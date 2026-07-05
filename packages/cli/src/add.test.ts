@@ -49,6 +49,8 @@ describe("addModule (auth / better-auth)", () => {
     const appModule = readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8");
     expect(appModule).toContain("AuthModule.forRoot(auth),");
     expect(appModule).toContain("{ provide: APP_GUARD, useClass: AuthGuard },");
+    // the demo /account controller is registered via its module
+    expect(appModule).toContain("AccountModule,");
     // health stays public (overlaid controller marked @Public)
     expect(readFileSync(join(project, "apps/api/src/health/health.controller.ts"), "utf8")).toContain("@Public()");
     // env example appended
@@ -198,6 +200,16 @@ describe("addModule (auth / better-auth)", () => {
     expect(apiPkg.dependencies["@nestjs/throttler"]).toBeDefined();
     expect(readFileSync(join(project, ".env.example"), "utf8")).toContain("RATE_LIMIT_MAX");
     expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).toContain("RateLimitModule,");
+  });
+
+  it("api-key-auth composes auth and wires a machine controller", () => {
+    const project = generate("fullstack-nest-svelte");
+    const result = addModule({ projectRoot: project, module: "api-key-auth", modulesDir: MODULES });
+
+    expect(result.added).toContain("auth");
+    expect(existsSync(join(project, "apps/api/src/api-key/api-key.guard.ts"))).toBe(true);
+    expect(readFileSync(join(project, ".env.example"), "utf8")).toContain("API_KEYS");
+    expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).toContain("ApiKeyModule,");
   });
 
   it("rejects a project without the target app", () => {
