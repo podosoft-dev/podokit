@@ -1,6 +1,6 @@
 {
   "name": "@podosoft/podokit",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "An opinionated but extensible starter toolkit and CLI for full-stack TypeScript apps with NestJS, SvelteKit, TailwindCSS, shadcn-svelte, Docker, and k3s.",
   "license": "Apache-2.0",
   "repository": {
@@ -16,12 +16,16 @@
   "engines": {
     "node": ">=20"
   },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/copy-templates.mjs",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
-    "@podosoft/podokit-template-engine": "*"
+    "@podosoft/podokit-template-engine": "^0.1.0"
   }
 }
