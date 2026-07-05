@@ -81,7 +81,7 @@ my-app/
 Highlights of the generated app:
 
 - **Backend (NestJS)** — bootstrap with a global `ValidationPipe` and exception filter, typed environment validation, a `/health` endpoint, and a stable `{ success, error: { code, ... } }` response envelope.
-- **Frontend (SvelteKit)** — TailwindCSS v4 (config-less), shadcn-svelte configuration, a typesafe-i18n scaffold, and a **server-side proxy** so the browser never calls the API directly.
+- **Frontend (SvelteKit)** — TailwindCSS v4 (config-less), **shadcn-svelte components preinstalled** (button, input, card, checkbox, label), a typesafe-i18n scaffold, and a **server-side proxy** so the browser never calls the API directly.
 - **Infra** — Docker Compose for local PostgreSQL and Redis, plus example k3s manifests (standard `Ingress`, `secret.example.yaml`).
 
 ## Status
