@@ -1,0 +1,15 @@
+{
+  "name": "@podosoft/podokit-template-engine",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Template rendering, copying, and package.json merge utilities for PodoKit.",
+  "license": "Apache-2.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  }
+}

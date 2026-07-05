@@ -1,0 +1,15 @@
+# Copy to .env and adjust. Never commit real secrets.
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_USER=podokit
+POSTGRES_PASSWORD=podokit
+POSTGRES_DB=podokit
+
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+APP_BASE_URL=http://localhost:5173
+API_BASE_URL=http://localhost:3000
+BACKEND_INTERNAL_URL=http://localhost:3000
+CORS_ORIGIN=http://localhost:5173
+PORT=3000
