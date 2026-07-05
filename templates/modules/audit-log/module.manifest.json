@@ -1,0 +1,16 @@
+{
+  "name": "audit-log",
+  "description": "Audit logging: a global interceptor records who did each mutating request (who/method/path/status) to an audit_logs table. Requires auth.",
+  "requires": ["auth"],
+  "targetApp": "api",
+  "env": [],
+  "inject": [
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:imports", "text": "import { AuditModule } from \"./audit/audit.module\";" },
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:module-imports", "text": "AuditModule," }
+  ],
+  "instructions": [
+    "Run migrations to create the audit_logs table:  npm run migration:run -w <app>-api",
+    "Mutating requests (POST/PUT/PATCH/DELETE) are recorded with the acting user.",
+    "List recent entries (requires a session):  curl -b cookies.txt localhost:3000/audit-logs"
+  ]
+}
