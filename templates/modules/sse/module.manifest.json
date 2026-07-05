@@ -1,0 +1,16 @@
+{
+  "name": "sse",
+  "description": "Server-Sent Events: a /events/stream endpoint (heartbeat + published messages) and a POST /events publisher.",
+  "requires": [],
+  "targetApp": "api",
+  "env": [],
+  "inject": [
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:imports", "text": "import { EventsModule } from \"./events/events.module\";" },
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:module-imports", "text": "EventsModule," }
+  ],
+  "instructions": [
+    "Stream events:  curl -N localhost:3000/events/stream",
+    "Publish a message (in another terminal):  curl -XPOST localhost:3000/events -H 'content-type: application/json' -d '{\"message\":\"hello\"}'",
+    "Inject EventsService anywhere to push updates (e.g. job progress)."
+  ]
+}
