@@ -41,6 +41,14 @@ Run without flags in a terminal and PodoKit prompts for the template and package
 | `fullstack-nest-svelte` (default) | NestJS API + SvelteKit web, with Docker Compose and k3s manifests |
 | `base` | Minimal npm workspace to build up from scratch |
 
+### Preview
+
+The default template generates a working todo app (SvelteKit UI + NestJS API + PostgreSQL) with API docs out of the box:
+
+| Web (SvelteKit) | API docs (Swagger) |
+| --- | --- |
+| ![Generated todo app](docs/images/todo-app.png) | ![Generated API docs](docs/images/api-docs.png) |
+
 ### What the fullstack template gives you
 
 ```

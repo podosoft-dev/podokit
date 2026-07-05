@@ -19,6 +19,10 @@ npm run dev
 
 When run in a terminal, `podo create` asks which template and package manager to use. Pass flags (or `--yes`) to skip the prompts.
 
+The default template generates a working todo app (SvelteKit UI + NestJS API + PostgreSQL) with Swagger docs:
+
+![Generated todo app](https://raw.githubusercontent.com/podosoft-dev/podokit/main/docs/images/todo-app.png)
+
 ## Usage
 
 ```

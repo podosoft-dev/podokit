@@ -4,7 +4,12 @@
 
 ## `fullstack-nest-svelte` (default)
 
-A full-stack npm workspace.
+A full-stack npm workspace. Generated out of the box:
+
+| Web (SvelteKit todo UI) | API docs (Swagger) |
+| --- | --- |
+| ![Generated todo app](images/todo-app.png) | ![Generated API docs](images/api-docs.png) |
+
 
 ```
 apps/
