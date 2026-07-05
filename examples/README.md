@@ -34,25 +34,28 @@ Try it: add a todo in the UI, then open `/api-docs` and call `GET /todos`.
 
 For a minimal, dependency-light layout instead, use `--template base`.
 
-## 2. auth (`podo add auth-jwt`)
+## 2. auth (`podo add auth`)
 
-Add JWT authentication to any generated project — register, login, a JWT guard,
-and a protected `/auth/me` route (TypeORM `users` table).
+Add full authentication (better-auth): email/password + sessions, with OAuth and
+2FA available by config. Adding it makes the API **secure by default** — every
+route needs a session except `/health` and `/api/auth/*`.
 
 ```bash
 npx @podosoft/podokit create auth-demo
 cd auth-demo && npm install && cp .env.example .env
-npx @podosoft/podokit add auth-jwt
+npx @podosoft/podokit add auth
 npm install
 docker compose -f infra/docker/docker-compose.yml up -d
-npm run migration:run -w auth-demo-api
+npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
 npm run dev
 
-# register → returns a JWT, then call the protected route
-curl -XPOST localhost:3000/auth/register -H 'content-type: application/json' \
-  -d '{"email":"a@example.com","password":"password123"}'
-curl localhost:3000/auth/me -H 'authorization: Bearer <token>'
+# sign up (sets a session cookie), then call a protected route
+curl -c cookies.txt -XPOST localhost:3000/api/auth/sign-up/email \
+  -H 'content-type: application/json' -d '{"email":"a@example.com","password":"password123","name":"A"}'
+curl -b cookies.txt localhost:3000/account/me
 ```
+
+Enable OAuth by setting a provider's `*_CLIENT_ID`/`*_CLIENT_SECRET`, and 2FA with `AUTH_TWO_FACTOR=true`.
 
 ## 3. background jobs (`podo add bullmq`)
 

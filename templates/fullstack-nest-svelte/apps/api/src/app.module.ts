@@ -13,5 +13,8 @@ import { HealthModule } from "./health/health.module";
     HealthModule,
     // podokit:module-imports
   ],
+  providers: [
+    // podokit:providers
+  ],
 })
 export class AppModule {}

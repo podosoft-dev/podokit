@@ -56,7 +56,7 @@ npx @podosoft/podokit create my-lib --template base --yes
 
 ```bash
 cd my-app
-npx @podosoft/podokit add auth-jwt   # JWT auth: register, login, guard, /auth/me
+npx @podosoft/podokit add auth      # full auth (better-auth): email/password, sessions, OAuth, 2FA
 ```
 
 `podo add <module>` overlays files, merges dependencies, appends env vars, and wires the module into the NestJS app. Run `podo add` with no argument to list available modules.
