@@ -162,6 +162,18 @@ describe("addModule (auth-jwt)", () => {
     expect(worker).toContain("RedisModule,");
   });
 
+  it("adds logging (nestjs-pino) with env and wiring", () => {
+    const project = generate("fullstack-nest-svelte");
+    addModule({ projectRoot: project, module: "logging", modulesDir: MODULES });
+    expect(existsSync(join(project, "apps/api/src/logging/logging.module.ts"))).toBe(true);
+    const apiPkg = JSON.parse(readFileSync(join(project, "apps/api/package.json"), "utf8")) as {
+      dependencies: Record<string, string>;
+    };
+    expect(apiPkg.dependencies["nestjs-pino"]).toBeDefined();
+    expect(readFileSync(join(project, ".env.example"), "utf8")).toContain("LOG_LEVEL");
+    expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).toContain("LoggingModule,");
+  });
+
   it("rejects a project without the target app", () => {
     const empty = tmp(); // no apps/api/package.json
     expect(() => addModule({ projectRoot: empty, module: "auth-jwt", modulesDir: MODULES })).toThrow(

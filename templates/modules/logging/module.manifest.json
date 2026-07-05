@@ -1,0 +1,27 @@
+{
+  "name": "logging",
+  "description": "Structured request logging (nestjs-pino) with a per-request correlation id (x-request-id). Pretty in dev, JSON in production.",
+  "requires": [],
+  "targetApp": "api",
+  "dependencies": {
+    "nestjs-pino": "^4.3.0",
+    "pino-http": "^10.3.0"
+  },
+  "devDependencies": {
+    "pino-pretty": "^13.0.0"
+  },
+  "env": [
+    "# logging",
+    "LOG_LEVEL=info"
+  ],
+  "inject": [
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:imports", "text": "import { LoggingModule } from \"./logging/logging.module\";" },
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:module-imports", "text": "LoggingModule," }
+  ],
+  "instructions": [
+    "Every HTTP request is now logged as structured JSON with a correlation id.",
+    "Make a request and watch the API logs:  curl localhost:3000/health",
+    "Set LOG_LEVEL (debug|info|warn|error) in .env. Logs are pretty in dev and JSON when NODE_ENV=production.",
+    "To route Nest's own logs through pino too, add to main.ts: NestFactory.create(AppModule, { bufferLogs: true }) then app.useLogger(app.get(Logger))."
+  ]
+}
