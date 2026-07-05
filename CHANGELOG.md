@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-05
+
 ### Added
 - **More preinstalled shadcn-svelte components** in the fullstack and todo templates: `select`, `dialog`, `dropdown-menu`, `tabs`, `table`, `avatar`, `badge`, `skeleton`, `separator`, `tooltip`, `alert`, and `sonner` (toasts) — on top of the existing `button`/`input`/`card`/`checkbox`/`label`. Bumps `mode-watcher` to v1.
 - **`api-key-auth` module** — API-key auth for machine/service clients (`X-API-Key`), separate from user sessions: an `ApiKeyGuard` + `@ApiKeyProtected()` decorator that opens a route to key holders (constant-time check against `API_KEYS`). Requires `auth`. Verified end-to-end (valid key 200, missing/invalid 401, session routes unaffected).
@@ -63,7 +65,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 - `fullstack-nest-svelte`: add missing `@types/express` so the generated API builds cleanly. Verified end-to-end: install, build (API + web), API starts, `/health` returns 200.
 
-[Unreleased]: https://github.com/podosoft-dev/podokit/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/podosoft-dev/podokit/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/podosoft-dev/podokit/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/podosoft-dev/podokit/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/podosoft-dev/podokit/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/podosoft-dev/podokit/releases/tag/v0.1.0
