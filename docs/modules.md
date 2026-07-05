@@ -127,6 +127,42 @@ curl -XPOST localhost:3000/events -H 'content-type: application/json' -d '{"mess
 
 Pairs well with `bullmq` — inject `EventsService` into the worker to stream job progress.
 
+### `redis`
+
+A Redis client ([ioredis](https://github.com/redis/ioredis)) with `get`/`set`/`del`
+and `publish`/`subscribe`, exposed as a global `RedisService`, plus demo `/cache`
+endpoints.
+
+```bash
+npx @podosoft/podokit add redis
+npm install
+docker compose -f infra/docker/docker-compose.yml up -d   # redis
+npm run dev
+
+curl -XPUT localhost:3000/cache/greeting -H 'content-type: application/json' -d '{"value":"hi","ttl":60}'
+curl localhost:3000/cache/greeting   # { key, value }
+```
+
+### `job-progress`
+
+Live job progress streaming — a capstone that composes `bullmq` + `redis` + `sse`
+(all auto-added). A **worker** processes a job and reports progress over a Redis
+channel; the **API** subscribes and relays it to SSE clients. This is the
+production pattern for pushing worker progress to the browser across processes.
+
+```bash
+npx @podosoft/podokit add job-progress   # also adds bullmq, sse, redis
+npm install
+docker compose -f infra/docker/docker-compose.yml up -d   # postgres + redis
+
+npm run dev                          # terminal 1 — API
+npm run dev:worker -w my-app-api     # terminal 2 — worker
+
+curl -N localhost:3000/events/stream                                             # terminal 3 — watch
+curl -XPOST localhost:3000/progress -H 'content-type: application/json' -d '{"steps":5}'
+# the stream shows job-progress events: 20 -> 40 -> 60 -> 80 -> 100
+```
+
 ## Roadmap
 
 More modules are planned — redis, queue (BullMQ), object storage (S3), file

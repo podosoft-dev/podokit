@@ -1,0 +1,21 @@
+{
+  "name": "redis",
+  "description": "Redis client (ioredis) with get/set/del and publish/subscribe, plus demo cache endpoints.",
+  "requires": [],
+  "targetApp": "api",
+  "dependencies": {
+    "ioredis": "^5.4.1"
+  },
+  "env": [
+    "# redis (REDIS_HOST / REDIS_PORT already defined above)"
+  ],
+  "inject": [
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:imports", "text": "import { RedisModule } from \"./redis/redis.module\";" },
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:module-imports", "text": "RedisModule," }
+  ],
+  "instructions": [
+    "Start Redis:  docker compose -f infra/docker/docker-compose.yml up -d",
+    "Set a value:  curl -XPUT localhost:3000/cache/greeting -H 'content-type: application/json' -d '{\"value\":\"hi\",\"ttl\":60}'",
+    "Read it back: curl localhost:3000/cache/greeting"
+  ]
+}
