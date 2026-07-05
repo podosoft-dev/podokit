@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- `fullstack-nest-svelte` template now generates a working **todo app**: a NestJS `todos` CRUD resource backed by **TypeORM + PostgreSQL** with a versioned migration, **Swagger** docs at `/api-docs`, schema-validated environment (zod), a `/health/ready` database check, and a SvelteKit todo UI wired through the server-side proxy.
+- Screenshots of the generated app (web UI and API docs) in the README, templates guide, and examples.
+
+Verified end-to-end from a generated project: install, build, `docker compose up`, `migration:run`, todo CRUD via the UI/API, and `/api-docs`.
+
 ## [0.1.1] - 2026-07-05
 
 ### Documentation
