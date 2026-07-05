@@ -1,6 +1,6 @@
-import { DEFAULT_TEMPLATE, type PackageManager } from "./create";
+import { type PackageManager } from "./create";
+import { DEFAULT_TEMPLATE, TEMPLATE_NAMES, isKnownTemplate } from "./templates";
 
-export const TEMPLATES = ["fullstack-nest-svelte", "base"] as const;
 export const PACKAGE_MANAGERS: PackageManager[] = ["npm", "pnpm", "yarn"];
 
 /** Asks a single question and resolves to the trimmed answer (empty if skipped). */
@@ -34,12 +34,12 @@ export async function resolveCreateOptions(
 ): Promise<ResolvedCreateOptions> {
   let template = args.template;
   if (!template && interactive) {
-    const answer = await ask(`Template (${TEMPLATES.join(" / ")}) [${DEFAULT_TEMPLATE}]: `);
+    const answer = await ask(`Template [${DEFAULT_TEMPLATE}]: `);
     template = answer || undefined;
   }
   template = template ?? DEFAULT_TEMPLATE;
-  if (!(TEMPLATES as readonly string[]).includes(template)) {
-    throw new Error(`Unknown template "${template}". Choose one of: ${TEMPLATES.join(", ")}.`);
+  if (!isKnownTemplate(template)) {
+    throw new Error(`Unknown template "${template}". Choose one of: ${TEMPLATE_NAMES.join(", ")}.`);
   }
 
   let pm: string | undefined = args.pm;

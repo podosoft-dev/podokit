@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { join } from "node:path";
 import { DataSource, type DataSourceOptions } from "typeorm";
+import { Todo } from "../todos/todo.entity";
 
 export const dataSourceOptions: DataSourceOptions = {
   type: "postgres",
@@ -9,8 +10,7 @@ export const dataSourceOptions: DataSourceOptions = {
   username: process.env.POSTGRES_USER ?? "podokit",
   password: process.env.POSTGRES_PASSWORD ?? "podokit",
   database: process.env.POSTGRES_DB ?? "podokit",
-  // Add your entities here as the app grows.
-  entities: [],
+  entities: [Todo],
   migrations: [join(__dirname, "../migrations/*{.ts,.js}")],
   synchronize: false,
 };

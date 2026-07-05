@@ -44,19 +44,30 @@ describe("create (integration against templates)", () => {
     expect(readFileSync(join(target, "README.md"), "utf8")).toContain("my-app");
   });
 
-  it("scaffolds the fullstack template by default", () => {
+  it("scaffolds the clean fullstack template by default (no domain code)", () => {
     const target = join(tmp(), "app");
     const result = create({ name: "app", templatesDir: REPO_TEMPLATES, targetDir: target });
 
     expect(result.template).toBe("fullstack-nest-svelte");
     expect(existsSync(join(target, "apps", "api", "src", "main.ts"))).toBe(true);
-    expect(existsSync(join(target, "apps", "api", "src", "todos", "todos.controller.ts"))).toBe(true);
     expect(existsSync(join(target, "apps", "api", "src", "database", "data-source.ts"))).toBe(true);
     expect(existsSync(join(target, "apps", "web", "svelte.config.js"))).toBe(true);
-    expect(existsSync(join(target, "apps", "web", "src", "routes", "api", "todos", "+server.ts"))).toBe(true);
     expect(existsSync(join(target, "infra", "k3s", "ingress.yaml"))).toBe(true);
+    // The clean starter ships no todo domain code.
+    expect(existsSync(join(target, "apps", "api", "src", "todos"))).toBe(false);
+    expect(existsSync(join(target, "apps", "web", "src", "routes", "api", "todos"))).toBe(false);
     const apiPkg = JSON.parse(readFileSync(join(target, "apps", "api", "package.json"), "utf8")) as { name: string };
     expect(apiPkg.name).toBe("app-api");
+  });
+
+  it("scaffolds the todo template with the CRUD example", () => {
+    const target = join(tmp(), "app");
+    const result = create({ name: "app", template: "todo", templatesDir: REPO_TEMPLATES, targetDir: target });
+
+    expect(result.template).toBe("todo");
+    expect(existsSync(join(target, "apps", "api", "src", "todos", "todos.controller.ts"))).toBe(true);
+    expect(existsSync(join(target, "apps", "api", "src", "migrations"))).toBe(true);
+    expect(existsSync(join(target, "apps", "web", "src", "routes", "api", "todos", "+server.ts"))).toBe(true);
   });
 
   it("refuses a non-empty target directory", () => {

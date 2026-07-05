@@ -17,9 +17,9 @@ npm run dev
 - API: http://localhost:3000 (health at `/health`)
 - Web: http://localhost:5173
 
-When run in a terminal, `podo create` asks which template and package manager to use. Pass flags (or `--yes`) to skip the prompts.
+When run in a terminal, `podo create` lists the templates with descriptions and asks which one (and which package manager) to use. Pass flags (or `--yes`) to skip the prompts.
 
-The default template generates a working todo app (SvelteKit UI + NestJS API + PostgreSQL) with Swagger docs:
+The `todo` template (`--template todo`) generates a working todo app (SvelteKit UI + NestJS API + PostgreSQL) with Swagger docs:
 
 ![Generated todo app](https://raw.githubusercontent.com/podosoft-dev/podokit/main/docs/images/todo-app.png)
 
@@ -30,7 +30,8 @@ podo create <name> [options]
 
 Options:
   --template <t>   Template to scaffold (default: fullstack-nest-svelte)
-                     - fullstack-nest-svelte : NestJS API + SvelteKit web
+                     - fullstack-nest-svelte : clean NestJS + SvelteKit starter
+                     - todo                  : fullstack + a Todo CRUD example
                      - base                  : minimal npm workspace
   --dir <path>     Target directory (default: ./<name>)
   --pm <name>      Package manager: npm | pnpm | yarn (default: npm)

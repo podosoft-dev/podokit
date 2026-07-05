@@ -7,10 +7,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
-- `fullstack-nest-svelte` template now generates a working **todo app**: a NestJS `todos` CRUD resource backed by **TypeORM + PostgreSQL** with a versioned migration, **Swagger** docs at `/api-docs`, schema-validated environment (zod), a `/health/ready` database check, and a SvelteKit todo UI wired through the server-side proxy.
-- Screenshots of the generated app (web UI and API docs) in the README, templates guide, and examples.
+- **`fullstack-nest-svelte`** (default) is now a clean starter: schema-validated env (zod), `/health` + `/health/ready`, **Swagger** at `/api-docs`, and **TypeORM + PostgreSQL wired with no domain code** — you add your own entities.
+- New **`todo`** template: the fullstack starter plus a worked Todo CRUD example (TypeORM entity, versioned migration, Swagger, and a SvelteKit todo UI through the server-side proxy). Verified end-to-end: install, build, `docker compose up`, `migration:run`, todo CRUD, `/api-docs`.
+- The CLI now lists templates with descriptions (in prompts and `--help`).
+- Screenshots of the generated todo app (web UI and API docs) in the README, templates guide, and examples.
 
-Verified end-to-end from a generated project: install, build, `docker compose up`, `migration:run`, todo CRUD via the UI/API, and `/api-docs`.
+### Changed
+- Templates are now distinct: `base` (minimal), `fullstack-nest-svelte` (clean default), and `todo` (example) — instead of baking the todo example into the default template.
 
 ## [0.1.1] - 2026-07-05
 

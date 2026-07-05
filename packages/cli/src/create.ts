@@ -1,10 +1,11 @@
 import { existsSync, readdirSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { copyTemplate, type TemplateVars } from "@podosoft/podokit-template-engine";
+import { DEFAULT_TEMPLATE } from "./templates";
 
 export type PackageManager = "npm" | "pnpm" | "yarn";
 
-export const DEFAULT_TEMPLATE = "fullstack-nest-svelte";
+export { DEFAULT_TEMPLATE };
 
 export interface CreateOptions {
   /** Project name; also the default directory name. */
