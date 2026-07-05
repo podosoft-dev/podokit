@@ -28,7 +28,8 @@ apps/
       lib/server/      # backend-proxy: header allowlist to the API
       lib/i18n/        # typesafe-i18n scaffold (en, ko)
       app.css          # TailwindCSS v4 (@import "tailwindcss")
-    components.json    # shadcn-svelte config (new-york / zinc)
+    lib/components/ui/ # shadcn-svelte components (button, input, card, …)
+    components.json    # shadcn-svelte config (nova / zinc)
     Dockerfile
 infra/
   docker/docker-compose.yml   # PostgreSQL + Redis (healthchecks)
