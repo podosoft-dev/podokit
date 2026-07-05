@@ -28,7 +28,7 @@ apps/
       lib/server/      # backend-proxy: header allowlist to the API
       lib/i18n/        # typesafe-i18n scaffold (en, ko)
       app.css          # TailwindCSS v4 (@import "tailwindcss")
-    lib/components/ui/ # shadcn-svelte components (button, input, card, …)
+    lib/components/ui/ # shadcn-svelte components (button, dialog, table, sonner, …)
     components.json    # shadcn-svelte config (nova / zinc)
     Dockerfile
 infra/
@@ -69,9 +69,21 @@ A minimal npm workspace (root `package.json`, `apps/api` and `apps/web` placehol
 
 ## UI: shadcn-svelte
 
-The `fullstack-nest-svelte` and `todo` templates come with [shadcn-svelte](https://shadcn-svelte.com) set up and a starter set of components **already installed** in `apps/web/src/lib/components/ui/`:
+The `fullstack-nest-svelte` and `todo` templates come with [shadcn-svelte](https://shadcn-svelte.com) set up and a broad set of components **already installed** in `apps/web/src/lib/components/ui/`:
 
-- `button`, `input`, `card`, `checkbox`, `label`
+- Forms & inputs: `button`, `input`, `label`, `checkbox`, `select`
+- Layout & content: `card`, `separator`, `tabs`, `table`, `avatar`, `badge`, `skeleton`
+- Overlays & feedback: `dialog`, `dropdown-menu`, `tooltip`, `alert`, `sonner` (toasts)
+
+To show toasts, mount the toaster once in `apps/web/src/routes/+layout.svelte`:
+
+```svelte
+<script lang="ts">
+  import { Toaster } from "$lib/components/ui/sonner";
+</script>
+<Toaster />
+```
+Then call `toast("Saved")` from `svelte-sonner` anywhere.
 
 Use them directly (no raw HTML form controls needed):
 
