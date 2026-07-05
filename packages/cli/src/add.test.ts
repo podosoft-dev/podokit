@@ -88,6 +88,22 @@ describe("addModule (auth-jwt)", () => {
     expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).toContain("JobsModule,");
   });
 
+  it("adds object-storage-s3 with provider config, env, and a MinIO compose overlay", () => {
+    const project = generate("fullstack-nest-svelte");
+    addModule({ projectRoot: project, module: "object-storage-s3", modulesDir: MODULES });
+
+    expect(existsSync(join(project, "apps/api/src/storage/storage.service.ts"))).toBe(true);
+    expect(existsSync(join(project, "apps/api/src/storage/storage.config.ts"))).toBe(true);
+    expect(existsSync(join(project, "infra/docker/minio.compose.yml"))).toBe(true);
+    const apiPkg = JSON.parse(readFileSync(join(project, "apps/api/package.json"), "utf8")) as {
+      dependencies: Record<string, string>;
+    };
+    expect(apiPkg.dependencies["@aws-sdk/client-s3"]).toBeDefined();
+    const env = readFileSync(join(project, ".env.example"), "utf8");
+    expect(env).toContain("STORAGE_PROVIDER=minio");
+    expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).toContain("StorageModule,");
+  });
+
   it("rejects a project without the target app", () => {
     const empty = tmp(); // no apps/api/package.json
     expect(() => addModule({ projectRoot: empty, module: "auth-jwt", modulesDir: MODULES })).toThrow(
