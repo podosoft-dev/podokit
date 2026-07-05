@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-07-05
+
+### Documentation
+- Add package READMEs for `@podosoft/podokit` (the npm landing page) and `@podosoft/podokit-template-engine`.
+- Expand the repository README, Getting Started guide, and add a Templates guide.
+
 ## [0.1.0] - 2026-07-05
 
 ### Added
@@ -19,5 +25,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 - `fullstack-nest-svelte`: add missing `@types/express` so the generated API builds cleanly. Verified end-to-end: install, build (API + web), API starts, `/health` returns 200.
 
-[Unreleased]: https://github.com/podosoft-dev/podokit/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/podosoft-dev/podokit/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/podosoft-dev/podokit/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/podosoft-dev/podokit/releases/tag/v0.1.0

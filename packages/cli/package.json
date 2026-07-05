@@ -1,6 +1,6 @@
 {
   "name": "@podosoft/podokit",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "An opinionated but extensible starter toolkit and CLI for full-stack TypeScript apps with NestJS, SvelteKit, TailwindCSS, shadcn-svelte, Docker, and k3s.",
   "license": "Apache-2.0",
   "repository": {
@@ -8,11 +8,21 @@
     "url": "git+https://github.com/podosoft-dev/podokit.git",
     "directory": "packages/cli"
   },
-  "keywords": ["nestjs", "sveltekit", "starter", "cli", "scaffold", "tailwindcss", "shadcn"],
+  "keywords": [
+    "nestjs",
+    "sveltekit",
+    "starter",
+    "cli",
+    "scaffold",
+    "tailwindcss",
+    "shadcn"
+  ],
   "bin": {
     "podo": "dist/index.js"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "engines": {
     "node": ">=20"
   },
