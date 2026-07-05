@@ -25,7 +25,7 @@ ${templateListText()}
 Example:
   npx @podosoft/podokit create my-app
   npx @podosoft/podokit create my-app --template todo
-  cd my-app && npx @podosoft/podokit add auth-jwt
+  cd my-app && npx @podosoft/podokit add auth
 `;
 
 interface ParsedArgs {

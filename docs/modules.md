@@ -18,24 +18,32 @@ npx @podosoft/podokit add <module>
 
 ## Available modules
 
-### `auth-jwt`
+### `auth` (better-auth)
 
-JWT authentication for the NestJS API: register, login, a JWT guard, and a
-protected `/auth/me` route backed by a TypeORM `users` table.
+Full authentication built on [better-auth](https://better-auth.com): email/password
+and sessions out of the box, plus **OAuth** and **2FA** enabled by configuration.
+Adding it installs a **global auth guard**, so the API is **secure by default** —
+every route requires a session except `/health` and `/api/auth/*`. Opt routes out
+with `@Public()`; read the current user with `@Session()`.
 
 ```bash
-npx @podosoft/podokit add auth-jwt
+npx @podosoft/podokit add auth
 npm install
-npm run migration:run -w my-app-api
+# create the auth tables (user/session/account/verification)
+npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
+npm run dev
 
-# then
-curl -XPOST localhost:3000/auth/register -H 'content-type: application/json' \
-  -d '{"email":"a@example.com","password":"password123"}'
-# → { accessToken, user }
-curl localhost:3000/auth/me -H 'authorization: Bearer <token>'
+# sign up (sets a session cookie), then call a protected route
+curl -c cookies.txt -XPOST localhost:3000/api/auth/sign-up/email \
+  -H 'content-type: application/json' -d '{"email":"a@example.com","password":"password123","name":"A"}'
+curl -b cookies.txt localhost:3000/account/me
 ```
 
-Set a real `JWT_SECRET` in `.env` before deploying.
+- **Secure by default**: all module endpoints (jobs, storage, files, cache, …) are protected once `auth` is added.
+- **OAuth**: set `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` or `GITHUB_*` in `.env` to enable a provider.
+- **2FA (TOTP)**: set `AUTH_TWO_FACTOR=true`.
+- Security/audit modules build on this (they require `auth`).
+
 
 ### `bullmq`
 

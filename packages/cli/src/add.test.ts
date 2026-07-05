@@ -25,41 +25,42 @@ function generate(template: string): string {
 }
 
 describe("listModules", () => {
-  it("includes auth-jwt", () => {
-    expect(listModules(MODULES).map((m) => m.name)).toContain("auth-jwt");
+  it("includes auth", () => {
+    expect(listModules(MODULES).map((m) => m.name)).toContain("auth");
   });
 });
 
-describe("addModule (auth-jwt)", () => {
-  it("overlays files, merges deps, appends env, and wires app.module", () => {
+describe("addModule (auth / better-auth)", () => {
+  it("overlays files, merges deps, appends env, and wires a global guard", () => {
     const project = generate("fullstack-nest-svelte");
-    const result = addModule({ projectRoot: project, module: "auth-jwt", modulesDir: MODULES });
+    const result = addModule({ projectRoot: project, module: "auth", modulesDir: MODULES });
 
-    expect(result.module).toBe("auth-jwt");
+    expect(result.module).toBe("auth");
     // files overlaid
-    expect(existsSync(join(project, "apps/api/src/auth/auth.module.ts"))).toBe(true);
-    expect(existsSync(join(project, "apps/api/src/auth/user.entity.ts"))).toBe(true);
-    expect(existsSync(join(project, "apps/api/src/migrations/1720200000000-InitUsers.ts"))).toBe(true);
+    expect(existsSync(join(project, "apps/api/src/auth/auth.ts"))).toBe(true);
+    expect(existsSync(join(project, "apps/api/src/account/account.controller.ts"))).toBe(true);
     // deps merged into the api workspace
     const apiPkg = JSON.parse(readFileSync(join(project, "apps/api/package.json"), "utf8")) as {
       dependencies: Record<string, string>;
     };
-    expect(apiPkg.dependencies["@nestjs/jwt"]).toBeDefined();
-    expect(apiPkg.dependencies["passport-jwt"]).toBeDefined();
-    // wiring injected at markers
+    expect(apiPkg.dependencies["better-auth"]).toBeDefined();
+    expect(apiPkg.dependencies["@thallesp/nestjs-better-auth"]).toBeDefined();
+    // secure-by-default: global guard wired
     const appModule = readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8");
-    expect(appModule).toContain('import { AuthModule } from "./auth/auth.module";');
-    expect(appModule).toContain("AuthModule,");
+    expect(appModule).toContain("AuthModule.forRoot(auth),");
+    expect(appModule).toContain("{ provide: APP_GUARD, useClass: AuthGuard },");
+    // health stays public (overlaid controller marked @Public)
+    expect(readFileSync(join(project, "apps/api/src/health/health.controller.ts"), "utf8")).toContain("@Public()");
     // env example appended
-    expect(readFileSync(join(project, ".env.example"), "utf8")).toContain("JWT_SECRET");
+    expect(readFileSync(join(project, ".env.example"), "utf8")).toContain("BETTER_AUTH_SECRET");
   });
 
   it("is idempotent for wiring when applied twice", () => {
     const project = generate("fullstack-nest-svelte");
-    addModule({ projectRoot: project, module: "auth-jwt", modulesDir: MODULES });
-    addModule({ projectRoot: project, module: "auth-jwt", modulesDir: MODULES });
+    addModule({ projectRoot: project, module: "auth", modulesDir: MODULES });
+    addModule({ projectRoot: project, module: "auth", modulesDir: MODULES });
     const appModule = readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8");
-    expect(appModule.match(/AuthModule,/g)?.length).toBe(1);
+    expect(appModule.match(/AuthModule\.forRoot\(auth\),/g)?.length).toBe(1);
   });
 
   it("rejects an unknown module", () => {
@@ -176,7 +177,7 @@ describe("addModule (auth-jwt)", () => {
 
   it("rejects a project without the target app", () => {
     const empty = tmp(); // no apps/api/package.json
-    expect(() => addModule({ projectRoot: empty, module: "auth-jwt", modulesDir: MODULES })).toThrow(
+    expect(() => addModule({ projectRoot: empty, module: "auth", modulesDir: MODULES })).toThrow(
       /does not look like a PodoKit project/,
     );
   });

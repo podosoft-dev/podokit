@@ -102,7 +102,7 @@ Grow a project feature by feature without swapping templates:
 
 ```bash
 cd my-app
-npx @podosoft/podokit add auth-jwt   # JWT auth: register, login, guard, /auth/me
+npx @podosoft/podokit add auth      # full auth (better-auth): email/password, sessions, OAuth, 2FA
 ```
 
 `podo add` overlays files, merges dependencies, appends env vars, and wires the

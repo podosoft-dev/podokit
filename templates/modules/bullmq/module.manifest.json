@@ -4,7 +4,7 @@
   "requires": [],
   "targetApp": "api",
   "dependencies": {
-    "@nestjs/bullmq": "^10.2.0",
+    "@nestjs/bullmq": "^11.0.4",
     "bullmq": "^5.34.0"
   },
   "scripts": {
@@ -15,8 +15,16 @@
     "# bullmq uses REDIS_HOST / REDIS_PORT (already defined above)"
   ],
   "inject": [
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:imports", "text": "import { JobsModule } from \"./jobs/jobs.module\";" },
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:module-imports", "text": "JobsModule," }
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:imports",
+      "text": "import { JobsModule } from \"./jobs/jobs.module\";"
+    },
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:module-imports",
+      "text": "JobsModule,"
+    }
   ],
   "instructions": [
     "Ensure Redis is running:  docker compose -f infra/docker/docker-compose.yml up -d",

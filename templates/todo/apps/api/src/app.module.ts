@@ -15,5 +15,8 @@ import { TodosModule } from "./todos/todos.module";
     TodosModule,
     // podokit:module-imports
   ],
+  providers: [
+    // podokit:providers
+  ],
 })
 export class AppModule {}
