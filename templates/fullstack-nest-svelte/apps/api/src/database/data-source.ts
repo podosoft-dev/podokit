@@ -9,9 +9,9 @@ export const dataSourceOptions: DataSourceOptions = {
   username: process.env.POSTGRES_USER ?? "podokit",
   password: process.env.POSTGRES_PASSWORD ?? "podokit",
   database: process.env.POSTGRES_DB ?? "podokit",
-  // Add your entities here as the app grows.
-  entities: [],
-  migrations: [join(__dirname, "../migrations/*{.ts,.js}")],
+  // Entities are auto-discovered by file name (*.entity.ts / .js).
+  entities: [join(__dirname, "..", "**", "*.entity{.ts,.js}")],
+  migrations: [join(__dirname, "..", "migrations", "*{.ts,.js}")],
   synchronize: false,
 };
 

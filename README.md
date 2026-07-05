@@ -96,9 +96,23 @@ npm test
 
 PodoKit is early (`0.x`). The CLI and templates work end-to-end, but APIs and templates may change before `1.0`. Feedback and issues are welcome.
 
+## Add features with modules
+
+Grow a project feature by feature without swapping templates:
+
+```bash
+cd my-app
+npx @podosoft/podokit add auth-jwt   # JWT auth: register, login, guard, /auth/me
+```
+
+`podo add` overlays files, merges dependencies, appends env vars, and wires the
+module into the NestJS app. See [docs/modules.md](docs/modules.md).
+
 ## Documentation
 
 - [Getting Started](docs/getting-started.md)
+- [Templates](docs/templates.md)
+- [Modules (`podo add`)](docs/modules.md)
 - [Examples](examples/README.md)
 - [Changelog](CHANGELOG.md)
 

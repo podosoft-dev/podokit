@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { renderTokens, resolveOutputName, mergePackageJson, copyTemplate } from "./index";
+import { renderTokens, resolveOutputName, mergePackageJson, copyTemplate, insertAtMarker } from "./index";
 
 const created: string[] = [];
 function tmp(): string {
@@ -56,6 +56,25 @@ describe("mergePackageJson", () => {
     const base = { scripts: { dev: "a" } };
     mergePackageJson(base, { scripts: { test: "b" } });
     expect(base).toEqual({ scripts: { dev: "a" } });
+  });
+});
+
+describe("insertAtMarker", () => {
+  const src = ["imports: [", "    HealthModule,", "    // podokit:module-imports", "  ],"].join("\n");
+
+  it("inserts text above the marker with matching indentation", () => {
+    const out = insertAtMarker(src, "// podokit:module-imports", "AuthModule,");
+    expect(out).toContain("    AuthModule,\n    // podokit:module-imports");
+  });
+
+  it("is idempotent when the text is already present", () => {
+    const once = insertAtMarker(src, "// podokit:module-imports", "AuthModule,");
+    const twice = insertAtMarker(once, "// podokit:module-imports", "AuthModule,");
+    expect(twice).toBe(once);
+  });
+
+  it("throws when the marker is missing", () => {
+    expect(() => insertAtMarker(src, "// nope", "X")).toThrow(/Marker not found/);
   });
 });
 

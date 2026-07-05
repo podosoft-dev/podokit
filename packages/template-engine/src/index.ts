@@ -57,6 +57,26 @@ export function copyTemplate(srcDir: string, destDir: string, vars: TemplateVars
   }
 }
 
+/**
+ * Insert `text` on its own line immediately after the first line containing
+ * `marker`, preserving the marker line and its indentation. No-op if `text`
+ * is already present (so re-applying a module is idempotent). Throws if the
+ * marker is not found.
+ */
+export function insertAtMarker(content: string, marker: string, text: string): string {
+  if (content.includes(text)) {
+    return content;
+  }
+  const lines = content.split("\n");
+  const index = lines.findIndex((line) => line.includes(marker));
+  if (index === -1) {
+    throw new Error(`Marker not found: ${marker}`);
+  }
+  const indent = lines[index]!.match(/^\s*/)?.[0] ?? "";
+  lines.splice(index, 0, `${indent}${text}`);
+  return lines.join("\n");
+}
+
 function isPlainObject(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

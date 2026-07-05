@@ -1,0 +1,31 @@
+{
+  "name": "auth-jwt",
+  "description": "JWT auth: register, login, a JWT guard, and a protected /auth/me route (TypeORM users).",
+  "requires": [],
+  "targetApp": "api",
+  "dependencies": {
+    "@nestjs/jwt": "^10.2.0",
+    "@nestjs/passport": "^10.0.3",
+    "bcryptjs": "^2.4.3",
+    "passport": "^0.7.0",
+    "passport-jwt": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/passport-jwt": "^4.0.1"
+  },
+  "env": [
+    "# auth-jwt",
+    "JWT_SECRET=change-me-in-production",
+    "JWT_EXPIRES_IN=3600s"
+  ],
+  "inject": [
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:imports", "text": "import { AuthModule } from \"./auth/auth.module\";" },
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:module-imports", "text": "AuthModule," }
+  ],
+  "instructions": [
+    "Run the users migration:  npm run migration:run -w <app>-api",
+    "Register:  curl -XPOST localhost:3000/auth/register -H 'content-type: application/json' -d '{\"email\":\"a@example.com\",\"password\":\"password123\"}'",
+    "Call the protected route with the returned token:  curl localhost:3000/auth/me -H 'authorization: Bearer <token>'"
+  ]
+}

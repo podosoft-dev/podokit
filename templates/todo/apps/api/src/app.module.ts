@@ -5,6 +5,7 @@ import { validateEnv } from "./config/env.validation";
 import { dataSourceOptions } from "./database/data-source";
 import { HealthModule } from "./health/health.module";
 import { TodosModule } from "./todos/todos.module";
+// podokit:imports
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { TodosModule } from "./todos/todos.module";
     TypeOrmModule.forRoot(dataSourceOptions),
     HealthModule,
     TodosModule,
+    // podokit:module-imports
   ],
 })
 export class AppModule {}
