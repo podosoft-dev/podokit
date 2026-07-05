@@ -1,0 +1,10 @@
+{
+  "name": "{{projectName}}-api",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"api dev placeholder\" && exit 0",
+    "build": "echo \"api build placeholder\" && exit 0",
+    "test": "echo \"api test placeholder\" && exit 0"
+  }
+}

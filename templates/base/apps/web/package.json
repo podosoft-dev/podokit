@@ -1,0 +1,10 @@
+{
+  "name": "{{projectName}}-web",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"web dev placeholder\" && exit 0",
+    "build": "echo \"web build placeholder\" && exit 0",
+    "test": "echo \"web test placeholder\" && exit 0"
+  }
+}
