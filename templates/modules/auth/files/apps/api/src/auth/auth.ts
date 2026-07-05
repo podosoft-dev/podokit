@@ -1,6 +1,7 @@
-import { betterAuth, type BetterAuthOptions } from "better-auth";
+import { betterAuth, type BetterAuthOptions, type BetterAuthPlugin } from "better-auth";
 import { twoFactor } from "better-auth/plugins";
 import { Pool } from "pg";
+// podokit:auth-imports
 
 // OAuth providers are enabled only when their credentials are present.
 function socialProviders(): NonNullable<BetterAuthOptions["socialProviders"]> {
@@ -20,6 +21,13 @@ function socialProviders(): NonNullable<BetterAuthOptions["socialProviders"]> {
   return providers;
 }
 
+// Plugins are collected here so other PodoKit modules can add their own.
+const plugins: BetterAuthPlugin[] = [];
+if (process.env.AUTH_TWO_FACTOR === "true") {
+  plugins.push(twoFactor());
+}
+// podokit:auth-plugins
+
 export const auth = betterAuth({
   database: new Pool({
     host: process.env.POSTGRES_HOST ?? "localhost",
@@ -30,7 +38,8 @@ export const auth = betterAuth({
   }),
   emailAndPassword: { enabled: true },
   socialProviders: socialProviders(),
-  plugins: process.env.AUTH_TWO_FACTOR === "true" ? [twoFactor()] : [],
+  plugins,
   secret: process.env.BETTER_AUTH_SECRET ?? "change-me-in-production-min-32-characters",
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+  // podokit:auth-options
 });
