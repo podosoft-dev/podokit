@@ -21,6 +21,7 @@ export interface ModuleManifest {
   targetApp: string;
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
+  scripts?: Record<string, string>;
   env?: string[];
   inject?: Injection[];
   instructions?: string[];
@@ -104,11 +105,12 @@ export function addModule(options: AddOptions): AddResult {
     copyTemplate(filesDir, projectRoot, vars);
   }
 
-  // 2) merge dependencies into the target app
-  if (manifest.dependencies || manifest.devDependencies) {
+  // 2) merge dependencies and scripts into the target app
+  if (manifest.dependencies || manifest.devDependencies || manifest.scripts) {
     const overlay: JsonObject = {};
     if (manifest.dependencies) overlay.dependencies = manifest.dependencies;
     if (manifest.devDependencies) overlay.devDependencies = manifest.devDependencies;
+    if (manifest.scripts) overlay.scripts = manifest.scripts;
     const merged = mergePackageJson(readJson(appPkgPath), overlay);
     writeFileSync(appPkgPath, `${JSON.stringify(merged, null, 2)}\n`);
   }

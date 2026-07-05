@@ -54,6 +54,27 @@ curl -XPOST localhost:3000/auth/register -H 'content-type: application/json' \
 curl localhost:3000/auth/me -H 'authorization: Bearer <token>'
 ```
 
+## 3. background jobs (`podo add bullmq`)
+
+Add a BullMQ queue with a **separate worker process**.
+
+```bash
+npx @podosoft/podokit create jobs-demo
+cd jobs-demo && npm install && cp .env.example .env
+npx @podosoft/podokit add bullmq
+npm install
+docker compose -f infra/docker/docker-compose.yml up -d
+
+# API (producer) and worker (consumer) run as separate processes
+npm run dev                       # terminal 1
+npm run dev:worker -w jobs-demo-api   # terminal 2
+
+curl -XPOST localhost:3000/jobs -H 'content-type: application/json' -d '{"text":"hello"}'
+curl localhost:3000/jobs/<id>     # waiting -> active -> completed
+```
+
+Deploy the worker separately (k3s `worker-deployment.yaml` and a Compose worker example are added by the module).
+
 ## Roadmap
 
 Further examples grow feature by feature (auth-guarded todos, file uploads,
