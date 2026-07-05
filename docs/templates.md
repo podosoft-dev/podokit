@@ -41,7 +41,7 @@ package.json                  # npm workspace
 Conventions baked in:
 
 - **Backend** returns a stable error envelope `{ success: false, error: { code, message, statusCode, path, timestamp } }`; clients branch on `code`, not the message.
-- **Frontend** talks to the API only through a server-side proxy (`src/lib/server/backend-proxy.ts`) that forwards an allowlist of headers, so tokens never reach the browser.
+- **Frontend** talks to the API only through the typed **`@podosoft/podokit-api-client`** (`$lib/api.ts`), which calls SvelteKit proxy routes (`routes/api/**`) that forward to the backend — the browser never hits the API directly, and tokens/cookies stay server-side. Use `client.get/post(...)` for REST and `client.auth.*` for auth.
 - **Env** uses `SCREAMING_SNAKE` names grouped by service; the API validates them before listening.
 
 ## `todo`
