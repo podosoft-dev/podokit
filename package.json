@@ -1,6 +1,6 @@
 {
   "name": "@podosoft/podokit-monorepo",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "description": "PodoKit monorepo \u2014 starter toolkit and CLI for full-stack TypeScript apps.",
   "license": "Apache-2.0",
