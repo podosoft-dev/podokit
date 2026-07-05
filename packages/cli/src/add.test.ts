@@ -175,6 +175,17 @@ describe("addModule (auth / better-auth)", () => {
     expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).toContain("LoggingModule,");
   });
 
+  it("audit-log composes auth and wires a global interceptor + migration", () => {
+    const project = generate("fullstack-nest-svelte");
+    const result = addModule({ projectRoot: project, module: "audit-log", modulesDir: MODULES });
+
+    expect(result.added).toContain("auth");
+    expect(existsSync(join(project, "apps/api/src/audit/audit.interceptor.ts"))).toBe(true);
+    expect(existsSync(join(project, "apps/api/src/audit/audit-log.entity.ts"))).toBe(true);
+    expect(existsSync(join(project, "apps/api/src/migrations/1720300000000-InitAuditLogs.ts"))).toBe(true);
+    expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).toContain("AuditModule,");
+  });
+
   it("rejects a project without the target app", () => {
     const empty = tmp(); // no apps/api/package.json
     expect(() => addModule({ projectRoot: empty, module: "auth", modulesDir: MODULES })).toThrow(

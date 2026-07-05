@@ -189,6 +189,28 @@ Set `LOG_LEVEL` (`debug|info|warn|error`) in `.env`. To route Nest's own logs
 through pino as well, create the app with `{ bufferLogs: true }` and call
 `app.useLogger(app.get(Logger))` in `main.ts`.
 
+### `audit-log`
+
+Audit logging built on `auth` (added automatically). A **global interceptor**
+records every mutating request (POST/PUT/PATCH/DELETE) to an `audit_logs` table
+with the **acting user**, method, path, and status. Read recent entries at
+`/audit-logs`.
+
+```bash
+npx @podosoft/podokit add audit-log   # also adds auth
+npm install
+docker compose -f infra/docker/docker-compose.yml up -d
+npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
+npm run migration:run -w my-app-api   # creates audit_logs
+npm run dev
+
+# sign in, make a change, then see who did it
+curl -c cookies.txt -XPOST localhost:3000/api/auth/sign-up/email \
+  -H 'content-type: application/json' -d '{"email":"a@example.com","password":"password123","name":"A"}'
+curl -b cookies.txt -XPOST localhost:3000/todos -H 'content-type: application/json' -d '{"title":"hi"}'
+curl -b cookies.txt localhost:3000/audit-logs   # [{ userId, method:"POST", path:"/todos", statusCode:201, ... }]
+```
+
 ## Roadmap
 
 More modules are planned — redis, queue (BullMQ), object storage (S3), file
