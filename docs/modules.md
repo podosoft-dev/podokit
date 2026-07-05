@@ -163,6 +163,24 @@ curl -XPOST localhost:3000/progress -H 'content-type: application/json' -d '{"st
 # the stream shows job-progress events: 20 -> 40 -> 60 -> 80 -> 100
 ```
 
+### `logging`
+
+Structured request logging with [nestjs-pino](https://github.com/iamolegga/nestjs-pino):
+every HTTP request is logged with a per-request **correlation id** (`x-request-id`,
+honored from the inbound header and echoed back). Pretty single-line logs in dev,
+JSON in production.
+
+```bash
+npx @podosoft/podokit add logging
+npm install
+npm run dev
+curl localhost:3000/health   # watch the API log a structured "request completed" line
+```
+
+Set `LOG_LEVEL` (`debug|info|warn|error`) in `.env`. To route Nest's own logs
+through pino as well, create the app with `{ bufferLogs: true }` and call
+`app.useLogger(app.get(Logger))` in `main.ts`.
+
 ## Roadmap
 
 More modules are planned — redis, queue (BullMQ), object storage (S3), file
