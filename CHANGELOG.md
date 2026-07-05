@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Replaced the thin `auth-jwt` module with the comprehensive better-auth `auth` module.
 
 ### Fixed
+- i18n scaffold: the `ko` locale imported `Translation` from `typesafe-i18n` (a generated type, not exported by the package), which broke `svelte-check`. It now uses `BaseTranslation` until you run `npx typesafe-i18n`. Generated apps pass `svelte-check` with no errors.
 - `auth` module: register the demo `AccountController` via an `AccountModule` so `/account/me` resolves (was 404).
 
 ## [0.2.0] - 2026-07-05
