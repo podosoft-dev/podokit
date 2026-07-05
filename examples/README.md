@@ -34,6 +34,26 @@ Try it: add a todo in the UI, then open `/api-docs` and call `GET /todos`.
 
 For a minimal, dependency-light layout instead, use `--template base`.
 
+## 2. auth (`podo add auth-jwt`)
+
+Add JWT authentication to any generated project — register, login, a JWT guard,
+and a protected `/auth/me` route (TypeORM `users` table).
+
+```bash
+npx @podosoft/podokit create auth-demo
+cd auth-demo && npm install && cp .env.example .env
+npx @podosoft/podokit add auth-jwt
+npm install
+docker compose -f infra/docker/docker-compose.yml up -d
+npm run migration:run -w auth-demo-api
+npm run dev
+
+# register → returns a JWT, then call the protected route
+curl -XPOST localhost:3000/auth/register -H 'content-type: application/json' \
+  -d '{"email":"a@example.com","password":"password123"}'
+curl localhost:3000/auth/me -H 'authorization: Bearer <token>'
+```
+
 ## Roadmap
 
 Further examples grow feature by feature (auth-guarded todos, file uploads,

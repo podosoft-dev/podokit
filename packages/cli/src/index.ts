@@ -4,11 +4,13 @@ import { createInterface } from "node:readline/promises";
 import { create, assertValidName, type PackageManager } from "./create";
 import { resolveCreateOptions, type Ask } from "./prompt";
 import { templateListText } from "./templates";
+import { addModule, listModules } from "./add";
 
 const HELP = `podo — PodoKit project generator
 
 Usage:
   podo create <name> [options]
+  podo add <module>
 
 Options:
   --template <t> Template to scaffold (see below)
@@ -23,6 +25,7 @@ ${templateListText()}
 Example:
   npx @podosoft/podokit create my-app
   npx @podosoft/podokit create my-app --template todo
+  cd my-app && npx @podosoft/podokit add auth-jwt
 `;
 
 interface ParsedArgs {
@@ -71,6 +74,30 @@ async function main(argv: string[]): Promise<void> {
     process.stdout.write(HELP);
     return;
   }
+  const modulesDir = join(__dirname, "templates", "modules");
+
+  if (args.command === "add") {
+    const moduleName = args.name;
+    if (!moduleName) {
+      const available = listModules(modulesDir);
+      const list = available.length
+        ? available.map((m) => `  ${m.name}  ${m.description}`).join("\n")
+        : "  (none available)";
+      process.stdout.write(`Usage: podo add <module>\n\nModules:\n${list}\n`);
+      return;
+    }
+    try {
+      const result = addModule({ projectRoot: process.cwd(), module: moduleName, modulesDir });
+      process.stdout.write(`\nAdded ${result.module}.\n`);
+      if (result.instructions.length) {
+        process.stdout.write(`\nNext steps:\n${result.instructions.map((i) => `  ${i}`).join("\n")}\n`);
+      }
+    } catch (err) {
+      fail((err as Error).message);
+    }
+    return;
+  }
+
   if (args.command !== "create") {
     fail(`Unknown command "${args.command}". Run "podo --help".`);
   }
