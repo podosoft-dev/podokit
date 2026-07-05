@@ -211,6 +211,23 @@ curl -b cookies.txt -XPOST localhost:3000/todos -H 'content-type: application/js
 curl -b cookies.txt localhost:3000/audit-logs   # [{ userId, method:"POST", path:"/todos", statusCode:201, ... }]
 ```
 
+### `rate-limit`
+
+Rate limiting with [`@nestjs/throttler`](https://docs.nestjs.com/security/rate-limiting)
+backed by **Redis** (added automatically), so the limit holds across API replicas.
+Adding it installs a global throttler guard; exceeding the limit returns **429**.
+
+```bash
+npx @podosoft/podokit add rate-limit   # also adds redis
+npm install
+docker compose -f infra/docker/docker-compose.yml up -d
+npm run dev
+# with RATE_LIMIT_MAX low, repeated requests return 429 once the window is exceeded
+```
+
+Tune `RATE_LIMIT_TTL` (window seconds) and `RATE_LIMIT_MAX` (requests/window) in `.env`.
+Skip a route with `@SkipThrottle()` or override it with `@Throttle()`.
+
 ## Roadmap
 
 More modules are planned — redis, queue (BullMQ), object storage (S3), file

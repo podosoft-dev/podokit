@@ -186,6 +186,20 @@ describe("addModule (auth / better-auth)", () => {
     expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).toContain("AuditModule,");
   });
 
+  it("rate-limit composes redis and wires a global throttler guard", () => {
+    const project = generate("fullstack-nest-svelte");
+    const result = addModule({ projectRoot: project, module: "rate-limit", modulesDir: MODULES });
+
+    expect(result.added).toContain("redis");
+    expect(existsSync(join(project, "apps/api/src/rate-limit/rate-limit.module.ts"))).toBe(true);
+    const apiPkg = JSON.parse(readFileSync(join(project, "apps/api/package.json"), "utf8")) as {
+      dependencies: Record<string, string>;
+    };
+    expect(apiPkg.dependencies["@nestjs/throttler"]).toBeDefined();
+    expect(readFileSync(join(project, ".env.example"), "utf8")).toContain("RATE_LIMIT_MAX");
+    expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).toContain("RateLimitModule,");
+  });
+
   it("rejects a project without the target app", () => {
     const empty = tmp(); // no apps/api/package.json
     expect(() => addModule({ projectRoot: empty, module: "auth", modulesDir: MODULES })).toThrow(
