@@ -136,6 +136,32 @@ describe("addModule (auth-jwt)", () => {
     expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).toContain("EventsModule,");
   });
 
+  it("adds redis with a client and cache endpoints", () => {
+    const project = generate("fullstack-nest-svelte");
+    addModule({ projectRoot: project, module: "redis", modulesDir: MODULES });
+    expect(existsSync(join(project, "apps/api/src/redis/redis.service.ts"))).toBe(true);
+    const apiPkg = JSON.parse(readFileSync(join(project, "apps/api/package.json"), "utf8")) as {
+      dependencies: Record<string, string>;
+    };
+    expect(apiPkg.dependencies["ioredis"]).toBeDefined();
+    expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).toContain("RedisModule,");
+  });
+
+  it("job-progress composes bullmq + sse + redis and wires the worker", () => {
+    const project = generate("fullstack-nest-svelte");
+    const result = addModule({ projectRoot: project, module: "job-progress", modulesDir: MODULES });
+
+    expect(result.added).toEqual(expect.arrayContaining(["bullmq", "sse", "redis"]));
+    expect(existsSync(join(project, "apps/api/src/progress/progress.processor.ts"))).toBe(true);
+    // API wiring
+    expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).toContain("JobProgressModule,");
+    // worker wiring (into bullmq's worker.module)
+    const worker = readFileSync(join(project, "apps/api/src/jobs/worker.module.ts"), "utf8");
+    expect(worker).toContain("ProgressProcessor,");
+    expect(worker).toContain('BullModule.registerQueue({ name: "progress" }),');
+    expect(worker).toContain("RedisModule,");
+  });
+
   it("rejects a project without the target app", () => {
     const empty = tmp(); // no apps/api/package.json
     expect(() => addModule({ projectRoot: empty, module: "auth-jwt", modulesDir: MODULES })).toThrow(

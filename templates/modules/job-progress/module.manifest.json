@@ -1,0 +1,23 @@
+{
+  "name": "job-progress",
+  "description": "Live job progress: a worker reports progress over Redis pub/sub and the API relays it to SSE clients (combines bullmq + redis + sse).",
+  "requires": ["bullmq", "sse", "redis"],
+  "targetApp": "api",
+  "env": [],
+  "inject": [
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:imports", "text": "import { JobProgressModule } from \"./progress/job-progress.module\";" },
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:module-imports", "text": "JobProgressModule," },
+    { "file": "apps/api/src/jobs/worker.module.ts", "marker": "// podokit:worker-imports", "text": "import { ProgressProcessor } from \"../progress/progress.processor\";" },
+    { "file": "apps/api/src/jobs/worker.module.ts", "marker": "// podokit:worker-imports", "text": "import { RedisModule } from \"../redis/redis.module\";" },
+    { "file": "apps/api/src/jobs/worker.module.ts", "marker": "// podokit:worker-queues", "text": "RedisModule," },
+    { "file": "apps/api/src/jobs/worker.module.ts", "marker": "// podokit:worker-queues", "text": "BullModule.registerQueue({ name: \"progress\" })," },
+    { "file": "apps/api/src/jobs/worker.module.ts", "marker": "// podokit:worker-providers", "text": "ProgressProcessor," }
+  ],
+  "instructions": [
+    "Start Redis + Postgres:  docker compose -f infra/docker/docker-compose.yml up -d",
+    "Run API and worker in separate terminals:  npm run dev   /   npm run dev:worker -w <app>-api",
+    "Watch progress:  curl -N localhost:3000/events/stream",
+    "Start a job:     curl -XPOST localhost:3000/progress -H 'content-type: application/json' -d '{\"steps\":5}'",
+    "The stream shows job-progress events 20 -> 40 -> ... -> 100 pushed from the worker via Redis."
+  ]
+}

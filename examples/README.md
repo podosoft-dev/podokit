@@ -91,6 +91,27 @@ npm run dev
 curl -F 'file=@./photo.png' localhost:3000/files   # → { key, url }
 ```
 
+## 5. job dashboard — live progress (`podo add job-progress`)
+
+Stream a background job's progress to the browser. `job-progress` composes
+`bullmq` (queue + worker), `redis` (pub/sub bridge), and `sse` (stream) — all
+added automatically.
+
+```bash
+npx @podosoft/podokit create jobs-dash
+cd jobs-dash && npm install && cp .env.example .env
+npx @podosoft/podokit add job-progress          # also adds bullmq, sse, redis
+npm install
+docker compose -f infra/docker/docker-compose.yml up -d
+
+npm run dev                            # API
+npm run dev:worker -w jobs-dash-api    # worker (separate process)
+
+curl -N localhost:3000/events/stream   # watch
+curl -XPOST localhost:3000/progress -H 'content-type: application/json' -d '{"steps":5}'
+# stream: job-progress 20 -> 40 -> 60 -> 80 -> 100 (pushed from the worker via Redis)
+```
+
 ## Roadmap
 
 Further examples grow feature by feature (auth-guarded todos, file uploads,
