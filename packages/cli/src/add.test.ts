@@ -69,6 +69,25 @@ describe("addModule (auth-jwt)", () => {
     );
   });
 
+  it("adds bullmq with a separate worker entrypoint and scripts", () => {
+    const project = generate("fullstack-nest-svelte");
+    addModule({ projectRoot: project, module: "bullmq", modulesDir: MODULES });
+
+    expect(existsSync(join(project, "apps/api/src/jobs/jobs.module.ts"))).toBe(true);
+    expect(existsSync(join(project, "apps/api/src/jobs/worker.module.ts"))).toBe(true);
+    expect(existsSync(join(project, "apps/api/src/main-worker.ts"))).toBe(true);
+    // deployment reflects the worker
+    expect(existsSync(join(project, "infra/k3s/worker-deployment.yaml"))).toBe(true);
+    expect(existsSync(join(project, "infra/docker/worker.compose.example.yml"))).toBe(true);
+    const apiPkg = JSON.parse(readFileSync(join(project, "apps/api/package.json"), "utf8")) as {
+      dependencies: Record<string, string>;
+      scripts: Record<string, string>;
+    };
+    expect(apiPkg.dependencies["@nestjs/bullmq"]).toBeDefined();
+    expect(apiPkg.scripts["dev:worker"]).toContain("main-worker");
+    expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).toContain("JobsModule,");
+  });
+
   it("rejects a project without the target app", () => {
     const empty = tmp(); // no apps/api/package.json
     expect(() => addModule({ projectRoot: empty, module: "auth-jwt", modulesDir: MODULES })).toThrow(
