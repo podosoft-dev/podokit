@@ -23,9 +23,27 @@ jobs:
       - run: npm run build
       - run: npm test
       # Publish the engine first (the CLI depends on it), then the CLI.
-      - run: npm publish -w @podosoft/podokit-template-engine
+      # Skip a package whose version is already on the registry so re-runs
+      # of the same tag are idempotent instead of failing with 403.
+      - name: Publish template-engine
+        run: |
+          PKG=@podosoft/podokit-template-engine
+          VER=$(node -p "require('./packages/template-engine/package.json').version")
+          if npm view "$PKG@$VER" version >/dev/null 2>&1; then
+            echo "$PKG@$VER already published — skipping"
+          else
+            npm publish -w "$PKG"
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - run: npm publish -w @podosoft/podokit
+      - name: Publish CLI
+        run: |
+          PKG=@podosoft/podokit
+          VER=$(node -p "require('./packages/cli/package.json').version")
+          if npm view "$PKG@$VER" version >/dev/null 2>&1; then
+            echo "$PKG@$VER already published — skipping"
+          else
+            npm publish -w "$PKG"
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
