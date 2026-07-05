@@ -8,7 +8,7 @@ cd my-app
 npx @podosoft/podokit add <module>
 ```
 
-`podo add` (with no module) lists what's available. Each module:
+`podo add` (with no module) lists what's available. Modules can depend on other modules — required modules are added automatically. Each module:
 
 - overlays its files into the project,
 - merges its dependencies into the target app's `package.json`,
@@ -92,6 +92,22 @@ curl localhost:3000/storage/hello/presigned  # { url }
 - **AWS S3**: `STORAGE_PROVIDER=aws`, remove `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE=false`, real credentials, and a pre-created bucket/region.
 
 The same `@aws-sdk/client-s3` code path serves both — only configuration differs.
+
+### `file-upload`
+
+A multipart upload endpoint that stores files via object storage and returns a
+presigned download URL. Depends on `object-storage-s3` — `podo add file-upload`
+adds it automatically if it is not already present.
+
+```bash
+npx @podosoft/podokit add file-upload   # also adds object-storage-s3
+npm install
+docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml up -d
+npm run dev
+
+curl -F 'file=@./photo.png' localhost:3000/files
+# → { key, url }  (url is a presigned download link)
+```
 
 ## Roadmap
 

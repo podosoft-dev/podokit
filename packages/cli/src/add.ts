@@ -36,6 +36,8 @@ export interface AddOptions {
 export interface AddResult {
   module: string;
   instructions: string[];
+  /** Required modules that were auto-added because they were missing. */
+  added: string[];
 }
 
 /** List modules available under `modulesDir` (each has a module.manifest.json). */
@@ -72,14 +74,34 @@ function appendEnv(projectRoot: string, lines: string[]): void {
   writeFileSync(file, `${current}${separator}\n${missing.join("\n")}\n`);
 }
 
+/** Heuristic: is `module` already applied to the project? */
+function isApplied(projectRoot: string, modulesDir: string, module: string): boolean {
+  const manifestPath = join(modulesDir, module, "module.manifest.json");
+  if (!existsSync(manifestPath)) return false;
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as ModuleManifest;
+  const firstInject = manifest.inject?.[0];
+  if (firstInject) {
+    const target = join(projectRoot, firstInject.file);
+    return existsSync(target) && readFileSync(target, "utf8").includes(firstInject.text);
+  }
+  return false;
+}
+
 /**
  * Apply a module to an existing generated project: overlay files, merge the
- * target app's package.json dependencies, append env example lines, and inject
- * wiring at markers. Returns the module's follow-up instructions.
+ * target app's package.json dependencies and scripts, append env example lines,
+ * and inject wiring at markers. Missing required modules are added first.
  */
 export function addModule(options: AddOptions): AddResult {
-  const { projectRoot, module, modulesDir } = options;
+  return applyModule(options.projectRoot, options.module, options.modulesDir, new Set());
+}
 
+function applyModule(
+  projectRoot: string,
+  module: string,
+  modulesDir: string,
+  applied: Set<string>,
+): AddResult {
   const moduleDir = join(modulesDir, module);
   if (!existsSync(join(moduleDir, "module.manifest.json"))) {
     const available = listModules(modulesDir).map((m) => m.name);
@@ -94,6 +116,16 @@ export function addModule(options: AddOptions): AddResult {
     throw new Error(
       `This does not look like a PodoKit project: ${join("apps", manifest.targetApp, "package.json")} not found. Run inside a generated project.`,
     );
+  }
+
+  applied.add(module);
+
+  // 0) apply required modules first (auto-add if missing)
+  const added: string[] = [];
+  for (const required of manifest.requires ?? []) {
+    if (applied.has(required) || isApplied(projectRoot, modulesDir, required)) continue;
+    const result = applyModule(projectRoot, required, modulesDir, applied);
+    added.push(required, ...result.added);
   }
 
   const appName = projectName(projectRoot);
@@ -130,5 +162,5 @@ export function addModule(options: AddOptions): AddResult {
   }
 
   const instructions = (manifest.instructions ?? []).map((line) => line.replace(/<app>/g, appName));
-  return { module, instructions };
+  return { module, instructions, added };
 }
