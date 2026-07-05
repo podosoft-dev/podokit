@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-05
+
 ### Added
 - Initial repository scaffold: README, license (Apache-2.0), community health files, npm workspace root, CI workflow, issue/PR templates, Dependabot config.
 - `@podosoft/podokit-template-engine`: token rendering, recursive template copy (with `dot-` file convention), and package.json deep-merge utilities.
@@ -17,4 +19,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 - `fullstack-nest-svelte`: add missing `@types/express` so the generated API builds cleanly. Verified end-to-end: install, build (API + web), API starts, `/health` returns 200.
 
-[Unreleased]: https://github.com/podosoft-dev/podokit/commits/main
+[Unreleased]: https://github.com/podosoft-dev/podokit/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/podosoft-dev/podokit/releases/tag/v0.1.0
