@@ -1,0 +1,116 @@
+import { createAuthClient } from "better-auth/client";
+import { adminClient } from "better-auth/client/plugins";
+
+/** Options for {@link createApiClient}. */
+export interface ApiClientOptions {
+  /** Origin of the API. Empty string for same-origin (browser through a proxy);
+   *  an absolute URL (e.g. the internal backend URL) for server-side use.
+   *  The better-auth client needs an absolute origin, so in the browser an
+   *  empty value falls back to `location.origin`. */
+  baseUrl?: string;
+  /** Path prefix for the app's REST endpoints. Default `/api`. */
+  apiBasePath?: string;
+  /** Custom fetch (inject on the server to forward cookies for SSR). */
+  fetch?: typeof globalThis.fetch;
+  /** Credentials mode for requests. Default `include` (send cookies). */
+  credentials?: RequestCredentials;
+}
+
+/** Error thrown when the API returns the standard error envelope or a non-2xx status. */
+export class ApiError extends Error {
+  readonly code: string;
+  readonly statusCode: number;
+  readonly details?: unknown;
+
+  constructor(code: string, message: string, statusCode: number, details?: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.code = code;
+    this.statusCode = statusCode;
+    this.details = details;
+  }
+}
+
+function toApiError(data: unknown, response: Response): ApiError {
+  if (data && typeof data === "object" && "error" in data) {
+    const error = (data as { error: unknown }).error;
+    if (error && typeof error === "object") {
+      const record = error as Record<string, unknown>;
+      return new ApiError(
+        typeof record.code === "string" ? record.code : "HTTP_ERROR",
+        typeof record.message === "string" ? record.message : response.statusText,
+        typeof record.statusCode === "number" ? record.statusCode : response.status,
+        record.details,
+      );
+    }
+  }
+  return new ApiError("HTTP_ERROR", response.statusText || "Request failed", response.status);
+}
+
+/**
+ * Create a typed API client. Every frontend talks to the PodoKit backend
+ * through this single entry point — never with a raw fetch.
+ *
+ * - `client.auth` is the better-auth client (email/password, sessions, and the
+ *   admin plugin: `client.auth.admin.listUsers()`, `banUser`, `setRole`, ...).
+ * - `client.get/post/put/patch/del` call the app's REST endpoints and parse the
+ *   standard error envelope, throwing {@link ApiError} on failure.
+ */
+export function createApiClient(options: ApiClientOptions = {}) {
+  const baseUrl = options.baseUrl ?? "";
+  const apiBasePath = options.apiBasePath ?? "/api";
+  const credentials = options.credentials ?? "include";
+  const doFetch = options.fetch ?? globalThis.fetch;
+
+  // better-auth mounts at /api/auth and needs an absolute origin. In the
+  // browser an empty baseUrl resolves to the current origin.
+  const authOrigin =
+    options.baseUrl ?? (typeof globalThis.location === "undefined" ? "" : globalThis.location.origin);
+
+  // Created lazily: REST-only usage (and SSR without an origin) never triggers
+  // the better-auth client's eager URL validation.
+  let authClient: ReturnType<typeof createAuthClient> | undefined;
+  function getAuth(): ReturnType<typeof createAuthClient> {
+    authClient ??= createAuthClient({
+      baseURL: authOrigin,
+      plugins: [adminClient()],
+      fetchOptions: {
+        credentials,
+        ...(options.fetch ? { customFetchImpl: options.fetch } : {}),
+      },
+    });
+    return authClient;
+  }
+
+  async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const response = await doFetch(`${baseUrl}${apiBasePath}${path}`, {
+      method,
+      credentials,
+      headers: body === undefined ? undefined : { "content-type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const text = await response.text();
+    const data: unknown = text ? JSON.parse(text) : undefined;
+    if (!response.ok) {
+      throw toApiError(data, response);
+    }
+    return data as T;
+  }
+
+  return {
+    /** The better-auth client (auth + admin plugin), created on first access. */
+    get auth(): ReturnType<typeof createAuthClient> {
+      return getAuth();
+    },
+    /** Low-level typed request against the app's REST API. */
+    request,
+    get: <T>(path: string): Promise<T> => request<T>("GET", path),
+    post: <T>(path: string, body?: unknown): Promise<T> => request<T>("POST", path, body),
+    put: <T>(path: string, body?: unknown): Promise<T> => request<T>("PUT", path, body),
+    patch: <T>(path: string, body?: unknown): Promise<T> => request<T>("PATCH", path, body),
+    del: <T>(path: string): Promise<T> => request<T>("DELETE", path),
+  };
+}
+
+/** The client returned by {@link createApiClient}. */
+export type ApiClient = ReturnType<typeof createApiClient>;
