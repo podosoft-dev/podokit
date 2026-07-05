@@ -1,4 +1,9 @@
 <script lang="ts">
+  import { Button } from "$lib/components/ui/button";
+  import { Input } from "$lib/components/ui/input";
+  import { Checkbox } from "$lib/components/ui/checkbox";
+  import * as Card from "$lib/components/ui/card";
+
   type Todo = { id: string; title: string; completed: boolean };
 
   let todos = $state<Todo[]>([]);
@@ -48,37 +53,43 @@
 </script>
 
 <main class="mx-auto flex min-h-full max-w-xl flex-col gap-6 p-8">
-  <header>
+  <div>
     <h1 class="text-3xl font-bold">{{projectName}}</h1>
-    <p class="text-sm opacity-70">Full-stack starter generated with PodoKit.</p>
-  </header>
+    <p class="text-muted-foreground text-sm">Full-stack starter generated with PodoKit.</p>
+  </div>
 
-  <form class="flex gap-2" onsubmit={add}>
-    <input
-      class="flex-1 rounded-md border border-current/20 bg-transparent px-3 py-2 text-sm"
-      placeholder="Add a todo…"
-      bind:value={title}
-    />
-    <button class="rounded-md border border-current/20 px-4 py-2 text-sm font-medium hover:opacity-80" type="submit">
-      Add
-    </button>
-  </form>
+  <Card.Root>
+    <Card.Header>
+      <Card.Title>Todos</Card.Title>
+      <Card.Description>A NestJS + SvelteKit CRUD example.</Card.Description>
+    </Card.Header>
+    <Card.Content class="flex flex-col gap-4">
+      <form class="flex gap-2" onsubmit={add}>
+        <Input placeholder="Add a todo…" bind:value={title} />
+        <Button type="submit">Add</Button>
+      </form>
 
-  {#if error}
-    <p class="text-sm text-red-500">{error}</p>
-  {/if}
+      {#if error}
+        <p class="text-destructive text-sm">{error}</p>
+      {/if}
 
-  <ul class="flex flex-col divide-y divide-current/10">
-    {#each todos as todo (todo.id)}
-      <li class="flex items-center gap-3 py-3">
-        <input type="checkbox" checked={todo.completed} onchange={() => toggle(todo)} />
-        <span class="flex-1 text-sm" class:line-through={todo.completed} class:opacity-50={todo.completed}>
-          {todo.title}
-        </span>
-        <button class="text-xs opacity-60 hover:opacity-100" onclick={() => remove(todo)}>Delete</button>
-      </li>
-    {:else}
-      <li class="py-6 text-center text-sm opacity-50">No todos yet — add one above.</li>
-    {/each}
-  </ul>
+      <ul class="divide-border flex flex-col divide-y">
+        {#each todos as todo (todo.id)}
+          <li class="flex items-center gap-3 py-3">
+            <Checkbox checked={todo.completed} onCheckedChange={() => toggle(todo)} />
+            <span
+              class="flex-1 text-sm"
+              class:line-through={todo.completed}
+              class:text-muted-foreground={todo.completed}
+            >
+              {todo.title}
+            </span>
+            <Button variant="ghost" size="sm" onclick={() => remove(todo)}>Delete</Button>
+          </li>
+        {:else}
+          <li class="text-muted-foreground py-6 text-center text-sm">No todos yet — add one above.</li>
+        {/each}
+      </ul>
+    </Card.Content>
+  </Card.Root>
 </main>

@@ -68,6 +68,9 @@ describe("create (integration against templates)", () => {
     expect(existsSync(join(target, "apps", "api", "src", "todos", "todos.controller.ts"))).toBe(true);
     expect(existsSync(join(target, "apps", "api", "src", "migrations"))).toBe(true);
     expect(existsSync(join(target, "apps", "web", "src", "routes", "api", "todos", "+server.ts"))).toBe(true);
+    // shadcn-svelte components ship preinstalled
+    expect(existsSync(join(target, "apps", "web", "src", "lib", "components", "ui", "button", "button.svelte"))).toBe(true);
+    expect(existsSync(join(target, "apps", "web", "src", "lib", "utils.ts"))).toBe(true);
   });
 
   it("refuses a non-empty target directory", () => {
