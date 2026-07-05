@@ -67,6 +67,32 @@ Without the worker running, jobs stay `waiting`; start the worker and they compl
 
 Run it in production as `npm run start:worker` (or the container command `node dist/main-worker`).
 
+### `object-storage-s3`
+
+S3-compatible object storage that works with **both AWS S3 and MinIO**, selected
+by the `STORAGE_PROVIDER` env var (`minio` or `aws`). Provides a `StorageService`
+(put/get/delete + presigned URLs) and demo `/storage` endpoints.
+
+```bash
+npx @podosoft/podokit add object-storage-s3
+npm install
+
+# local dev with MinIO
+docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml up -d
+npm run dev
+
+curl -XPUT localhost:3000/storage/hello -H 'content-type: application/json' -d '{"content":"hi"}'
+curl localhost:3000/storage/hello            # { key, content }
+curl localhost:3000/storage/hello/presigned  # { url }
+```
+
+**Providers** (set in `.env`):
+
+- **MinIO** (default, for dev): `STORAGE_PROVIDER=minio`, `S3_ENDPOINT=http://localhost:9000`, `S3_FORCE_PATH_STYLE=true`, `S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY`.
+- **AWS S3**: `STORAGE_PROVIDER=aws`, remove `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE=false`, real credentials, and a pre-created bucket/region.
+
+The same `@aws-sdk/client-s3` code path serves both — only configuration differs.
+
 ## Roadmap
 
 More modules are planned — redis, queue (BullMQ), object storage (S3), file

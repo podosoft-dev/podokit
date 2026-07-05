@@ -1,0 +1,31 @@
+{
+  "name": "object-storage-s3",
+  "description": "S3-compatible object storage (AWS S3 or MinIO, chosen by STORAGE_PROVIDER) with a StorageService and presigned URLs.",
+  "requires": [],
+  "targetApp": "api",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.700.0",
+    "@aws-sdk/s3-request-presigner": "^3.700.0"
+  },
+  "env": [
+    "# object storage — STORAGE_PROVIDER: minio | aws",
+    "STORAGE_PROVIDER=minio",
+    "S3_ENDPOINT=http://localhost:9000",
+    "S3_REGION=us-east-1",
+    "S3_BUCKET=podokit",
+    "S3_ACCESS_KEY_ID=podokit",
+    "S3_SECRET_ACCESS_KEY=podokitsecret",
+    "S3_FORCE_PATH_STYLE=true"
+  ],
+  "inject": [
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:imports", "text": "import { StorageModule } from \"./storage/storage.module\";" },
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:module-imports", "text": "StorageModule," }
+  ],
+  "instructions": [
+    "Start MinIO for local dev:  docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml up -d",
+    "Store an object:  curl -XPUT localhost:3000/storage/hello -H 'content-type: application/json' -d '{\"content\":\"hi\"}'",
+    "Read it back:     curl localhost:3000/storage/hello",
+    "Presigned URL:    curl localhost:3000/storage/hello/presigned",
+    "For AWS S3: set STORAGE_PROVIDER=aws, remove S3_ENDPOINT, set S3_FORCE_PATH_STYLE=false and real credentials/bucket."
+  ]
+}
