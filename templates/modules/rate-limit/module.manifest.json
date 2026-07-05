@@ -1,0 +1,25 @@
+{
+  "name": "rate-limit",
+  "description": "Rate limiting with @nestjs/throttler backed by Redis (correct across API replicas). Installs a global throttler guard; configurable via env.",
+  "requires": ["redis"],
+  "targetApp": "api",
+  "dependencies": {
+    "@nestjs/throttler": "^6.5.0",
+    "@nest-lab/throttler-storage-redis": "^1.2.0"
+  },
+  "env": [
+    "# rate limit (window in seconds, max requests per window per client)",
+    "RATE_LIMIT_TTL=60",
+    "RATE_LIMIT_MAX=100"
+  ],
+  "inject": [
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:imports", "text": "import { RateLimitModule } from \"./rate-limit/rate-limit.module\";" },
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:module-imports", "text": "RateLimitModule," }
+  ],
+  "instructions": [
+    "Ensure Redis is running:  docker compose -f infra/docker/docker-compose.yml up -d",
+    "Tune RATE_LIMIT_TTL / RATE_LIMIT_MAX in .env.",
+    "Exceeding the limit returns HTTP 429. Skip a route with @SkipThrottle() or tune it with @Throttle().",
+    "The limit is shared across API replicas because it is stored in Redis."
+  ]
+}
