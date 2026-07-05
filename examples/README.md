@@ -75,6 +75,22 @@ curl localhost:3000/jobs/<id>     # waiting -> active -> completed
 
 Deploy the worker separately (k3s `worker-deployment.yaml` and a Compose worker example are added by the module).
 
+## 4. file uploads (`podo add file-upload`)
+
+Upload files to S3-compatible storage (MinIO in dev, AWS S3 in prod) and get a
+presigned download URL. `file-upload` pulls in `object-storage-s3` automatically.
+
+```bash
+npx @podosoft/podokit create files-demo
+cd files-demo && npm install && cp .env.example .env
+npx @podosoft/podokit add file-upload
+npm install
+docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml up -d
+npm run dev
+
+curl -F 'file=@./photo.png' localhost:3000/files   # → { key, url }
+```
+
 ## Roadmap
 
 Further examples grow feature by feature (auth-guarded todos, file uploads,

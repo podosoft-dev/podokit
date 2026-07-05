@@ -88,6 +88,9 @@ async function main(argv: string[]): Promise<void> {
     }
     try {
       const result = addModule({ projectRoot: process.cwd(), module: moduleName, modulesDir });
+      if (result.added.length) {
+        process.stdout.write(`\nAlso added required module(s): ${result.added.join(", ")}\n`);
+      }
       process.stdout.write(`\nAdded ${result.module}.\n`);
       if (result.instructions.length) {
         process.stdout.write(`\nNext steps:\n${result.instructions.map((i) => `  ${i}`).join("\n")}\n`);

@@ -104,6 +104,30 @@ describe("addModule (auth-jwt)", () => {
     expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).toContain("StorageModule,");
   });
 
+  it("auto-adds a required module (file-upload pulls in object-storage-s3)", () => {
+    const project = generate("fullstack-nest-svelte");
+    const result = addModule({ projectRoot: project, module: "file-upload", modulesDir: MODULES });
+
+    expect(result.added).toContain("object-storage-s3");
+    // both modules' files are present
+    expect(existsSync(join(project, "apps/api/src/files/files.controller.ts"))).toBe(true);
+    expect(existsSync(join(project, "apps/api/src/storage/storage.service.ts"))).toBe(true);
+    // both are wired
+    const appModule = readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8");
+    expect(appModule).toContain("FilesModule,");
+    expect(appModule).toContain("StorageModule,");
+  });
+
+  it("does not re-add an already-present required module", () => {
+    const project = generate("fullstack-nest-svelte");
+    addModule({ projectRoot: project, module: "object-storage-s3", modulesDir: MODULES });
+    const result = addModule({ projectRoot: project, module: "file-upload", modulesDir: MODULES });
+    expect(result.added).not.toContain("object-storage-s3");
+    // storage wiring still appears exactly once
+    const appModule = readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8");
+    expect(appModule.match(/StorageModule,/g)?.length).toBe(1);
+  });
+
   it("rejects a project without the target app", () => {
     const empty = tmp(); // no apps/api/package.json
     expect(() => addModule({ projectRoot: empty, module: "auth-jwt", modulesDir: MODULES })).toThrow(

@@ -1,0 +1,19 @@
+{
+  "name": "file-upload",
+  "description": "Multipart file upload endpoint that stores files via object storage and returns a presigned URL.",
+  "requires": ["object-storage-s3"],
+  "targetApp": "api",
+  "devDependencies": {
+    "@types/multer": "^1.4.12"
+  },
+  "env": [],
+  "inject": [
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:imports", "text": "import { FilesModule } from \"./files/files.module\";" },
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:module-imports", "text": "FilesModule," }
+  ],
+  "instructions": [
+    "Start MinIO (or configure AWS S3):  docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml up -d",
+    "Upload a file:  curl -F 'file=@./some.png' localhost:3000/files",
+    "The response includes { key, url } — a presigned download URL."
+  ]
+}
