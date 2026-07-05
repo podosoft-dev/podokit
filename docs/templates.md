@@ -66,6 +66,49 @@ npm run dev
 
 A minimal npm workspace (root `package.json`, `apps/api` and `apps/web` placeholders, `.env.example`, `.gitignore`). Use it when you want to assemble a project yourself.
 
+## UI: shadcn-svelte
+
+The `fullstack-nest-svelte` and `todo` templates come with [shadcn-svelte](https://shadcn-svelte.com) set up and a starter set of components **already installed** in `apps/web/src/lib/components/ui/`:
+
+- `button`, `input`, `card`, `checkbox`, `label`
+
+Use them directly (no raw HTML form controls needed):
+
+```svelte
+<script lang="ts">
+  import { Button } from "$lib/components/ui/button";
+  import { Input } from "$lib/components/ui/input";
+  import * as Card from "$lib/components/ui/card";
+</script>
+
+<Card.Root>
+  <Card.Header><Card.Title>Hello</Card.Title></Card.Header>
+  <Card.Content class="flex gap-2">
+    <Input placeholder="Name" />
+    <Button>Save</Button>
+  </Card.Content>
+</Card.Root>
+```
+
+### Add more components
+
+```bash
+cd apps/web
+npx shadcn-svelte@latest add dialog dropdown-menu badge
+```
+
+Components are copied into `src/lib/components/ui/` — they are yours to edit.
+
+### Theming
+
+Colors, radius, and dark-mode values are CSS variables in `apps/web/src/app.css` (`:root` for light, `.dark` for dark). Change them to restyle everything — for example a different primary color:
+
+```css
+:root { --primary: oklch(0.55 0.2 260); }   /* blue-ish */
+```
+
+Dark mode is handled by [`mode-watcher`](https://github.com/svecosystem/mode-watcher) (mounted in `+layout.svelte`); toggle with its `toggleMode()` helper. The base color palette was generated with `baseColor: zinc` (see `components.json`).
+
 ## The `dot-` convention
 
 Template files named `dot-<name>` are written as `.<name>` (for example `dot-gitignore` → `.gitignore`). This lets templates ship dotfiles that package managers would otherwise strip.
