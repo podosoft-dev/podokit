@@ -38,24 +38,34 @@ Run without flags in a terminal and PodoKit prompts for the template and package
 
 | Template | Description |
 | --- | --- |
-| `fullstack-nest-svelte` (default) | NestJS API + SvelteKit web, with Docker Compose and k3s manifests |
+| `fullstack-nest-svelte` (default) | Clean NestJS + SvelteKit starter: config validation, health checks, Swagger, TypeORM wired (no domain code) + Docker Compose and k3s |
+| `todo` | The fullstack starter plus a Todo CRUD example (DB entity, migration, UI) — a runnable reference |
 | `base` | Minimal npm workspace to build up from scratch |
 
-### Preview
+Pick one interactively, or pass `--template <name>`:
 
-The default template generates a working todo app (SvelteKit UI + NestJS API + PostgreSQL) with API docs out of the box:
+```bash
+npx @podosoft/podokit create my-app                    # clean fullstack (default)
+npx @podosoft/podokit create my-app --template todo    # worked todo example
+npx @podosoft/podokit create my-app --template base    # minimal
+```
+
+### Preview — the `todo` template
+
+`--template todo` generates a working todo app (SvelteKit UI + NestJS API + PostgreSQL) with API docs:
 
 | Web (SvelteKit) | API docs (Swagger) |
 | --- | --- |
 | ![Generated todo app](docs/images/todo-app.png) | ![Generated API docs](docs/images/api-docs.png) |
 
-### What the fullstack template gives you
+### What the fullstack starter gives you
 
 ```
 my-app/
 ├── apps/
-│   ├── api/     # NestJS: config validation, /health, global ValidationPipe,
-│   │            # exception filter, standard { success, error } envelope
+│   ├── api/     # NestJS: zod env validation, /health + /health/ready,
+│   │            # Swagger at /api-docs, TypeORM wired (add your entities),
+│   │            # global ValidationPipe, standard { success, error } envelope
 │   └── web/     # SvelteKit: Tailwind v4, shadcn-svelte, typesafe-i18n,
 │                # server-side API proxy (browser never calls the API directly)
 ├── infra/

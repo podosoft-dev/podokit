@@ -4,17 +4,18 @@ PodoKit generates projects rather than vendoring large example apps, so the
 canonical example is what `podo create` produces. Each example below layers on
 one more feature.
 
-## 1. todo-app (default template)
+## 1. todo (`--template todo`)
 
-The default `fullstack-nest-svelte` template is a working todo app: a SvelteKit
-UI, a NestJS `todos` CRUD API (TypeORM + PostgreSQL), and Swagger docs.
+The `todo` template is a working todo app: a SvelteKit UI, a NestJS `todos`
+CRUD API (TypeORM + PostgreSQL), and Swagger docs. (The default
+`fullstack-nest-svelte` template is the same foundation without the todo code.)
 
 | Web (SvelteKit) | API docs (Swagger) |
 | --- | --- |
 | ![Generated todo app](../docs/images/todo-app.png) | ![Generated API docs](../docs/images/api-docs.png) |
 
 ```bash
-npx @podosoft/podokit create todo-app
+npx @podosoft/podokit create todo-app --template todo
 cd todo-app
 npm install
 cp .env.example .env

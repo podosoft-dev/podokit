@@ -3,6 +3,7 @@ import { join, relative } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { create, assertValidName, type PackageManager } from "./create";
 import { resolveCreateOptions, type Ask } from "./prompt";
+import { templateListText } from "./templates";
 
 const HELP = `podo — PodoKit project generator
 
@@ -10,14 +11,18 @@ Usage:
   podo create <name> [options]
 
 Options:
-  --template <t> Template: fullstack-nest-svelte | base (default: fullstack-nest-svelte)
+  --template <t> Template to scaffold (see below)
   --dir <path>   Target directory (default: ./<name>)
   --pm <name>    Package manager: npm | pnpm | yarn (default: npm)
   -y, --yes      Skip prompts and accept defaults
   -h, --help     Show this help
 
+Templates:
+${templateListText()}
+
 Example:
   npx @podosoft/podokit create my-app
+  npx @podosoft/podokit create my-app --template todo
 `;
 
 interface ParsedArgs {
@@ -82,6 +87,11 @@ async function main(argv: string[]): Promise<void> {
   const interactive = Boolean(process.stdin.isTTY) && !args.yes;
   const rl = interactive ? createInterface({ input: process.stdin, output: process.stdout }) : undefined;
   const ask: Ask = async (question) => (rl ? (await rl.question(question)).trim() : "");
+
+  // Show the template menu with descriptions before prompting for one.
+  if (interactive && !args.template) {
+    process.stdout.write(`\nTemplates:\n${templateListText()}\n\n`);
+  }
 
   const templatesDir = join(__dirname, "templates");
   try {
