@@ -4,11 +4,15 @@ import { copyTemplate, type TemplateVars } from "@podosoft/podokit-template-engi
 
 export type PackageManager = "npm" | "pnpm" | "yarn";
 
+export const DEFAULT_TEMPLATE = "fullstack-nest-svelte";
+
 export interface CreateOptions {
   /** Project name; also the default directory name. */
   name: string;
-  /** Directory that holds the template set (contains a `base/` folder). */
+  /** Directory that holds the template sets (each in its own subfolder). */
   templatesDir: string;
+  /** Template subfolder to use. Defaults to `fullstack-nest-svelte`. */
+  template?: string;
   /** Where to create the project. Defaults to `<cwd>/<name>`. */
   targetDir?: string;
   /** Package manager recorded in the generated project. Defaults to `npm`. */
@@ -18,6 +22,7 @@ export interface CreateOptions {
 export interface CreateResult {
   projectDir: string;
   packageManager: PackageManager;
+  template: string;
 }
 
 const NAME_PATTERN = /^[a-z0-9](?:[a-z0-9-._]*[a-z0-9])?$/i;
@@ -43,6 +48,7 @@ export function create(options: CreateOptions): CreateResult {
   const { name, templatesDir } = options;
   assertValidName(name);
 
+  const template = options.template ?? DEFAULT_TEMPLATE;
   const packageManager = options.packageManager ?? "npm";
   const projectDir = options.targetDir
     ? isAbsolute(options.targetDir)
@@ -54,13 +60,13 @@ export function create(options: CreateOptions): CreateResult {
     throw new Error(`Target directory is not empty: ${projectDir}`);
   }
 
-  const baseTemplate = join(templatesDir, "base");
-  if (!existsSync(baseTemplate)) {
-    throw new Error(`Base template not found at ${baseTemplate}`);
+  const templateDir = join(templatesDir, template);
+  if (!existsSync(templateDir)) {
+    throw new Error(`Template "${template}" not found at ${templateDir}`);
   }
 
   const vars: TemplateVars = { projectName: name, packageManager };
-  copyTemplate(baseTemplate, projectDir, vars);
+  copyTemplate(templateDir, projectDir, vars);
 
-  return { projectDir, packageManager };
+  return { projectDir, packageManager, template };
 }

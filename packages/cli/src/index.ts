@@ -8,6 +8,7 @@ Usage:
   podo create <name> [options]
 
 Options:
+  --template <t> Template: fullstack-nest-svelte | base (default: fullstack-nest-svelte)
   --dir <path>   Target directory (default: ./<name>)
   --pm <name>    Package manager: npm | pnpm | yarn (default: npm)
   -h, --help     Show this help
@@ -19,6 +20,7 @@ Example:
 interface ParsedArgs {
   command?: string;
   name?: string;
+  template?: string;
   dir?: string;
   pm?: PackageManager;
   help: boolean;
@@ -31,6 +33,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
     const arg = argv[i];
     if (arg === "-h" || arg === "--help") {
       parsed.help = true;
+    } else if (arg === "--template") {
+      parsed.template = argv[++i];
     } else if (arg === "--dir") {
       parsed.dir = argv[++i];
     } else if (arg === "--pm") {
@@ -77,6 +81,7 @@ function main(argv: string[]): void {
     const result = create({
       name: args.name,
       templatesDir,
+      template: args.template,
       targetDir: args.dir,
       packageManager: args.pm,
     });

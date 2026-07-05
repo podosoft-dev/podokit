@@ -28,13 +28,14 @@ describe("assertValidName", () => {
   });
 });
 
-describe("create (integration against the base template)", () => {
-  it("scaffolds a project with rendered project name", () => {
+describe("create (integration against templates)", () => {
+  it("scaffolds the base template with a rendered project name", () => {
     const target = join(tmp(), "my-app");
-    const result = create({ name: "my-app", templatesDir: REPO_TEMPLATES, targetDir: target });
+    const result = create({ name: "my-app", template: "base", templatesDir: REPO_TEMPLATES, targetDir: target });
 
     expect(result.projectDir).toBe(target);
     expect(result.packageManager).toBe("npm");
+    expect(result.template).toBe("base");
 
     const pkg = JSON.parse(readFileSync(join(target, "package.json"), "utf8")) as { name: string };
     expect(pkg.name).toBe("my-app");
@@ -43,18 +44,31 @@ describe("create (integration against the base template)", () => {
     expect(readFileSync(join(target, "README.md"), "utf8")).toContain("my-app");
   });
 
+  it("scaffolds the fullstack template by default", () => {
+    const target = join(tmp(), "app");
+    const result = create({ name: "app", templatesDir: REPO_TEMPLATES, targetDir: target });
+
+    expect(result.template).toBe("fullstack-nest-svelte");
+    expect(existsSync(join(target, "apps", "api", "src", "main.ts"))).toBe(true);
+    expect(existsSync(join(target, "apps", "web", "svelte.config.js"))).toBe(true);
+    expect(existsSync(join(target, "apps", "web", "src", "routes", "api", "health", "+server.ts"))).toBe(true);
+    expect(existsSync(join(target, "infra", "k3s", "ingress.yaml"))).toBe(true);
+    const apiPkg = JSON.parse(readFileSync(join(target, "apps", "api", "package.json"), "utf8")) as { name: string };
+    expect(apiPkg.name).toBe("app-api");
+  });
+
   it("refuses a non-empty target directory", () => {
     const target = tmp();
     mkdirSync(join(target, "sub"), { recursive: true });
     writeFileSync(join(target, "sub", "f.txt"), "x");
-    expect(() => create({ name: "app", templatesDir: REPO_TEMPLATES, targetDir: join(target, "sub") })).toThrow(
-      /not empty/,
-    );
+    expect(() =>
+      create({ name: "app", template: "base", templatesDir: REPO_TEMPLATES, targetDir: join(target, "sub") }),
+    ).toThrow(/not empty/);
   });
 
-  it("throws when the base template is missing", () => {
-    expect(() => create({ name: "app", templatesDir: tmp(), targetDir: join(tmp(), "x") })).toThrow(
-      /Base template not found/,
-    );
+  it("throws when the template is missing", () => {
+    expect(() =>
+      create({ name: "app", template: "nope", templatesDir: REPO_TEMPLATES, targetDir: join(tmp(), "x") }),
+    ).toThrow(/Template "nope" not found/);
   });
 });
