@@ -228,6 +228,22 @@ npm run dev
 Tune `RATE_LIMIT_TTL` (window seconds) and `RATE_LIMIT_MAX` (requests/window) in `.env`.
 Skip a route with `@SkipThrottle()` or override it with `@Throttle()`.
 
+### `api-key-auth`
+
+API-key authentication for **machine/service clients** (`X-API-Key`), separate from
+user sessions. Provides an `ApiKeyGuard` and an `@ApiKeyProtected()` decorator that
+opens a route to key holders (it bypasses the user-session guard and requires a valid
+key instead). Requires `auth` (auto-added).
+
+```bash
+npx @podosoft/podokit add api-key-auth   # also adds auth
+# set API_KEYS=key1,key2 in .env, then:
+curl -H 'x-api-key: key1' localhost:3000/machine/ping   # { ok: true, via: "api-key" }
+```
+
+Protect your own machine routes with `@ApiKeyProtected()`. Keys are checked against
+the `API_KEYS` allowlist with a constant-time comparison.
+
 ## Roadmap
 
 More modules are planned — redis, queue (BullMQ), object storage (S3), file

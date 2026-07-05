@@ -1,6 +1,6 @@
 {
   "name": "auth",
-  "description": "Full authentication (better-auth): email/password, sessions, and — via config — OAuth and 2FA. Installs a global guard so the API is secure by default; health and /api/auth stay public.",
+  "description": "Full authentication (better-auth): email/password, sessions, and \u2014 via config \u2014 OAuth and 2FA. Installs a global guard so the API is secure by default; health and /api/auth stay public.",
   "requires": [],
   "targetApp": "api",
   "dependencies": {
@@ -12,23 +12,53 @@
     "@types/pg": "^8.11.10"
   },
   "env": [
-    "# auth (better-auth) — set a strong secret (>= 32 chars) in production",
+    "# auth (better-auth) \u2014 set a strong secret (>= 32 chars) in production",
     "BETTER_AUTH_SECRET=change-me-in-production-min-32-characters",
     "BETTER_AUTH_URL=http://localhost:3000",
     "# 2FA (TOTP): set true to enable the plugin",
     "AUTH_TWO_FACTOR=false",
-    "# OAuth (optional) — set a provider's id+secret to enable it",
+    "# OAuth (optional) \u2014 set a provider's id+secret to enable it",
     "# GOOGLE_CLIENT_ID=",
     "# GOOGLE_CLIENT_SECRET=",
     "# GITHUB_CLIENT_ID=",
     "# GITHUB_CLIENT_SECRET="
   ],
   "inject": [
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:imports", "text": "import { APP_GUARD } from \"@nestjs/core\";" },
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:imports", "text": "import { AuthModule, AuthGuard } from \"@thallesp/nestjs-better-auth\";" },
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:imports", "text": "import { auth } from \"./auth/auth\";" },
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:module-imports", "text": "AuthModule.forRoot(auth)," },
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:providers", "text": "{ provide: APP_GUARD, useClass: AuthGuard }," }
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:imports",
+      "text": "import { APP_GUARD } from \"@nestjs/core\";"
+    },
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:imports",
+      "text": "import { AuthModule, AuthGuard } from \"@thallesp/nestjs-better-auth\";"
+    },
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:imports",
+      "text": "import { auth } from \"./auth/auth\";"
+    },
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:imports",
+      "text": "import { AccountModule } from \"./account/account.module\";"
+    },
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:module-imports",
+      "text": "AuthModule.forRoot(auth),"
+    },
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:module-imports",
+      "text": "AccountModule,"
+    },
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:providers",
+      "text": "{ provide: APP_GUARD, useClass: AuthGuard },"
+    }
   ],
   "instructions": [
     "Set BETTER_AUTH_SECRET in .env (>= 32 chars).",

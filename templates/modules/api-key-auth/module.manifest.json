@@ -1,0 +1,19 @@
+{
+  "name": "api-key-auth",
+  "description": "API-key auth for machine/service clients (X-API-Key), separate from user sessions. Provides an ApiKeyGuard and @ApiKeyProtected() to open a route to key holders. Requires auth.",
+  "requires": ["auth"],
+  "targetApp": "api",
+  "env": [
+    "# api keys for machine clients (comma-separated)",
+    "API_KEYS=dev-key-please-change"
+  ],
+  "inject": [
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:imports", "text": "import { ApiKeyModule } from \"./api-key/api-key.module\";" },
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:module-imports", "text": "ApiKeyModule," }
+  ],
+  "instructions": [
+    "Set API_KEYS in .env (comma-separated).",
+    "Protect a route for machine clients with @ApiKeyProtected() (bypasses the user session, requires X-API-Key).",
+    "Call it:  curl -H 'x-api-key: dev-key-please-change' localhost:3000/machine/ping"
+  ]
+}
