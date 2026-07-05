@@ -128,6 +128,14 @@ describe("addModule (auth-jwt)", () => {
     expect(appModule.match(/StorageModule,/g)?.length).toBe(1);
   });
 
+  it("adds sse with an events stream and wires it", () => {
+    const project = generate("fullstack-nest-svelte");
+    addModule({ projectRoot: project, module: "sse", modulesDir: MODULES });
+    expect(existsSync(join(project, "apps/api/src/events/events.controller.ts"))).toBe(true);
+    expect(existsSync(join(project, "apps/api/src/events/events.service.ts"))).toBe(true);
+    expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).toContain("EventsModule,");
+  });
+
   it("rejects a project without the target app", () => {
     const empty = tmp(); // no apps/api/package.json
     expect(() => addModule({ projectRoot: empty, module: "auth-jwt", modulesDir: MODULES })).toThrow(

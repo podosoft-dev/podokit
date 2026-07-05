@@ -109,6 +109,24 @@ curl -F 'file=@./photo.png' localhost:3000/files
 # → { key, url }  (url is a presigned download link)
 ```
 
+### `sse`
+
+Server-Sent Events for real-time updates: a `/events/stream` endpoint (heartbeat
+plus published messages) and a `POST /events` publisher. `EventsService` is
+global, so any module (for example a queue processor) can broadcast updates.
+
+```bash
+npx @podosoft/podokit add sse
+npm run dev
+
+# terminal 1 — stream
+curl -N localhost:3000/events/stream
+# terminal 2 — publish
+curl -XPOST localhost:3000/events -H 'content-type: application/json' -d '{"message":"hello"}'
+```
+
+Pairs well with `bullmq` — inject `EventsService` into the worker to stream job progress.
+
 ## Roadmap
 
 More modules are planned — redis, queue (BullMQ), object storage (S3), file
