@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { join, relative } from "node:path";
+import { createInterface } from "node:readline/promises";
 import { create, assertValidName, type PackageManager } from "./create";
+import { resolveCreateOptions, type Ask } from "./prompt";
 
 const HELP = `podo — PodoKit project generator
 
@@ -11,6 +13,7 @@ Options:
   --template <t> Template: fullstack-nest-svelte | base (default: fullstack-nest-svelte)
   --dir <path>   Target directory (default: ./<name>)
   --pm <name>    Package manager: npm | pnpm | yarn (default: npm)
+  -y, --yes      Skip prompts and accept defaults
   -h, --help     Show this help
 
 Example:
@@ -23,16 +26,19 @@ interface ParsedArgs {
   template?: string;
   dir?: string;
   pm?: PackageManager;
+  yes: boolean;
   help: boolean;
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
-  const parsed: ParsedArgs = { help: false };
+  const parsed: ParsedArgs = { help: false, yes: false };
   const positionals: string[] = [];
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "-h" || arg === "--help") {
       parsed.help = true;
+    } else if (arg === "-y" || arg === "--yes") {
+      parsed.yes = true;
     } else if (arg === "--template") {
       parsed.template = argv[++i];
     } else if (arg === "--dir") {
@@ -53,7 +59,7 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-function main(argv: string[]): void {
+async function main(argv: string[]): Promise<void> {
   const args = parseArgs(argv);
 
   if (args.help || !args.command) {
@@ -66,9 +72,6 @@ function main(argv: string[]): void {
   if (!args.name) {
     fail('Missing project name. Usage: podo create <name>');
   }
-  if (args.pm && !["npm", "pnpm", "yarn"].includes(args.pm)) {
-    fail(`Invalid --pm "${args.pm}". Use npm, pnpm, or yarn.`);
-  }
 
   try {
     assertValidName(args.name);
@@ -76,24 +79,35 @@ function main(argv: string[]): void {
     fail((err as Error).message);
   }
 
+  const interactive = Boolean(process.stdin.isTTY) && !args.yes;
+  const rl = interactive ? createInterface({ input: process.stdin, output: process.stdout }) : undefined;
+  const ask: Ask = async (question) => (rl ? (await rl.question(question)).trim() : "");
+
   const templatesDir = join(__dirname, "templates");
   try {
+    const resolved = await resolveCreateOptions(
+      { template: args.template, pm: args.pm },
+      ask,
+      interactive,
+    );
     const result = create({
       name: args.name,
       templatesDir,
-      template: args.template,
+      template: resolved.template,
       targetDir: args.dir,
-      packageManager: args.pm,
+      packageManager: resolved.packageManager,
     });
     const relPath = relative(process.cwd(), result.projectDir) || ".";
     const rel = relPath.startsWith("..") ? result.projectDir : relPath;
     const pm = result.packageManager;
     process.stdout.write(
-      `\nCreated ${args.name} in ${rel}\n\nNext steps:\n  cd ${rel}\n  ${pm} install\n  ${pm} run dev\n`,
+      `\nCreated ${args.name} (${result.template}) in ${rel}\n\nNext steps:\n  cd ${rel}\n  ${pm} install\n  ${pm} run dev\n`,
     );
   } catch (err) {
     fail((err as Error).message);
+  } finally {
+    rl?.close();
   }
 }
 
-main(process.argv.slice(2));
+void main(process.argv.slice(2));
