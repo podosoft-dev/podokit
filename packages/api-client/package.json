@@ -1,0 +1,39 @@
+{
+  "name": "@podosoft/podokit-api-client",
+  "version": "0.4.0",
+  "description": "Typed API client for PodoKit backends: better-auth (auth + admin) plus a standard error-envelope request layer.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/podosoft-dev/podokit.git",
+    "directory": "packages/api-client"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "dependencies": {
+    "better-auth": "^1.6.23"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  }
+}
