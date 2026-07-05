@@ -67,7 +67,9 @@ describe("create (integration against templates)", () => {
     expect(result.template).toBe("todo");
     expect(existsSync(join(target, "apps", "api", "src", "todos", "todos.controller.ts"))).toBe(true);
     expect(existsSync(join(target, "apps", "api", "src", "migrations"))).toBe(true);
-    expect(existsSync(join(target, "apps", "web", "src", "routes", "api", "todos", "+server.ts"))).toBe(true);
+    // API access goes through the generic proxy + ApiClient (no per-resource proxy route)
+    expect(existsSync(join(target, "apps", "web", "src", "routes", "api", "[...path]", "+server.ts"))).toBe(true);
+    expect(existsSync(join(target, "apps", "web", "src", "lib", "api.ts"))).toBe(true);
     // shadcn-svelte components ship preinstalled
     expect(existsSync(join(target, "apps", "web", "src", "lib", "components", "ui", "button", "button.svelte"))).toBe(true);
     expect(existsSync(join(target, "apps", "web", "src", "lib", "utils.ts"))).toBe(true);
