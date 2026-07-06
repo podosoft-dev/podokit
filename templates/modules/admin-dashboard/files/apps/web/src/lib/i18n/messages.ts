@@ -96,6 +96,8 @@ const en = {
     banExpiryDays: "Expires in (days, optional)",
     stopImpersonating: "Stop impersonating",
     impersonatingAs: "Impersonating {email}",
+    manage: "Manage",
+    revokeSession: "Revoke",
   },
   sessions: {
     title: "Active sessions",
@@ -267,6 +269,8 @@ const ko: Messages = {
     banExpiryDays: "만료 (일, 선택)",
     stopImpersonating: "대리 로그인 종료",
     impersonatingAs: "{email} 사용자로 대리 로그인 중",
+    manage: "관리",
+    revokeSession: "종료",
   },
   sessions: {
     title: "활성 세션",

@@ -26,11 +26,9 @@
   let total = $state(0);
   let page = $state(1);
   let search = $state("");
-  let loading = $state(false);
   let busy = $state(false);
 
   async function load(): Promise<void> {
-    loading = true;
     const { data: res, error } = await api.auth.admin.listUsers({
       query: {
         limit: PAGE_SIZE,
@@ -38,78 +36,9 @@
         ...(search ? { searchField: "email", searchOperator: "contains", searchValue: search } : {}),
       },
     });
-    loading = false;
-    if (error) {
-      toast.error(error.message ?? i18n.t.users.loadFailed);
-      return;
-    }
+    if (error) return void toast.error(error.message ?? i18n.t.users.loadFailed);
     users = (res?.users ?? []) as Row[];
     total = res?.total ?? users.length;
-  }
-
-  async function act(promise: Promise<{ error?: { message?: string } | null }>, ok: string): Promise<void> {
-    const { error } = await promise;
-    if (error) toast.error(error.message ?? i18n.t.users.actionFailed);
-    else {
-      toast.success(ok);
-      await load();
-    }
-  }
-
-  const setRole = (u: Row, role: "user" | "admin") =>
-    act(api.auth.admin.setRole({ userId: u.id, role }), fmt(i18n.t.users.roleSet, { role }));
-  const unban = (u: Row) => act(api.auth.admin.unbanUser({ userId: u.id }), i18n.t.users.userUnbanned);
-
-  // Edit user
-  let editOpen = $state(false);
-  let editUser = $state<Row | null>(null);
-  let editForm = $state({ name: "", email: "", admin: false });
-  function openEdit(u: Row): void {
-    editUser = u;
-    editForm = { name: u.name, email: u.email, admin: u.role === "admin" };
-    editOpen = true;
-  }
-  async function submitEdit(event: Event): Promise<void> {
-    event.preventDefault();
-    if (!editUser) return;
-    busy = true;
-    const { error } = await api.auth.admin.updateUser({
-      userId: editUser.id,
-      data: { name: editForm.name, email: editForm.email, role: editForm.admin ? "admin" : "user" },
-    });
-    busy = false;
-    if (error) return void toast.error(error.message ?? i18n.t.users.actionFailed);
-    toast.success(i18n.t.users.userUpdated);
-    editOpen = false;
-    await load();
-  }
-
-  // Ban user (with optional reason + expiry)
-  let banOpen = $state(false);
-  let banUser = $state<Row | null>(null);
-  let banReason = $state("");
-  let banDays = $state("");
-  function openBan(u: Row): void {
-    banUser = u;
-    banReason = "";
-    banDays = "";
-    banOpen = true;
-  }
-  async function submitBan(event: Event): Promise<void> {
-    event.preventDefault();
-    if (!banUser) return;
-    const days = Number(banDays);
-    busy = true;
-    const { error } = await api.auth.admin.banUser({
-      userId: banUser.id,
-      ...(banReason ? { banReason } : {}),
-      ...(days > 0 ? { banExpiresIn: days * 24 * 60 * 60 } : {}),
-    });
-    busy = false;
-    if (error) return void toast.error(error.message ?? i18n.t.users.actionFailed);
-    toast.success(i18n.t.users.userBanned);
-    banOpen = false;
-    await load();
   }
 
   // Impersonate — become the user, then a banner offers "stop impersonating".
@@ -138,10 +67,7 @@
       role: form.admin ? "admin" : "user",
     });
     busy = false;
-    if (error) {
-      toast.error(error.message ?? i18n.t.users.actionFailed);
-      return;
-    }
+    if (error) return void toast.error(error.message ?? i18n.t.users.actionFailed);
     toast.success(i18n.t.users.userCreated);
     createOpen = false;
     form = { name: "", email: "", password: "", confirm: "", admin: false };
@@ -149,56 +75,138 @@
     await load();
   }
 
-  // Set password
-  let pwOpen = $state(false);
-  let pwUser = $state<Row | null>(null);
-  let newPassword = $state("");
-  let confirmNewPassword = $state("");
-  let pwError = $state("");
-  function openPassword(u: Row): void {
-    pwUser = u;
-    newPassword = "";
-    confirmNewPassword = "";
-    pwError = "";
-    pwOpen = true;
-  }
-  async function submitPassword(event: Event): Promise<void> {
-    event.preventDefault();
-    if (!pwUser) return;
-    if (newPassword !== confirmNewPassword) {
-      pwError = i18n.t.users.passwordMismatch;
-      return;
-    }
-    pwError = "";
-    busy = true;
-    const { error } = await api.auth.admin.setUserPassword({ userId: pwUser.id, newPassword });
-    busy = false;
-    if (error) {
-      toast.error(error.message ?? i18n.t.users.actionFailed);
-      return;
-    }
-    toast.success(i18n.t.users.passwordSet);
-    pwOpen = false;
+  // Manage user — a two-pane modal mirroring the account settings, admin-scoped.
+  type ManageSection = "profile" | "security" | "sessions" | "danger";
+  type Session = { id: string; token: string; userAgent?: string | null; ipAddress?: string | null; createdAt: string | Date };
+  let manageOpen = $state(false);
+  let mUser = $state<Row | null>(null);
+  let mSection = $state<ManageSection>("profile");
+  const sections: ManageSection[] = ["profile", "security", "sessions", "danger"];
+  // profile
+  let mName = $state("");
+  let mEmail = $state("");
+  let mAdmin = $state(false);
+  // security
+  let mNewPassword = $state("");
+  let mConfirmPassword = $state("");
+  let mPwError = $state("");
+  let mBanReason = $state("");
+  let mBanDays = $state("");
+  // sessions
+  let mSessions = $state<Session[]>([]);
+  // danger
+  let mDeleteArmed = $state(false);
+
+  async function openManage(u: Row): Promise<void> {
+    mUser = u;
+    mSection = "profile";
+    mName = u.name;
+    mEmail = u.email;
+    mAdmin = u.role === "admin";
+    mNewPassword = "";
+    mConfirmPassword = "";
+    mPwError = "";
+    mBanReason = "";
+    mBanDays = "";
+    mDeleteArmed = false;
+    mSessions = [];
+    manageOpen = true;
+    await loadManagedSessions();
   }
 
-  // Delete user
-  let deleteOpen = $state(false);
-  let deleteUser = $state<Row | null>(null);
-  function openDelete(u: Row): void {
-    deleteUser = u;
-    deleteOpen = true;
+  async function loadManagedSessions(): Promise<void> {
+    if (!mUser) return;
+    const { data: res } = await api.auth.admin.listUserSessions({ userId: mUser.id });
+    mSessions = (res?.sessions ?? []) as Session[];
   }
-  async function confirmDelete(): Promise<void> {
-    if (!deleteUser) return;
+
+  async function saveProfile(event: Event): Promise<void> {
+    event.preventDefault();
+    if (!mUser) return;
     busy = true;
-    const { error } = await api.auth.admin.removeUser({ userId: deleteUser.id });
+    const { error } = await api.auth.admin.updateUser({
+      userId: mUser.id,
+      data: { name: mName, email: mEmail, role: mAdmin ? "admin" : "user" },
+    });
     busy = false;
-    if (error) {
-      toast.error(error.message ?? i18n.t.users.actionFailed);
+    if (error) return void toast.error(error.message ?? i18n.t.users.actionFailed);
+    mUser = { ...mUser, name: mName, email: mEmail, role: mAdmin ? "admin" : "user" };
+    toast.success(i18n.t.users.userUpdated);
+    await load();
+  }
+
+  async function setPassword(event: Event): Promise<void> {
+    event.preventDefault();
+    if (!mUser) return;
+    if (mNewPassword !== mConfirmPassword) {
+      mPwError = i18n.t.users.passwordMismatch;
       return;
     }
+    mPwError = "";
+    busy = true;
+    const { error } = await api.auth.admin.setUserPassword({ userId: mUser.id, newPassword: mNewPassword });
+    busy = false;
+    if (error) return void toast.error(error.message ?? i18n.t.users.actionFailed);
+    mNewPassword = "";
+    mConfirmPassword = "";
+    toast.success(i18n.t.users.passwordSet);
+  }
+
+  async function ban(event: Event): Promise<void> {
+    event.preventDefault();
+    if (!mUser) return;
+    const days = Number(mBanDays);
+    busy = true;
+    const { error } = await api.auth.admin.banUser({
+      userId: mUser.id,
+      ...(mBanReason ? { banReason: mBanReason } : {}),
+      ...(days > 0 ? { banExpiresIn: days * 24 * 60 * 60 } : {}),
+    });
+    busy = false;
+    if (error) return void toast.error(error.message ?? i18n.t.users.actionFailed);
+    mUser = { ...mUser, banned: true };
+    toast.success(i18n.t.users.userBanned);
+    await load();
+  }
+
+  async function unban(): Promise<void> {
+    if (!mUser) return;
+    busy = true;
+    const { error } = await api.auth.admin.unbanUser({ userId: mUser.id });
+    busy = false;
+    if (error) return void toast.error(error.message ?? i18n.t.users.actionFailed);
+    mUser = { ...mUser, banned: false };
+    toast.success(i18n.t.users.userUnbanned);
+    await load();
+  }
+
+  async function revokeSession(token: string): Promise<void> {
+    busy = true;
+    const { error } = await api.auth.admin.revokeUserSession({ sessionToken: token });
+    busy = false;
+    if (error) return void toast.error(error.message ?? i18n.t.adminSessions.loadFailed);
+    toast.success(i18n.t.adminSessions.revoked);
+    await loadManagedSessions();
+  }
+
+  async function revokeAllSessions(): Promise<void> {
+    if (!mUser) return;
+    busy = true;
+    const { error } = await api.auth.admin.revokeUserSessions({ userId: mUser.id });
+    busy = false;
+    if (error) return void toast.error(error.message ?? i18n.t.adminSessions.loadFailed);
+    toast.success(i18n.t.adminSessions.allRevoked);
+    await loadManagedSessions();
+  }
+
+  async function deleteUser(): Promise<void> {
+    if (!mUser) return;
+    busy = true;
+    const { error } = await api.auth.admin.removeUser({ userId: mUser.id });
+    busy = false;
+    if (error) return void toast.error(error.message ?? i18n.t.users.actionFailed);
     toast.success(i18n.t.users.userDeleted);
-    deleteOpen = false;
+    manageOpen = false;
     await load();
   }
 
@@ -248,28 +256,9 @@
                   {/snippet}
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
-                  <DropdownMenu.Item onSelect={() => openEdit(user)}>{i18n.t.users.edit}</DropdownMenu.Item>
-                  {#if user.role === "admin"}
-                    <DropdownMenu.Item onSelect={() => setRole(user, "user")}>{i18n.t.users.makeUser}</DropdownMenu.Item>
-                  {:else}
-                    <DropdownMenu.Item onSelect={() => setRole(user, "admin")}>{i18n.t.users.makeAdmin}</DropdownMenu.Item>
-                  {/if}
-                  {#if user.banned}
-                    <DropdownMenu.Item onSelect={() => unban(user)}>{i18n.t.users.unban}</DropdownMenu.Item>
-                  {:else}
-                    <DropdownMenu.Item onSelect={() => openBan(user)}>{i18n.t.users.ban}</DropdownMenu.Item>
-                  {/if}
-                  <DropdownMenu.Item onSelect={() => openPassword(user)}>{i18n.t.users.setPassword}</DropdownMenu.Item>
+                  <DropdownMenu.Item onSelect={() => openManage(user)}>{i18n.t.users.manage}</DropdownMenu.Item>
                   <DropdownMenu.Item disabled={user.id === data.currentUserId} onSelect={() => impersonate(user)}>
                     {i18n.t.users.impersonate}
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Separator />
-                  <DropdownMenu.Item
-                    variant="destructive"
-                    disabled={user.id === data.currentUserId}
-                    onSelect={() => openDelete(user)}
-                  >
-                    {i18n.t.users.delete}
                   </DropdownMenu.Item>
                 </DropdownMenu.Content>
               </DropdownMenu.Root>
@@ -310,61 +299,104 @@
   </Dialog.Content>
 </Dialog.Root>
 
-<!-- Set password -->
-<Dialog.Root bind:open={pwOpen}>
-  <Dialog.Content>
-    <Dialog.Header><Dialog.Title>{i18n.t.users.setPassword}</Dialog.Title></Dialog.Header>
-    <form onsubmit={submitPassword} class="flex flex-col gap-3">
-      <div class="flex flex-col gap-1"><Label for="p-password">{i18n.t.users.newPassword}</Label><Input id="p-password" type="password" bind:value={newPassword} required /></div>
-      <div class="flex flex-col gap-1"><Label for="p-confirm">{i18n.t.users.confirmNewPassword}</Label><Input id="p-confirm" type="password" bind:value={confirmNewPassword} required /></div>
-      {#if pwError}<p class="text-destructive text-sm">{pwError}</p>{/if}
-      <Dialog.Footer>
-        <Button type="button" variant="outline" onclick={() => (pwOpen = false)}>{i18n.t.users.cancel}</Button>
-        <Button type="submit" disabled={busy}>{i18n.t.users.save}</Button>
-      </Dialog.Footer>
-    </form>
-  </Dialog.Content>
-</Dialog.Root>
+<!-- Manage user (two-pane) -->
+<Dialog.Root bind:open={manageOpen}>
+  <Dialog.Content class="max-w-3xl">
+    <Dialog.Header><Dialog.Title class="truncate">{mUser?.email}</Dialog.Title></Dialog.Header>
+    <div class="flex flex-col gap-4 sm:flex-row">
+      <nav class="flex shrink-0 flex-wrap gap-1 sm:w-40 sm:flex-col">
+        {#each sections as key (key)}
+          <button
+            type="button"
+            onclick={() => (mSection = key)}
+            aria-current={mSection === key ? "page" : undefined}
+            class="hover:bg-muted rounded-md px-3 py-2 text-left text-sm font-medium transition-colors {mSection === key ? 'bg-muted' : 'text-muted-foreground'}"
+          >
+            {i18n.t.account.nav[key]}
+          </button>
+        {/each}
+      </nav>
 
-<!-- Delete confirmation -->
-<Dialog.Root bind:open={deleteOpen}>
-  <Dialog.Content>
-    <Dialog.Header><Dialog.Title>{i18n.t.users.deleteTitle}</Dialog.Title></Dialog.Header>
-    <p class="text-muted-foreground text-sm">{fmt(i18n.t.users.deleteConfirm, { email: deleteUser?.email ?? "" })}</p>
-    <Dialog.Footer>
-      <Button type="button" variant="outline" onclick={() => (deleteOpen = false)}>{i18n.t.users.cancel}</Button>
-      <Button type="button" variant="destructive" disabled={busy} onclick={confirmDelete}>{i18n.t.users.delete}</Button>
-    </Dialog.Footer>
-  </Dialog.Content>
-</Dialog.Root>
-
-<!-- Edit user -->
-<Dialog.Root bind:open={editOpen}>
-  <Dialog.Content>
-    <Dialog.Header><Dialog.Title>{i18n.t.users.editTitle}</Dialog.Title></Dialog.Header>
-    <form onsubmit={submitEdit} class="flex flex-col gap-3">
-      <div class="flex flex-col gap-1"><Label for="e-name">{i18n.t.users.name}</Label><Input id="e-name" bind:value={editForm.name} required /></div>
-      <div class="flex flex-col gap-1"><Label for="e-email">{i18n.t.users.email}</Label><Input id="e-email" type="email" bind:value={editForm.email} required /></div>
-      <Label class="flex items-center gap-2"><Checkbox bind:checked={editForm.admin} />{i18n.t.users.makeAdmin}</Label>
-      <Dialog.Footer>
-        <Button type="button" variant="outline" onclick={() => (editOpen = false)}>{i18n.t.users.cancel}</Button>
-        <Button type="submit" disabled={busy}>{i18n.t.users.save}</Button>
-      </Dialog.Footer>
-    </form>
-  </Dialog.Content>
-</Dialog.Root>
-
-<!-- Ban user -->
-<Dialog.Root bind:open={banOpen}>
-  <Dialog.Content>
-    <Dialog.Header><Dialog.Title>{i18n.t.users.banTitle}</Dialog.Title></Dialog.Header>
-    <form onsubmit={submitBan} class="flex flex-col gap-3">
-      <div class="flex flex-col gap-1"><Label for="b-reason">{i18n.t.users.banReason}</Label><Input id="b-reason" bind:value={banReason} /></div>
-      <div class="flex flex-col gap-1"><Label for="b-days">{i18n.t.users.banExpiryDays}</Label><Input id="b-days" type="number" min="0" bind:value={banDays} /></div>
-      <Dialog.Footer>
-        <Button type="button" variant="outline" onclick={() => (banOpen = false)}>{i18n.t.users.cancel}</Button>
-        <Button type="submit" variant="destructive" disabled={busy}>{i18n.t.users.ban}</Button>
-      </Dialog.Footer>
-    </form>
+      <div class="min-h-64 min-w-0 flex-1">
+        {#if mSection === "profile"}
+          <form class="flex flex-col gap-3" onsubmit={saveProfile}>
+            <div class="flex flex-col gap-1"><Label for="m-name">{i18n.t.users.name}</Label><Input id="m-name" bind:value={mName} required /></div>
+            <div class="flex flex-col gap-1"><Label for="m-email">{i18n.t.users.email}</Label><Input id="m-email" type="email" bind:value={mEmail} required /></div>
+            <Label class="flex items-center gap-2"><Checkbox bind:checked={mAdmin} />{i18n.t.users.makeAdmin}</Label>
+            {#if mUser?.banned}<Badge variant="destructive" class="w-fit">{i18n.t.users.banned}</Badge>{/if}
+            <Button type="submit" class="w-fit" disabled={busy}>{i18n.t.users.save}</Button>
+          </form>
+        {:else if mSection === "security"}
+          <div class="flex flex-col gap-6">
+            <form class="flex flex-col gap-3" onsubmit={setPassword}>
+              <div class="flex flex-col gap-1"><Label for="m-pw">{i18n.t.users.newPassword}</Label><Input id="m-pw" type="password" bind:value={mNewPassword} required /></div>
+              <div class="flex flex-col gap-1"><Label for="m-pw2">{i18n.t.users.confirmNewPassword}</Label><Input id="m-pw2" type="password" bind:value={mConfirmPassword} required /></div>
+              {#if mPwError}<p class="text-destructive text-sm">{mPwError}</p>{/if}
+              <Button type="submit" class="w-fit" disabled={busy}>{i18n.t.users.setPassword}</Button>
+            </form>
+            <div class="border-t pt-4">
+              {#if mUser?.banned}
+                <Button variant="outline" disabled={busy} onclick={unban}>{i18n.t.users.unban}</Button>
+              {:else}
+                <form class="flex flex-col gap-3" onsubmit={ban}>
+                  <div class="flex flex-col gap-1"><Label for="m-reason">{i18n.t.users.banReason}</Label><Input id="m-reason" bind:value={mBanReason} /></div>
+                  <div class="flex flex-col gap-1"><Label for="m-days">{i18n.t.users.banExpiryDays}</Label><Input id="m-days" type="number" min="0" bind:value={mBanDays} /></div>
+                  <Button type="submit" variant="destructive" class="w-fit" disabled={busy}>{i18n.t.users.ban}</Button>
+                </form>
+              {/if}
+            </div>
+          </div>
+        {:else if mSection === "sessions"}
+          <div class="flex flex-col gap-3">
+            <div class="flex justify-end">
+              <Button variant="outline" size="sm" disabled={busy || mSessions.length === 0} onclick={revokeAllSessions}>{i18n.t.adminSessions.revokeAll}</Button>
+            </div>
+            <div class="rounded-md border">
+              <Table.Root>
+                <Table.Header>
+                  <Table.Row>
+                    <Table.Head>{i18n.t.adminSessions.device}</Table.Head>
+                    <Table.Head>{i18n.t.adminSessions.ip}</Table.Head>
+                    <Table.Head>{i18n.t.adminSessions.since}</Table.Head>
+                    <Table.Head class="w-10"></Table.Head>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
+                  {#each mSessions as s (s.id)}
+                    <Table.Row>
+                      <Table.Cell class="max-w-40 truncate">{s.userAgent ?? i18n.t.adminSessions.unknown}</Table.Cell>
+                      <Table.Cell class="text-muted-foreground">{s.ipAddress ?? "—"}</Table.Cell>
+                      <Table.Cell class="text-muted-foreground">{new Date(s.createdAt).toLocaleString(i18n.locale)}</Table.Cell>
+                      <Table.Cell><Button variant="ghost" size="sm" disabled={busy} onclick={() => revokeSession(s.token)}>{i18n.t.users.revokeSession}</Button></Table.Cell>
+                    </Table.Row>
+                  {:else}
+                    <Table.Row><Table.Cell colspan={4} class="text-muted-foreground py-8 text-center">{i18n.t.adminSessions.empty}</Table.Cell></Table.Row>
+                  {/each}
+                </Table.Body>
+              </Table.Root>
+            </div>
+          </div>
+        {:else if mSection === "danger"}
+          <div class="border-destructive/50 flex flex-col gap-3 rounded-md border p-4">
+            <p class="text-muted-foreground text-sm">{fmt(i18n.t.users.deleteConfirm, { email: mUser?.email ?? "" })}</p>
+            {#if mDeleteArmed}
+              <div class="flex gap-2">
+                <Button variant="outline" onclick={() => (mDeleteArmed = false)}>{i18n.t.users.cancel}</Button>
+                <Button variant="destructive" disabled={busy} onclick={deleteUser}>{i18n.t.users.delete}</Button>
+              </div>
+            {:else}
+              <Button
+                variant="destructive"
+                class="w-fit"
+                disabled={mUser?.id === data.currentUserId}
+                onclick={() => (mDeleteArmed = true)}
+              >
+                {i18n.t.users.delete}
+              </Button>
+            {/if}
+          </div>
+        {/if}
+      </div>
+    </div>
   </Dialog.Content>
 </Dialog.Root>
