@@ -8,12 +8,30 @@ export function backendBaseUrl(): string {
   return process.env.BACKEND_INTERNAL_URL ?? "http://localhost:3000";
 }
 
-export async function proxyRequest(request: Request, targetUrl: string): Promise<Response> {
+// Normalize the resolved client IP for the forwarded header. better-auth stores
+// IPv4 as-is but anonymizes IPv6 (masks the host bits), so an IPv6 loopback would
+// be recorded as "::" — map loopback to 127.0.0.1 for a clean local value, and
+// unwrap IPv4-mapped addresses.
+function normalizeClientIp(address: string | undefined): string | undefined {
+  if (!address) return undefined;
+  if (address === "::1" || address === "::") return "127.0.0.1";
+  if (address.startsWith("::ffff:")) return address.slice("::ffff:".length);
+  return address;
+}
+
+export async function proxyRequest(
+  request: Request,
+  targetUrl: string,
+  clientAddress?: string,
+): Promise<Response> {
   const headers = new Headers();
   for (const name of FORWARDED_HEADERS) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
+  // Forward the resolved client IP so the API (better-auth) can record it.
+  const forwardedIp = normalizeClientIp(clientAddress);
+  if (forwardedIp) headers.set("x-forwarded-for", forwardedIp);
 
   const hasBody = request.method !== "GET" && request.method !== "HEAD";
   const upstream = await fetch(targetUrl, {

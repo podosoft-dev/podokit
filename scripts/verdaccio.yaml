@@ -1,0 +1,17 @@
+# Local registry for faithful e2e: serves our packages, proxies the rest from npm.
+storage: ./.verdaccio-storage
+uplinks:
+  npmjs:
+    url: https://registry.npmjs.org/
+    cache: false
+packages:
+  "@podosoft/*":
+    access: $all
+    publish: $all
+    unpublish: $all
+  "**":
+    access: $all
+    proxy: npmjs
+log: { type: stdout, format: pretty, level: warn }
+publish:
+  allow_offline: true

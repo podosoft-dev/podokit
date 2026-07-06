@@ -8,15 +8,21 @@ export class InitAuditLogs1720300000000 implements MigrationInterface {
     await queryRunner.query(`
       CREATE TABLE "audit_logs" (
         "id" uuid NOT NULL DEFAULT gen_random_uuid(),
-        "userId" character varying,
-        "method" character varying(10) NOT NULL,
-        "path" character varying(2048) NOT NULL,
-        "statusCode" integer NOT NULL,
+        "action" character varying(128) NOT NULL,
+        "actorId" character varying,
+        "actorName" character varying,
+        "actorEmail" character varying,
+        "targetType" character varying,
+        "targetId" character varying,
+        "targetLabel" character varying,
         "ip" character varying,
+        "metadata" jsonb,
         "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
         CONSTRAINT "PK_audit_logs_id" PRIMARY KEY ("id")
       )
     `);
+    await queryRunner.query(`CREATE INDEX "IDX_audit_logs_action" ON "audit_logs" ("action")`);
+    await queryRunner.query(`CREATE INDEX "IDX_audit_logs_createdAt" ON "audit_logs" ("createdAt")`);
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {

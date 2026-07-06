@@ -7,13 +7,14 @@ export type SessionUser = {
   role?: string | null;
   image?: string | null;
   emailVerified?: boolean;
+  twoFactorEnabled?: boolean | null;
 };
 
 declare global {
   namespace App {
     interface Locals {
       user: SessionUser | null;
-      session: { id: string } | null;
+      session: { id: string; impersonatedBy?: string | null } | null;
       locale: Locale;
     }
   }

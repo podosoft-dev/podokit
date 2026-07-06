@@ -1,5 +1,5 @@
 import { createAuthClient } from "better-auth/client";
-import { adminClient } from "better-auth/client/plugins";
+import { adminClient, twoFactorClient } from "better-auth/client/plugins";
 
 /** Options for {@link createApiClient}. */
 export interface ApiClientOptions {
@@ -72,7 +72,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
   const makeAuthClient = () =>
     createAuthClient({
       baseURL: authOrigin,
-      plugins: [adminClient()],
+      plugins: [adminClient(), twoFactorClient()],
       fetchOptions: {
         credentials,
         ...(options.fetch ? { customFetchImpl: options.fetch } : {}),

@@ -62,3 +62,11 @@ cd apps/web && npx svelte-kit sync && npx svelte-check --tsconfig ./tsconfig.jso
 For anything auth/session related (login, admin, cookies), do a full local run
 (compose + migrate + `npm run dev`) and exercise the flow in the browser — a
 build passing is necessary but not sufficient.
+
+## Testing
+
+End-to-end/ui tests ship inside every generated app (`tests/` workspace) and run
+with Playwright. See [testing.md](./testing.md) for how to run them
+(`npm run test:e2e`), author them (the `@playwright/cli` loop), and verify faithfully
+against a local Verdaccio registry (`scripts/e2e-ci.mjs`, mirrored by the `e2e` CI
+workflow).

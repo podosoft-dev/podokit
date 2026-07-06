@@ -44,5 +44,16 @@ export const auth = betterAuth({
   plugins,
   secret: process.env.BETTER_AUTH_SECRET ?? "change-me-in-production-min-32-characters",
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+  advanced: {
+    ipAddress: {
+      // The API sits behind the SvelteKit server proxy, which forwards the
+      // resolved client IP as x-forwarded-for; trust it so sessions record an IP.
+      ipAddressHeaders: ["x-forwarded-for"],
+    },
+  },
+  user: {
+    // Self-service account deletion — opt in with AUTH_ALLOW_DELETE=true.
+    deleteUser: { enabled: process.env.AUTH_ALLOW_DELETE === "true" },
+  },
   // podokit:auth-options
 });

@@ -1,39 +1,54 @@
 import { type CallHandler, type ExecutionContext, Injectable, type NestInterceptor } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
+import { Reflector } from "@nestjs/core";
 import { fromNodeHeaders } from "better-auth/node";
-import type { Request, Response } from "express";
+import type { Request } from "express";
 import { type Observable, tap } from "rxjs";
-import { Repository } from "typeorm";
 import { auth } from "../auth/auth";
-import { AuditLog } from "./audit-log.entity";
+import { AUDIT_KEY, type AuditMeta } from "./audit.decorator";
+import { AuditService } from "./audit.service";
 
-const AUDITED_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
-
-// Records who performed each mutating request. Skips the auth endpoints.
+// Records handlers explicitly marked with @Audit(...). Nothing is logged unless
+// you opt a route in, so the trail stays meaningful (semantic actions, not raw
+// HTTP). Auth/admin actions are recorded separately by the better-auth hook.
 @Injectable()
 export class AuditInterceptor implements NestInterceptor {
-  constructor(@InjectRepository(AuditLog) private readonly logs: Repository<AuditLog>) {}
+  constructor(
+    private readonly reflector: Reflector,
+    private readonly audit: AuditService,
+  ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
+    const meta = this.reflector.get<AuditMeta | undefined>(AUDIT_KEY, context.getHandler());
+    if (!meta) return next.handle();
     const req = context.switchToHttp().getRequest<Request>();
-    const path = req.originalUrl ?? req.url;
-    if (!AUDITED_METHODS.has(req.method) || path.startsWith("/api/auth")) {
-      return next.handle();
-    }
-    const res = context.switchToHttp().getResponse<Response>();
-    return next.handle().pipe(tap(() => void this.record(req, res, path)));
+    return next.handle().pipe(tap((result) => void this.log(meta, req, result)));
   }
 
-  private async record(req: Request, res: Response, path: string): Promise<void> {
-    let userId: string | null = null;
+  private async log(meta: AuditMeta, req: Request, result: unknown): Promise<void> {
+    let actorId: string | null = null;
+    let actorName: string | null = null;
+    let actorEmail: string | null = null;
     try {
       const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
-      userId = session?.user?.id ?? null;
+      if (session?.user) {
+        actorId = session.user.id;
+        actorName = session.user.name ?? null;
+        actorEmail = session.user.email ?? null;
+      }
     } catch {
-      userId = null;
+      /* unauthenticated */
     }
-    await this.logs.save(
-      this.logs.create({ userId, method: req.method, path, statusCode: res.statusCode, ip: req.ip ?? null }),
-    );
+    const target = meta.resolve?.(req, result);
+    await this.audit.record({
+      action: meta.action,
+      actorId,
+      actorName,
+      actorEmail,
+      targetType: target?.type ?? null,
+      targetId: target?.id ?? null,
+      targetLabel: target?.label ?? null,
+      ip: req.ip ?? null,
+      metadata: target?.metadata ?? null,
+    });
   }
 }

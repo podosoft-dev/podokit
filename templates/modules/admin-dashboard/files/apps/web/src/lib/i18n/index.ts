@@ -19,3 +19,9 @@ export function fmt(template: string, values: Record<string, string | number>): 
     key in values ? String(values[key]) : match,
   );
 }
+
+// Render a timestamp in the viewer's own locale and timezone (browser defaults),
+// so dates always match the user's regional settings. Used across all pages.
+export function formatDateTime(value: string | Date): string {
+  return new Date(value).toLocaleString();
+}
