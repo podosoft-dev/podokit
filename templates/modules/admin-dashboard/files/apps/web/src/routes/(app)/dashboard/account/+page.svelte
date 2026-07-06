@@ -78,33 +78,36 @@
   });
 </script>
 
-<div class="flex max-w-2xl flex-col gap-6">
+<div class="flex flex-col gap-6">
   <h1 class="text-2xl font-semibold">{i18n.t.account.title}</h1>
-  <Card.Root>
-    <Card.Header><Card.Title>{i18n.t.account.profile}</Card.Title></Card.Header>
-    <Card.Content class="flex flex-col gap-2 text-sm">
-      <div><span class="text-muted-foreground">{i18n.t.account.name}:</span> {data.user.name}</div>
-      <div><span class="text-muted-foreground">{i18n.t.account.email}:</span> {data.user.email}</div>
-      <div><span class="text-muted-foreground">{i18n.t.account.role}:</span> <span class="capitalize">{data.user.role ?? "user"}</span></div>
-    </Card.Content>
-  </Card.Root>
 
-  <Card.Root>
-    <Card.Header><Card.Title>{i18n.t.account.changePassword}</Card.Title></Card.Header>
-    <Card.Content>
-      <form class="flex flex-col gap-4" onsubmit={changePassword}>
-        <div class="flex flex-col gap-2">
-          <Label for="current">{i18n.t.account.currentPassword}</Label>
-          <Input id="current" type="password" bind:value={currentPassword} required autocomplete="current-password" />
-        </div>
-        <div class="flex flex-col gap-2">
-          <Label for="new">{i18n.t.account.newPassword}</Label>
-          <Input id="new" type="password" bind:value={newPassword} required autocomplete="new-password" />
-        </div>
-        <Button type="submit" class="w-fit" disabled={loading}>{loading ? i18n.t.account.updating : i18n.t.account.update}</Button>
-      </form>
-    </Card.Content>
-  </Card.Root>
+  <div class="grid items-start gap-6 lg:grid-cols-2">
+    <Card.Root>
+      <Card.Header><Card.Title>{i18n.t.account.profile}</Card.Title></Card.Header>
+      <Card.Content class="flex flex-col gap-3 text-sm">
+        <div class="flex justify-between gap-4"><span class="text-muted-foreground">{i18n.t.account.name}</span><span class="font-medium">{data.user.name}</span></div>
+        <div class="flex justify-between gap-4"><span class="text-muted-foreground">{i18n.t.account.email}</span><span class="truncate font-medium">{data.user.email}</span></div>
+        <div class="flex justify-between gap-4"><span class="text-muted-foreground">{i18n.t.account.role}</span><span class="font-medium capitalize">{data.user.role ?? "user"}</span></div>
+      </Card.Content>
+    </Card.Root>
+
+    <Card.Root>
+      <Card.Header><Card.Title>{i18n.t.account.changePassword}</Card.Title></Card.Header>
+      <Card.Content>
+        <form class="flex flex-col gap-4" onsubmit={changePassword}>
+          <div class="flex flex-col gap-2">
+            <Label for="current">{i18n.t.account.currentPassword}</Label>
+            <Input id="current" type="password" bind:value={currentPassword} required autocomplete="current-password" />
+          </div>
+          <div class="flex flex-col gap-2">
+            <Label for="new">{i18n.t.account.newPassword}</Label>
+            <Input id="new" type="password" bind:value={newPassword} required autocomplete="new-password" />
+          </div>
+          <Button type="submit" class="w-fit" disabled={loading}>{loading ? i18n.t.account.updating : i18n.t.account.update}</Button>
+        </form>
+      </Card.Content>
+    </Card.Root>
+  </div>
 
   <Card.Root>
     <Card.Header class="flex flex-row items-center justify-between gap-2">
