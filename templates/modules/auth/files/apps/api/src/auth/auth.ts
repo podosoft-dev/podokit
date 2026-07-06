@@ -44,5 +44,12 @@ export const auth = betterAuth({
   plugins,
   secret: process.env.BETTER_AUTH_SECRET ?? "change-me-in-production-min-32-characters",
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+  advanced: {
+    ipAddress: {
+      // The API sits behind the SvelteKit server proxy, which forwards the
+      // resolved client IP as x-forwarded-for; trust it so sessions record an IP.
+      ipAddressHeaders: ["x-forwarded-for"],
+    },
+  },
   // podokit:auth-options
 });

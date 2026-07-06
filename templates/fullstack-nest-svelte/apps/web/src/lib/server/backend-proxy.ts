@@ -8,12 +8,18 @@ export function backendBaseUrl(): string {
   return process.env.BACKEND_INTERNAL_URL ?? "http://localhost:3000";
 }
 
-export async function proxyRequest(request: Request, targetUrl: string): Promise<Response> {
+export async function proxyRequest(
+  request: Request,
+  targetUrl: string,
+  clientAddress?: string,
+): Promise<Response> {
   const headers = new Headers();
   for (const name of FORWARDED_HEADERS) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
+  // Forward the resolved client IP so the API (better-auth) can record it.
+  if (clientAddress) headers.set("x-forwarded-for", clientAddress);
 
   const hasBody = request.method !== "GET" && request.method !== "HEAD";
   const upstream = await fetch(targetUrl, {

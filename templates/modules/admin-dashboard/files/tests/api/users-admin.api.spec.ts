@@ -86,3 +86,12 @@ test("revokeOtherSessions keeps the current session valid", async ({ playwright 
   expect((await after.json())?.user?.email).toBe(email); // still signed in
   await ctx.dispose();
 });
+
+test("sessions record a client IP (forwarded through the proxy)", async ({ playwright }) => {
+  const ctx = await signedIn(playwright, ADMIN);
+  const res = await ctx.get("/api/auth/list-sessions");
+  const sessions = (await res.json()) as Array<{ ipAddress?: string | null }>;
+  expect(sessions.length).toBeGreaterThan(0);
+  expect(sessions[0]?.ipAddress).toBeTruthy();
+  await ctx.dispose();
+});
