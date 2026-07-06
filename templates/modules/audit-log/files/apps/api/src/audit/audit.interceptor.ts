@@ -9,7 +9,9 @@ import { AuditLog } from "./audit-log.entity";
 
 const AUDITED_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
-// Records who performed each mutating request. Skips the auth endpoints.
+// Records who performed each mutating request to the app's own NestJS routes.
+// The auth endpoints (/api/auth/*) are mounted as middleware and bypass this
+// interceptor entirely — those are audited by the better-auth hook (audit-hook.ts).
 @Injectable()
 export class AuditInterceptor implements NestInterceptor {
   constructor(@InjectRepository(AuditLog) private readonly logs: Repository<AuditLog>) {}
@@ -21,19 +23,30 @@ export class AuditInterceptor implements NestInterceptor {
       return next.handle();
     }
     const res = context.switchToHttp().getResponse<Response>();
-    return next.handle().pipe(tap(() => void this.record(req, res, path)));
+    // Record both successful and failed mutations (fire-and-forget; a failed
+    // audit write is swallowed so it never breaks the request).
+    return next.handle().pipe(
+      tap({
+        next: () => void this.record(req, res.statusCode, path),
+        error: (err: { status?: number }) => void this.record(req, err?.status ?? 500, path),
+      }),
+    );
   }
 
-  private async record(req: Request, res: Response, path: string): Promise<void> {
-    let userId: string | null = null;
+  private async record(req: Request, statusCode: number, path: string): Promise<void> {
     try {
-      const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
-      userId = session?.user?.id ?? null;
+      let userId: string | null = null;
+      try {
+        const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+        userId = session?.user?.id ?? null;
+      } catch {
+        userId = null;
+      }
+      await this.logs.save(
+        this.logs.create({ userId, method: req.method, path, statusCode, ip: req.ip ?? null }),
+      );
     } catch {
-      userId = null;
+      // Never let an audit write failure surface as an unhandled rejection.
     }
-    await this.logs.save(
-      this.logs.create({ userId, method: req.method, path, statusCode: res.statusCode, ip: req.ip ?? null }),
-    );
   }
 }

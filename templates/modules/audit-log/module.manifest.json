@@ -1,6 +1,6 @@
 {
   "name": "audit-log",
-  "description": "Audit logging: a global interceptor records who did each mutating request (who/method/path/status) to an audit_logs table. Requires auth.",
+  "description": "Audit logging: records who did each mutating request (who/method/path/status) to an audit_logs table — a NestJS interceptor for your own API routes plus a better-auth hook for auth/admin actions (login, ban, role changes, ...). Requires auth.",
   "requires": [
     "auth"
   ],
@@ -19,11 +19,21 @@
       "file": "apps/api/src/app.module.ts",
       "marker": "// podokit:module-imports",
       "text": "AuditModule,"
+    },
+    {
+      "file": "apps/api/src/auth/auth.ts",
+      "marker": "// podokit:auth-imports",
+      "text": "import { auditAfterHook } from \"../audit/audit-hook\";"
+    },
+    {
+      "file": "apps/api/src/auth/auth.ts",
+      "marker": "// podokit:auth-options",
+      "text": "hooks: { after: auditAfterHook },"
     }
   ],
   "instructions": [
     "Run migrations to create the audit_logs table:  npm run migration:run -w <app>-api",
-    "Mutating requests (POST/PUT/PATCH/DELETE) are recorded with the acting user.",
-    "List recent entries (requires a session):  curl -b cookies.txt localhost:3000/audit-logs"
+    "Auth/admin actions (login, ban, role changes, session revocation, user CRUD) are recorded via a better-auth hook; your own mutating NestJS routes are recorded by the interceptor.",
+    "List recent entries (admin session required):  curl -b cookies.txt localhost:3000/audit-logs"
   ]
 }
