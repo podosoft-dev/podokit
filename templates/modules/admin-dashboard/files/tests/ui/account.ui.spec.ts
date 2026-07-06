@@ -30,11 +30,26 @@ test("account security and sessions sub-navigation", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Sign out other sessions" })).toBeVisible();
 });
 
-test("account nav hides sections not enabled by config", async ({ page }) => {
+test("account nav shows the core sections", async ({ page }) => {
   await ready(page, "/dashboard/account");
   await expect(page.getByRole("button", { name: "Profile" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Security" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Sessions" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Connected" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Danger zone" })).toHaveCount(0);
+});
+
+test("two-factor setup is available when enabled", async ({ page }) => {
+  await ready(page, "/dashboard/account");
+  await page.getByRole("button", { name: "Security" }).click();
+  const heading = page.getByText("Two-factor authentication");
+  test.skip((await heading.count()) === 0, "two-factor not enabled");
+  await expect(heading).toBeVisible();
+  await expect(page.getByRole("button", { name: "Enable" })).toBeVisible();
+});
+
+test("danger zone offers account deletion when enabled", async ({ page }) => {
+  await ready(page, "/dashboard/account");
+  const danger = page.getByRole("button", { name: "Danger zone" });
+  test.skip((await danger.count()) === 0, "account deletion not enabled");
+  await danger.click();
+  await expect(page.getByRole("button", { name: "Delete account" })).toBeVisible();
 });

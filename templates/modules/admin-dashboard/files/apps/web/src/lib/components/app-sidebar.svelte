@@ -5,20 +5,24 @@
   import LayoutDashboardIcon from "@lucide/svelte/icons/layout-dashboard";
   import UsersIcon from "@lucide/svelte/icons/users";
   import MonitorSmartphoneIcon from "@lucide/svelte/icons/monitor-smartphone";
+  import ScrollTextIcon from "@lucide/svelte/icons/scroll-text";
   import { getI18n } from "$lib/i18n";
   import type { SessionUser } from "../../app.d.ts";
   import type { Messages } from "$lib/i18n/messages";
   import type { Component } from "svelte";
 
-  let { user }: { user: SessionUser } = $props();
+  let { user, capabilities }: { user: SessionUser; capabilities?: { auditLog?: boolean } } = $props();
   const i18n = getI18n();
 
   type NavItem = { href: string; key: keyof Messages["nav"]; icon: Component; adminOnly?: boolean };
-  const items: NavItem[] = [
+  const items = $derived<NavItem[]>([
     { href: "/dashboard", key: "overview", icon: LayoutDashboardIcon },
     { href: "/dashboard/users", key: "users", icon: UsersIcon, adminOnly: true },
     { href: "/dashboard/sessions", key: "sessions", icon: MonitorSmartphoneIcon, adminOnly: true },
-  ];
+    ...(capabilities?.auditLog
+      ? [{ href: "/dashboard/audit", key: "audit", icon: ScrollTextIcon, adminOnly: true } as NavItem]
+      : []),
+  ]);
   const visible = $derived(items.filter((item) => !item.adminOnly || user.role === "admin"));
 </script>
 

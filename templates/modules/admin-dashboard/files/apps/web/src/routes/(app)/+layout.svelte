@@ -11,8 +11,13 @@
   import { getI18n } from "$lib/i18n";
   import type { SessionUser } from "../../app.d.ts";
 
-  let { children, data }: { children: import("svelte").Snippet; data: { user: SessionUser; impersonating: boolean } } =
-    $props();
+  let {
+    children,
+    data,
+  }: {
+    children: import("svelte").Snippet;
+    data: { user: SessionUser; impersonating: boolean; capabilities: { auditLog?: boolean } };
+  } = $props();
   const i18n = getI18n();
 
   async function stopImpersonating(): Promise<void> {
@@ -22,7 +27,7 @@
 </script>
 
 <Sidebar.Provider>
-  <AppSidebar user={data.user} />
+  <AppSidebar user={data.user} capabilities={data.capabilities} />
   <Sidebar.Inset>
     {#if data.impersonating}
       <div class="bg-primary text-primary-foreground flex items-center justify-between gap-2 px-4 py-2 text-sm">

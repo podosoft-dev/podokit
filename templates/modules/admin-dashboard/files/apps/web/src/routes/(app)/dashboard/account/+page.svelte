@@ -14,15 +14,12 @@
   import { untrack } from "svelte";
   import type { SessionUser } from "../../../../app.d.ts";
 
-  let { data }: { data: { user: SessionUser; currentSessionId: string | null } } = $props();
+  type Capabilities = { twoFactor: boolean; providers: string[]; deleteAccount: boolean; auditLog: boolean };
+  let { data }: { data: { user: SessionUser; currentSessionId: string | null; capabilities: Capabilities } } = $props();
   const i18n = getI18n();
 
-  // Optional features, resolved from the API so we only show enabled sections.
-  let caps = $state<{ twoFactor: boolean; providers: string[]; deleteAccount: boolean }>({
-    twoFactor: false,
-    providers: [],
-    deleteAccount: false,
-  });
+  // Optional features (resolved by the layout) so we only show enabled sections.
+  const caps = $derived(data.capabilities);
 
   type SectionKey = "profile" | "security" | "connected" | "sessions" | "danger";
   let section = $state<SectionKey>("profile");
@@ -169,17 +166,7 @@
     }
   }
 
-  async function loadCapabilities(): Promise<void> {
-    try {
-      const res = await fetch("/api/account/capabilities");
-      if (res.ok) caps = await res.json();
-    } catch {
-      /* keep defaults */
-    }
-  }
-
   $effect(() => {
-    void loadCapabilities();
     void loadSessions();
     void loadAccounts();
   });

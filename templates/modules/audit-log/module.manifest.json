@@ -1,12 +1,25 @@
 {
   "name": "audit-log",
   "description": "Audit logging: a global interceptor records who did each mutating request (who/method/path/status) to an audit_logs table. Requires auth.",
-  "requires": ["auth"],
+  "requires": [
+    "auth"
+  ],
   "targetApp": "api",
-  "env": [],
+  "env": [
+    "# audit-log: surfaces the admin Audit log page in the dashboard",
+    "AUDIT_LOG_ENABLED=true"
+  ],
   "inject": [
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:imports", "text": "import { AuditModule } from \"./audit/audit.module\";" },
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:module-imports", "text": "AuditModule," }
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:imports",
+      "text": "import { AuditModule } from \"./audit/audit.module\";"
+    },
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:module-imports",
+      "text": "AuditModule,"
+    }
   ],
   "instructions": [
     "Run migrations to create the audit_logs table:  npm run migration:run -w <app>-api",
