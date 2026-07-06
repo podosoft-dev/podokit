@@ -20,6 +20,10 @@ export class AuditLog {
   @Column({ type: "varchar", nullable: true })
   ip!: string | null;
 
+  // Free-form context for custom audit events (see README).
+  @Column({ type: "jsonb", nullable: true })
+  metadata!: Record<string, unknown> | null;
+
   @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 }

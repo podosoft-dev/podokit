@@ -13,6 +13,7 @@ export class InitAuditLogs1720300000000 implements MigrationInterface {
         "path" character varying(2048) NOT NULL,
         "statusCode" integer NOT NULL,
         "ip" character varying,
+        "metadata" jsonb,
         "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
         CONSTRAINT "PK_audit_logs_id" PRIMARY KEY ("id")
       )
