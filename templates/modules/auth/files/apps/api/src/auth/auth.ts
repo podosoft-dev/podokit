@@ -51,5 +51,9 @@ export const auth = betterAuth({
       ipAddressHeaders: ["x-forwarded-for"],
     },
   },
+  user: {
+    // Self-service account deletion — opt in with AUTH_ALLOW_DELETE=true.
+    deleteUser: { enabled: process.env.AUTH_ALLOW_DELETE === "true" },
+  },
   // podokit:auth-options
 });

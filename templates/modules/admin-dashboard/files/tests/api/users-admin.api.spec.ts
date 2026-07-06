@@ -96,3 +96,14 @@ test("sessions record a client IP (forwarded through the proxy)", async ({ playw
   expect(sessions[0]?.ipAddress).not.toBe("0000:0000:0000:0000:0000:0000:0000:0000");
   await ctx.dispose();
 });
+
+test("account capabilities reports optional-feature flags", async ({ playwright }) => {
+  const ctx = await signedIn(playwright, ADMIN);
+  const res = await ctx.get("/api/account/capabilities");
+  expect(res.ok()).toBeTruthy();
+  const caps = await res.json();
+  expect(typeof caps.twoFactor).toBe("boolean");
+  expect(Array.isArray(caps.providers)).toBe(true);
+  expect(typeof caps.deleteAccount).toBe("boolean");
+  await ctx.dispose();
+});

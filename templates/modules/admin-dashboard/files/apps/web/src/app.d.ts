@@ -7,6 +7,7 @@ export type SessionUser = {
   role?: string | null;
   image?: string | null;
   emailVerified?: boolean;
+  twoFactorEnabled?: boolean | null;
 };
 
 declare global {

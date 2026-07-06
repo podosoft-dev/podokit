@@ -2,6 +2,8 @@ import { Controller, Get } from "@nestjs/common";
 import { Session, type UserSession } from "@thallesp/nestjs-better-auth";
 import { ApiTags } from "@nestjs/swagger";
 
+type Capabilities = { twoFactor: boolean; providers: string[]; deleteAccount: boolean };
+
 // Protected by the global AuthGuard. Use @Session() to read the current user.
 @ApiTags("account")
 @Controller("account")
@@ -9,5 +11,19 @@ export class AccountController {
   @Get("me")
   me(@Session() session: UserSession) {
     return session.user;
+  }
+
+  // Which optional auth features are enabled, so the UI can show/hide sections.
+  @Get("capabilities")
+  capabilities(): Capabilities {
+    const providers = [
+      process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET ? "google" : null,
+      process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET ? "github" : null,
+    ].filter((p): p is string => p !== null);
+    return {
+      twoFactor: process.env.AUTH_TWO_FACTOR === "true",
+      providers,
+      deleteAccount: process.env.AUTH_ALLOW_DELETE === "true",
+    };
   }
 }

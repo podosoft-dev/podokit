@@ -29,3 +29,12 @@ test("account security and sessions sub-navigation", async ({ page }) => {
   await expect(page.getByText("Current", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign out other sessions" })).toBeVisible();
 });
+
+test("account nav hides sections not enabled by config", async ({ page }) => {
+  await ready(page, "/dashboard/account");
+  await expect(page.getByRole("button", { name: "Profile" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Security" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sessions" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Connected" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Danger zone" })).toHaveCount(0);
+});
