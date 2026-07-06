@@ -212,6 +212,27 @@ describe("addModule (auth / better-auth)", () => {
     expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).toContain("ApiKeyModule,");
   });
 
+  it("admin-dashboard composes auth and overlays the dashboard UI + admin plugin", () => {
+    const project = generate("fullstack-nest-svelte");
+    const result = addModule({ projectRoot: project, module: "admin-dashboard", modulesDir: MODULES });
+
+    expect(result.added).toContain("auth");
+    // web overlay
+    expect(existsSync(join(project, "apps/web/src/hooks.server.ts"))).toBe(true);
+    expect(existsSync(join(project, "apps/web/src/routes/(auth)/login/+page.svelte"))).toBe(true);
+    expect(existsSync(join(project, "apps/web/src/routes/(app)/+layout.svelte"))).toBe(true);
+    expect(existsSync(join(project, "apps/web/src/lib/components/app-sidebar.svelte"))).toBe(true);
+    expect(existsSync(join(project, "apps/web/src/lib/components/ui/sidebar/index.ts"))).toBe(true);
+    // admin plugin + bootstrap injected into auth.ts
+    const authTs = readFileSync(join(project, "apps/api/src/auth/auth.ts"), "utf8");
+    expect(authTs).toContain("plugins.push(admin(");
+    expect(authTs).toContain("sendResetPassword");
+    expect(authTs).toContain("databaseHooks");
+    expect(authTs).toContain("trustedOrigins");
+    // env
+    expect(readFileSync(join(project, ".env.example"), "utf8")).toContain("ADMIN_EMAILS");
+  });
+
   it("rejects a project without the target app", () => {
     const empty = tmp(); // no apps/api/package.json
     expect(() => addModule({ projectRoot: empty, module: "auth", modulesDir: MODULES })).toThrow(
