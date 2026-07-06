@@ -42,13 +42,29 @@ export const auditAfterHook = createAuthMiddleware(async (ctx) => {
   };
   const actor = context.session?.user ?? context.newSession?.user;
   const body = (ctx.body ?? {}) as { email?: string; userId?: string };
+
+  // Prefer a human-readable target: the email in the body, otherwise resolve the
+  // target user's email by id (falls back to the id for already-deleted users).
+  const targetId = body.userId ?? null;
+  let targetLabel = body.email ?? null;
+  if (!targetLabel && targetId) {
+    try {
+      const adapter = (ctx.context as { internalAdapter?: { findUserById?: (id: string) => Promise<{ email?: string } | null> } })
+        .internalAdapter;
+      const target = await adapter?.findUserById?.(targetId);
+      targetLabel = target?.email ?? targetId;
+    } catch {
+      targetLabel = targetId;
+    }
+  }
+
   await recordAudit({
     action,
     actorId: actor?.id ?? null,
     actorName: actor?.name ?? null,
     actorEmail: actor?.email ?? null,
-    targetId: body.userId ?? null,
-    targetLabel: body.email ?? body.userId ?? null,
+    targetId,
+    targetLabel,
     ip: ctx.headers?.get("x-forwarded-for") ?? null,
   });
 });
