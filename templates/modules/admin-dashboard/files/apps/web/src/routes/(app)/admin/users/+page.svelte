@@ -301,7 +301,7 @@
 
 <!-- Manage user (two-pane) -->
 <Dialog.Root bind:open={manageOpen}>
-  <Dialog.Content class="max-w-3xl">
+  <Dialog.Content class="sm:max-w-3xl">
     <Dialog.Header><Dialog.Title class="truncate">{mUser?.email}</Dialog.Title></Dialog.Header>
     <div class="flex flex-col gap-4 sm:flex-row">
       <nav class="flex shrink-0 flex-wrap gap-1 sm:w-40 sm:flex-col">
