@@ -6,7 +6,9 @@
   import * as Card from "$lib/components/ui/card";
   import * as Alert from "$lib/components/ui/alert";
   import { api } from "$lib/api";
+  import { getI18n } from "$lib/i18n";
 
+  const i18n = getI18n();
   let name = $state("");
   let email = $state("");
   let password = $state("");
@@ -20,7 +22,7 @@
     const { error: authError } = await api.auth.signUp.email({ name, email, password });
     loading = false;
     if (authError) {
-      error = authError.message ?? "Sign up failed";
+      error = authError.message ?? i18n.t.auth.signUpFailed;
       return;
     }
     await goto("/dashboard", { invalidateAll: true });
@@ -29,8 +31,8 @@
 
 <Card.Root>
   <Card.Header>
-    <Card.Title>Create account</Card.Title>
-    <Card.Description>Sign up to get started.</Card.Description>
+    <Card.Title>{i18n.t.auth.createTitle}</Card.Title>
+    <Card.Description>{i18n.t.auth.createDesc}</Card.Description>
   </Card.Header>
   <Card.Content>
     <form class="flex flex-col gap-4" onsubmit={submit}>
@@ -38,21 +40,21 @@
         <Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>
       {/if}
       <div class="flex flex-col gap-2">
-        <Label for="name">Name</Label>
+        <Label for="name">{i18n.t.auth.name}</Label>
         <Input id="name" bind:value={name} required autocomplete="name" />
       </div>
       <div class="flex flex-col gap-2">
-        <Label for="email">Email</Label>
+        <Label for="email">{i18n.t.auth.email}</Label>
         <Input id="email" type="email" bind:value={email} required autocomplete="email" />
       </div>
       <div class="flex flex-col gap-2">
-        <Label for="password">Password</Label>
+        <Label for="password">{i18n.t.auth.password}</Label>
         <Input id="password" type="password" bind:value={password} required autocomplete="new-password" />
       </div>
-      <Button type="submit" disabled={loading}>{loading ? "Creating…" : "Create account"}</Button>
+      <Button type="submit" disabled={loading}>{loading ? i18n.t.auth.creating : i18n.t.auth.create}</Button>
     </form>
   </Card.Content>
   <Card.Footer class="justify-center">
-    <p class="text-muted-foreground text-sm">Have an account? <a href="/login" class="text-foreground hover:underline">Sign in</a></p>
+    <p class="text-muted-foreground text-sm">{i18n.t.auth.haveAccount} <a href="/login" class="text-foreground hover:underline">{i18n.t.auth.signIn}</a></p>
   </Card.Footer>
 </Card.Root>

@@ -3,6 +3,7 @@
   import { Separator } from "$lib/components/ui/separator";
   import AppSidebar from "$lib/components/app-sidebar.svelte";
   import ThemeToggle from "$lib/components/theme-toggle.svelte";
+  import LanguageSwitch from "$lib/components/language-switch.svelte";
   import { Toaster } from "$lib/components/ui/sonner";
   import type { SessionUser } from "../../app.d.ts";
 
@@ -16,6 +17,7 @@
       <Sidebar.Trigger />
       <Separator orientation="vertical" class="mr-2 h-4" />
       <div class="flex-1"></div>
+      <LanguageSwitch />
       <ThemeToggle />
     </header>
     <main class="flex-1 overflow-auto p-6">

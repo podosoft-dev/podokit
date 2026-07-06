@@ -7,7 +7,9 @@
   import * as Card from "$lib/components/ui/card";
   import * as Alert from "$lib/components/ui/alert";
   import { api } from "$lib/api";
+  import { getI18n } from "$lib/i18n";
 
+  const i18n = getI18n();
   let password = $state("");
   let error = $state<string | null>(null);
   let loading = $state(false);
@@ -20,7 +22,7 @@
     const { error: authError } = await api.auth.resetPassword({ newPassword: password, token });
     loading = false;
     if (authError) {
-      error = authError.message ?? "Reset failed";
+      error = authError.message ?? i18n.t.auth.resetFailed;
       return;
     }
     await goto("/login", { invalidateAll: true });
@@ -29,7 +31,7 @@
 
 <Card.Root>
   <Card.Header>
-    <Card.Title>Set a new password</Card.Title>
+    <Card.Title>{i18n.t.auth.newTitle}</Card.Title>
   </Card.Header>
   <Card.Content>
     <form class="flex flex-col gap-4" onsubmit={submit}>
@@ -37,13 +39,13 @@
         <Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>
       {/if}
       {#if !token}
-        <Alert.Root variant="destructive"><Alert.Description>Missing or invalid reset token.</Alert.Description></Alert.Root>
+        <Alert.Root variant="destructive"><Alert.Description>{i18n.t.auth.missingToken}</Alert.Description></Alert.Root>
       {/if}
       <div class="flex flex-col gap-2">
-        <Label for="password">New password</Label>
+        <Label for="password">{i18n.t.auth.newPassword}</Label>
         <Input id="password" type="password" bind:value={password} required autocomplete="new-password" />
       </div>
-      <Button type="submit" disabled={loading || !token}>{loading ? "Updating…" : "Update password"}</Button>
+      <Button type="submit" disabled={loading || !token}>{loading ? i18n.t.auth.updating : i18n.t.auth.updatePassword}</Button>
     </form>
   </Card.Content>
 </Card.Root>
