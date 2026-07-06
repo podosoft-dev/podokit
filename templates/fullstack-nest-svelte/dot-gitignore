@@ -7,3 +7,8 @@ build/
 !.env.example
 .DS_Store
 *.log
+
+# e2e test artifacts
+tests/playwright/
+tests/playwright-report/
+tests/test-results/
