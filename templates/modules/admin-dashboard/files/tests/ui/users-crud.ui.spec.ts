@@ -95,3 +95,30 @@ test("users list shows pagination beyond one page", async ({ page }) => {
   await expect(nav).toBeVisible();
   await expect(nav.getByRole("button", { name: "Page 2" })).toBeVisible();
 });
+
+test("admin can edit a user via the dialog", async ({ page }) => {
+  await ready(page, "/dashboard/users");
+  const email = `ui-edit-${Date.now()}@example.com`;
+  await seedUser(page, email);
+  await page.getByPlaceholder("Search by email…").fill(email);
+  await page.getByRole("row", { name: new RegExp(email) }).getByRole("button").click();
+  await page.getByRole("menuitem", { name: "Edit" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Name").fill("Edited Name");
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("User updated")).toBeVisible();
+  await expect(page.getByRole("cell", { name: "Edited Name" })).toBeVisible();
+});
+
+test("admin can ban a user with a reason", async ({ page }) => {
+  await ready(page, "/dashboard/users");
+  const email = `ui-ban-${Date.now()}@example.com`;
+  await seedUser(page, email);
+  await page.getByPlaceholder("Search by email…").fill(email);
+  await page.getByRole("row", { name: new RegExp(email) }).getByRole("button").click();
+  await page.getByRole("menuitem", { name: "Ban", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Reason (optional)").fill("policy violation");
+  await dialog.getByRole("button", { name: "Ban", exact: true }).click();
+  await expect(page.getByText("User banned", { exact: true })).toBeVisible();
+});

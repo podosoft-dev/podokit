@@ -7,7 +7,9 @@ export const handle: Handle = async ({ event, resolve }) => {
   try {
     const { data } = await serverApiClient(event).auth.getSession();
     event.locals.user = (data?.user as App.Locals["user"]) ?? null;
-    event.locals.session = data?.session ? { id: data.session.id } : null;
+    event.locals.session = data?.session
+      ? { id: data.session.id, impersonatedBy: (data.session as { impersonatedBy?: string | null }).impersonatedBy ?? null }
+      : null;
   } catch {
     event.locals.user = null;
     event.locals.session = null;

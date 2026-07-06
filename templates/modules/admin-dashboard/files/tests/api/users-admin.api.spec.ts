@@ -107,3 +107,28 @@ test("account capabilities reports optional-feature flags", async ({ playwright 
   expect(typeof caps.deleteAccount).toBe("boolean");
   await ctx.dispose();
 });
+
+test("admin can update a user and impersonate them", async ({ playwright }) => {
+  const admin = await signedIn(playwright, ADMIN);
+  const email = `api-edit-${Date.now()}@example.com`;
+  const created = await admin.post("/api/auth/admin/create-user", {
+    data: { email, password: "password123", name: "Edit Me", role: "user" },
+  });
+  const userId = (await created.json())?.user?.id as string;
+
+  const updated = await admin.post("/api/auth/admin/update-user", { data: { userId, data: { name: "Updated" } } });
+  expect(updated.ok()).toBeTruthy();
+
+  // impersonate on a fresh context so shared sessions are untouched
+  const imp = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  await imp.post("/api/auth/sign-in/email", { data: { email: ADMIN.email, password: ADMIN.password } });
+  expect((await imp.post("/api/auth/admin/impersonate-user", { data: { userId } })).ok()).toBeTruthy();
+  const session = await (await imp.get("/api/auth/get-session")).json();
+  expect(session?.user?.email).toBe(email);
+  expect(session?.session?.impersonatedBy).toBeTruthy();
+  await imp.post("/api/auth/admin/stop-impersonating");
+  await imp.dispose();
+
+  await admin.post("/api/auth/admin/remove-user", { data: { userId } });
+  await admin.dispose();
+});
