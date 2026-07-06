@@ -94,6 +94,8 @@
   let mBanDays = $state("");
   // sessions
   let mSessions = $state<Session[]>([]);
+  let mSessionsPage = $state(1);
+  const mPagedSessions = $derived(mSessions.slice((mSessionsPage - 1) * PAGE_SIZE, mSessionsPage * PAGE_SIZE));
   // danger
   let mDeleteArmed = $state(false);
 
@@ -110,6 +112,7 @@
     mBanDays = "";
     mDeleteArmed = false;
     mSessions = [];
+    mSessionsPage = 1;
     manageOpen = true;
     await loadManagedSessions();
   }
@@ -317,7 +320,7 @@
         {/each}
       </nav>
 
-      <div class="min-h-64 min-w-0 flex-1">
+      <div class="h-[26rem] min-w-0 flex-1 overflow-y-auto">
         {#if mSection === "profile"}
           <form class="flex flex-col gap-3" onsubmit={saveProfile}>
             <div class="flex flex-col gap-1"><Label for="m-name">{i18n.t.users.name}</Label><Input id="m-name" bind:value={mName} required /></div>
@@ -362,7 +365,7 @@
                   </Table.Row>
                 </Table.Header>
                 <Table.Body>
-                  {#each mSessions as s (s.id)}
+                  {#each mPagedSessions as s (s.id)}
                     <Table.Row>
                       <Table.Cell class="max-w-40 truncate">{s.userAgent ?? i18n.t.adminSessions.unknown}</Table.Cell>
                       <Table.Cell class="text-muted-foreground">{s.ipAddress ?? "—"}</Table.Cell>
@@ -375,6 +378,7 @@
                 </Table.Body>
               </Table.Root>
             </div>
+            <TablePagination count={mSessions.length} perPage={PAGE_SIZE} bind:page={mSessionsPage} />
           </div>
         {:else if mSection === "danger"}
           <div class="border-destructive/50 flex flex-col gap-3 rounded-md border p-4">
