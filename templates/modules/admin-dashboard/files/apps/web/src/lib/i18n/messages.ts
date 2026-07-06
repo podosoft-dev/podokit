@@ -47,7 +47,7 @@ const en = {
   },
   nav: { overview: "Overview", users: "Users", sessions: "Sessions", audit: "Audit log", account: "Account", signOut: "Sign out" },
   dashboard: { title: "Dashboard", welcome: "Welcome back, {name}.", yourRole: "Your role", signedInAs: "Signed in as" },
-  audit: { title: "Audit log", when: "When", user: "User", method: "Method", path: "Path", status: "Status", ip: "IP", empty: "No audit entries.", loadFailed: "Failed to load audit log", total: "{count} entries" },
+  audit: { title: "Audit log", when: "When", actor: "Actor", action: "Action", target: "Target", ip: "IP", empty: "No audit entries.", loadFailed: "Failed to load audit log", total: "{count} entries" },
   users: {
     title: "Users",
     search: "Search by email…",
@@ -220,7 +220,7 @@ const ko: Messages = {
   },
   nav: { overview: "개요", users: "회원", sessions: "세션", audit: "감사 로그", account: "계정", signOut: "로그아웃" },
   dashboard: { title: "대시보드", welcome: "{name}님, 환영합니다.", yourRole: "내 권한", signedInAs: "로그인 계정" },
-  audit: { title: "감사 로그", when: "시각", user: "사용자", method: "메서드", path: "경로", status: "상태", ip: "IP", empty: "감사 기록이 없습니다.", loadFailed: "감사 로그를 불러오지 못했습니다", total: "항목 {count}개" },
+  audit: { title: "감사 로그", when: "시각", actor: "수행자", action: "동작", target: "대상", ip: "IP", empty: "감사 기록이 없습니다.", loadFailed: "감사 로그를 불러오지 못했습니다", total: "항목 {count}개" },
   users: {
     title: "회원",
     search: "이메일로 검색…",

@@ -28,10 +28,10 @@ test("audit log records auth/admin actions", async ({ playwright }) => {
 
   const res = await admin.get("/api/audit-logs");
   expect(res.ok()).toBeTruthy();
-  const entries = (await res.json()) as Array<{ path: string; statusCode: number; userId: string | null }>;
-  const entry = entries.find((e) => e.path === "/api/auth/admin/create-user");
-  expect(entry, "create-user should be audited").toBeTruthy();
-  expect(entry?.userId, "audit entry records the acting user").toBeTruthy();
+  const entries = (await res.json()) as Array<{ action: string; actorEmail: string | null; targetLabel: string | null }>;
+  const entry = entries.find((e) => e.action === "user.create" && e.targetLabel === email);
+  expect(entry, "user.create should be audited with the target").toBeTruthy();
+  expect(entry?.actorEmail, "audit entry records the acting admin").toBe(ADMIN.email);
 
   await admin.post("/api/auth/admin/remove-user", { data: { userId } });
   await admin.dispose();

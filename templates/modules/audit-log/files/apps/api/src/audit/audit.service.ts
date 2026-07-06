@@ -4,8 +4,8 @@ import { Repository } from "typeorm";
 import { AuditLog } from "./audit-log.entity";
 import { setAuditRecorder, type AuditEntry } from "./audit-events";
 
-// The one place audit entries are written. Inject it to record events from your
-// own Nest code, or call recordAudit() from anywhere else — both end up here.
+// The one place audit entries are written. Inject it to record from Nest code,
+// or call recordAudit() from anywhere else — both end up here.
 @Injectable()
 export class AuditService implements OnModuleInit {
   constructor(@InjectRepository(AuditLog) private readonly logs: Repository<AuditLog>) {}
@@ -18,10 +18,13 @@ export class AuditService implements OnModuleInit {
     try {
       await this.logs.save(
         this.logs.create({
-          userId: entry.userId ?? null,
-          method: entry.method,
-          path: entry.path,
-          statusCode: entry.statusCode,
+          action: entry.action,
+          actorId: entry.actorId ?? null,
+          actorName: entry.actorName ?? null,
+          actorEmail: entry.actorEmail ?? null,
+          targetType: entry.targetType ?? null,
+          targetId: entry.targetId ?? null,
+          targetLabel: entry.targetLabel ?? null,
           ip: entry.ip ?? null,
           metadata: entry.metadata ?? null,
         }),

@@ -11,6 +11,6 @@ test("admin can view audit entries when the module is installed", async ({ page 
   await auditNav.click();
   await expect(page).toHaveURL(/\/admin\/audit/);
   await expect(page.getByRole("heading", { name: "Audit log" })).toBeVisible();
-  // seed sign-ins are audited via the better-auth hook, so a row is present
-  await expect(page.getByRole("cell", { name: /\/api\/auth\// }).first()).toBeVisible();
+  // seed sign-ins are audited via the better-auth hook, so an action row is present
+  await expect(page.getByText("auth.login").first()).toBeVisible();
 });

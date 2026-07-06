@@ -6,18 +6,21 @@
   import { getI18n, fmt, formatDateTime } from "$lib/i18n";
 
   const i18n = getI18n();
-  type Entry = { id: string; userId: string | null; method: string; path: string; statusCode: number; ip: string | null; createdAt: string };
+  type Entry = {
+    id: string;
+    action: string;
+    actorId: string | null;
+    actorName: string | null;
+    actorEmail: string | null;
+    targetLabel: string | null;
+    ip: string | null;
+    createdAt: string;
+  };
 
   const PAGE_SIZE = 10;
   let entries = $state<Entry[]>([]);
   let page = $state(1);
   const paged = $derived(entries.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE));
-
-  function statusVariant(code: number): "outline" | "secondary" | "destructive" {
-    if (code >= 500) return "destructive";
-    if (code >= 400) return "secondary";
-    return "outline";
-  }
 
   async function load(): Promise<void> {
     try {
@@ -42,10 +45,9 @@
       <Table.Header>
         <Table.Row>
           <Table.Head>{i18n.t.audit.when}</Table.Head>
-          <Table.Head>{i18n.t.audit.method}</Table.Head>
-          <Table.Head>{i18n.t.audit.path}</Table.Head>
-          <Table.Head>{i18n.t.audit.status}</Table.Head>
-          <Table.Head>{i18n.t.audit.user}</Table.Head>
+          <Table.Head>{i18n.t.audit.actor}</Table.Head>
+          <Table.Head>{i18n.t.audit.action}</Table.Head>
+          <Table.Head>{i18n.t.audit.target}</Table.Head>
           <Table.Head>{i18n.t.audit.ip}</Table.Head>
         </Table.Row>
       </Table.Header>
@@ -53,14 +55,20 @@
         {#each paged as e (e.id)}
           <Table.Row>
             <Table.Cell class="text-muted-foreground whitespace-nowrap">{formatDateTime(e.createdAt)}</Table.Cell>
-            <Table.Cell class="font-mono text-xs">{e.method}</Table.Cell>
-            <Table.Cell class="max-w-xs truncate font-mono text-xs">{e.path}</Table.Cell>
-            <Table.Cell><Badge variant={statusVariant(e.statusCode)}>{e.statusCode}</Badge></Table.Cell>
-            <Table.Cell class="text-muted-foreground max-w-[10rem] truncate text-xs">{e.userId ?? "—"}</Table.Cell>
+            <Table.Cell>
+              {#if e.actorName || e.actorEmail}
+                <div class="font-medium">{e.actorName ?? e.actorEmail}</div>
+                {#if e.actorName && e.actorEmail}<div class="text-muted-foreground text-xs">{e.actorEmail}</div>{/if}
+              {:else}
+                <span class="text-muted-foreground">—</span>
+              {/if}
+            </Table.Cell>
+            <Table.Cell><Badge variant="secondary" class="font-mono text-xs">{e.action}</Badge></Table.Cell>
+            <Table.Cell class="max-w-xs truncate">{e.targetLabel ?? "—"}</Table.Cell>
             <Table.Cell class="text-muted-foreground">{e.ip ?? "—"}</Table.Cell>
           </Table.Row>
         {:else}
-          <Table.Row><Table.Cell colspan={6} class="text-muted-foreground py-8 text-center">{i18n.t.audit.empty}</Table.Cell></Table.Row>
+          <Table.Row><Table.Cell colspan={5} class="text-muted-foreground py-8 text-center">{i18n.t.audit.empty}</Table.Cell></Table.Row>
         {/each}
       </Table.Body>
     </Table.Root>

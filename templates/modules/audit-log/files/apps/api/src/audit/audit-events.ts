@@ -1,12 +1,16 @@
-// One audit pipeline for the whole app. Every source — the NestJS interceptor,
-// the better-auth hook, and your own code — records through here, so all entries
-// share the same shape and the same write path (AuditService → audit_logs).
+// One audit pipeline for the whole app. Every source — the @Audit decorator, the
+// better-auth hook, and your own code — records through here, so all entries
+// share the actor/action/target shape and one write path (audit_logs).
 
 export type AuditEntry = {
-  userId?: string | null;
-  method: string;
-  path: string;
-  statusCode: number;
+  // Stable semantic action code, e.g. "user.create", "invoice.paid".
+  action: string;
+  actorId?: string | null;
+  actorName?: string | null;
+  actorEmail?: string | null;
+  targetType?: string | null;
+  targetId?: string | null;
+  targetLabel?: string | null;
   ip?: string | null;
   metadata?: Record<string, unknown> | null;
 };
@@ -14,17 +18,17 @@ export type AuditEntry = {
 type Recorder = (entry: AuditEntry) => Promise<void>;
 let recorder: Recorder | null = null;
 
-// AuditService registers the real recorder on startup. This registry lives
-// outside Nest's DI so code that runs outside the container (the better-auth
-// hook, background jobs, etc.) can still write through the one pipeline.
+// AuditService registers the real recorder on startup. The registry lives outside
+// Nest's DI so code that runs outside the container (the better-auth hook,
+// background jobs, ...) can still write through the one pipeline.
 export function setAuditRecorder(fn: Recorder): void {
   recorder = fn;
 }
 
 // Record a custom audit event from anywhere. Awaits the write; a no-op until the
 // AuditService has started. Example:
-//   await recordAudit({ method: "EVENT", path: "todo.deleted", statusCode: 200,
-//                       userId, metadata: { todoId } });
+//   await recordAudit({ action: "invoice.paid", actorId, targetLabel: invoice.number,
+//                       metadata: { amount } });
 export async function recordAudit(entry: AuditEntry): Promise<void> {
   if (recorder) await recorder(entry);
 }

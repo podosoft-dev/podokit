@@ -1,51 +1,59 @@
 # Audit log
 
-Every audit entry goes through **one pipeline** — `AuditService` → the
-`audit_logs` table — so all entries share one shape and one write path,
-regardless of where they came from.
+An append-only trail of **who did what, to which resource, when** — the
+actor / action / target model. Every entry flows through one pipeline
+(`AuditService` → the `audit_logs` table) so they all share one shape.
 
-## Sources (built in)
+## What gets recorded
 
-| Source | File | Captures |
-| --- | --- | --- |
-| NestJS interceptor | `audit.interceptor.ts` | Mutating requests (`POST/PUT/PATCH/DELETE`) to **your own** API routes. |
-| better-auth hook | `audit-hook.ts` | **Auth/admin actions** (login, ban, role change, session revoke, user CRUD, …). better-auth is mounted as middleware and bypasses the interceptor, so it is caught here. |
+Nothing is recorded automatically except the built-in **auth/admin actions**
+(login, user create/update/delete, ban, role change, session revoke, ...),
+which the better-auth hook (`audit-hook.ts`) maps to semantic action codes like
+`user.create` and `auth.login`. Everything else is **opt-in** — you decide what
+matters.
 
-Both call the same recorder, so you manage a single, consistent log.
-
-## Record a custom event
-
-From anywhere (including code outside Nest's DI):
+## Audit your own routes with `@Audit`
 
 ```ts
-import { recordAudit } from "./audit/audit-events";
+import { Audit } from "../audit/audit.decorator";
+
+@Post()
+@Audit("todo.create", (_req, todo) => ({ type: "todo", id: todo.id, label: todo.title }))
+create(@Body() dto: CreateTodoDto) {
+  return this.todos.create(dto);
+}
+```
+
+The interceptor resolves the acting user (name + email), attaches the target you
+return, and writes one entry when the handler succeeds.
+
+## Record from anywhere in code
+
+```ts
+import { recordAudit } from "../audit/audit-events";
 
 await recordAudit({
-  method: "EVENT",
-  path: "todo.deleted",
-  statusCode: 200,
-  userId: currentUserId,
-  metadata: { todoId }, // any JSON — stored in the jsonb `metadata` column
+  action: "invoice.paid",
+  actorId, actorName, actorEmail,
+  targetType: "invoice", targetId: invoice.id, targetLabel: invoice.number,
+  metadata: { amount },
 });
 ```
 
-Or, inside a Nest provider, inject the service:
+Or inject `AuditService` in a Nest provider and call `audit.record({ ... })`.
+Both never throw — a failed audit write never breaks the request.
 
-```ts
-constructor(private readonly audit: AuditService) {}
-// ...
-await this.audit.record({ method: "EVENT", path: "invoice.paid", statusCode: 200, userId, metadata });
-```
+## Fields (`AuditEntry`)
 
-`recordAudit` / `AuditService.record` never throw — a failed audit write will
-never break the request it describes.
+`action` (semantic code), `actorId/actorName/actorEmail` (denormalized so the log
+survives renames/deletes), `targetType/targetId/targetLabel`, `ip`, `metadata`
+(jsonb, free-form), `createdAt`.
 
 ## Customize
 
-- **What is audited:** edit `AUDITED_METHODS` in `audit.interceptor.ts` (your API
-  routes) and `AUDITED_PATHS` in `audit-hook.ts` (auth/admin endpoints).
-- **Extra context:** put anything in `metadata` (a `jsonb` column).
-- **Schema:** add columns to `audit-log.entity.ts` and a matching migration; keep
-  the `AuditEntry` type in `audit-events.ts` in sync.
-- **Reading:** `GET /audit-logs` returns the latest 50 (admin only). Extend
-  `audit.controller.ts` for filtering/pagination as needed.
+- **Auth actions:** edit the `ACTIONS` map in `audit-hook.ts`.
+- **Your routes:** add `@Audit("your.action")` where you want a trail.
+- **Schema:** add columns to `audit-log.entity.ts` + a migration, and keep the
+  `AuditEntry` type in `audit-events.ts` in sync.
+- **Reading:** `GET /audit-logs` returns the latest 50 (admin only); extend
+  `audit.controller.ts` for filtering/pagination.
