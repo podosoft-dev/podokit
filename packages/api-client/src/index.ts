@@ -67,11 +67,10 @@ export function createApiClient(options: ApiClientOptions = {}) {
   const authOrigin =
     options.baseUrl ?? (typeof globalThis.location === "undefined" ? "" : globalThis.location.origin);
 
-  // Created lazily: REST-only usage (and SSR without an origin) never triggers
-  // the better-auth client's eager URL validation.
-  let authClient: ReturnType<typeof createAuthClient> | undefined;
-  function getAuth(): ReturnType<typeof createAuthClient> {
-    authClient ??= createAuthClient({
+  // Inner factory so the return type keeps the admin plugin's client methods
+  // (a bare ReturnType<typeof createAuthClient> would drop the plugin augmentation).
+  const makeAuthClient = () =>
+    createAuthClient({
       baseURL: authOrigin,
       plugins: [adminClient()],
       fetchOptions: {
@@ -79,6 +78,12 @@ export function createApiClient(options: ApiClientOptions = {}) {
         ...(options.fetch ? { customFetchImpl: options.fetch } : {}),
       },
     });
+
+  // Created lazily: REST-only usage (and SSR without an origin) never triggers
+  // the better-auth client's eager URL validation.
+  let authClient: ReturnType<typeof makeAuthClient> | undefined;
+  function getAuth(): ReturnType<typeof makeAuthClient> {
+    authClient ??= makeAuthClient();
     return authClient;
   }
 
@@ -99,7 +104,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
 
   return {
     /** The better-auth client (auth + admin plugin), created on first access. */
-    get auth(): ReturnType<typeof createAuthClient> {
+    get auth(): ReturnType<typeof makeAuthClient> {
       return getAuth();
     },
     /** Low-level typed request against the app's REST API. */

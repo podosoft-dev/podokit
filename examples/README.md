@@ -115,6 +115,22 @@ curl -XPOST localhost:3000/progress -H 'content-type: application/json' -d '{"st
 # stream: job-progress 20 -> 40 -> 60 -> 80 -> 100 (pushed from the worker via Redis)
 ```
 
+## 6. admin dashboard (`podo add admin-dashboard`)
+
+A full admin starter — auth pages, a sidebar shell, and user/session management.
+
+```bash
+npx @podosoft/podokit create my-admin
+cd my-admin && npm install && cp .env.example .env
+npx @podosoft/podokit add admin-dashboard    # also adds auth
+npm install
+docker compose -f infra/docker/docker-compose.yml up -d
+npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
+# set ADMIN_EMAILS=you@example.com in .env
+npm run dev
+# /signup that email → admin, then manage users at /dashboard/users
+```
+
 ## Roadmap
 
 Further examples grow feature by feature (auth-guarded todos, file uploads,

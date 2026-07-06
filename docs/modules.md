@@ -244,6 +244,30 @@ curl -H 'x-api-key: key1' localhost:3000/machine/ping   # { ok: true, via: "api-
 Protect your own machine routes with `@ApiKeyProtected()`. Keys are checked against
 the `API_KEYS` allowlist with a constant-time comparison.
 
+### `admin-dashboard`
+
+A ready-made admin dashboard on top of `auth` (added automatically): login /
+signup / forgot- & reset-password pages, a shadcn-svelte **sidebar shell**, and
+**user + session management** through the better-auth admin plugin. Emails listed
+in `ADMIN_EMAILS` are promoted to the `admin` role on sign-up. All API access
+goes through the typed ApiClient; routes are guarded server-side.
+
+```bash
+npx @podosoft/podokit add admin-dashboard   # also adds auth
+npm install
+docker compose -f infra/docker/docker-compose.yml up -d
+# admin columns (role/banned) + set ADMIN_EMAILS in .env
+npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
+npm run dev
+# open /signup, register an ADMIN_EMAILS address (→ admin), then sign in at /login
+```
+
+- **/dashboard** — overview.
+- **/dashboard/users** (admin only) — list & search users, ban/unban, set role, revoke sessions.
+- **/dashboard/sessions** — your active sessions (revoke).
+- **/dashboard/account** — profile + change password.
+- Password reset link is logged to the API console in dev; wire a real mailer via `emailAndPassword.sendResetPassword` for production.
+
 ## Roadmap
 
 More modules are planned — redis, queue (BullMQ), object storage (S3), file

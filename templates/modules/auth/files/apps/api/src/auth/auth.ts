@@ -36,7 +36,10 @@ export const auth = betterAuth({
     password: process.env.POSTGRES_PASSWORD ?? "podokit",
     database: process.env.POSTGRES_DB ?? "podokit",
   }),
-  emailAndPassword: { enabled: true },
+  emailAndPassword: {
+    enabled: true,
+    // podokit:auth-email-password
+  },
   socialProviders: socialProviders(),
   plugins,
   secret: process.env.BETTER_AUTH_SECRET ?? "change-me-in-production-min-32-characters",

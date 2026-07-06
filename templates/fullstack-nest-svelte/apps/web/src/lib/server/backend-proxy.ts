@@ -1,7 +1,7 @@
 // Server-side proxy boundary. The browser never talks to the API directly:
 // requests go through SvelteKit server routes, which forward an allowlist of
 // headers to BACKEND_INTERNAL_URL and relay the response (including Set-Cookie).
-const FORWARDED_HEADERS = ["authorization", "cookie", "content-type", "accept"];
+const FORWARDED_HEADERS = ["authorization", "cookie", "content-type", "accept", "origin", "referer"];
 const RELAYED_RESPONSE_HEADERS = ["content-type", "location", "cache-control"];
 
 export function backendBaseUrl(): string {

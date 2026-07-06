@@ -1,0 +1,41 @@
+{
+  "name": "admin-dashboard",
+  "description": "Admin dashboard UI (SvelteKit + shadcn-svelte): login/signup/password-reset, a sidebar shell, and user + session management via the better-auth admin plugin. Requires auth.",
+  "requires": [
+    "auth"
+  ],
+  "targetApp": "web",
+  "env": [
+    "# admin-dashboard: emails auto-promoted to the admin role on sign-up (comma-separated)",
+    "ADMIN_EMAILS=admin@example.com"
+  ],
+  "inject": [
+    {
+      "file": "apps/api/src/auth/auth.ts",
+      "marker": "// podokit:auth-imports",
+      "text": "import { admin } from \"better-auth/plugins\";"
+    },
+    {
+      "file": "apps/api/src/auth/auth.ts",
+      "marker": "// podokit:auth-plugins",
+      "text": "plugins.push(admin({ defaultRole: \"user\", adminRoles: [\"admin\"] }));"
+    },
+    {
+      "file": "apps/api/src/auth/auth.ts",
+      "marker": "// podokit:auth-email-password",
+      "text": "sendResetPassword: async ({ user, url }) => {\n      console.log(`[auth] password reset for ${user.email}: ${url}`);\n    },"
+    },
+    {
+      "file": "apps/api/src/auth/auth.ts",
+      "marker": "// podokit:auth-options",
+      "text": "trustedOrigins: (process.env.CORS_ORIGIN ?? \"http://localhost:5173\").split(\",\").map((origin) => origin.trim()),\n  databaseHooks: {\n    user: {\n      create: {\n        before: async (user) => ({\n          data: {\n            ...user,\n            role: (process.env.ADMIN_EMAILS ?? \"\")\n              .split(\",\")\n              .map((email) => email.trim().toLowerCase())\n              .includes(user.email.toLowerCase())\n              ? \"admin\"\n              : \"user\",\n          },\n        }),\n      },\n    },\n  },"
+    }
+  ],
+  "instructions": [
+    "Set ADMIN_EMAILS in .env (comma-separated). Those emails become admins on sign-up.",
+    "Re-run the auth migration to add the admin columns:  npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts",
+    "Start the app (npm run dev), open /signup, register an ADMIN_EMAILS address, then sign in.",
+    "Admin pages: /dashboard/users (list, ban, set role, revoke sessions). Everyone: /dashboard/sessions, /dashboard/account.",
+    "Password reset: the reset link is logged to the API console in dev; wire a real mailer via emailAndPassword.sendResetPassword for production."
+  ]
+}
