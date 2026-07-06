@@ -13,7 +13,7 @@ test("sidebar navigates to sessions and account", async ({ page }) => {
   await page.goto("/dashboard");
   await page.getByRole("link", { name: "Sessions" }).click();
   await expect(page).toHaveURL(/\/dashboard\/sessions/);
-  await expect(page.getByRole("heading", { name: "Active sessions" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "User sessions" })).toBeVisible();
   await page.getByRole("link", { name: "Account" }).click();
   await expect(page).toHaveURL(/\/dashboard\/account/);
   await expect(page.getByRole("heading", { name: "Account" })).toBeVisible();

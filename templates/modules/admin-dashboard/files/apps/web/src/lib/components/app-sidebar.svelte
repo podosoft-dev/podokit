@@ -18,7 +18,7 @@
   const items: NavItem[] = [
     { href: "/dashboard", key: "overview", icon: LayoutDashboardIcon },
     { href: "/dashboard/users", key: "users", icon: UsersIcon, adminOnly: true },
-    { href: "/dashboard/sessions", key: "sessions", icon: MonitorSmartphoneIcon },
+    { href: "/dashboard/sessions", key: "sessions", icon: MonitorSmartphoneIcon, adminOnly: true },
     { href: "/dashboard/account", key: "account", icon: UserCogIcon },
   ];
   const visible = $derived(items.filter((item) => !item.adminOnly || user.role === "admin"));

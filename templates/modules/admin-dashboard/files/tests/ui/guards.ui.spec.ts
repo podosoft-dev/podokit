@@ -11,10 +11,11 @@ test.describe("unauthenticated", () => {
 
 test.describe("normal user (non-admin)", () => {
   test.use({ storageState: userState });
-  test("Users nav is hidden and /dashboard/users is forbidden", async ({ page }) => {
+  test("admin-only nav is hidden and admin routes are forbidden", async ({ page }) => {
     await page.goto("/dashboard");
     await expect(page.getByRole("link", { name: "Users" })).toHaveCount(0);
-    const res = await page.goto("/dashboard/users");
-    expect(res?.status()).toBe(403);
+    await expect(page.getByRole("link", { name: "Sessions" })).toHaveCount(0);
+    expect((await page.goto("/dashboard/users"))?.status()).toBe(403);
+    expect((await page.goto("/dashboard/sessions"))?.status()).toBe(403);
   });
 });
