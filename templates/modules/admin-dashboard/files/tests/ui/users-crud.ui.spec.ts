@@ -14,7 +14,7 @@ async function seedUser(page: Page, email: string): Promise<void> {
 }
 
 test("admin can create a user via the dialog @smoke", async ({ page }) => {
-  await ready(page, "/dashboard/users");
+  await ready(page, "/admin/users");
   const email = `ui-create-${Date.now()}@example.com`;
   await page.getByRole("button", { name: "Add user" }).click();
   const dialog = page.getByRole("dialog");
@@ -28,7 +28,7 @@ test("admin can create a user via the dialog @smoke", async ({ page }) => {
 });
 
 test("create rejects mismatched passwords", async ({ page }) => {
-  await ready(page, "/dashboard/users");
+  await ready(page, "/admin/users");
   await page.getByRole("button", { name: "Add user" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Name").fill("Mismatch");
@@ -41,7 +41,7 @@ test("create rejects mismatched passwords", async ({ page }) => {
 });
 
 test("admin can set a user's password", async ({ page }) => {
-  await ready(page, "/dashboard/users");
+  await ready(page, "/admin/users");
   const email = `ui-setpw-${Date.now()}@example.com`;
   await seedUser(page, email);
   await page.getByPlaceholder("Search by email…").fill(email);
@@ -55,7 +55,7 @@ test("admin can set a user's password", async ({ page }) => {
 });
 
 test("set password rejects mismatched passwords", async ({ page }) => {
-  await ready(page, "/dashboard/users");
+  await ready(page, "/admin/users");
   const email = `ui-setpw-mismatch-${Date.now()}@example.com`;
   await seedUser(page, email);
   await page.getByPlaceholder("Search by email…").fill(email);
@@ -69,7 +69,7 @@ test("set password rejects mismatched passwords", async ({ page }) => {
 });
 
 test("admin can delete a user with confirmation", async ({ page }) => {
-  await ready(page, "/dashboard/users");
+  await ready(page, "/admin/users");
   const email = `ui-delete-${Date.now()}@example.com`;
   await seedUser(page, email);
   await page.getByPlaceholder("Search by email…").fill(email);
@@ -82,7 +82,7 @@ test("admin can delete a user with confirmation", async ({ page }) => {
 });
 
 test("users list shows pagination beyond one page", async ({ page }) => {
-  await ready(page, "/dashboard/users");
+  await ready(page, "/admin/users");
   // seed enough users to exceed one page (PAGE_SIZE = 5)
   for (let i = 0; i < 6; i += 1) {
     await page.request.post("/api/auth/admin/create-user", {
@@ -97,7 +97,7 @@ test("users list shows pagination beyond one page", async ({ page }) => {
 });
 
 test("admin can edit a user via the dialog", async ({ page }) => {
-  await ready(page, "/dashboard/users");
+  await ready(page, "/admin/users");
   const email = `ui-edit-${Date.now()}@example.com`;
   await seedUser(page, email);
   await page.getByPlaceholder("Search by email…").fill(email);
@@ -111,7 +111,7 @@ test("admin can edit a user via the dialog", async ({ page }) => {
 });
 
 test("admin can ban a user with a reason", async ({ page }) => {
-  await ready(page, "/dashboard/users");
+  await ready(page, "/admin/users");
   const email = `ui-ban-${Date.now()}@example.com`;
   await seedUser(page, email);
   await page.getByPlaceholder("Search by email…").fill(email);

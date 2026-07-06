@@ -10,6 +10,7 @@ export const localeNames: Record<Locale, string> = {
 
 const en = {
   common: { appName: "Admin" },
+  landing: { title: "Welcome", subtitle: "This is your app's home page. Replace it with your own content — the admin area lives under /admin.", openAdmin: "Open admin" },
   language: { label: "Language" },
   theme: { toggle: "Toggle theme", light: "Light", dark: "Dark", system: "System" },
   auth: {
@@ -180,6 +181,7 @@ export type Messages = typeof en;
 
 const ko: Messages = {
   common: { appName: "관리자" },
+  landing: { title: "환영합니다", subtitle: "앱의 홈 페이지입니다. 원하는 내용으로 교체하세요 — 관리자 기능은 /admin 에 있습니다.", openAdmin: "관리자 열기" },
   language: { label: "언어" },
   theme: { toggle: "테마 전환", light: "라이트", dark: "다크", system: "시스템" },
   auth: {

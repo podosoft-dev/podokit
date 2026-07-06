@@ -16,11 +16,11 @@
 
   type NavItem = { href: string; key: keyof Messages["nav"]; icon: Component; adminOnly?: boolean };
   const items = $derived<NavItem[]>([
-    { href: "/dashboard", key: "overview", icon: LayoutDashboardIcon },
-    { href: "/dashboard/users", key: "users", icon: UsersIcon, adminOnly: true },
-    { href: "/dashboard/sessions", key: "sessions", icon: MonitorSmartphoneIcon, adminOnly: true },
+    { href: "/admin", key: "overview", icon: LayoutDashboardIcon },
+    { href: "/admin/users", key: "users", icon: UsersIcon, adminOnly: true },
+    { href: "/admin/sessions", key: "sessions", icon: MonitorSmartphoneIcon, adminOnly: true },
     ...(capabilities?.auditLog
-      ? [{ href: "/dashboard/audit", key: "audit", icon: ScrollTextIcon, adminOnly: true } as NavItem]
+      ? [{ href: "/admin/audit", key: "audit", icon: ScrollTextIcon, adminOnly: true } as NavItem]
       : []),
   ]);
   const visible = $derived(items.filter((item) => !item.adminOnly || user.role === "admin"));

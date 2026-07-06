@@ -25,7 +25,7 @@
       error = authError.message ?? i18n.t.auth.signUpFailed;
       return;
     }
-    await goto("/dashboard", { invalidateAll: true });
+    await goto("/admin", { invalidateAll: true });
   }
 </script>
 

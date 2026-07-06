@@ -25,7 +25,7 @@
       error = authError.message ?? i18n.t.auth.signInFailed;
       return;
     }
-    await goto(page.url.searchParams.get("redirect") ?? "/dashboard", { invalidateAll: true });
+    await goto(page.url.searchParams.get("redirect") ?? "/admin", { invalidateAll: true });
   }
 </script>
 

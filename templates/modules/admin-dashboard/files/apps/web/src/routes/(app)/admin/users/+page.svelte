@@ -116,7 +116,7 @@
   async function impersonate(u: Row): Promise<void> {
     const { error } = await api.auth.admin.impersonateUser({ userId: u.id });
     if (error) return void toast.error(error.message ?? i18n.t.users.actionFailed);
-    await goto("/dashboard", { invalidateAll: true });
+    await goto("/admin", { invalidateAll: true });
   }
 
   // Create user

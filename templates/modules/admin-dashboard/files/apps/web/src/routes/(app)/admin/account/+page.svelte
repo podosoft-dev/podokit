@@ -105,7 +105,7 @@
   }
   const linkedProviders = $derived(new Set(accounts.map((a) => a.providerId)));
   async function connect(provider: string): Promise<void> {
-    const { data: res, error } = await api.auth.linkSocial({ provider, callbackURL: "/dashboard/account" });
+    const { data: res, error } = await api.auth.linkSocial({ provider, callbackURL: "/admin/account" });
     if (error) return void toast.error(error.message ?? i18n.t.account.saveFailed);
     if (res?.url) window.location.href = res.url;
   }

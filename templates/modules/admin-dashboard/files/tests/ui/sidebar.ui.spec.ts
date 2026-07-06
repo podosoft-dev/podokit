@@ -3,7 +3,7 @@ import { ready } from "../helpers/hydration";
 
 // admin storageState (project default)
 test("collapsing the sidebar hides the brand instead of overflowing @smoke", async ({ page }) => {
-  await ready(page, "/dashboard");
+  await ready(page, "/admin");
   const brand = page.getByTestId("sidebar-brand");
   const toggle = page.getByRole("button", { name: "Toggle Sidebar" });
   await expect(brand).toBeVisible();

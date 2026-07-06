@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("admin sees the user list and can search @smoke", async ({ page }) => {
-  await page.goto("/dashboard/users");
+  await page.goto("/admin/users");
   await expect(page.getByRole("heading", { name: "Users" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "admin@example.com" })).toBeVisible();
   await page.getByPlaceholder("Search by email…").fill("user@");
@@ -10,7 +10,7 @@ test("admin sees the user list and can search @smoke", async ({ page }) => {
 });
 
 test("row menu exposes admin actions", async ({ page }) => {
-  await page.goto("/dashboard/users");
+  await page.goto("/admin/users");
   await page.getByPlaceholder("Search by email…").fill("user@example.com");
   const row = page.getByRole("row", { name: /user@example.com/ });
   await row.getByRole("button").click();

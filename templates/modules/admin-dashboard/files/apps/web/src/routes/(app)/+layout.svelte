@@ -22,7 +22,7 @@
 
   async function stopImpersonating(): Promise<void> {
     await api.auth.admin.stopImpersonating();
-    await goto("/dashboard", { invalidateAll: true });
+    await goto("/admin", { invalidateAll: true });
   }
 </script>
 
