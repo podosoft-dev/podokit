@@ -7,6 +7,7 @@
   import * as Table from "$lib/components/ui/table";
   import * as Dialog from "$lib/components/ui/dialog";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import * as Pagination from "$lib/components/ui/pagination";
   import EllipsisIcon from "@lucide/svelte/icons/ellipsis";
   import PlusIcon from "@lucide/svelte/icons/plus";
   import { toast } from "svelte-sonner";
@@ -19,10 +20,10 @@
 
   type Row = { id: string; name: string; email: string; role?: string | null; banned?: boolean | null };
 
-  const PAGE_SIZE = 10;
+  const PAGE_SIZE = 5;
   let users = $state<Row[]>([]);
   let total = $state(0);
-  let offset = $state(0);
+  let page = $state(1);
   let search = $state("");
   let loading = $state(false);
   let busy = $state(false);
@@ -32,7 +33,7 @@
     const { data: res, error } = await api.auth.admin.listUsers({
       query: {
         limit: PAGE_SIZE,
-        offset,
+        offset: (page - 1) * PAGE_SIZE,
         ...(search ? { searchField: "email", searchOperator: "contains", searchValue: search } : {}),
       },
     });
@@ -86,7 +87,7 @@
     toast.success(i18n.t.users.userCreated);
     createOpen = false;
     form = { name: "", email: "", password: "", confirm: "", admin: false };
-    offset = 0;
+    page = 1;
     await load();
   }
 
@@ -145,7 +146,7 @@
 
   function searchInput(event: Event): void {
     search = (event.target as HTMLInputElement).value;
-    offset = 0;
+    page = 1;
     void load();
   }
 
@@ -220,12 +221,25 @@
     </Table.Root>
   </div>
 
-  <div class="flex items-center justify-between">
+  <div class="flex items-center justify-between gap-2">
     <span class="text-muted-foreground text-sm">{fmt(i18n.t.users.total, { count: total })}</span>
-    <div class="flex gap-2">
-      <Button variant="outline" size="sm" disabled={offset === 0 || loading} onclick={() => { offset = Math.max(0, offset - PAGE_SIZE); void load(); }}>{i18n.t.users.previous}</Button>
-      <Button variant="outline" size="sm" disabled={offset + PAGE_SIZE >= total || loading} onclick={() => { offset += PAGE_SIZE; void load(); }}>{i18n.t.users.next}</Button>
-    </div>
+    {#if total > PAGE_SIZE}
+      <Pagination.Root count={total} perPage={PAGE_SIZE} {page} onPageChange={(p) => { page = p; void load(); }}>
+        {#snippet children({ pages, currentPage })}
+          <Pagination.Content>
+            <Pagination.Item><Pagination.PrevButton /></Pagination.Item>
+            {#each pages as p (p.key)}
+              {#if p.type === "ellipsis"}
+                <Pagination.Item><Pagination.Ellipsis /></Pagination.Item>
+              {:else}
+                <Pagination.Item><Pagination.Link page={p} isActive={currentPage === p.value}>{p.value}</Pagination.Link></Pagination.Item>
+              {/if}
+            {/each}
+            <Pagination.Item><Pagination.NextButton /></Pagination.Item>
+          </Pagination.Content>
+        {/snippet}
+      </Pagination.Root>
+    {/if}
   </div>
 </div>
 

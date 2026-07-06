@@ -80,3 +80,18 @@ test("admin can delete a user with confirmation", async ({ page }) => {
   await page.getByPlaceholder("Search by email…").fill(email);
   await expect(page.getByRole("cell", { name: email })).toHaveCount(0);
 });
+
+test("users list shows pagination beyond one page", async ({ page }) => {
+  await ready(page, "/dashboard/users");
+  // seed enough users to exceed one page (PAGE_SIZE = 5)
+  for (let i = 0; i < 6; i += 1) {
+    await page.request.post("/api/auth/admin/create-user", {
+      headers: { origin: base },
+      data: { email: `pg-${Date.now()}-${i}@example.com`, password: "password123", name: `Pg${i}`, role: "user" },
+    });
+  }
+  await page.reload();
+  const nav = page.getByRole("navigation", { name: "pagination" });
+  await expect(nav).toBeVisible();
+  await expect(nav.getByRole("button", { name: "Page 2" })).toBeVisible();
+});

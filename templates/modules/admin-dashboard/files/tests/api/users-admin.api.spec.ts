@@ -93,5 +93,6 @@ test("sessions record a client IP (forwarded through the proxy)", async ({ playw
   const sessions = (await res.json()) as Array<{ ipAddress?: string | null }>;
   expect(sessions.length).toBeGreaterThan(0);
   expect(sessions[0]?.ipAddress).toBeTruthy();
+  expect(sessions[0]?.ipAddress).not.toBe("0000:0000:0000:0000:0000:0000:0000:0000");
   await ctx.dispose();
 });

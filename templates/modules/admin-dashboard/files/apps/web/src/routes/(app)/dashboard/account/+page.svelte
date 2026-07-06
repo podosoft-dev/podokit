@@ -5,6 +5,7 @@
   import { Badge } from "$lib/components/ui/badge";
   import * as Card from "$lib/components/ui/card";
   import * as Table from "$lib/components/ui/table";
+  import * as Pagination from "$lib/components/ui/pagination";
   import { toast } from "svelte-sonner";
   import { api } from "$lib/api";
   import { getI18n } from "$lib/i18n";
@@ -32,9 +33,12 @@
 
   // Active sessions (this user's own devices)
   type Session = { id: string; token: string; userAgent?: string | null; ipAddress?: string | null; createdAt: string | Date };
+  const PAGE_SIZE = 5;
   let sessions = $state<Session[]>([]);
+  let sessionsPage = $state(1);
   let sessionsLoading = $state(false);
   let busy = $state(false);
+  const pagedSessions = $derived(sessions.slice((sessionsPage - 1) * PAGE_SIZE, sessionsPage * PAGE_SIZE));
 
   async function loadSessions(): Promise<void> {
     sessionsLoading = true;
@@ -122,7 +126,7 @@
             </Table.Row>
           </Table.Header>
           <Table.Body>
-            {#each sessions as session (session.id)}
+            {#each pagedSessions as session (session.id)}
               {@const isCurrent = session.id === data.currentSessionId}
               <Table.Row>
                 <Table.Cell class="max-w-xs truncate">{session.userAgent ?? i18n.t.sessions.unknown}</Table.Cell>
@@ -141,6 +145,25 @@
           </Table.Body>
         </Table.Root>
       </div>
+      {#if sessions.length > PAGE_SIZE}
+        <div class="mt-4">
+          <Pagination.Root count={sessions.length} perPage={PAGE_SIZE} bind:page={sessionsPage}>
+            {#snippet children({ pages, currentPage })}
+              <Pagination.Content>
+                <Pagination.Item><Pagination.PrevButton /></Pagination.Item>
+                {#each pages as p (p.key)}
+                  {#if p.type === "ellipsis"}
+                    <Pagination.Item><Pagination.Ellipsis /></Pagination.Item>
+                  {:else}
+                    <Pagination.Item><Pagination.Link page={p} isActive={currentPage === p.value}>{p.value}</Pagination.Link></Pagination.Item>
+                  {/if}
+                {/each}
+                <Pagination.Item><Pagination.NextButton /></Pagination.Item>
+              </Pagination.Content>
+            {/snippet}
+          </Pagination.Root>
+        </div>
+      {/if}
     </Card.Content>
   </Card.Root>
 </div>
