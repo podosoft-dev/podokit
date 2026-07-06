@@ -51,7 +51,7 @@ mistakes, so each is named explicitly.
 
 ## Running the tests (C — and the shape of A/B)
 
-_Filled in as the test scaffolding lands._ The generated app will expose:
+Every generated app exposes:
 
 ```bash
 npm run test:e2e         # all specs (ui + api projects)
@@ -60,22 +60,60 @@ npm run test:e2e:api     # request-only — backend endpoints
 npm run test:e2e:report  # open the HTML report
 ```
 
-Prerequisites: PostgreSQL running and the auth tables migrated
-(`npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts`), the API on
-`:3000` and the web on `:5173`. See [development.md](./development.md) for the local
-harness (`dev-app.mjs`, `dev-watch.mjs`).
+The suite runs against a **live stack**: the web on `E2E_BASE_URL` (default
+`http://localhost:5173`) proxying `/api/*` to the API. Bring it up first:
+
+```bash
+docker compose -f infra/docker/docker-compose.yml up -d postgres
+npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts   # if using auth/admin-dashboard
+npm run dev            # api on :3000, web on :5173
+# then, in another shell:
+npm run test:e2e
+```
+
+The first run installs the Playwright browser: `npx playwright install chromium`
+(run inside `tests/`). Specs ending in `*.api.spec.ts` run in the request-only `api`
+project; `*.ui.spec.ts` run in the chromium `ui` project. When the app has the
+admin-dashboard module, a `setup` project seeds admin + user sessions via the API and
+saves `storageState` the other projects reuse. See [development.md](./development.md)
+for the local harness (`dev-app.mjs`, `dev-watch.mjs`).
 
 ## (A) Authoring loop — maintainers
 
-_Filled in as Phase 1–2 land._ Outline: run the live app with `dev-watch`
-(web HMR + `nest start --watch`), explore with `@playwright/cli` / Test Agents to
-produce `specs/*.md`, generate `tests/*.spec.ts`, and re-run `npx playwright test`
-against the linked app until stable.
+Author specs against a live, `file:`-linked app so edits reflect instantly:
+
+1. Generate + link: `node scripts/dev-app.mjs /tmp/app --add admin-dashboard`, bring up
+   Postgres, migrate, and run the app in watch mode (`node scripts/dev-watch.mjs` +
+   `nest start --watch` + `vite dev`).
+2. Explore with `@playwright/cli` / Test Agents (`npx playwright init-agents
+   --loop=claude`): the planner writes `specs/*.md`, the generator turns them into
+   `tests/*.spec.ts` while checking selectors live, the healer repairs breakage.
+3. Iterate `npx playwright test` in the linked app until green.
+
+Notes learned the hard way: seed sessions via the **API** (not the login UI) to avoid
+dev-server hydration races; SvelteKit `Card.Title` renders a `<div>`, not a heading, so
+assert on stable roles (buttons, inputs, `<main>`-scoped text); keep the suite
+`workers: 1` when it shares one database. This is the fast loop — **never** the release
+check.
 
 ## (B) Faithful verification — Verdaccio + npx create
 
-_Filled in as Phase 3 lands._ Outline: `scripts/e2e-ci.mjs` starts Verdaccio, publishes
-the three packages to it, runs the real `npx --registry=<verdaccio> @podosoft/podokit
-create` + `podo add`, migrates, and runs the shipped `test:e2e`. This is also the CI
-job (`.github/workflows/e2e.yml`): PostgreSQL service, browser cache, artifacts;
-triggered nightly + on demand + PR smoke (`--grep @smoke`).
+`scripts/e2e-ci.mjs` reproduces exactly what a user runs:
+
+```bash
+node scripts/e2e-ci.mjs           # full suite
+node scripts/e2e-ci.mjs --smoke   # @smoke subset (what PRs run)
+```
+
+It starts Verdaccio (`scripts/verdaccio.yaml`), publishes the three packages
+(template-engine, api-client, cli) to it, runs the real `npx @podosoft/podokit create`
++ `podo add admin-dashboard`, `npm install`s **resolving `@podosoft/*` from the
+registry** (no `file:` shortcut), writes `.env`, migrates, builds + starts the API and
+web, and runs the shipped `test:e2e`. Ports and Postgres are env-configurable
+(`REGISTRY_PORT`, `API_PORT`, `WEB_PORT`, `POSTGRES_*`); `KEEP=1` preserves the app for
+inspection.
+
+This is the CI job [`.github/workflows/e2e.yml`](../.github/workflows/e2e.yml):
+PostgreSQL service with a health check, Playwright browser cache, report + trace
+artifacts (`if: always()`); triggered nightly (cron), on demand (`workflow_dispatch`),
+and on PRs (the `--smoke` subset). `concurrency` cancels superseded runs.

@@ -17,7 +17,9 @@
   "scripts": {
     "build": "npm run build -w @podosoft/podokit-template-engine && npm run build -w @podosoft/podokit-api-client && npm run build -w @podosoft/podokit",
     "lint": "npm run lint --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present",
+    "e2e": "node scripts/e2e-ci.mjs",
+    "e2e:smoke": "node scripts/e2e-ci.mjs --smoke"
   },
   "devDependencies": {
     "@types/node": "^20.17.0",
