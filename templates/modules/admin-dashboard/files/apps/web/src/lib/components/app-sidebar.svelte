@@ -5,7 +5,6 @@
   import LayoutDashboardIcon from "@lucide/svelte/icons/layout-dashboard";
   import UsersIcon from "@lucide/svelte/icons/users";
   import MonitorSmartphoneIcon from "@lucide/svelte/icons/monitor-smartphone";
-  import UserCogIcon from "@lucide/svelte/icons/user-cog";
   import { getI18n } from "$lib/i18n";
   import type { SessionUser } from "../../app.d.ts";
   import type { Messages } from "$lib/i18n/messages";
@@ -19,7 +18,6 @@
     { href: "/dashboard", key: "overview", icon: LayoutDashboardIcon },
     { href: "/dashboard/users", key: "users", icon: UsersIcon, adminOnly: true },
     { href: "/dashboard/sessions", key: "sessions", icon: MonitorSmartphoneIcon, adminOnly: true },
-    { href: "/dashboard/account", key: "account", icon: UserCogIcon },
   ];
   const visible = $derived(items.filter((item) => !item.adminOnly || user.role === "admin"));
 </script>
