@@ -2,10 +2,30 @@ import { expect, test } from "@playwright/test";
 import { ready } from "../helpers/hydration";
 
 // admin storageState (project default)
-test("account shows my active sessions with a current badge @smoke", async ({ page }) => {
+test("account opens on the profile section @smoke", async ({ page }) => {
   await ready(page, "/dashboard/account");
   await expect(page.getByRole("heading", { name: "Account" })).toBeVisible();
-  await expect(page.getByText("Active sessions")).toBeVisible(); // sessions card
-  await expect(page.getByText("Current", { exact: true })).toBeVisible(); // current-session badge
+  await expect(page.getByLabel("Name")).toBeVisible();
+  await expect(page.getByLabel("Email")).toHaveValue("admin@example.com");
+  // save is enabled only once the name changes
+  await expect(page.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  await page.getByLabel("Name").fill("Admin Renamed");
+  await expect(page.getByRole("button", { name: "Save changes" })).toBeEnabled();
+});
+
+test("admin can update their profile name", async ({ page }) => {
+  await ready(page, "/dashboard/account");
+  await page.getByLabel("Name").fill("Admin Renamed");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Profile updated")).toBeVisible();
+});
+
+test("account security and sessions sub-navigation", async ({ page }) => {
+  await ready(page, "/dashboard/account");
+  await page.getByRole("button", { name: "Security" }).click();
+  await expect(page.getByLabel("Current password")).toBeVisible();
+  await page.getByRole("button", { name: "Sessions" }).click();
+  await expect(page.getByText("Active sessions")).toBeVisible();
+  await expect(page.getByText("Current", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign out other sessions" })).toBeVisible();
 });

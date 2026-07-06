@@ -131,6 +131,12 @@ const en = {
     updating: "Updating…",
     changed: "Password changed",
     changeFailed: "Failed to change password",
+    nav: { profile: "Profile", security: "Security", sessions: "Sessions" },
+    save: "Save changes",
+    saved: "Profile updated",
+    saveFailed: "Failed to save profile",
+    verified: "Verified",
+    unverified: "Unverified",
   },
 };
 
@@ -259,6 +265,12 @@ const ko: Messages = {
     updating: "변경 중…",
     changed: "비밀번호를 변경했습니다",
     changeFailed: "비밀번호 변경에 실패했습니다",
+    nav: { profile: "프로필", security: "보안", sessions: "세션" },
+    save: "변경 저장",
+    saved: "프로필을 저장했습니다",
+    saveFailed: "프로필 저장에 실패했습니다",
+    verified: "인증됨",
+    unverified: "미인증",
   },
 };
 

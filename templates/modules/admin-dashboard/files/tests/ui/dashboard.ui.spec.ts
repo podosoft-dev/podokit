@@ -21,5 +21,5 @@ test("sidebar navigates to sessions and account", async ({ page }) => {
   await page.getByRole("menuitem", { name: "Account" }).click();
   await expect(page).toHaveURL(/\/dashboard\/account/);
   await expect(page.getByRole("heading", { name: "Account" })).toBeVisible();
-  await expect(page.getByText("Change password")).toBeVisible();
+  await expect(page.getByLabel("Name")).toBeVisible(); // profile section
 });
