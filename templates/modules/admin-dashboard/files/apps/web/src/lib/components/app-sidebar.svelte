@@ -26,7 +26,12 @@
 
 <Sidebar.Root collapsible="icon">
   <Sidebar.Header>
-    <div class="flex items-center gap-2 px-2 py-1 font-semibold">{i18n.t.common.appName}</div>
+    <div
+      data-testid="sidebar-brand"
+      class="flex items-center gap-2 overflow-hidden px-2 py-1 font-semibold whitespace-nowrap group-data-[collapsible=icon]:hidden"
+    >
+      {i18n.t.common.appName}
+    </div>
   </Sidebar.Header>
   <Sidebar.Content>
     <Sidebar.Group>
