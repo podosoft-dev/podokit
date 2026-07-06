@@ -5,10 +5,10 @@
   import { Badge } from "$lib/components/ui/badge";
   import * as Card from "$lib/components/ui/card";
   import * as Table from "$lib/components/ui/table";
-  import * as Pagination from "$lib/components/ui/pagination";
+  import TablePagination from "$lib/components/table-pagination.svelte";
   import { toast } from "svelte-sonner";
   import { api } from "$lib/api";
-  import { getI18n } from "$lib/i18n";
+  import { getI18n, fmt } from "$lib/i18n";
   import type { SessionUser } from "../../../../app.d.ts";
 
   let { data }: { data: { user: SessionUser; currentSessionId: string | null } } = $props();
@@ -145,25 +145,14 @@
           </Table.Body>
         </Table.Root>
       </div>
-      {#if sessions.length > PAGE_SIZE}
-        <div class="mt-4">
-          <Pagination.Root count={sessions.length} perPage={PAGE_SIZE} bind:page={sessionsPage}>
-            {#snippet children({ pages, currentPage })}
-              <Pagination.Content>
-                <Pagination.Item><Pagination.PrevButton /></Pagination.Item>
-                {#each pages as p (p.key)}
-                  {#if p.type === "ellipsis"}
-                    <Pagination.Item><Pagination.Ellipsis /></Pagination.Item>
-                  {:else}
-                    <Pagination.Item><Pagination.Link page={p} isActive={currentPage === p.value}>{p.value}</Pagination.Link></Pagination.Item>
-                  {/if}
-                {/each}
-                <Pagination.Item><Pagination.NextButton /></Pagination.Item>
-              </Pagination.Content>
-            {/snippet}
-          </Pagination.Root>
-        </div>
-      {/if}
+      <div class="mt-4">
+        <TablePagination
+          count={sessions.length}
+          perPage={PAGE_SIZE}
+          bind:page={sessionsPage}
+          label={fmt(i18n.t.sessions.total, { count: sessions.length })}
+        />
+      </div>
     </Card.Content>
   </Card.Root>
 </div>

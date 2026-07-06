@@ -2,7 +2,7 @@
   import { Button } from "$lib/components/ui/button";
   import * as Table from "$lib/components/ui/table";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-  import * as Pagination from "$lib/components/ui/pagination";
+  import TablePagination from "$lib/components/table-pagination.svelte";
   import EllipsisIcon from "@lucide/svelte/icons/ellipsis";
   import { toast } from "svelte-sonner";
   import { api } from "$lib/api";
@@ -118,24 +118,5 @@
     </Table.Root>
   </div>
 
-  <div class="flex items-center justify-between gap-2">
-    <span class="text-muted-foreground text-sm">{fmt(i18n.t.adminSessions.total, { count: rows.length })}</span>
-    {#if rows.length > PAGE_SIZE}
-      <Pagination.Root count={rows.length} perPage={PAGE_SIZE} bind:page>
-        {#snippet children({ pages, currentPage })}
-          <Pagination.Content>
-            <Pagination.Item><Pagination.PrevButton /></Pagination.Item>
-            {#each pages as p (p.key)}
-              {#if p.type === "ellipsis"}
-                <Pagination.Item><Pagination.Ellipsis /></Pagination.Item>
-              {:else}
-                <Pagination.Item><Pagination.Link page={p} isActive={currentPage === p.value}>{p.value}</Pagination.Link></Pagination.Item>
-              {/if}
-            {/each}
-            <Pagination.Item><Pagination.NextButton /></Pagination.Item>
-          </Pagination.Content>
-        {/snippet}
-      </Pagination.Root>
-    {/if}
-  </div>
+  <TablePagination count={rows.length} perPage={PAGE_SIZE} bind:page label={fmt(i18n.t.adminSessions.total, { count: rows.length })} />
 </div>

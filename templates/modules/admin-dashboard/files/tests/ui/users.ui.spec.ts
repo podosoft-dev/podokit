@@ -15,5 +15,6 @@ test("row menu exposes admin actions", async ({ page }) => {
   const row = page.getByRole("row", { name: /user@example.com/ });
   await row.getByRole("button").click();
   await expect(page.getByRole("menuitem", { name: /Make admin|Make user/ })).toBeVisible();
-  await expect(page.getByRole("menuitem", { name: "Revoke sessions" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Set password" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Delete" })).toBeVisible();
 });

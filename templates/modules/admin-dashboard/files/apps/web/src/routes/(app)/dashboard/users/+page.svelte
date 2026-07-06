@@ -7,7 +7,7 @@
   import * as Table from "$lib/components/ui/table";
   import * as Dialog from "$lib/components/ui/dialog";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-  import * as Pagination from "$lib/components/ui/pagination";
+  import TablePagination from "$lib/components/table-pagination.svelte";
   import EllipsisIcon from "@lucide/svelte/icons/ellipsis";
   import PlusIcon from "@lucide/svelte/icons/plus";
   import { toast } from "svelte-sonner";
@@ -59,7 +59,6 @@
     act(api.auth.admin.setRole({ userId: u.id, role }), fmt(i18n.t.users.roleSet, { role }));
   const ban = (u: Row) => act(api.auth.admin.banUser({ userId: u.id }), i18n.t.users.userBanned);
   const unban = (u: Row) => act(api.auth.admin.unbanUser({ userId: u.id }), i18n.t.users.userUnbanned);
-  const revoke = (u: Row) => act(api.auth.admin.revokeUserSessions({ userId: u.id }), i18n.t.users.sessionsRevoked);
 
   // Create user
   let createOpen = $state(false);
@@ -201,7 +200,6 @@
                     <DropdownMenu.Item onSelect={() => ban(user)}>{i18n.t.users.ban}</DropdownMenu.Item>
                   {/if}
                   <DropdownMenu.Item onSelect={() => openPassword(user)}>{i18n.t.users.setPassword}</DropdownMenu.Item>
-                  <DropdownMenu.Item onSelect={() => revoke(user)}>{i18n.t.users.revokeSessions}</DropdownMenu.Item>
                   <DropdownMenu.Separator />
                   <DropdownMenu.Item
                     variant="destructive"
@@ -221,26 +219,13 @@
     </Table.Root>
   </div>
 
-  <div class="flex items-center justify-between gap-2">
-    <span class="text-muted-foreground text-sm">{fmt(i18n.t.users.total, { count: total })}</span>
-    {#if total > PAGE_SIZE}
-      <Pagination.Root count={total} perPage={PAGE_SIZE} {page} onPageChange={(p) => { page = p; void load(); }}>
-        {#snippet children({ pages, currentPage })}
-          <Pagination.Content>
-            <Pagination.Item><Pagination.PrevButton /></Pagination.Item>
-            {#each pages as p (p.key)}
-              {#if p.type === "ellipsis"}
-                <Pagination.Item><Pagination.Ellipsis /></Pagination.Item>
-              {:else}
-                <Pagination.Item><Pagination.Link page={p} isActive={currentPage === p.value}>{p.value}</Pagination.Link></Pagination.Item>
-              {/if}
-            {/each}
-            <Pagination.Item><Pagination.NextButton /></Pagination.Item>
-          </Pagination.Content>
-        {/snippet}
-      </Pagination.Root>
-    {/if}
-  </div>
+  <TablePagination
+    count={total}
+    perPage={PAGE_SIZE}
+    bind:page
+    label={fmt(i18n.t.users.total, { count: total })}
+    onPageChange={() => void load()}
+  />
 </div>
 
 <!-- Create user -->
