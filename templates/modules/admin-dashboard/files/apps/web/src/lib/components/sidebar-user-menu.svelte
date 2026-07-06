@@ -7,9 +7,11 @@
   import LogOutIcon from "@lucide/svelte/icons/log-out";
   import UserIcon from "@lucide/svelte/icons/user";
   import { api } from "$lib/api";
+  import { getI18n } from "$lib/i18n";
   import type { SessionUser } from "../../app.d.ts";
 
   let { user }: { user: SessionUser } = $props();
+  const i18n = getI18n();
 
   async function signOut(): Promise<void> {
     await api.auth.signOut();
@@ -33,9 +35,9 @@
         {/snippet}
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" side="top" class="w-56">
-        <DropdownMenu.Item onSelect={() => goto("/dashboard/account")}><UserIcon class="mr-2 size-4" /> Account</DropdownMenu.Item>
+        <DropdownMenu.Item onSelect={() => goto("/dashboard/account")}><UserIcon class="mr-2 size-4" /> {i18n.t.nav.account}</DropdownMenu.Item>
         <DropdownMenu.Separator />
-        <DropdownMenu.Item onSelect={signOut}><LogOutIcon class="mr-2 size-4" /> Sign out</DropdownMenu.Item>
+        <DropdownMenu.Item onSelect={signOut}><LogOutIcon class="mr-2 size-4" /> {i18n.t.nav.signOut}</DropdownMenu.Item>
       </DropdownMenu.Content>
     </DropdownMenu.Root>
   </Sidebar.MenuItem>

@@ -223,6 +223,9 @@ describe("addModule (auth / better-auth)", () => {
     expect(existsSync(join(project, "apps/web/src/routes/(app)/+layout.svelte"))).toBe(true);
     expect(existsSync(join(project, "apps/web/src/lib/components/app-sidebar.svelte"))).toBe(true);
     expect(existsSync(join(project, "apps/web/src/lib/components/ui/sidebar/index.ts"))).toBe(true);
+    // i18n: message catalog + language switch
+    expect(existsSync(join(project, "apps/web/src/lib/i18n/messages.ts"))).toBe(true);
+    expect(existsSync(join(project, "apps/web/src/lib/components/language-switch.svelte"))).toBe(true);
     // admin plugin + bootstrap injected into auth.ts
     const authTs = readFileSync(join(project, "apps/api/src/auth/auth.ts"), "utf8");
     expect(authTs).toContain("plugins.push(admin(");

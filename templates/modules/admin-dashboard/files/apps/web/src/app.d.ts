@@ -1,3 +1,5 @@
+import type { Locale } from "$lib/i18n/messages";
+
 export type SessionUser = {
   id: string;
   email: string;
@@ -12,6 +14,7 @@ declare global {
     interface Locals {
       user: SessionUser | null;
       session: { id: string } | null;
+      locale: Locale;
     }
   }
 }

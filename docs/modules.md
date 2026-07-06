@@ -267,6 +267,7 @@ npm run dev
 - **/dashboard/sessions** — your active sessions (revoke).
 - **/dashboard/account** — profile + change password.
 - Password reset link is logged to the API console in dev; wire a real mailer via `emailAndPassword.sendResetPassword` for production.
+- **i18n**: all pages are localized (English default + Korean); a language switch sits on the login screen and in the dashboard header. Add locales/strings in `apps/web/src/lib/i18n/messages.ts`.
 
 ## Roadmap
 

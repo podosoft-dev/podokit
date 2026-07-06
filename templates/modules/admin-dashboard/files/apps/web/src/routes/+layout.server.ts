@@ -17,5 +17,5 @@ export const load: LayoutServerLoad = ({ locals, url }) => {
   if (!locals.user && !isPublic(url.pathname)) {
     redirect(303, `/login?redirect=${encodeURIComponent(url.pathname)}`);
   }
-  return { user: locals.user };
+  return { user: locals.user, locale: locals.locale };
 };
