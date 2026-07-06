@@ -13,7 +13,7 @@
   import PlusIcon from "@lucide/svelte/icons/plus";
   import { toast } from "svelte-sonner";
   import { api } from "$lib/api";
-  import { getI18n, fmt } from "$lib/i18n";
+  import { getI18n, fmt, formatDateTime } from "$lib/i18n";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
@@ -369,7 +369,7 @@
                     <Table.Row>
                       <Table.Cell class="max-w-40 truncate">{s.userAgent ?? i18n.t.adminSessions.unknown}</Table.Cell>
                       <Table.Cell class="text-muted-foreground">{s.ipAddress ?? "—"}</Table.Cell>
-                      <Table.Cell class="text-muted-foreground">{new Date(s.createdAt).toLocaleString(i18n.locale)}</Table.Cell>
+                      <Table.Cell class="text-muted-foreground">{formatDateTime(s.createdAt)}</Table.Cell>
                       <Table.Cell><Button variant="ghost" size="sm" disabled={busy} onclick={() => revokeSession(s.token)}>{i18n.t.users.revokeSession}</Button></Table.Cell>
                     </Table.Row>
                   {:else}

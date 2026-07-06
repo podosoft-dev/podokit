@@ -3,7 +3,7 @@
   import * as Table from "$lib/components/ui/table";
   import TablePagination from "$lib/components/table-pagination.svelte";
   import { toast } from "svelte-sonner";
-  import { getI18n, fmt } from "$lib/i18n";
+  import { getI18n, fmt, formatDateTime } from "$lib/i18n";
 
   const i18n = getI18n();
   type Entry = { id: string; userId: string | null; method: string; path: string; statusCode: number; ip: string | null; createdAt: string };
@@ -52,7 +52,7 @@
       <Table.Body>
         {#each paged as e (e.id)}
           <Table.Row>
-            <Table.Cell class="text-muted-foreground whitespace-nowrap">{new Date(e.createdAt).toLocaleString(i18n.locale)}</Table.Cell>
+            <Table.Cell class="text-muted-foreground whitespace-nowrap">{formatDateTime(e.createdAt)}</Table.Cell>
             <Table.Cell class="font-mono text-xs">{e.method}</Table.Cell>
             <Table.Cell class="max-w-xs truncate font-mono text-xs">{e.path}</Table.Cell>
             <Table.Cell><Badge variant={statusVariant(e.statusCode)}>{e.statusCode}</Badge></Table.Cell>

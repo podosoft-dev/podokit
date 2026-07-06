@@ -6,7 +6,7 @@
   import EllipsisIcon from "@lucide/svelte/icons/ellipsis";
   import { toast } from "svelte-sonner";
   import { api } from "$lib/api";
-  import { getI18n, fmt } from "$lib/i18n";
+  import { getI18n, fmt, formatDateTime } from "$lib/i18n";
 
   const i18n = getI18n();
 
@@ -96,7 +96,7 @@
             </Table.Cell>
             <Table.Cell class="max-w-xs truncate">{row.userAgent ?? i18n.t.adminSessions.unknown}</Table.Cell>
             <Table.Cell class="text-muted-foreground">{row.ipAddress ?? "—"}</Table.Cell>
-            <Table.Cell class="text-muted-foreground">{new Date(row.createdAt).toLocaleString(i18n.locale)}</Table.Cell>
+            <Table.Cell class="text-muted-foreground">{formatDateTime(row.createdAt)}</Table.Cell>
             <Table.Cell>
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger>

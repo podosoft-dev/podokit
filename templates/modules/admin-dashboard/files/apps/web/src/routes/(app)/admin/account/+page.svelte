@@ -10,7 +10,7 @@
   import TablePagination from "$lib/components/table-pagination.svelte";
   import { toast } from "svelte-sonner";
   import { api } from "$lib/api";
-  import { getI18n, fmt } from "$lib/i18n";
+  import { getI18n, fmt, formatDateTime } from "$lib/i18n";
   import { untrack } from "svelte";
   import type { SessionUser } from "../../../../app.d.ts";
 
@@ -326,7 +326,7 @@
                     <Table.Row>
                       <Table.Cell class="max-w-xs truncate">{s.userAgent ?? i18n.t.sessions.unknown}</Table.Cell>
                       <Table.Cell class="text-muted-foreground">{s.ipAddress ?? "—"}</Table.Cell>
-                      <Table.Cell class="text-muted-foreground">{new Date(s.createdAt).toLocaleString(i18n.locale)}</Table.Cell>
+                      <Table.Cell class="text-muted-foreground">{formatDateTime(s.createdAt)}</Table.Cell>
                       <Table.Cell>{#if isCurrent}<Badge>{i18n.t.sessions.current}</Badge>{/if}</Table.Cell>
                       <Table.Cell>
                         <Button variant="ghost" size="sm" disabled={busy || isCurrent} onclick={() => revoke(s.token)}>{i18n.t.sessions.revoke}</Button>
