@@ -84,6 +84,9 @@ const en = {
     deleteTitle: "Delete user",
     deleteConfirm: "Delete {email}? This cannot be undone.",
     userDeleted: "User deleted",
+    confirmPassword: "Confirm password",
+    confirmNewPassword: "Confirm new password",
+    passwordMismatch: "Passwords do not match",
   },
   sessions: {
     title: "Active sessions",
@@ -191,6 +194,9 @@ const ko: Messages = {
     deleteTitle: "사용자 삭제",
     deleteConfirm: "{email} 사용자를 삭제할까요? 되돌릴 수 없습니다.",
     userDeleted: "사용자를 삭제했습니다",
+    confirmPassword: "비밀번호 확인",
+    confirmNewPassword: "새 비밀번호 확인",
+    passwordMismatch: "비밀번호가 일치하지 않습니다",
   },
   sessions: {
     title: "활성 세션",

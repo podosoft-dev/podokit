@@ -20,10 +20,24 @@ test("admin can create a user via the dialog @smoke", async ({ page }) => {
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Name").fill("Created");
   await dialog.getByLabel("Email").fill(email);
-  await dialog.getByLabel("Password").fill("password123");
+  await dialog.getByLabel("Password", { exact: true }).fill("password123");
+  await dialog.getByLabel("Confirm password").fill("password123");
   await dialog.getByRole("button", { name: "Create" }).click();
   await page.getByPlaceholder("Search by email…").fill(email);
   await expect(page.getByRole("cell", { name: email })).toBeVisible();
+});
+
+test("create rejects mismatched passwords", async ({ page }) => {
+  await ready(page, "/dashboard/users");
+  await page.getByRole("button", { name: "Add user" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Name").fill("Mismatch");
+  await dialog.getByLabel("Email").fill(`ui-mismatch-${Date.now()}@example.com`);
+  await dialog.getByLabel("Password", { exact: true }).fill("password123");
+  await dialog.getByLabel("Confirm password").fill("different999");
+  await dialog.getByRole("button", { name: "Create" }).click();
+  await expect(dialog.getByText("Passwords do not match")).toBeVisible();
+  await expect(dialog).toBeVisible(); // dialog stays open, nothing submitted
 });
 
 test("admin can set a user's password", async ({ page }) => {
@@ -34,9 +48,24 @@ test("admin can set a user's password", async ({ page }) => {
   await page.getByRole("row", { name: new RegExp(email) }).getByRole("button").click();
   await page.getByRole("menuitem", { name: "Set password" }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("New password").fill("newpass1234");
+  await dialog.getByLabel("New password", { exact: true }).fill("newpass1234");
+  await dialog.getByLabel("Confirm new password").fill("newpass1234");
   await dialog.getByRole("button", { name: "Save" }).click();
   await expect(page.getByText("Password updated")).toBeVisible();
+});
+
+test("set password rejects mismatched passwords", async ({ page }) => {
+  await ready(page, "/dashboard/users");
+  const email = `ui-setpw-mismatch-${Date.now()}@example.com`;
+  await seedUser(page, email);
+  await page.getByPlaceholder("Search by email…").fill(email);
+  await page.getByRole("row", { name: new RegExp(email) }).getByRole("button").click();
+  await page.getByRole("menuitem", { name: "Set password" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("New password", { exact: true }).fill("newpass1234");
+  await dialog.getByLabel("Confirm new password").fill("different999");
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(dialog.getByText("Passwords do not match")).toBeVisible();
 });
 
 test("admin can delete a user with confirmation", async ({ page }) => {

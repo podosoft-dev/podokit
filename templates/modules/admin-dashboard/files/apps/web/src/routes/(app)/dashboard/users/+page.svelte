@@ -62,9 +62,15 @@
 
   // Create user
   let createOpen = $state(false);
-  let form = $state({ name: "", email: "", password: "", admin: false });
+  let form = $state({ name: "", email: "", password: "", confirm: "", admin: false });
+  let createError = $state("");
   async function createUser(event: Event): Promise<void> {
     event.preventDefault();
+    if (form.password !== form.confirm) {
+      createError = i18n.t.users.passwordMismatch;
+      return;
+    }
+    createError = "";
     busy = true;
     const { error } = await api.auth.admin.createUser({
       name: form.name,
@@ -79,7 +85,7 @@
     }
     toast.success(i18n.t.users.userCreated);
     createOpen = false;
-    form = { name: "", email: "", password: "", admin: false };
+    form = { name: "", email: "", password: "", confirm: "", admin: false };
     offset = 0;
     await load();
   }
@@ -88,14 +94,23 @@
   let pwOpen = $state(false);
   let pwUser = $state<Row | null>(null);
   let newPassword = $state("");
+  let confirmNewPassword = $state("");
+  let pwError = $state("");
   function openPassword(u: Row): void {
     pwUser = u;
     newPassword = "";
+    confirmNewPassword = "";
+    pwError = "";
     pwOpen = true;
   }
   async function submitPassword(event: Event): Promise<void> {
     event.preventDefault();
     if (!pwUser) return;
+    if (newPassword !== confirmNewPassword) {
+      pwError = i18n.t.users.passwordMismatch;
+      return;
+    }
+    pwError = "";
     busy = true;
     const { error } = await api.auth.admin.setUserPassword({ userId: pwUser.id, newPassword });
     busy = false;
@@ -142,7 +157,7 @@
 <div class="flex flex-col gap-4">
   <div class="flex items-center justify-between gap-2">
     <h1 class="text-2xl font-semibold">{i18n.t.users.title}</h1>
-    <Button onclick={() => (createOpen = true)}><PlusIcon class="size-4" />{i18n.t.users.addUser}</Button>
+    <Button onclick={() => { createError = ""; createOpen = true; }}><PlusIcon class="size-4" />{i18n.t.users.addUser}</Button>
   </div>
   <Input placeholder={i18n.t.users.search} value={search} oninput={searchInput} class="max-w-xs" />
 
@@ -222,6 +237,8 @@
       <div class="flex flex-col gap-1"><Label for="c-name">{i18n.t.users.name}</Label><Input id="c-name" bind:value={form.name} required /></div>
       <div class="flex flex-col gap-1"><Label for="c-email">{i18n.t.users.email}</Label><Input id="c-email" type="email" bind:value={form.email} required /></div>
       <div class="flex flex-col gap-1"><Label for="c-password">{i18n.t.users.password}</Label><Input id="c-password" type="password" bind:value={form.password} required /></div>
+      <div class="flex flex-col gap-1"><Label for="c-confirm">{i18n.t.users.confirmPassword}</Label><Input id="c-confirm" type="password" bind:value={form.confirm} required /></div>
+      {#if createError}<p class="text-destructive text-sm">{createError}</p>{/if}
       <Label class="flex items-center gap-2"><Checkbox bind:checked={form.admin} />{i18n.t.users.makeAdmin}</Label>
       <Dialog.Footer>
         <Button type="button" variant="outline" onclick={() => (createOpen = false)}>{i18n.t.users.cancel}</Button>
@@ -237,6 +254,8 @@
     <Dialog.Header><Dialog.Title>{i18n.t.users.setPassword}</Dialog.Title></Dialog.Header>
     <form onsubmit={submitPassword} class="flex flex-col gap-3">
       <div class="flex flex-col gap-1"><Label for="p-password">{i18n.t.users.newPassword}</Label><Input id="p-password" type="password" bind:value={newPassword} required /></div>
+      <div class="flex flex-col gap-1"><Label for="p-confirm">{i18n.t.users.confirmNewPassword}</Label><Input id="p-confirm" type="password" bind:value={confirmNewPassword} required /></div>
+      {#if pwError}<p class="text-destructive text-sm">{pwError}</p>{/if}
       <Dialog.Footer>
         <Button type="button" variant="outline" onclick={() => (pwOpen = false)}>{i18n.t.users.cancel}</Button>
         <Button type="submit" disabled={busy}>{i18n.t.users.save}</Button>
