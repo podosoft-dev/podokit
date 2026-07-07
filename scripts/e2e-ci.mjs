@@ -39,7 +39,9 @@ function run(cmd, cmdArgs, opts = {}) {
   execFileSync(cmd, cmdArgs, { stdio: "inherit", ...opts });
 }
 function bg(cmd, cmdArgs, opts = {}) {
-  const child = spawn(cmd, cmdArgs, { stdio: "inherit", ...opts });
+  // Own process group (detached) so cleanup can kill the whole tree — npx spawns
+  // grandchildren (e.g. Verdaccio) that a direct child.kill() would orphan.
+  const child = spawn(cmd, cmdArgs, { stdio: "inherit", detached: true, ...opts });
   children.push(child);
   return child;
 }
@@ -58,16 +60,23 @@ async function waitFor(url, label, tries = 60) {
 function cleanup() {
   for (const c of children) {
     try {
-      c.kill("SIGKILL");
+      // Negative pid targets the whole process group (see bg()).
+      process.kill(-c.pid, "SIGKILL");
     } catch {
-      /* ignore */
+      try {
+        c.kill("SIGKILL");
+      } catch {
+        /* already gone */
+      }
     }
   }
   if (!keep) rmSync(appDir, { recursive: true, force: true });
   rmSync(join(repoRoot, ".verdaccio-storage"), { recursive: true, force: true });
 }
-process.on("exit", cleanup);
-process.on("SIGINT", () => process.exit(1));
+process.on("SIGINT", () => {
+  cleanup();
+  process.exit(1);
+});
 
 const step = (m) => console.log(`\n── ${m}`);
 
@@ -158,7 +167,15 @@ async function main() {
   console.log("\n✓ faithful e2e passed");
 }
 
-main().catch((err) => {
-  console.error(err.message ?? err);
-  process.exitCode = 1;
-});
+main()
+  .catch((err) => {
+    console.error(err.message ?? err);
+    process.exitCode = 1;
+  })
+  .finally(() => {
+    // The background children (Verdaccio, api, web) inherit stdio and keep the
+    // event loop alive, so the run never exits on its own. Kill them and exit
+    // explicitly — otherwise CI hangs until the job timeout.
+    cleanup();
+    process.exit(process.exitCode ?? 0);
+  });

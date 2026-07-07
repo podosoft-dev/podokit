@@ -1,5 +1,5 @@
 # Local registry for faithful e2e: serves our packages, proxies the rest from npm.
-storage: ./.verdaccio-storage
+storage: ../.verdaccio-storage
 uplinks:
   npmjs:
     url: https://registry.npmjs.org/
