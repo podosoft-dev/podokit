@@ -9,6 +9,7 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import TablePagination from "$lib/components/table-pagination.svelte";
+  import DataTable, { type DataTableColumn, type SortState } from "$lib/components/data-table.svelte";
   import EllipsisIcon from "@lucide/svelte/icons/ellipsis";
   import PlusIcon from "@lucide/svelte/icons/plus";
   import { toast } from "svelte-sonner";
@@ -27,13 +28,24 @@
   let total = $state(0);
   let page = $state(1);
   let search = $state("");
+  let sort = $state<SortState | null>(null);
   let busy = $state(false);
+
+  // Server-side list: sorting + paging are done by the API (manual mode).
+  const columns: DataTableColumn<Row>[] = [
+    { key: "name", label: i18n.t.users.name, sortable: true },
+    { key: "email", label: i18n.t.users.email, sortable: true },
+    { key: "role", label: i18n.t.users.role, sortable: true },
+    { key: "status", label: i18n.t.users.status },
+    { key: "actions", label: "", class: "w-10" },
+  ];
 
   async function load(): Promise<void> {
     const { data: res, error } = await api.auth.admin.listUsers({
       query: {
         limit: PAGE_SIZE,
         offset: (page - 1) * PAGE_SIZE,
+        ...(sort ? { sortBy: sort.key, sortDirection: sort.dir } : {}),
         ...(search ? { searchField: "email", searchOperator: "contains", searchValue: search } : {}),
       },
     });
@@ -264,61 +276,49 @@
   </div>
   <Input placeholder={i18n.t.users.search} value={search} oninput={searchInput} class="max-w-xs" />
 
-  <div class="rounded-md border">
-    <Table.Root>
-      <Table.Header>
-        <Table.Row>
-          <Table.Head>{i18n.t.users.name}</Table.Head>
-          <Table.Head>{i18n.t.users.email}</Table.Head>
-          <Table.Head>{i18n.t.users.role}</Table.Head>
-          <Table.Head>{i18n.t.users.status}</Table.Head>
-          <Table.Head class="w-10"></Table.Head>
-        </Table.Row>
-      </Table.Header>
-      <Table.Body>
-        {#each users as user (user.id)}
-          <Table.Row>
-            <Table.Cell class="font-medium">{user.name}</Table.Cell>
-            <Table.Cell class="text-muted-foreground">{user.email}</Table.Cell>
-            <Table.Cell><Badge variant={user.role === "admin" ? "default" : "secondary"}>{user.role ?? "user"}</Badge></Table.Cell>
-            <Table.Cell>
-              <div class="flex flex-wrap gap-1">
-                {#if user.banned}<Badge variant="destructive">{i18n.t.users.banned}</Badge>{:else}<Badge variant="outline">{i18n.t.users.active}</Badge>{/if}
-                {#if emailVerificationEnabled}
-                  {#if user.emailVerified}<Badge variant="outline" class="text-green-600 dark:text-green-400">{i18n.t.users.verified}</Badge>{:else}<Badge variant="secondary">{i18n.t.users.unverified}</Badge>{/if}
-                {/if}
-              </div>
-            </Table.Cell>
-            <Table.Cell>
-              <DropdownMenu.Root>
-                <DropdownMenu.Trigger>
-                  {#snippet child({ props })}
-                    <Button {...props} variant="ghost" size="icon"><EllipsisIcon class="size-4" /></Button>
-                  {/snippet}
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Content align="end">
-                  <DropdownMenu.Item onSelect={() => openManage(user)}>{i18n.t.users.manage}</DropdownMenu.Item>
-                  <DropdownMenu.Item disabled={user.id === data.currentUserId} onSelect={() => impersonate(user)}>
-                    {i18n.t.users.impersonate}
-                  </DropdownMenu.Item>
-                </DropdownMenu.Content>
-              </DropdownMenu.Root>
-            </Table.Cell>
-          </Table.Row>
-        {:else}
-          <Table.Row><Table.Cell colspan={5} class="text-muted-foreground py-8 text-center">{i18n.t.users.empty}</Table.Cell></Table.Row>
-        {/each}
-      </Table.Body>
-    </Table.Root>
-  </div>
-
-  <TablePagination
-    count={total}
-    perPage={PAGE_SIZE}
+  <DataTable
+    {columns}
+    rows={users}
+    getKey={(u) => u.id}
+    empty={i18n.t.users.empty}
+    bind:sort
     bind:page
+    perPage={PAGE_SIZE}
+    total={total}
     label={fmt(i18n.t.users.total, { count: total })}
-    onPageChange={() => void load()}
-  />
+    manualSort
+    manualPagination
+    onChange={() => void load()}
+  >
+    {#snippet row(user)}
+      <Table.Cell class="font-medium">{user.name}</Table.Cell>
+      <Table.Cell class="text-muted-foreground">{user.email}</Table.Cell>
+      <Table.Cell><Badge variant={user.role === "admin" ? "default" : "secondary"}>{user.role ?? "user"}</Badge></Table.Cell>
+      <Table.Cell>
+        <div class="flex flex-wrap gap-1">
+          {#if user.banned}<Badge variant="destructive">{i18n.t.users.banned}</Badge>{:else}<Badge variant="outline">{i18n.t.users.active}</Badge>{/if}
+          {#if emailVerificationEnabled}
+            {#if user.emailVerified}<Badge variant="outline" class="text-green-600 dark:text-green-400">{i18n.t.users.verified}</Badge>{:else}<Badge variant="secondary">{i18n.t.users.unverified}</Badge>{/if}
+          {/if}
+        </div>
+      </Table.Cell>
+      <Table.Cell>
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger>
+            {#snippet child({ props })}
+              <Button {...props} variant="ghost" size="icon"><EllipsisIcon class="size-4" /></Button>
+            {/snippet}
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content align="end">
+            <DropdownMenu.Item onSelect={() => openManage(user)}>{i18n.t.users.manage}</DropdownMenu.Item>
+            <DropdownMenu.Item disabled={user.id === data.currentUserId} onSelect={() => impersonate(user)}>
+              {i18n.t.users.impersonate}
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
+      </Table.Cell>
+    {/snippet}
+  </DataTable>
 </div>
 
 <!-- Create user -->

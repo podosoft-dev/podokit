@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Badge } from "$lib/components/ui/badge";
   import * as Table from "$lib/components/ui/table";
-  import TablePagination from "$lib/components/table-pagination.svelte";
+  import DataTable, { type DataTableColumn, type SortState } from "$lib/components/data-table.svelte";
   import { toast } from "svelte-sonner";
   import { getI18n, fmt, formatDateTime } from "$lib/i18n";
 
@@ -17,10 +17,17 @@
     createdAt: string;
   };
 
-  const PAGE_SIZE = 10;
   let entries = $state<Entry[]>([]);
   let page = $state(1);
-  const paged = $derived(entries.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE));
+  let sort = $state<SortState | null>({ key: "createdAt", dir: "desc" });
+
+  const columns: DataTableColumn<Entry>[] = [
+    { key: "createdAt", label: i18n.t.audit.when, sortable: true, class: "whitespace-nowrap" },
+    { key: "actor", label: i18n.t.audit.actor, sortable: true, value: (e) => e.actorName ?? e.actorEmail },
+    { key: "action", label: i18n.t.audit.action, sortable: true },
+    { key: "target", label: i18n.t.audit.target, sortable: true, value: (e) => e.targetLabel },
+    { key: "ip", label: i18n.t.audit.ip, sortable: true },
+  ];
 
   async function load(): Promise<void> {
     try {
@@ -40,39 +47,29 @@
 <div class="flex flex-col gap-4">
   <h1 class="text-2xl font-semibold">{i18n.t.audit.title}</h1>
 
-  <div class="rounded-md border">
-    <Table.Root>
-      <Table.Header>
-        <Table.Row>
-          <Table.Head>{i18n.t.audit.when}</Table.Head>
-          <Table.Head>{i18n.t.audit.actor}</Table.Head>
-          <Table.Head>{i18n.t.audit.action}</Table.Head>
-          <Table.Head>{i18n.t.audit.target}</Table.Head>
-          <Table.Head>{i18n.t.audit.ip}</Table.Head>
-        </Table.Row>
-      </Table.Header>
-      <Table.Body>
-        {#each paged as e (e.id)}
-          <Table.Row>
-            <Table.Cell class="text-muted-foreground whitespace-nowrap">{formatDateTime(e.createdAt)}</Table.Cell>
-            <Table.Cell>
-              {#if e.actorName || e.actorEmail}
-                <div class="font-medium">{e.actorName ?? e.actorEmail}</div>
-                {#if e.actorName && e.actorEmail}<div class="text-muted-foreground text-xs">{e.actorEmail}</div>{/if}
-              {:else}
-                <span class="text-muted-foreground">—</span>
-              {/if}
-            </Table.Cell>
-            <Table.Cell><Badge variant="secondary" class="font-mono text-xs">{e.action}</Badge></Table.Cell>
-            <Table.Cell class="max-w-xs truncate">{e.targetLabel ?? "—"}</Table.Cell>
-            <Table.Cell class="text-muted-foreground">{e.ip ?? "—"}</Table.Cell>
-          </Table.Row>
+  <DataTable
+    {columns}
+    rows={entries}
+    getKey={(e) => e.id}
+    empty={i18n.t.audit.empty}
+    bind:sort
+    bind:page
+    perPage={10}
+    label={fmt(i18n.t.audit.total, { count: entries.length })}
+  >
+    {#snippet row(e)}
+      <Table.Cell class="text-muted-foreground whitespace-nowrap">{formatDateTime(e.createdAt)}</Table.Cell>
+      <Table.Cell>
+        {#if e.actorName || e.actorEmail}
+          <div class="font-medium">{e.actorName ?? e.actorEmail}</div>
+          {#if e.actorName && e.actorEmail}<div class="text-muted-foreground text-xs">{e.actorEmail}</div>{/if}
         {:else}
-          <Table.Row><Table.Cell colspan={5} class="text-muted-foreground py-8 text-center">{i18n.t.audit.empty}</Table.Cell></Table.Row>
-        {/each}
-      </Table.Body>
-    </Table.Root>
-  </div>
-
-  <TablePagination count={entries.length} perPage={PAGE_SIZE} bind:page label={fmt(i18n.t.audit.total, { count: entries.length })} />
+          <span class="text-muted-foreground">—</span>
+        {/if}
+      </Table.Cell>
+      <Table.Cell><Badge variant="secondary" class="font-mono text-xs">{e.action}</Badge></Table.Cell>
+      <Table.Cell class="max-w-xs truncate">{e.targetLabel ?? "—"}</Table.Cell>
+      <Table.Cell class="text-muted-foreground">{e.ip ?? "—"}</Table.Cell>
+    {/snippet}
+  </DataTable>
 </div>

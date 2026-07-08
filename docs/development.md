@@ -70,3 +70,48 @@ with Playwright. See [testing.md](./testing.md) for how to run them
 (`npm run test:e2e`), author them (the `@playwright/cli` loop), and verify faithfully
 against a local Verdaccio registry (`scripts/e2e-ci.mjs`, mirrored by the `e2e` CI
 workflow).
+
+## Data tables
+
+Admin list views (users, sessions, audit log, ...) share one table component,
+`$lib/components/data-table.svelte`, so header, sortable columns (asc/desc), and
+the pagination footer behave the same everywhere. Use it for any new table —
+don't assemble `Table.*` primitives by hand.
+
+Define columns and render each row's cells with a `row` snippet:
+
+```svelte
+<script lang="ts">
+  import * as Table from "$lib/components/ui/table";
+  import DataTable, { type DataTableColumn, type SortState } from "$lib/components/data-table.svelte";
+
+  let rows = $state<Item[]>([]);
+  let page = $state(1);
+  let sort = $state<SortState | null>({ key: "createdAt", dir: "desc" });
+
+  const columns: DataTableColumn<Item>[] = [
+    { key: "name", label: "Name", sortable: true },
+    { key: "createdAt", label: "Created", sortable: true },
+    { key: "actions", label: "", class: "w-10" }, // non-sortable
+  ];
+</script>
+
+<DataTable {columns} {rows} getKey={(r) => r.id} bind:sort bind:page perPage={10} label={`${rows.length} items`}>
+  {#snippet row(r)}
+    <Table.Cell>{r.name}</Table.Cell>
+    <Table.Cell>{r.createdAt}</Table.Cell>
+    <Table.Cell><!-- actions --></Table.Cell>
+  {/snippet}
+</DataTable>
+```
+
+Two modes:
+
+- **Client (default)** — pass all `rows`; sorting and paging happen in the
+  component. For nested/derived sort keys, give the column a `value` accessor
+  (e.g. `value: (s) => s.user.email`). Used by sessions and the audit log.
+- **Manual / server** — set `manualSort` + `manualPagination`, pass the server
+  `total`, and refetch in `onChange` using the emitted `sort` (`sortBy` /
+  `sortDirection`) and `page`. Used by the users list.
+
+Pagination is handled inside via `TablePagination`; don't add a separate footer.
