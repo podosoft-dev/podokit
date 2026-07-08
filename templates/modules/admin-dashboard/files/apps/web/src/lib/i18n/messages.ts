@@ -104,6 +104,10 @@ const en = {
     impersonatingAs: "Impersonating {email}",
     manage: "Manage",
     revokeSession: "Revoke",
+    verified: "Verified",
+    unverified: "Unverified",
+    sendVerification: "Send verification email",
+    verificationSent: "Verification email sent",
   },
   sessions: {
     title: "Active sessions",
@@ -283,6 +287,10 @@ const ko: Messages = {
     impersonatingAs: "{email} 사용자로 대리 로그인 중",
     manage: "관리",
     revokeSession: "종료",
+    verified: "인증됨",
+    unverified: "미인증",
+    sendVerification: "인증 메일 보내기",
+    verificationSent: "인증 메일을 보냈습니다",
   },
   sessions: {
     title: "활성 세션",

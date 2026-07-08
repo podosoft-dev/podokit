@@ -18,8 +18,9 @@
 
   let { data }: { data: PageData } = $props();
   const i18n = getI18n();
+  const emailVerificationEnabled = $derived(data.capabilities.emailVerification);
 
-  type Row = { id: string; name: string; email: string; role?: string | null; banned?: boolean | null };
+  type Row = { id: string; name: string; email: string; role?: string | null; banned?: boolean | null; emailVerified?: boolean | null };
 
   const PAGE_SIZE = 5;
   let users = $state<Row[]>([]);
@@ -155,6 +156,15 @@
     toast.success(i18n.t.users.passwordSet);
   }
 
+  async function resendVerification(): Promise<void> {
+    if (!mUser) return;
+    busy = true;
+    const { error } = await api.auth.sendVerificationEmail({ email: mUser.email, callbackURL: `${location.origin}/admin` });
+    busy = false;
+    if (error) return void toast.error(error.message ?? i18n.t.users.actionFailed);
+    toast.success(i18n.t.users.verificationSent);
+  }
+
   async function ban(event: Event): Promise<void> {
     event.preventDefault();
     if (!mUser) return;
@@ -249,7 +259,12 @@
             <Table.Cell class="text-muted-foreground">{user.email}</Table.Cell>
             <Table.Cell><Badge variant={user.role === "admin" ? "default" : "secondary"}>{user.role ?? "user"}</Badge></Table.Cell>
             <Table.Cell>
-              {#if user.banned}<Badge variant="destructive">{i18n.t.users.banned}</Badge>{:else}<Badge variant="outline">{i18n.t.users.active}</Badge>{/if}
+              <div class="flex flex-wrap gap-1">
+                {#if user.banned}<Badge variant="destructive">{i18n.t.users.banned}</Badge>{:else}<Badge variant="outline">{i18n.t.users.active}</Badge>{/if}
+                {#if emailVerificationEnabled}
+                  {#if user.emailVerified}<Badge variant="outline" class="text-green-600 dark:text-green-400">{i18n.t.users.verified}</Badge>{:else}<Badge variant="secondary">{i18n.t.users.unverified}</Badge>{/if}
+                {/if}
+              </div>
             </Table.Cell>
             <Table.Cell>
               <DropdownMenu.Root>
@@ -327,6 +342,15 @@
             <div class="flex flex-col gap-1"><Label for="m-email">{i18n.t.users.email}</Label><Input id="m-email" type="email" bind:value={mEmail} required /></div>
             <Label class="flex items-center gap-2"><Checkbox bind:checked={mAdmin} />{i18n.t.users.makeAdmin}</Label>
             {#if mUser?.banned}<Badge variant="destructive" class="w-fit">{i18n.t.users.banned}</Badge>{/if}
+            {#if emailVerificationEnabled}
+              <div class="flex items-center gap-2">
+                {#if mUser?.emailVerified}<Badge variant="outline" class="text-green-600 dark:text-green-400">{i18n.t.users.verified}</Badge>
+                {:else}
+                  <Badge variant="secondary">{i18n.t.users.unverified}</Badge>
+                  <Button type="button" variant="outline" size="sm" disabled={busy} onclick={resendVerification}>{i18n.t.users.sendVerification}</Button>
+                {/if}
+              </div>
+            {/if}
             <Button type="submit" class="w-fit" disabled={busy}>{i18n.t.users.save}</Button>
           </form>
         {:else if mSection === "security"}

@@ -14,7 +14,7 @@
   import { untrack } from "svelte";
   import type { SessionUser } from "../../../../app.d.ts";
 
-  type Capabilities = { twoFactor: boolean; providers: string[]; deleteAccount: boolean; auditLog: boolean };
+  type Capabilities = { twoFactor: boolean; providers: string[]; deleteAccount: boolean; auditLog: boolean; emailVerification: boolean };
   let { data }: { data: { user: SessionUser; currentSessionId: string | null; capabilities: Capabilities } } = $props();
   const i18n = getI18n();
 
@@ -42,6 +42,16 @@
     savingProfile = false;
     if (error) toast.error(error.message ?? i18n.t.account.saveFailed);
     else toast.success(i18n.t.account.saved);
+  }
+
+  // Email verification — resend the confirmation link to the current address.
+  let verifying = $state(false);
+  async function resendVerification(): Promise<void> {
+    verifying = true;
+    const { error } = await api.auth.sendVerificationEmail({ email: data.user.email, callbackURL: `${location.origin}/admin` });
+    verifying = false;
+    if (error) toast.error(error.message ?? i18n.t.auth.requestFailed);
+    else toast.success(i18n.t.auth.verifySent);
   }
 
   // Security — change password
@@ -203,10 +213,17 @@
                 <Label for="email">{i18n.t.account.email}</Label>
                 <div class="flex items-center gap-2">
                   <Input id="email" value={data.user.email} readonly class="text-muted-foreground" />
-                  <Badge variant={data.user.emailVerified ? "outline" : "secondary"}>
-                    {data.user.emailVerified ? i18n.t.account.verified : i18n.t.account.unverified}
-                  </Badge>
+                  {#if caps.emailVerification}
+                    <Badge variant={data.user.emailVerified ? "outline" : "secondary"} class={data.user.emailVerified ? "text-green-600 dark:text-green-400" : ""}>
+                      {data.user.emailVerified ? i18n.t.account.verified : i18n.t.account.unverified}
+                    </Badge>
+                  {/if}
                 </div>
+                {#if caps.emailVerification && !data.user.emailVerified}
+                  <Button type="button" variant="outline" size="sm" class="w-fit" disabled={verifying} onclick={resendVerification}>
+                    {verifying ? i18n.t.auth.sending : i18n.t.auth.resendVerification}
+                  </Button>
+                {/if}
               </div>
               <div class="flex flex-col gap-2">
                 <Label>{i18n.t.account.role}</Label>
