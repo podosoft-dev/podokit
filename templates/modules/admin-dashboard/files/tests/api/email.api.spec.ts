@@ -1,8 +1,25 @@
 import { expect, test } from "@playwright/test";
+import { ADMIN } from "../helpers/accounts";
 import { clearMailpit, mailpitReachable, waitForLink } from "../helpers/mailpit";
 
 const base = process.env.E2E_BASE_URL ?? "http://localhost:5173";
 const origin = { origin: base };
+
+test("magic link signs an existing user in @smoke", async ({ playwright }) => {
+  test.skip(!(await mailpitReachable()), "Mailpit not available");
+  const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  const caps = await (await ctx.get("/api/account/capabilities")).json();
+  test.skip(!caps?.magicLink, "magic link not enabled");
+  await clearMailpit();
+  const requested = await ctx.post("/api/auth/sign-in/magic-link", { data: { email: ADMIN.email, callbackURL: `${base}/admin` } });
+  expect(requested.ok()).toBeTruthy();
+  const link = await waitForLink(ADMIN.email);
+  // Following the emailed link validates the token and sets the session cookie.
+  await ctx.get(link, { maxRedirects: 0 });
+  const session = await (await ctx.get("/api/auth/get-session")).json();
+  expect(session?.user?.email).toBe(ADMIN.email);
+  await ctx.dispose();
+});
 
 // Follow an emailed auth link (which hits the API to validate) and read the
 // token the API hands back on its redirect.

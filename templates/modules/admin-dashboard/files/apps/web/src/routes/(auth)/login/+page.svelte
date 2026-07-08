@@ -9,12 +9,38 @@
   import { api } from "$lib/api";
   import { getI18n } from "$lib/i18n";
 
+  import type { PageData } from "./$types";
+
+  let { data }: { data: PageData } = $props();
   const i18n = getI18n();
   let email = $state("");
   let password = $state("");
   let error = $state<string | null>(null);
   let unverified = $state(false);
   let loading = $state(false);
+
+  // Passwordless sign-in, shown only when the server enabled the magic-link plugin.
+  const magicLinkEnabled = $derived(data.capabilities?.magicLink ?? false);
+  let magicLoading = $state(false);
+  let magicSent = $state(false);
+  async function sendMagicLink(): Promise<void> {
+    if (!email) {
+      error = i18n.t.auth.magicLinkNeedsEmail;
+      return;
+    }
+    magicLoading = true;
+    error = null;
+    const { error: authError } = await api.auth.signIn.magicLink({
+      email,
+      callbackURL: page.url.searchParams.get("redirect") ?? "/admin",
+    });
+    magicLoading = false;
+    if (authError) {
+      error = authError.message ?? i18n.t.auth.signInFailed;
+      return;
+    }
+    magicSent = true;
+  }
 
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
@@ -63,6 +89,17 @@
       </div>
       <Button type="submit" disabled={loading}>{loading ? i18n.t.auth.signingIn : i18n.t.auth.signIn}</Button>
     </form>
+    {#if magicLinkEnabled}
+      <div class="mt-4 border-t pt-4">
+        {#if magicSent}
+          <p class="text-muted-foreground text-sm" data-testid="magic-link-sent">{i18n.t.auth.magicLinkSent}</p>
+        {:else}
+          <Button type="button" variant="outline" class="w-full" disabled={magicLoading} onclick={sendMagicLink}>
+            {magicLoading ? i18n.t.auth.sending : i18n.t.auth.magicLinkButton}
+          </Button>
+        {/if}
+      </div>
+    {/if}
   </Card.Content>
   <Card.Footer class="justify-center">
     <p class="text-muted-foreground text-sm">{i18n.t.auth.noAccount} <a href="/signup" class="text-foreground hover:underline">{i18n.t.auth.signUp}</a></p>

@@ -1,5 +1,5 @@
 import { Controller, Get } from "@nestjs/common";
-import { Session, type UserSession } from "@thallesp/nestjs-better-auth";
+import { Public, Session, type UserSession } from "@thallesp/nestjs-better-auth";
 import { ApiTags } from "@nestjs/swagger";
 
 type Capabilities = {
@@ -9,6 +9,7 @@ type Capabilities = {
   auditLog: boolean;
   emailVerification: boolean;
   passwordBreachCheck: boolean;
+  magicLink: boolean;
 };
 
 // Protected by the global AuthGuard. Use @Session() to read the current user.
@@ -21,6 +22,8 @@ export class AccountController {
   }
 
   // Which optional auth features are enabled, so the UI can show/hide sections.
+  // Public so the login page (unauthenticated) can offer available sign-in methods.
+  @Public()
   @Get("capabilities")
   capabilities(): Capabilities {
     const providers = [
@@ -34,6 +37,7 @@ export class AccountController {
       auditLog: process.env.AUDIT_LOG_ENABLED === "true",
       emailVerification: process.env.AUTH_EMAIL_VERIFICATION === "true",
       passwordBreachCheck: process.env.AUTH_HIBP === "true",
+      magicLink: process.env.AUTH_MAGIC_LINK === "true",
     };
   }
 }

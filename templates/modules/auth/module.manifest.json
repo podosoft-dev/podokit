@@ -21,6 +21,8 @@
     "AUTH_TWO_FACTOR=false",
     "# Reject breached passwords via Have I Been Pwned (calls the public range API)",
     "AUTH_HIBP=false",
+    "# Passwordless sign-in via an emailed magic link",
+    "AUTH_MAGIC_LINK=false",
     "# Email: SMTP for password reset + verification. Local dev targets Mailpit",
     "# (docker-compose), which captures mail at http://localhost:8025.",
     "SMTP_HOST=localhost",
