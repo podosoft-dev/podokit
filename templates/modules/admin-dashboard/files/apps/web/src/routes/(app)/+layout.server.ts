@@ -1,9 +1,21 @@
 import type { LayoutServerLoad } from "./$types";
 
-type Capabilities = { twoFactor: boolean; providers: string[]; deleteAccount: boolean; auditLog: boolean };
+type Capabilities = {
+  twoFactor: boolean;
+  providers: string[];
+  deleteAccount: boolean;
+  auditLog: boolean;
+  emailVerification: boolean;
+};
 
 export const load: LayoutServerLoad = async ({ locals, fetch }) => {
-  let capabilities: Capabilities = { twoFactor: false, providers: [], deleteAccount: false, auditLog: false };
+  let capabilities: Capabilities = {
+    twoFactor: false,
+    providers: [],
+    deleteAccount: false,
+    auditLog: false,
+    emailVerification: false,
+  };
   try {
     const res = await fetch("/api/account/capabilities");
     if (res.ok) capabilities = (await res.json()) as Capabilities;
