@@ -11,6 +11,8 @@ const ACTIONS: Record<string, string> = {
   "/change-password": "auth.password_change",
   "/change-email": "auth.email_change",
   "/reset-password": "auth.password_reset",
+  "/send-verification-email": "auth.verification_sent",
+  "/verify-email": "auth.email_verified",
   "/update-user": "account.update",
   "/delete-user": "account.delete",
   "/revoke-session": "session.revoke",

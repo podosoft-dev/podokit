@@ -13,16 +13,20 @@
   let email = $state("");
   let password = $state("");
   let error = $state<string | null>(null);
+  let unverified = $state(false);
   let loading = $state(false);
 
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     loading = true;
     error = null;
+    unverified = false;
     const { error: authError } = await api.auth.signIn.email({ email, password });
     loading = false;
     if (authError) {
-      error = authError.message ?? i18n.t.auth.signInFailed;
+      // Surface an unverified address with a path to a fresh verification link.
+      unverified = authError.code === "EMAIL_NOT_VERIFIED";
+      error = unverified ? i18n.t.auth.emailNotVerified : (authError.message ?? i18n.t.auth.signInFailed);
       return;
     }
     await goto(page.url.searchParams.get("redirect") ?? "/admin", { invalidateAll: true });
@@ -37,7 +41,14 @@
   <Card.Content>
     <form class="flex flex-col gap-4" onsubmit={submit}>
       {#if error}
-        <Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>
+        <Alert.Root variant="destructive">
+          <Alert.Description>
+            {error}
+            {#if unverified}
+              <a href="/verify-email?email={encodeURIComponent(email)}" class="font-medium underline">{i18n.t.auth.resendVerification}</a>
+            {/if}
+          </Alert.Description>
+        </Alert.Root>
       {/if}
       <div class="flex flex-col gap-2">
         <Label for="email">{i18n.t.auth.email}</Label>

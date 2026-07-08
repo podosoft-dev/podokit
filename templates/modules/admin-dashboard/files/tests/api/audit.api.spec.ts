@@ -46,3 +46,14 @@ test("the audit log is admin-only", async ({ playwright }) => {
   expect((await user.get("/api/audit-logs")).status()).toBe(403);
   await user.dispose();
 });
+
+test("sending a verification email is audited", async ({ playwright }) => {
+  const admin = await signedIn(playwright, ADMIN);
+  test.skip((await admin.get("/api/audit-logs")).status() === 404, "audit-log module not installed");
+  const email = `verif-audit-${Date.now()}@example.com`;
+  await admin.post("/api/auth/admin/create-user", { data: { email, password: "password123", name: "VA", role: "user" } });
+  await admin.post("/api/auth/send-verification-email", { data: { email, callbackURL: `${base}/admin` } });
+  const entries = (await (await admin.get("/api/audit-logs")).json()) as Array<{ action: string; targetLabel: string | null }>;
+  expect(entries.some((e) => e.action === "auth.verification_sent"), "verification send should be audited").toBeTruthy();
+  await admin.dispose();
+});
