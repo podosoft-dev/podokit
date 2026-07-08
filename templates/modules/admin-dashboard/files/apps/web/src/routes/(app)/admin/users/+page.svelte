@@ -456,5 +456,8 @@
         {/if}
       </div>
     </div>
+    <Dialog.Footer>
+      <Button variant="outline" onclick={() => (manageOpen = false)}>{i18n.t.users.close}</Button>
+    </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>
