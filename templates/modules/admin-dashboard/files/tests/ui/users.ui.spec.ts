@@ -14,6 +14,11 @@ test("admin sees the user list and can search @smoke", async ({ page }) => {
   await expect(page.getByRole("cell", { name: "admin@example.com" })).toHaveCount(0);
 });
 
+test("user list shows the joined column @smoke", async ({ page }) => {
+  await ready(page, "/admin/users");
+  await expect(page.getByRole("columnheader", { name: "Joined" })).toBeVisible();
+});
+
 test("row menu exposes admin actions", async ({ page }) => {
   await page.goto("/admin/users");
   await page.locator("#toolbar-search").fill("user@example.com");
