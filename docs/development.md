@@ -109,9 +109,32 @@ Two modes:
 
 - **Client (default)** — pass all `rows`; sorting and paging happen in the
   component. For nested/derived sort keys, give the column a `value` accessor
-  (e.g. `value: (s) => s.user.email`). Used by sessions and the audit log.
+  (e.g. `value: (s) => s.user.email`). Used by the users, sessions, and audit-log lists (each loads a bounded set).
 - **Manual / server** — set `manualSort` + `manualPagination`, pass the server
   `total`, and refetch in `onChange` using the emitted `sort` (`sortBy` /
-  `sortDirection`) and `page`. Used by the users list.
+  `sortDirection`) and `page`. Use for very large server-side lists.
 
 Pagination is handled inside via `TablePagination`; don't add a separate footer.
+
+## Search & filters (TableToolbar)
+
+Pair a `TableToolbar` with the `DataTable` for list views that need search or
+filters, so the toolbar looks and behaves the same everywhere:
+
+```
+Filter | Role [select]  Status [select]
+Search | [Email v] [input]  [ Search ]
+```
+
+- The **search field is a `select`** (`searchFields`), so a page can search by
+  Email, Name, ... — free-text columns that can't be a filter.
+- **Filters + search apply together** on the Search button / Enter — never per
+  keystroke, and a filter `select` only stages a value until Search runs. This
+  lets several filter + search conditions apply in one pass. Keep the live values
+  in `search` / `filterValues` and copy them to your *applied* state in
+  `onSearch` (the applied state is what the table reads).
+
+Apply the results client-side (filter the rows you pass to `DataTable`) for
+bounded lists — the users, sessions, and audit-log pages all load a bounded set
+and filter/search/sort/paginate in the browser. For very large server-side
+lists, drive `onSearch`/`onFilter` to refetch and use the DataTable's manual mode.

@@ -10,6 +10,7 @@
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import TablePagination from "$lib/components/table-pagination.svelte";
   import DataTable, { type DataTableColumn, type SortState } from "$lib/components/data-table.svelte";
+  import TableToolbar, { type ToolbarFilter, type ToolbarSearchField } from "$lib/components/table-toolbar.svelte";
   import EllipsisIcon from "@lucide/svelte/icons/ellipsis";
   import PlusIcon from "@lucide/svelte/icons/plus";
   import { toast } from "svelte-sonner";
@@ -24,14 +25,21 @@
   type Row = { id: string; name: string; email: string; role?: string | null; banned?: boolean | null; emailVerified?: boolean | null };
 
   const PAGE_SIZE = 5;
+  const LOAD_LIMIT = 500; // bounded client-side list; add server-side filtering for larger deployments
   let users = $state<Row[]>([]);
-  let total = $state(0);
   let page = $state(1);
-  let search = $state("");
   let sort = $state<SortState | null>(null);
   let busy = $state(false);
 
-  // Server-side list: sorting + paging are done by the API (manual mode).
+  // Toolbar: filters + search both commit on the Search button (nothing applies
+  // until then), so multiple filter/search conditions apply together.
+  let search = $state("");
+  let appliedSearch = $state("");
+  let searchField = $state("email");
+  let appliedSearchField = $state("email");
+  let filterValues = $state<Record<string, string>>({ role: "", status: "" });
+  let appliedFilters = $state<Record<string, string>>({ role: "", status: "" });
+
   const columns: DataTableColumn<Row>[] = [
     { key: "name", label: i18n.t.users.name, sortable: true },
     { key: "email", label: i18n.t.users.email, sortable: true },
@@ -39,19 +47,56 @@
     { key: "status", label: i18n.t.users.status },
     { key: "actions", label: "", class: "w-10" },
   ];
+  const filters: ToolbarFilter[] = [
+    {
+      key: "role",
+      label: i18n.t.users.role,
+      options: [
+        { value: "", label: i18n.t.toolbar.all },
+        { value: "admin", label: i18n.t.users.roleAdmin },
+        { value: "user", label: i18n.t.users.roleUser },
+      ],
+    },
+    {
+      key: "status",
+      label: i18n.t.users.status,
+      options: [
+        { value: "", label: i18n.t.toolbar.all },
+        { value: "active", label: i18n.t.users.active },
+        { value: "banned", label: i18n.t.users.banned },
+      ],
+    },
+  ];
+  const searchFields: ToolbarSearchField[] = [
+    { value: "email", label: i18n.t.users.email },
+    { value: "name", label: i18n.t.users.name },
+  ];
+
+  const filtered = $derived(
+    users.filter((u) => {
+      if (appliedSearch) {
+        const hay = (appliedSearchField === "name" ? u.name : u.email).toLowerCase();
+        if (!hay.includes(appliedSearch.toLowerCase())) return false;
+      }
+      if (appliedFilters.role && (u.role ?? "user") !== appliedFilters.role) return false;
+      if (appliedFilters.status === "banned" && !u.banned) return false;
+      if (appliedFilters.status === "active" && u.banned) return false;
+      return true;
+    }),
+  );
 
   async function load(): Promise<void> {
-    const { data: res, error } = await api.auth.admin.listUsers({
-      query: {
-        limit: PAGE_SIZE,
-        offset: (page - 1) * PAGE_SIZE,
-        ...(sort ? { sortBy: sort.key, sortDirection: sort.dir } : {}),
-        ...(search ? { searchField: "email", searchOperator: "contains", searchValue: search } : {}),
-      },
-    });
+    const { data: res, error } = await api.auth.admin.listUsers({ query: { limit: LOAD_LIMIT } });
     if (error) return void toast.error(error.message ?? i18n.t.users.loadFailed);
     users = (res?.users ?? []) as Row[];
-    total = res?.total ?? users.length;
+  }
+
+  async function applySearch(): Promise<void> {
+    await load(); // refresh from the server on explicit search, then filter client-side
+    appliedSearch = search;
+    appliedSearchField = searchField;
+    appliedFilters = { ...filterValues };
+    page = 1;
   }
 
   // Impersonate — become the user, then a banner offers "stop impersonating".
@@ -258,12 +303,6 @@
     await load();
   }
 
-  function searchInput(event: Event): void {
-    search = (event.target as HTMLInputElement).value;
-    page = 1;
-    void load();
-  }
-
   $effect(() => {
     void load();
   });
@@ -274,21 +313,27 @@
     <h1 class="text-2xl font-semibold">{i18n.t.users.title}</h1>
     <Button onclick={() => { createError = ""; createOpen = true; }}><PlusIcon class="size-4" />{i18n.t.users.addUser}</Button>
   </div>
-  <Input placeholder={i18n.t.users.search} value={search} oninput={searchInput} class="max-w-xs" />
+  <TableToolbar
+    {filters}
+    bind:filterValues
+    {searchFields}
+    bind:searchField
+    bind:search
+    filterHeading={i18n.t.toolbar.filter}
+    searchHeading={i18n.t.toolbar.search}
+    searchButton={i18n.t.toolbar.searchButton}
+    onSearch={applySearch}
+  />
 
   <DataTable
     {columns}
-    rows={users}
+    rows={filtered}
     getKey={(u) => u.id}
     empty={i18n.t.users.empty}
     bind:sort
     bind:page
     perPage={PAGE_SIZE}
-    total={total}
-    label={fmt(i18n.t.users.total, { count: total })}
-    manualSort
-    manualPagination
-    onChange={() => void load()}
+    label={fmt(i18n.t.users.total, { count: filtered.length })}
   >
     {#snippet row(user)}
       <Table.Cell class="font-medium">{user.name}</Table.Cell>
@@ -350,14 +395,14 @@
     <div class="flex flex-col gap-4 sm:flex-row">
       <nav class="flex shrink-0 flex-wrap gap-1 sm:w-40 sm:flex-col">
         {#each sections as key (key)}
-          <button
-            type="button"
+          <Button
+            variant="ghost"
             onclick={() => (mSection = key)}
             aria-current={mSection === key ? "page" : undefined}
-            class="hover:bg-muted rounded-md px-3 py-2 text-left text-sm font-medium transition-colors {mSection === key ? 'bg-muted' : 'text-muted-foreground'}"
+            class="h-auto justify-start px-3 py-2 text-sm font-medium {mSection === key ? 'bg-muted' : 'text-muted-foreground'}"
           >
             {i18n.t.account.nav[key]}
-          </button>
+          </Button>
         {/each}
       </nav>
 

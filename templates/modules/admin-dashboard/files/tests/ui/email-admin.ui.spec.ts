@@ -26,7 +26,8 @@ test("admin sends a password reset email to a user", async ({ page }) => {
     data: { email, password: "password123", name: "AR", role: "user" },
   });
   await clearMailpit();
-  await page.getByPlaceholder("Search by email…").fill(email);
+  await page.locator("#toolbar-search").fill(email);
+  await page.getByRole("button", { name: "Search", exact: true }).click();
   await page.getByRole("row", { name: new RegExp(email) }).getByRole("button").click();
   await page.getByRole("menuitem", { name: "Manage" }).click();
   const dialog = page.getByRole("dialog");

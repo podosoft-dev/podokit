@@ -2,6 +2,7 @@
   import { Badge } from "$lib/components/ui/badge";
   import * as Table from "$lib/components/ui/table";
   import DataTable, { type DataTableColumn, type SortState } from "$lib/components/data-table.svelte";
+  import TableToolbar, { type ToolbarFilter, type ToolbarSearchField } from "$lib/components/table-toolbar.svelte";
   import { toast } from "svelte-sonner";
   import { getI18n, fmt, formatDateTime } from "$lib/i18n";
 
@@ -20,6 +21,12 @@
   let entries = $state<Entry[]>([]);
   let page = $state(1);
   let sort = $state<SortState | null>({ key: "createdAt", dir: "desc" });
+  let search = $state("");
+  let appliedSearch = $state("");
+  let filterValues = $state<Record<string, string>>({ action: "" });
+  let appliedFilters = $state<Record<string, string>>({ action: "" });
+  let searchField = $state("actor");
+  let appliedSearchField = $state("actor");
 
   const columns: DataTableColumn<Entry>[] = [
     { key: "createdAt", label: i18n.t.audit.when, sortable: true, class: "whitespace-nowrap" },
@@ -28,6 +35,35 @@
     { key: "target", label: i18n.t.audit.target, sortable: true, value: (e) => e.targetLabel },
     { key: "ip", label: i18n.t.audit.ip, sortable: true },
   ];
+
+  const actions = $derived([...new Set(entries.map((e) => e.action))].sort());
+  const filters = $derived<ToolbarFilter[]>([
+    {
+      key: "action",
+      label: i18n.t.audit.action,
+      options: [{ value: "", label: i18n.t.toolbar.all }, ...actions.map((a) => ({ value: a, label: a }))],
+    },
+  ]);
+
+  const searchFields: ToolbarSearchField[] = [
+    { value: "actor", label: i18n.t.audit.actor },
+    { value: "target", label: i18n.t.audit.target },
+  ];
+
+  const filtered = $derived(
+    entries.filter((e) => {
+      if (appliedFilters.action && e.action !== appliedFilters.action) return false;
+      if (appliedSearch) {
+        const hay = (
+          appliedSearchField === "target"
+            ? (e.targetLabel ?? "")
+            : `${e.actorName ?? ""} ${e.actorEmail ?? ""}`
+        ).toLowerCase();
+        if (!hay.includes(appliedSearch.toLowerCase())) return false;
+      }
+      return true;
+    }),
+  );
 
   async function load(): Promise<void> {
     try {
@@ -47,15 +83,27 @@
 <div class="flex flex-col gap-4">
   <h1 class="text-2xl font-semibold">{i18n.t.audit.title}</h1>
 
+  <TableToolbar
+    {filters}
+    bind:filterValues
+    {searchFields}
+    bind:searchField
+    bind:search
+    filterHeading={i18n.t.toolbar.filter}
+    searchHeading={i18n.t.toolbar.search}
+    searchButton={i18n.t.toolbar.searchButton}
+    onSearch={() => { appliedSearch = search; appliedSearchField = searchField; appliedFilters = { ...filterValues }; page = 1; }}
+  />
+
   <DataTable
     {columns}
-    rows={entries}
+    rows={filtered}
     getKey={(e) => e.id}
     empty={i18n.t.audit.empty}
     bind:sort
     bind:page
     perPage={10}
-    label={fmt(i18n.t.audit.total, { count: entries.length })}
+    label={fmt(i18n.t.audit.total, { count: filtered.length })}
   >
     {#snippet row(e)}
       <Table.Cell class="text-muted-foreground whitespace-nowrap">{formatDateTime(e.createdAt)}</Table.Cell>
