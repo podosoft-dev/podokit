@@ -13,7 +13,7 @@ test("forgot password: request, open the emailed link, set a new password, sign 
   test.skip(!(await mailpitReachable()), "Mailpit not available");
   const email = `ui-reset-${Date.now()}@example.com`;
   const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
-  const signup = await ctx.post("/api/auth/sign-up/email", { data: { email, password: "password123", name: "UIReset" } });
+  const signup = await ctx.post("/api/auth/sign-up/email", { data: { email, password: "Podokit3e-Str0ng!pw", name: "UIReset" } });
   expect(signup.ok()).toBeTruthy();
   const verificationOn = !(await signup.json())?.token;
   await ctx.dispose();
@@ -31,12 +31,12 @@ test("forgot password: request, open the emailed link, set a new password, sign 
   await page.goto(await waitForLink(email));
   await page.waitForLoadState("load");
   await page.waitForTimeout(400);
-  await page.getByLabel("New password").fill("newpass1234");
+  await page.getByLabel("New password").fill("Podokit3e-N3wStr0ng!pw");
   await page.getByRole("button", { name: "Update password" }).click();
   await expect(page).toHaveURL(/\/login/);
 
   await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill("newpass1234");
+  await page.getByLabel("Password").fill("Podokit3e-N3wStr0ng!pw");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/admin/);
 });
