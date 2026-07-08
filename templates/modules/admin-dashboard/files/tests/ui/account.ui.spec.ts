@@ -50,13 +50,17 @@ test("account nav shows the core sections", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Sessions" })).toBeVisible();
 });
 
-test("two-factor setup is available when enabled", async ({ page }) => {
+test("two-factor setup shows a scannable QR code when enabled @smoke", async ({ page }) => {
   await ready(page, "/admin/account");
   await page.getByRole("button", { name: "Security" }).click();
   const heading = page.getByText("Two-factor authentication");
   test.skip((await heading.count()) === 0, "two-factor not enabled");
-  await expect(heading).toBeVisible();
-  await expect(page.getByRole("button", { name: "Enable" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Enable", exact: true })).toBeVisible();
+  // Start setup (password + Enable) and confirm the QR renders. Stop before
+  // verifying so 2FA stays inactive and the shared admin session keeps working.
+  await page.locator("#tf-on-pw").fill("password123");
+  await page.getByRole("button", { name: "Enable", exact: true }).click();
+  await expect(page.getByRole("img", { name: "TOTP QR code" })).toBeVisible();
 });
 
 test("danger zone offers account deletion when enabled", async ({ page }) => {

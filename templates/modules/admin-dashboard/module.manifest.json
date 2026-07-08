@@ -5,6 +5,12 @@
     "auth"
   ],
   "targetApp": "web",
+  "dependencies": {
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@types/qrcode": "^1.5.5"
+  },
   "env": [
     "# admin-dashboard: emails auto-promoted to the admin role on sign-up (comma-separated)",
     "ADMIN_EMAILS=admin@example.com"

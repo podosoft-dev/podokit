@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
+  import QRCode from "qrcode";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
@@ -91,6 +92,18 @@
   let twoFaCode = $state("");
   let twoFaBusy = $state(false);
   let setup = $state<{ totpURI: string; backupCodes: string[] } | null>(null);
+  // Render the otpauth URI as a scannable QR image (data URL) during setup.
+  let qrDataUrl = $state("");
+  $effect(() => {
+    const uri = setup?.totpURI;
+    if (!uri) {
+      qrDataUrl = "";
+      return;
+    }
+    QRCode.toDataURL(uri, { margin: 1, width: 176 })
+      .then((url) => (qrDataUrl = url))
+      .catch(() => (qrDataUrl = ""));
+  });
   async function enable2fa(): Promise<void> {
     twoFaBusy = true;
     const { data: res, error } = await api.auth.twoFactor.enable({ password: twoFaPassword });
@@ -290,6 +303,9 @@
                   <Button variant="destructive" class="w-fit" disabled={twoFaBusy || !twoFaPassword} onclick={disable2fa}>{i18n.t.account.disable}</Button>
                 {:else if setup}
                   <p class="text-muted-foreground text-sm">{i18n.t.account.scanHint}</p>
+                  {#if qrDataUrl}
+                    <img src={qrDataUrl} alt="TOTP QR code" width="176" height="176" class="rounded border bg-white p-2" />
+                  {/if}
                   <div class="flex flex-col gap-1">
                     <Label>{i18n.t.account.setupKey}</Label>
                     <code class="bg-muted overflow-x-auto rounded px-2 py-1 text-xs">{setup.totpURI}</code>
