@@ -17,5 +17,6 @@ test.describe("normal user (non-admin)", () => {
     await expect(page.getByRole("link", { name: "Sessions" })).toHaveCount(0);
     expect((await page.goto("/admin/users"))?.status()).toBe(403);
     expect((await page.goto("/admin/sessions"))?.status()).toBe(403);
+    expect((await page.goto("/admin/settings"))?.status()).toBe(403);
   });
 });
