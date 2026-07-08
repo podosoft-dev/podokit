@@ -1,7 +1,12 @@
 import { betterAuth, type BetterAuthOptions, type BetterAuthPlugin } from "better-auth";
 import { twoFactor } from "better-auth/plugins";
 import { Pool } from "pg";
+import { actionEmail, sendMail } from "../mail/mailer";
 // podokit:auth-imports
+
+// Email verification is opt-in: when on, new sign-ups must confirm their address
+// before they can sign in.
+const emailVerificationEnabled = process.env.AUTH_EMAIL_VERIFICATION === "true";
 
 // OAuth providers are enabled only when their credentials are present.
 function socialProviders(): NonNullable<BetterAuthOptions["socialProviders"]> {
@@ -38,7 +43,28 @@ export const auth = betterAuth({
   }),
   emailAndPassword: {
     enabled: true,
+    requireEmailVerification: emailVerificationEnabled,
+    sendResetPassword: async ({ user, url }) => {
+      await sendMail({
+        to: user.email,
+        subject: "Reset your password",
+        text: `Reset your password: ${url}`,
+        html: actionEmail("Reset your password", "Click the button below to choose a new password.", url, "Reset password"),
+      });
+    },
     // podokit:auth-email-password
+  },
+  emailVerification: {
+    sendOnSignUp: emailVerificationEnabled,
+    autoSignInAfterVerification: true,
+    sendVerificationEmail: async ({ user, url }) => {
+      await sendMail({
+        to: user.email,
+        subject: "Verify your email",
+        text: `Verify your email: ${url}`,
+        html: actionEmail("Verify your email", "Confirm your address to finish setting up your account.", url, "Verify email"),
+      });
+    },
   },
   socialProviders: socialProviders(),
   plugins,
