@@ -1,5 +1,5 @@
 import { betterAuth, type BetterAuthOptions, type BetterAuthPlugin } from "better-auth";
-import { twoFactor, haveIBeenPwned, magicLink, emailOTP, username, multiSession } from "better-auth/plugins";
+import { twoFactor, haveIBeenPwned, magicLink, emailOTP, username, multiSession, phoneNumber } from "better-auth/plugins";
 import { Pool } from "pg";
 import { actionEmail, sendMail } from "../mail/mailer";
 // podokit:auth-imports
@@ -56,6 +56,13 @@ const plugins: BetterAuthPlugin[] = [
   username(),
   // Let one browser hold several signed-in accounts and switch between them.
   multiSession(),
+  // Phone-number sign-in/verification. SMS delivery is a dev stub (logs the code);
+  // wire a real provider in sendOTP for production.
+  phoneNumber({
+    sendOTP: async ({ phoneNumber: to, code }: { phoneNumber: string; code: string }) => {
+      console.warn(`[phone-number] SMS not configured \u2014 OTP for ${to}: ${code}`);
+    },
+  }),
 ];
 // Reject passwords found in known breaches (Have I Been Pwned, k-anonymity range
 // API). Server-enforced, so it's an environment flag applied at startup.

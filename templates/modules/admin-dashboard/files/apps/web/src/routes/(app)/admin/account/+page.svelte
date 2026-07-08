@@ -48,6 +48,30 @@
     else toast.success(i18n.t.account.saved);
   }
 
+  // Phone number — register + verify with an SMS code (dev delivery is a stub).
+  let phone = $state(untrack(() => data.user.phoneNumber ?? ""));
+  let phoneCode = $state("");
+  let phoneOtpSent = $state(false);
+  let phoneBusy = $state(false);
+  async function sendPhoneOtp(): Promise<void> {
+    phoneBusy = true;
+    const { error } = await api.auth.phoneNumber.sendOtp({ phoneNumber: phone });
+    phoneBusy = false;
+    if (error) return void toast.error(error.message ?? i18n.t.account.saveFailed);
+    phoneOtpSent = true;
+    toast.success(i18n.t.account.phoneCodeSent);
+  }
+  async function verifyPhone(): Promise<void> {
+    phoneBusy = true;
+    const { error } = await api.auth.phoneNumber.verify({ phoneNumber: phone, code: phoneCode });
+    phoneBusy = false;
+    if (error) return void toast.error(error.message ?? i18n.t.account.saveFailed);
+    phoneOtpSent = false;
+    phoneCode = "";
+    toast.success(i18n.t.account.phoneVerified);
+    await goto("/admin/account", { invalidateAll: true });
+  }
+
   // Email change — when verification is on, better-auth emails an approval link
   // to the current address; otherwise the address switches immediately.
   let newEmail = $state(untrack(() => data.user.email));
@@ -290,6 +314,25 @@
               </div>
               <Button type="submit" class="w-fit" disabled={savingProfile || !nameChanged}>{i18n.t.account.save}</Button>
             </form>
+            {#if caps.phoneNumber}
+              <div class="mt-6 flex max-w-md flex-col gap-2 border-t pt-6">
+                <div class="flex items-center gap-2">
+                  <Label for="phone">{i18n.t.account.phone}</Label>
+                  {#if data.user.phoneNumberVerified}
+                    <Badge variant="outline" class="text-green-600 dark:text-green-400">{i18n.t.account.verified}</Badge>
+                  {/if}
+                </div>
+                <Input id="phone" type="tel" bind:value={phone} autocomplete="tel" />
+                {#if phoneOtpSent}
+                  <Input placeholder={i18n.t.account.phoneCode} bind:value={phoneCode} inputmode="numeric" autocomplete="one-time-code" />
+                  <Button type="button" size="sm" class="w-fit" disabled={phoneBusy || !phoneCode} onclick={verifyPhone}>{i18n.t.account.phoneVerify}</Button>
+                {:else}
+                  <Button type="button" variant="outline" size="sm" class="w-fit" disabled={phoneBusy || !phone} onclick={sendPhoneOtp}>
+                    {phoneBusy ? i18n.t.auth.sending : i18n.t.account.phoneSendCode}
+                  </Button>
+                {/if}
+              </div>
+            {/if}
           </Card.Content>
         </Card.Root>
       {:else if section === "security"}

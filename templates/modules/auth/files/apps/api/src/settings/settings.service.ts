@@ -10,7 +10,7 @@ import { AppSetting } from "./app-setting.entity";
 // Only features whose plugin can be mounted unconditionally and gated in the UI
 // live via capabilities. Server-enforced flags (email verification, breach check,
 // self-deletion) are read by the auth server at boot and stay in the environment.
-export type FeatureFlag = "twoFactor" | "magicLink" | "emailOtp" | "username" | "multiSession";
+export type FeatureFlag = "twoFactor" | "magicLink" | "emailOtp" | "username" | "multiSession" | "phoneNumber";
 
 const ENV_DEFAULT: Record<FeatureFlag, string> = {
   twoFactor: "AUTH_TWO_FACTOR",
@@ -18,6 +18,7 @@ const ENV_DEFAULT: Record<FeatureFlag, string> = {
   emailOtp: "AUTH_EMAIL_OTP",
   username: "AUTH_USERNAME",
   multiSession: "AUTH_MULTI_SESSION",
+  phoneNumber: "AUTH_PHONE_NUMBER",
 };
 
 export const FEATURE_FLAGS = Object.keys(ENV_DEFAULT) as FeatureFlag[];
