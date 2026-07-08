@@ -5,11 +5,11 @@ import { ready } from "../helpers/hydration";
 test("account opens on the profile section @smoke", async ({ page }) => {
   await ready(page, "/admin/account");
   await expect(page.getByRole("heading", { name: "Account" })).toBeVisible();
-  await expect(page.getByLabel("Name")).toBeVisible();
+  await expect(page.getByLabel("Name", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Email")).toHaveValue("admin@example.com");
   // save is enabled only once the name changes
   await expect(page.getByRole("button", { name: "Save changes" })).toBeDisabled();
-  await page.getByLabel("Name").fill("Admin Renamed");
+  await page.getByLabel("Name", { exact: true }).fill("Admin Renamed");
   await expect(page.getByRole("button", { name: "Save changes" })).toBeEnabled();
 });
 
@@ -35,7 +35,7 @@ test("account shows a username field when enabled @smoke", async ({ page }) => {
 
 test("admin can update their profile name", async ({ page }) => {
   await ready(page, "/admin/account");
-  await page.getByLabel("Name").fill("Admin Renamed");
+  await page.getByLabel("Name", { exact: true }).fill("Admin Renamed");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText("Profile updated")).toBeVisible();
 });
