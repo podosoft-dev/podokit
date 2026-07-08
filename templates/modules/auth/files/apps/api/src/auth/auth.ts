@@ -78,6 +78,25 @@ export const auth = betterAuth({
     },
   },
   user: {
+    // Self-service email change. When email verification is on, better-auth sends
+    // an approval link to the current address before switching; otherwise it
+    // changes immediately.
+    changeEmail: {
+      enabled: true,
+      sendChangeEmailVerification: async ({ user, newEmail, url }) => {
+        await sendMail({
+          to: user.email,
+          subject: "Approve your email change",
+          text: `Approve changing your email to ${newEmail}: ${url}`,
+          html: actionEmail(
+            "Approve email change",
+            `Confirm changing your email address to ${newEmail}.`,
+            url,
+            "Approve change",
+          ),
+        });
+      },
+    },
     // Self-service account deletion — opt in with AUTH_ALLOW_DELETE=true.
     deleteUser: { enabled: process.env.AUTH_ALLOW_DELETE === "true" },
   },
