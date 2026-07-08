@@ -205,9 +205,26 @@
     }
   }
 
+  // Multi-account: other accounts signed in on this browser (multiSession plugin).
+  type DeviceSession = { session: { token: string }; user: { id: string; email: string; name: string } };
+  let deviceSessions = $state<DeviceSession[]>([]);
+  async function loadDeviceSessions(): Promise<void> {
+    if (!caps.multiSession) return;
+    const { data: res } = await api.auth.multiSession.listDeviceSessions();
+    deviceSessions = (res ?? []) as DeviceSession[];
+  }
+  async function switchAccount(token: string): Promise<void> {
+    busy = true;
+    const { error } = await api.auth.multiSession.setActive({ sessionToken: token });
+    busy = false;
+    if (error) return void toast.error(error.message ?? i18n.t.sessions.switchFailed);
+    await goto("/admin", { invalidateAll: true });
+  }
+
   $effect(() => {
     void loadSessions();
     void loadAccounts();
+    void loadDeviceSessions();
   });
 </script>
 
@@ -365,6 +382,22 @@
           </Card.Content>
         </Card.Root>
       {:else if section === "sessions"}
+        {#if caps.multiSession && deviceSessions.filter((d) => d.user.id !== data.user.id).length}
+          <Card.Root>
+            <Card.Header><Card.Title>{i18n.t.sessions.accountsTitle}</Card.Title></Card.Header>
+            <Card.Content class="flex flex-col gap-2">
+              {#each deviceSessions.filter((d) => d.user.id !== data.user.id) as d (d.session.token)}
+                <div class="flex items-center justify-between gap-4 rounded-md border p-3">
+                  <div>
+                    <div class="font-medium">{d.user.name}</div>
+                    <div class="text-muted-foreground text-xs">{d.user.email}</div>
+                  </div>
+                  <Button variant="outline" size="sm" disabled={busy} onclick={() => switchAccount(d.session.token)}>{i18n.t.sessions.switchAccount}</Button>
+                </div>
+              {/each}
+            </Card.Content>
+          </Card.Root>
+        {/if}
         <Card.Root>
           <Card.Header class="flex flex-row items-center justify-between gap-2">
             <Card.Title>{i18n.t.sessions.title}</Card.Title>
