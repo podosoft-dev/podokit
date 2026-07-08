@@ -1,5 +1,5 @@
 import { betterAuth, type BetterAuthOptions, type BetterAuthPlugin } from "better-auth";
-import { twoFactor, haveIBeenPwned, magicLink, emailOTP } from "better-auth/plugins";
+import { twoFactor, haveIBeenPwned, magicLink, emailOTP, username } from "better-auth/plugins";
 import { Pool } from "pg";
 import { actionEmail, sendMail } from "../mail/mailer";
 // podokit:auth-imports
@@ -52,6 +52,8 @@ const plugins: BetterAuthPlugin[] = [
       });
     },
   }),
+  // Adds username/displayUsername columns; lets users sign in with a username.
+  username(),
 ];
 // Reject passwords found in known breaches (Have I Been Pwned, k-anonymity range
 // API). Server-enforced, so it's an environment flag applied at startup.

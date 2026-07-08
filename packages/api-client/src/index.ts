@@ -1,5 +1,5 @@
 import { createAuthClient } from "better-auth/client";
-import { adminClient, twoFactorClient, magicLinkClient, emailOTPClient } from "better-auth/client/plugins";
+import { adminClient, twoFactorClient, magicLinkClient, emailOTPClient, usernameClient } from "better-auth/client/plugins";
 
 /** Options for {@link createApiClient}. */
 export interface ApiClientOptions {
@@ -34,6 +34,8 @@ export interface Capabilities {
   magicLink: boolean;
   /** Passwordless sign-in via an emailed one-time code. */
   emailOtp: boolean;
+  /** Sign in with a username instead of an email. */
+  username: boolean;
 }
 
 /** Error thrown when the API returns the standard error envelope or a non-2xx status. */
@@ -92,7 +94,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
   const makeAuthClient = () =>
     createAuthClient({
       baseURL: authOrigin,
-      plugins: [adminClient(), twoFactorClient(), magicLinkClient(), emailOTPClient()],
+      plugins: [adminClient(), twoFactorClient(), magicLinkClient(), emailOTPClient(), usernameClient()],
       fetchOptions: {
         credentials,
         ...(options.fetch ? { customFetchImpl: options.fetch } : {}),

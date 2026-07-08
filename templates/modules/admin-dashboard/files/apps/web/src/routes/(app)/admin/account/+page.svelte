@@ -32,14 +32,17 @@
     ...(caps.deleteAccount ? (["danger"] as const) : []),
   ]);
 
-  // Profile — seed the editable field from the initial user value.
+  // Profile — seed the editable fields from the initial user value.
   let name = $state(untrack(() => data.user.name));
+  let username = $state(untrack(() => data.user.username ?? ""));
   let savingProfile = $state(false);
-  const nameChanged = $derived(name.trim() !== "" && name !== data.user.name);
+  const nameChanged = $derived(
+    (name.trim() !== "" && name !== data.user.name) || (caps.username && username !== (data.user.username ?? "")),
+  );
   async function saveProfile(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     savingProfile = true;
-    const { error } = await api.auth.updateUser({ name });
+    const { error } = await api.auth.updateUser({ name, ...(caps.username ? { username } : {}) });
     savingProfile = false;
     if (error) toast.error(error.message ?? i18n.t.account.saveFailed);
     else toast.success(i18n.t.account.saved);
@@ -235,6 +238,12 @@
                 <Label for="name">{i18n.t.account.name}</Label>
                 <Input id="name" bind:value={name} required />
               </div>
+              {#if caps.username}
+                <div class="flex flex-col gap-2">
+                  <Label for="username">{i18n.t.account.username}</Label>
+                  <Input id="username" bind:value={username} autocomplete="username" />
+                </div>
+              {/if}
               <div class="flex flex-col gap-2">
                 <Label for="email">{i18n.t.account.email}</Label>
                 <div class="flex items-center gap-2">
