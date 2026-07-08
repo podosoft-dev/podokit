@@ -6,6 +6,7 @@
   import UsersIcon from "@lucide/svelte/icons/users";
   import MonitorSmartphoneIcon from "@lucide/svelte/icons/monitor-smartphone";
   import ScrollTextIcon from "@lucide/svelte/icons/scroll-text";
+  import SettingsIcon from "@lucide/svelte/icons/settings";
   import { getI18n } from "$lib/i18n";
   import type { SessionUser } from "../../app.d.ts";
   import type { Messages } from "$lib/i18n/messages";
@@ -22,6 +23,7 @@
     ...(capabilities?.auditLog
       ? [{ href: "/admin/audit", key: "audit", icon: ScrollTextIcon, adminOnly: true } as NavItem]
       : []),
+    { href: "/admin/settings", key: "settings", icon: SettingsIcon, adminOnly: true },
   ]);
   const visible = $derived(items.filter((item) => !item.adminOnly || user.role === "admin"));
 </script>
