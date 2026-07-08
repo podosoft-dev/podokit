@@ -13,6 +13,7 @@
 
 <script lang="ts" generics="Row">
   import type { Snippet } from "svelte";
+  import { Button } from "$lib/components/ui/button";
   import * as Table from "$lib/components/ui/table";
   import TablePagination from "$lib/components/table-pagination.svelte";
   import ChevronUpIcon from "@lucide/svelte/icons/chevron-up";
@@ -99,18 +100,14 @@
               aria-sort={sort?.key === col.key ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
             >
               {#if col.sortable}
-                <button
-                  type="button"
-                  onclick={() => toggle(col)}
-                  class="hover:text-foreground -mx-1 inline-flex items-center gap-1 rounded px-1 font-medium"
-                >
+                <Button variant="ghost" size="sm" class="-mx-2 h-auto gap-1 px-2 py-1 font-medium" onclick={() => toggle(col)}>
                   {col.label}
                   {#if sort?.key === col.key}
                     {#if sort.dir === "asc"}<ChevronUpIcon class="size-3.5" />{:else}<ChevronDownIcon class="size-3.5" />{/if}
                   {:else}
                     <ChevronsUpDownIcon class="size-3.5 opacity-40" />
                   {/if}
-                </button>
+                </Button>
               {:else}
                 {col.label}
               {/if}

@@ -60,7 +60,7 @@
         <div class="flex items-center gap-2">
           <Label class="text-sm">{f.label}</Label>
           <Select.Root type="single" bind:value={filterValues[f.key]}>
-            <Select.Trigger class="w-36" size="sm">{filterTrigger(f)}</Select.Trigger>
+            <Select.Trigger class="w-36">{filterTrigger(f)}</Select.Trigger>
             <Select.Content>
               {#each f.options as o (o.value)}
                 <Select.Item value={o.value}>{o.label}</Select.Item>
@@ -76,7 +76,7 @@
       <span class="text-muted-foreground w-14 shrink-0 text-sm font-medium">{searchHeading}</span>
       {#if searchFields.length > 1}
         <Select.Root type="single" bind:value={searchField}>
-          <Select.Trigger class="w-32" size="sm">{searchFieldLabel}</Select.Trigger>
+          <Select.Trigger class="w-32">{searchFieldLabel}</Select.Trigger>
           <Select.Content>
             {#each searchFields as f (f.value)}
               <Select.Item value={f.value}>{f.label}</Select.Item>

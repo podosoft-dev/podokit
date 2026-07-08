@@ -188,14 +188,14 @@
   <div class="flex flex-col gap-6 lg:flex-row">
     <nav class="flex shrink-0 flex-wrap gap-1 lg:w-48 lg:flex-col">
       {#each navItems as key (key)}
-        <button
-          type="button"
+        <Button
+          variant="ghost"
           onclick={() => (section = key)}
           aria-current={section === key ? "page" : undefined}
-          class="hover:bg-muted rounded-md px-3 py-2 text-left text-sm font-medium transition-colors {section === key ? 'bg-muted' : 'text-muted-foreground'}"
+          class="h-auto justify-start px-3 py-2 text-sm font-medium {section === key ? 'bg-muted' : 'text-muted-foreground'}"
         >
           {i18n.t.account.nav[key]}
-        </button>
+        </Button>
       {/each}
     </nav>
 

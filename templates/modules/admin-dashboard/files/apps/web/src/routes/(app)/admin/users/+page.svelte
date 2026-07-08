@@ -91,7 +91,8 @@
     users = (res?.users ?? []) as Row[];
   }
 
-  function applySearch(): void {
+  async function applySearch(): Promise<void> {
+    await load(); // refresh from the server on explicit search, then filter client-side
     appliedSearch = search;
     appliedSearchField = searchField;
     appliedFilters = { ...filterValues };
@@ -394,14 +395,14 @@
     <div class="flex flex-col gap-4 sm:flex-row">
       <nav class="flex shrink-0 flex-wrap gap-1 sm:w-40 sm:flex-col">
         {#each sections as key (key)}
-          <button
-            type="button"
+          <Button
+            variant="ghost"
             onclick={() => (mSection = key)}
             aria-current={mSection === key ? "page" : undefined}
-            class="hover:bg-muted rounded-md px-3 py-2 text-left text-sm font-medium transition-colors {mSection === key ? 'bg-muted' : 'text-muted-foreground'}"
+            class="h-auto justify-start px-3 py-2 text-sm font-medium {mSection === key ? 'bg-muted' : 'text-muted-foreground'}"
           >
             {i18n.t.account.nav[key]}
-          </button>
+          </Button>
         {/each}
       </nav>
 
