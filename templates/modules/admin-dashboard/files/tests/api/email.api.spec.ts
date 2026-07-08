@@ -1,23 +1,26 @@
 import { expect, test } from "@playwright/test";
-import { ADMIN } from "../helpers/accounts";
 import { clearMailpit, mailpitReachable, waitForLink } from "../helpers/mailpit";
 
 const base = process.env.E2E_BASE_URL ?? "http://localhost:5173";
 const origin = { origin: base };
 
-test("magic link signs an existing user in @smoke", async ({ playwright }) => {
+test("magic link signs a user in @smoke", async ({ playwright }) => {
   test.skip(!(await mailpitReachable()), "Mailpit not available");
   const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const caps = await (await ctx.get("/api/account/capabilities")).json();
   test.skip(!caps?.magicLink, "magic link not enabled");
+  // Use a throwaway account, not the shared ADMIN — a magic-link sign-in can
+  // rotate the account's sessions, which would invalidate the seeded storageState.
+  const email = `magic-${Date.now()}@example.com`;
+  await ctx.post("/api/auth/sign-up/email", { data: { email, password: "Podokit3e-Str0ng!pw", name: "Magic" } });
   await clearMailpit();
-  const requested = await ctx.post("/api/auth/sign-in/magic-link", { data: { email: ADMIN.email, callbackURL: `${base}/admin` } });
+  const requested = await ctx.post("/api/auth/sign-in/magic-link", { data: { email, callbackURL: `${base}/admin` } });
   expect(requested.ok()).toBeTruthy();
-  const link = await waitForLink(ADMIN.email);
+  const link = await waitForLink(email);
   // Following the emailed link validates the token and sets the session cookie.
   await ctx.get(link, { maxRedirects: 0 });
   const session = await (await ctx.get("/api/auth/get-session")).json();
-  expect(session?.user?.email).toBe(ADMIN.email);
+  expect(session?.user?.email).toBe(email);
   await ctx.dispose();
 });
 
