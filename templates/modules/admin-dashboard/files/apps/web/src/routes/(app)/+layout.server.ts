@@ -1,12 +1,5 @@
 import type { LayoutServerLoad } from "./$types";
-
-type Capabilities = {
-  twoFactor: boolean;
-  providers: string[];
-  deleteAccount: boolean;
-  auditLog: boolean;
-  emailVerification: boolean;
-};
+import type { Capabilities } from "@podosoft/podokit-api-client";
 
 export const load: LayoutServerLoad = async ({ locals, fetch }) => {
   let capabilities: Capabilities = {

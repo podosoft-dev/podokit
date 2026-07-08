@@ -1,9 +1,7 @@
 import type { PageServerLoad } from "./$types";
-import { error } from "@sveltejs/kit";
+import { requireAdmin } from "$lib/server/guards";
 
 export const load: PageServerLoad = ({ locals }) => {
-  if (locals.user?.role !== "admin") {
-    error(403, "Admins only");
-  }
-  return { currentUserId: locals.user.id };
+  requireAdmin(locals.user);
+  return { currentUserId: locals.user!.id };
 };

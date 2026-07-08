@@ -16,6 +16,20 @@ export interface ApiClientOptions {
   credentials?: RequestCredentials;
 }
 
+/**
+ * Feature flags the API reports at `GET /account/capabilities`. The web app gates
+ * optional auth features (2FA, social providers, account deletion, ...) on these
+ * so UI never offers an endpoint the server didn't enable. Single source of truth
+ * for the shape — the backend controller and every SvelteKit loader import it.
+ */
+export interface Capabilities {
+  twoFactor: boolean;
+  providers: string[];
+  deleteAccount: boolean;
+  auditLog: boolean;
+  emailVerification: boolean;
+}
+
 /** Error thrown when the API returns the standard error envelope or a non-2xx status. */
 export class ApiError extends Error {
   readonly code: string;

@@ -22,7 +22,17 @@
   const i18n = getI18n();
   const emailVerificationEnabled = $derived(data.capabilities.emailVerification);
 
-  type Row = { id: string; name: string; email: string; role?: string | null; banned?: boolean | null; emailVerified?: boolean | null };
+  type Row = {
+    id: string;
+    name: string;
+    email: string;
+    role?: string | null;
+    banned?: boolean | null;
+    emailVerified?: boolean | null;
+    createdAt?: string | Date | null;
+    banReason?: string | null;
+    banExpires?: string | Date | null;
+  };
 
   const PAGE_SIZE = 5;
   const LOAD_LIMIT = 500; // bounded client-side list; add server-side filtering for larger deployments
@@ -45,6 +55,7 @@
     { key: "email", label: i18n.t.users.email, sortable: true },
     { key: "role", label: i18n.t.users.role, sortable: true },
     { key: "status", label: i18n.t.users.status },
+    { key: "createdAt", label: i18n.t.users.joined, sortable: true, value: (u) => (u.createdAt ? new Date(u.createdAt).getTime() : 0) },
     { key: "actions", label: "", class: "w-10" },
   ];
   const filters: ToolbarFilter[] = [
@@ -188,13 +199,23 @@
     event.preventDefault();
     if (!mUser) return;
     busy = true;
+    const nextRole = mAdmin ? "admin" : "user";
+    // Profile fields go through updateUser; role changes go through the dedicated
+    // setRole endpoint (aligns with the admin plugin's access-control model).
     const { error } = await api.auth.admin.updateUser({
       userId: mUser.id,
-      data: { name: mName, email: mEmail, role: mAdmin ? "admin" : "user" },
+      data: { name: mName, email: mEmail },
     });
+    if (!error && nextRole !== (mUser.role ?? "user")) {
+      const { error: roleError } = await api.auth.admin.setRole({ userId: mUser.id, role: nextRole });
+      if (roleError) {
+        busy = false;
+        return void toast.error(roleError.message ?? i18n.t.users.actionFailed);
+      }
+    }
     busy = false;
     if (error) return void toast.error(error.message ?? i18n.t.users.actionFailed);
-    mUser = { ...mUser, name: mName, email: mEmail, role: mAdmin ? "admin" : "user" };
+    mUser = { ...mUser, name: mName, email: mEmail, role: nextRole };
     toast.success(i18n.t.users.userUpdated);
     await load();
   }
@@ -347,6 +368,7 @@
           {/if}
         </div>
       </Table.Cell>
+      <Table.Cell class="text-muted-foreground">{user.createdAt ? formatDateTime(user.createdAt) : "—"}</Table.Cell>
       <Table.Cell>
         <DropdownMenu.Root>
           <DropdownMenu.Trigger>
@@ -438,6 +460,10 @@
             </div>
             <div class="border-t pt-4">
               {#if mUser?.banned}
+                <div class="mb-3 flex flex-col gap-1 text-sm">
+                  {#if mUser.banReason}<p><span class="text-muted-foreground">{i18n.t.users.banReason}:</span> {mUser.banReason}</p>{/if}
+                  {#if mUser.banExpires}<p><span class="text-muted-foreground">{i18n.t.users.banExpiry}:</span> {formatDateTime(mUser.banExpires)}</p>{:else}<p class="text-muted-foreground">{i18n.t.users.banPermanent}</p>{/if}
+                </div>
                 <Button variant="outline" disabled={busy} onclick={unban}>{i18n.t.users.unban}</Button>
               {:else}
                 <form class="flex flex-col gap-3" onsubmit={ban}>

@@ -2,6 +2,11 @@ import { expect, test } from "@playwright/test";
 import { ready } from "../helpers/hydration";
 
 // admin storageState (project default) — sessions is an admin-only view
+test("sessions table shows the expires column @smoke", async ({ page }) => {
+  await ready(page, "/admin/sessions");
+  await expect(page.getByRole("columnheader", { name: "Expires" })).toBeVisible();
+});
+
 test("admin sees user sessions across users @smoke", async ({ page }) => {
   await ready(page, "/admin/sessions");
   await expect(page.getByRole("heading", { name: "User sessions" })).toBeVisible();

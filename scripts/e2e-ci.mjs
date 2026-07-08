@@ -10,7 +10,7 @@
 //   APP_DIR, KEEP.
 import { spawn, execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir, homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -101,6 +101,11 @@ async function main() {
   }
 
   step("generate an app the way a user would (npx create from the registry)");
+  // npx caches packages by version under ~/.npm/_npx; since we republish the same
+  // version to a throwaway registry each run, a stale cached CLI would mask template
+  // changes on local reruns (CI runners start clean). Clear it so the create/add
+  // below always fetch the freshly published packages.
+  rmSync(join(homedir(), ".npm", "_npx"), { recursive: true, force: true });
   const target = join(appDir, "app");
   const npmEnv = { ...process.env, npm_config_registry: registry, npm_config_userconfig: npmrc };
   run("npx", ["--yes", "@podosoft/podokit", "create", "app", "--dir", target, "--template", "fullstack-nest-svelte", "--yes"], { cwd: appDir, env: npmEnv });

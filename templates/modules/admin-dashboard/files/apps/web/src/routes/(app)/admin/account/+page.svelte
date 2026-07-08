@@ -13,8 +13,8 @@
   import { getI18n, fmt, formatDateTime } from "$lib/i18n";
   import { untrack } from "svelte";
   import type { SessionUser } from "../../../../app.d.ts";
+  import type { Capabilities } from "@podosoft/podokit-api-client";
 
-  type Capabilities = { twoFactor: boolean; providers: string[]; deleteAccount: boolean; auditLog: boolean; emailVerification: boolean };
   let { data }: { data: { user: SessionUser; currentSessionId: string | null; capabilities: Capabilities } } = $props();
   const i18n = getI18n();
 
@@ -42,6 +42,19 @@
     savingProfile = false;
     if (error) toast.error(error.message ?? i18n.t.account.saveFailed);
     else toast.success(i18n.t.account.saved);
+  }
+
+  // Email change — when verification is on, better-auth emails an approval link
+  // to the current address; otherwise the address switches immediately.
+  let newEmail = $state(untrack(() => data.user.email));
+  let changingEmail = $state(false);
+  const emailChanged = $derived(newEmail.trim() !== "" && newEmail !== data.user.email);
+  async function changeEmail(): Promise<void> {
+    changingEmail = true;
+    const { error } = await api.auth.changeEmail({ newEmail, callbackURL: `${location.origin}/admin` });
+    changingEmail = false;
+    if (error) return void toast.error(error.message ?? i18n.t.account.saveFailed);
+    toast.success(caps.emailVerification ? i18n.t.account.emailChangePending : i18n.t.account.emailChanged);
   }
 
   // Email verification — resend the confirmation link to the current address.
@@ -212,18 +225,25 @@
               <div class="flex flex-col gap-2">
                 <Label for="email">{i18n.t.account.email}</Label>
                 <div class="flex items-center gap-2">
-                  <Input id="email" value={data.user.email} readonly class="text-muted-foreground" />
+                  <Input id="email" type="email" bind:value={newEmail} required />
                   {#if caps.emailVerification}
                     <Badge variant={data.user.emailVerified ? "outline" : "secondary"} class={data.user.emailVerified ? "text-green-600 dark:text-green-400" : ""}>
                       {data.user.emailVerified ? i18n.t.account.verified : i18n.t.account.unverified}
                     </Badge>
                   {/if}
                 </div>
-                {#if caps.emailVerification && !data.user.emailVerified}
-                  <Button type="button" variant="outline" size="sm" class="w-fit" disabled={verifying} onclick={resendVerification}>
-                    {verifying ? i18n.t.auth.sending : i18n.t.auth.resendVerification}
-                  </Button>
-                {/if}
+                <div class="flex flex-wrap gap-2">
+                  {#if emailChanged}
+                    <Button type="button" variant="outline" size="sm" class="w-fit" disabled={changingEmail} onclick={changeEmail}>
+                      {changingEmail ? i18n.t.account.saving : i18n.t.account.changeEmail}
+                    </Button>
+                  {/if}
+                  {#if caps.emailVerification && !data.user.emailVerified}
+                    <Button type="button" variant="outline" size="sm" class="w-fit" disabled={verifying} onclick={resendVerification}>
+                      {verifying ? i18n.t.auth.sending : i18n.t.auth.resendVerification}
+                    </Button>
+                  {/if}
+                </div>
               </div>
               <div class="flex flex-col gap-2">
                 <Label>{i18n.t.account.role}</Label>

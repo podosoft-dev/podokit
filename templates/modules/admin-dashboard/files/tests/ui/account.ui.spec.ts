@@ -13,6 +13,19 @@ test("account opens on the profile section @smoke", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Save changes" })).toBeEnabled();
 });
 
+test("account exposes a change-email action when the address is edited @smoke", async ({ page }) => {
+  await ready(page, "/admin/account");
+  const email = page.getByLabel("Email");
+  await expect(email).toHaveValue("admin@example.com");
+  // no action until the address actually changes
+  await expect(page.getByRole("button", { name: "Change email" })).toHaveCount(0);
+  await email.fill("admin+changed@example.com");
+  await expect(page.getByRole("button", { name: "Change email" })).toBeVisible();
+  // revert without submitting — don't mutate the shared admin session
+  await email.fill("admin@example.com");
+  await expect(page.getByRole("button", { name: "Change email" })).toHaveCount(0);
+});
+
 test("admin can update their profile name", async ({ page }) => {
   await ready(page, "/admin/account");
   await page.getByLabel("Name").fill("Admin Renamed");
