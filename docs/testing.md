@@ -101,9 +101,26 @@ check.
 `scripts/e2e-ci.mjs` reproduces exactly what a user runs:
 
 ```bash
-node scripts/e2e-ci.mjs           # full suite
-node scripts/e2e-ci.mjs --smoke   # @smoke subset (what PRs run)
+node scripts/e2e-ci.mjs                         # full suite
+node scripts/e2e-ci.mjs --smoke                 # @smoke subset (what PRs run)
+node scripts/e2e-ci.mjs --grep "magic link"     # only matching specs (fast feedback on one feature)
 ```
+
+### Why the Outer loop is slow — and how to iterate fast
+
+The Outer run is dominated by **publish → `npx create` → `npm install` → build API + web**
+(minutes), not the Playwright run (seconds). So narrowing the tests (`--grep`) barely
+shortens a run — it mainly sharpens the signal. To actually iterate quickly:
+
+- **Author against the live app (A), not the Outer.** Keep one generated app running
+  (`dev-app.mjs` + `dev-watch` + `vite dev`/`nest start --watch`) and run just the spec
+  you're changing against it: `E2E_BASE_URL=http://localhost:<web-port> npx playwright test <spec> --grep @smoke`.
+  Template edits mirror instantly; each check is seconds. Enable the auth feature flags you
+  need (`AUTH_TWO_FACTOR`, `AUTH_HIBP`, `AUTH_MAGIC_LINK`, …) in that app's `.env`.
+- **Run the Outer once, as the gate** — before opening/merging a PR — with `--smoke`
+  (or `--grep` for the touched feature). Don't re-run the full Outer on every tweak.
+- Injection-target changes (`auth.ts`, `app.module.ts`) don't mirror; regenerate that one
+  app when you change them (see development.md).
 
 It starts Verdaccio (`scripts/verdaccio.yaml`), publishes the three packages
 (template-engine, api-client, cli) to it, runs the real `npx @podosoft/podokit create`

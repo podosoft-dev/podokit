@@ -1,5 +1,5 @@
 import { createAuthClient } from "better-auth/client";
-import { adminClient, twoFactorClient } from "better-auth/client/plugins";
+import { adminClient, twoFactorClient, magicLinkClient } from "better-auth/client/plugins";
 
 /** Options for {@link createApiClient}. */
 export interface ApiClientOptions {
@@ -30,6 +30,8 @@ export interface Capabilities {
   emailVerification: boolean;
   /** Reject passwords found in known breaches (Have I Been Pwned) on sign-up/change. */
   passwordBreachCheck: boolean;
+  /** Passwordless sign-in via an emailed magic link. */
+  magicLink: boolean;
 }
 
 /** Error thrown when the API returns the standard error envelope or a non-2xx status. */
@@ -88,7 +90,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
   const makeAuthClient = () =>
     createAuthClient({
       baseURL: authOrigin,
-      plugins: [adminClient(), twoFactorClient()],
+      plugins: [adminClient(), twoFactorClient(), magicLinkClient()],
       fetchOptions: {
         credentials,
         ...(options.fetch ? { customFetchImpl: options.fetch } : {}),

@@ -18,6 +18,9 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
 const smoke = args.includes("--smoke");
 const keep = args.includes("--keep") || process.env.KEEP === "1";
+// --grep <pattern>: run only matching tests (faster feedback on one feature).
+const grepIdx = args.indexOf("--grep");
+const grep = grepIdx !== -1 ? args[grepIdx + 1] : process.env.GREP;
 
 const env = {
   REGISTRY_PORT: process.env.REGISTRY_PORT ?? "4873",
@@ -135,6 +138,7 @@ async function main() {
       "AUTH_TWO_FACTOR=true",
       // Exercise the breached-password check (Have I Been Pwned).
       "AUTH_HIBP=true",
+      "AUTH_MAGIC_LINK=true",
       // Point mail at the CI Mailpit service when present so the email specs run;
       // otherwise the app logs mail and those specs skip.
       ...(process.env.SMTP_HOST
@@ -156,6 +160,7 @@ async function main() {
     AUTH_TWO_FACTOR: "true",
     // Runtime flags for the built api (this env is what `node dist/main` gets).
     AUTH_HIBP: "true",
+    AUTH_MAGIC_LINK: "true",
   };
 
   step("migrate the auth tables");
@@ -179,7 +184,9 @@ async function main() {
 
   step(`run e2e${smoke ? " (smoke)" : ""}`);
   run("npx", ["playwright", "install", "--with-deps", "chromium"], { cwd: join(target, "tests") });
-  const testArgs = ["playwright", "test", ...(smoke ? ["--grep", "@smoke"] : [])];
+  // --grep wins when given (run just one feature's specs); otherwise --smoke runs
+  // the @smoke subset, and the default runs everything.
+  const testArgs = ["playwright", "test", ...(grep ? ["--grep", grep] : smoke ? ["--grep", "@smoke"] : [])];
   run("npx", testArgs, { cwd: join(target, "tests"), env: { ...process.env, E2E_BASE_URL: webURL } });
 
   console.log("\n✓ faithful e2e passed");

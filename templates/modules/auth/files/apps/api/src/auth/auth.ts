@@ -1,5 +1,5 @@
 import { betterAuth, type BetterAuthOptions, type BetterAuthPlugin } from "better-auth";
-import { twoFactor, haveIBeenPwned } from "better-auth/plugins";
+import { twoFactor, haveIBeenPwned, magicLink } from "better-auth/plugins";
 import { Pool } from "pg";
 import { actionEmail, sendMail } from "../mail/mailer";
 // podokit:auth-imports
@@ -34,6 +34,21 @@ if (process.env.AUTH_TWO_FACTOR === "true") {
 // Reject passwords found in known breaches (Have I Been Pwned, k-anonymity range API).
 if (process.env.AUTH_HIBP === "true") {
   plugins.push(haveIBeenPwned());
+}
+// Passwordless sign-in via an emailed magic link.
+if (process.env.AUTH_MAGIC_LINK === "true") {
+  plugins.push(
+    magicLink({
+      sendMagicLink: async ({ email, url }: { email: string; url: string; token: string }) => {
+        await sendMail({
+          to: email,
+          subject: "Your sign-in link",
+          text: `Sign in: ${url}`,
+          html: actionEmail("Sign in to your account", "Click the button below to sign in. This link expires shortly.", url, "Sign in"),
+        });
+      },
+    }),
+  );
 }
 // podokit:auth-plugins
 
