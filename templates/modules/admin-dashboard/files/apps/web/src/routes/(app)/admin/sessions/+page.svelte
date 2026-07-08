@@ -27,7 +27,9 @@
 
   let rows = $state<Row[]>([]);
   let page = $state(1);
-  let sort = $state<SortState | null>({ key: "createdAt", dir: "desc" });
+  // No default sort: keep the fan-out order so the newest session isn't required
+  // to sit on page 1. Sorting is available by clicking a column header.
+  let sort = $state<SortState | null>(null);
   let loading = $state(false);
   let busy = $state(false);
 
