@@ -166,6 +166,9 @@ async function main() {
   step("migrate the auth tables");
   run("npx", ["--yes", "@better-auth/cli@latest", "migrate", "-y", "--config", "apps/api/src/auth/auth.ts"], { cwd: target, env: pgEnv });
 
+  step("migrate the app tables (TypeORM: app_setting, audit_logs, ...)");
+  run("npm", ["run", "migration:run", "-w", "app-api"], { cwd: target, env: pgEnv });
+
   step("build api + web");
   run("npm", ["run", "build", "-w", "app-api"], { cwd: target });
   run("npm", ["run", "build", "-w", "app-web"], { cwd: target });

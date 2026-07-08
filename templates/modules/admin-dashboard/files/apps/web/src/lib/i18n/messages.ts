@@ -60,6 +60,7 @@ const en = {
   settings: {
     title: "Settings", subtitle: "Which authentication features are enabled, and how they are configured.",
     enabled: "Enabled", disabled: "Disabled", configuredVia: "Configured via {env}", manage: "Manage",
+    saved: "Setting updated", saveFailed: "Failed to update setting",
     emailPassword: "Email & password", emailPasswordDesc: "Sign in with an email address and password.",
     emailVerification: "Email verification", emailVerificationDesc: "Require new sign-ups to confirm their address.",
     magicLink: "Magic link", magicLinkDesc: "Passwordless sign-in via an emailed link.",
@@ -277,6 +278,7 @@ const ko: Messages = {
   settings: {
     title: "설정", subtitle: "활성화된 인증 기능과 구성 방법입니다.",
     enabled: "활성", disabled: "비활성", configuredVia: "{env} 로 구성", manage: "관리",
+    saved: "설정을 변경했습니다", saveFailed: "설정 변경에 실패했습니다",
     emailPassword: "이메일·비밀번호", emailPasswordDesc: "이메일과 비밀번호로 로그인.",
     emailVerification: "이메일 인증", emailVerificationDesc: "신규 가입 시 이메일 확인 요구.",
     magicLink: "매직 링크", magicLinkDesc: "이메일 링크로 비밀번호 없이 로그인.",

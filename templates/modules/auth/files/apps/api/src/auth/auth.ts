@@ -27,28 +27,26 @@ function socialProviders(): NonNullable<BetterAuthOptions["socialProviders"]> {
 }
 
 // Plugins are collected here so other PodoKit modules can add their own.
-const plugins: BetterAuthPlugin[] = [];
-if (process.env.AUTH_TWO_FACTOR === "true") {
-  plugins.push(twoFactor());
-}
-// Reject passwords found in known breaches (Have I Been Pwned, k-anonymity range API).
+// twoFactor and magicLink are always mounted; whether the UI offers them is an
+// admin-editable, DB-backed setting (see /account/capabilities), so they can be
+// toggled live without a restart. Their endpoints are opt-in either way.
+const plugins: BetterAuthPlugin[] = [
+  twoFactor(),
+  magicLink({
+    sendMagicLink: async ({ email, url }: { email: string; url: string; token: string }) => {
+      await sendMail({
+        to: email,
+        subject: "Your sign-in link",
+        text: `Sign in: ${url}`,
+        html: actionEmail("Sign in to your account", "Click the button below to sign in. This link expires shortly.", url, "Sign in"),
+      });
+    },
+  }),
+];
+// Reject passwords found in known breaches (Have I Been Pwned, k-anonymity range
+// API). Server-enforced, so it's an environment flag applied at startup.
 if (process.env.AUTH_HIBP === "true") {
   plugins.push(haveIBeenPwned());
-}
-// Passwordless sign-in via an emailed magic link.
-if (process.env.AUTH_MAGIC_LINK === "true") {
-  plugins.push(
-    magicLink({
-      sendMagicLink: async ({ email, url }: { email: string; url: string; token: string }) => {
-        await sendMail({
-          to: email,
-          subject: "Your sign-in link",
-          text: `Sign in: ${url}`,
-          html: actionEmail("Sign in to your account", "Click the button below to sign in. This link expires shortly.", url, "Sign in"),
-        });
-      },
-    }),
-  );
 }
 // podokit:auth-plugins
 
