@@ -26,7 +26,7 @@
 	{#snippet children({ selected, highlighted })}
 		<span class="absolute end-2 flex size-3.5 items-center justify-center">
 			{#if selected}
-				<CheckIcon class="cn-select-item-indicator-icon" />
+				<CheckIcon class="size-3.5" />
 			{/if}
 		</span>
 		<span class="flex flex-1 gap-2 shrink-0 whitespace-nowrap">
