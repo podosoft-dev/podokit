@@ -23,6 +23,27 @@ test("rejects a breached password on sign-up @smoke", async ({ playwright }) => 
   await ctx.dispose();
 });
 
+test("multi-session holds several accounts and switches between them @smoke", async ({ playwright }) => {
+  const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  const caps = await (await ctx.get("/api/account/capabilities")).json();
+  test.skip(!caps?.multiSession, "multi-session not enabled");
+  const pw = "Podokit3e-Str0ng!pw";
+  const a = `ms-a-${Date.now()}@example.com`;
+  const b = `ms-b-${Date.now()}@example.com`;
+  await ctx.post("/api/auth/sign-up/email", { data: { email: a, password: pw, name: "A" } });
+  await ctx.post("/api/auth/sign-up/email", { data: { email: b, password: pw, name: "B" } });
+  type Device = { session: { token: string }; user: { email: string } };
+  const devices = (await (await ctx.get("/api/auth/multi-session/list-device-sessions")).json()) as Device[];
+  expect(devices.length).toBeGreaterThanOrEqual(2);
+  // most recent sign-up is active; switch back to the first account
+  const first = devices.find((d) => d.user?.email === a);
+  expect(first?.session?.token).toBeTruthy();
+  await ctx.post("/api/auth/multi-session/set-active", { data: { sessionToken: first!.session.token } });
+  const session = await (await ctx.get("/api/auth/get-session")).json();
+  expect(session?.user?.email).toBe(a);
+  await ctx.dispose();
+});
+
 test("a user can sign in with a username @smoke", async ({ playwright }) => {
   const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const caps = await (await ctx.get("/api/account/capabilities")).json();

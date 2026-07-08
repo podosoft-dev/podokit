@@ -13,6 +13,7 @@ type Capabilities = {
   magicLink: boolean;
   emailOtp: boolean;
   username: boolean;
+  multiSession: boolean;
 };
 
 function isAdmin(session: UserSession): boolean {
@@ -46,6 +47,7 @@ export class AccountController {
       magicLink: flags.magicLink,
       emailOtp: flags.emailOtp,
       username: flags.username,
+      multiSession: flags.multiSession,
       // Server-enforced flags are boot-time (environment), not live-toggleable.
       providers,
       deleteAccount: process.env.AUTH_ALLOW_DELETE === "true",
