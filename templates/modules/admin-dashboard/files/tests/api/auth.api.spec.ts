@@ -23,6 +23,14 @@ test("rejects a breached password on sign-up @smoke", async ({ playwright }) => 
   await ctx.dispose();
 });
 
+test("only admins can change settings @smoke", async ({ playwright }) => {
+  const userCtx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  await userCtx.post("/api/auth/sign-in/email", { data: { email: USER.email, password: USER.password } });
+  const asUser = await userCtx.put("/api/account/settings", { data: { magicLink: false } });
+  expect(asUser.status()).toBe(403);
+  await userCtx.dispose();
+});
+
 test("sign-in with a wrong password is rejected", async ({ request }) => {
   const res = await request.post("/api/auth/sign-in/email", {
     headers: origin,
