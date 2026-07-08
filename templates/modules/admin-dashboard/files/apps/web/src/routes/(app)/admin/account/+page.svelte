@@ -13,8 +13,8 @@
   import { getI18n, fmt, formatDateTime } from "$lib/i18n";
   import { untrack } from "svelte";
   import type { SessionUser } from "../../../../app.d.ts";
+  import type { Capabilities } from "@podosoft/podokit-api-client";
 
-  type Capabilities = { twoFactor: boolean; providers: string[]; deleteAccount: boolean; auditLog: boolean; emailVerification: boolean };
   let { data }: { data: { user: SessionUser; currentSessionId: string | null; capabilities: Capabilities } } = $props();
   const i18n = getI18n();
 
