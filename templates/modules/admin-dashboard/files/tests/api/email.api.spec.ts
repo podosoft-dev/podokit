@@ -14,7 +14,7 @@ test("password reset delivers an email and updates the password @smoke", async (
   test.skip(!(await mailpitReachable()), "Mailpit not available");
   const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const email = `reset-${Date.now()}@example.com`;
-  const signup = await ctx.post("/api/auth/sign-up/email", { data: { email, password: "password123", name: "Reset" } });
+  const signup = await ctx.post("/api/auth/sign-up/email", { data: { email, password: "Podokit3e-Str0ng!pw", name: "Reset" } });
   expect(signup.ok()).toBeTruthy();
   // With verification on, sign-up returns no session and the new password still
   // can't sign in until confirmed — so only assert sign-in when it's off.
@@ -29,10 +29,10 @@ test("password reset delivers an email and updates the password @smoke", async (
   const token = tokenFromRedirect(redirected.headers()["location"] ?? "");
   expect(token, "the reset link resolves to a valid token").toBeTruthy();
 
-  expect((await ctx.post("/api/auth/reset-password", { data: { newPassword: "newpass1234", token } })).ok()).toBeTruthy();
+  expect((await ctx.post("/api/auth/reset-password", { data: { newPassword: "Podokit3e-N3wStr0ng!pw", token } })).ok()).toBeTruthy();
   if (!verificationOn) {
-    expect((await ctx.post("/api/auth/sign-in/email", { data: { email, password: "newpass1234" } })).ok()).toBeTruthy();
-    expect((await ctx.post("/api/auth/sign-in/email", { data: { email, password: "password123" } })).status()).toBe(401);
+    expect((await ctx.post("/api/auth/sign-in/email", { data: { email, password: "Podokit3e-N3wStr0ng!pw" } })).ok()).toBeTruthy();
+    expect((await ctx.post("/api/auth/sign-in/email", { data: { email, password: "Podokit3e-Str0ng!pw" } })).status()).toBe(401);
   }
   await ctx.dispose();
 });
@@ -42,14 +42,14 @@ test("email verification blocks sign-in until the address is confirmed", async (
   const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const email = `verify-${Date.now()}@example.com`;
   await clearMailpit();
-  const signup = await ctx.post("/api/auth/sign-up/email", { data: { email, password: "password123", name: "Verify", callbackURL: `${base}/admin` } });
+  const signup = await ctx.post("/api/auth/sign-up/email", { data: { email, password: "Podokit3e-Str0ng!pw", name: "Verify", callbackURL: `${base}/admin` } });
   expect(signup.ok()).toBeTruthy();
   // When verification is off, sign-up returns a session — nothing to test here.
   test.skip(Boolean((await signup.json())?.token), "email verification not enabled");
 
-  expect((await ctx.post("/api/auth/sign-in/email", { data: { email, password: "password123" } })).status()).toBe(403);
+  expect((await ctx.post("/api/auth/sign-in/email", { data: { email, password: "Podokit3e-Str0ng!pw" } })).status()).toBe(403);
   const link = await waitForLink(email);
   await ctx.get(link, { maxRedirects: 0 });
-  expect((await ctx.post("/api/auth/sign-in/email", { data: { email, password: "password123" } })).ok()).toBeTruthy();
+  expect((await ctx.post("/api/auth/sign-in/email", { data: { email, password: "Podokit3e-Str0ng!pw" } })).ok()).toBeTruthy();
   await ctx.dispose();
 });

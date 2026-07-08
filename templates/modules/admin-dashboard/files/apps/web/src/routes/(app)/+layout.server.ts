@@ -8,6 +8,7 @@ export const load: LayoutServerLoad = async ({ locals, fetch }) => {
     deleteAccount: false,
     auditLog: false,
     emailVerification: false,
+    passwordBreachCheck: false,
   };
   try {
     const res = await fetch("/api/account/capabilities");

@@ -10,6 +10,19 @@ test("account/me is 401 when unauthenticated @smoke", async ({ request }) => {
   expect(res.status()).toBe(401);
 });
 
+test("rejects a breached password on sign-up @smoke", async ({ playwright }) => {
+  const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  await ctx.post("/api/auth/sign-in/email", { data: { email: ADMIN.email, password: ADMIN.password } });
+  const caps = await (await ctx.get("/api/account/capabilities")).json();
+  test.skip(!caps?.passwordBreachCheck, "breach check not enabled");
+  // "password" is one of the most-breached passwords; Have I Been Pwned rejects it.
+  const res = await ctx.post("/api/auth/sign-up/email", {
+    data: { name: "Pwned", email: `pwned-${Date.now()}@example.com`, password: "password" },
+  });
+  expect(res.ok()).toBeFalsy();
+  await ctx.dispose();
+});
+
 test("sign-in with a wrong password is rejected", async ({ request }) => {
   const res = await request.post("/api/auth/sign-in/email", {
     headers: origin,

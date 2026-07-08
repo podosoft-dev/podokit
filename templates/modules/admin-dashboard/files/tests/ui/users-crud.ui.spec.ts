@@ -8,7 +8,7 @@ const base = process.env.E2E_BASE_URL ?? "http://localhost:5173";
 async function seedUser(page: Page, email: string): Promise<void> {
   const res = await page.request.post("/api/auth/admin/create-user", {
     headers: { origin: base },
-    data: { email, password: "password123", name: "Throwaway", role: "user" },
+    data: { email, password: "Podokit3e-Str0ng!pw", name: "Throwaway", role: "user" },
   });
   expect(res.ok()).toBeTruthy();
 }
@@ -28,8 +28,8 @@ test("admin can create a user via the dialog @smoke", async ({ page }) => {
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Name").fill("Created");
   await dialog.getByLabel("Email").fill(email);
-  await dialog.getByLabel("Password", { exact: true }).fill("password123");
-  await dialog.getByLabel("Confirm password").fill("password123");
+  await dialog.getByLabel("Password", { exact: true }).fill("Podokit3e-Str0ng!pw");
+  await dialog.getByLabel("Confirm password").fill("Podokit3e-Str0ng!pw");
   await dialog.getByRole("button", { name: "Create" }).click();
   // Wait for the create to settle (dialog closes + list reloads) before searching,
   // otherwise the search input can be refilled by the post-create reload.
@@ -45,7 +45,7 @@ test("create rejects mismatched passwords", async ({ page }) => {
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Name").fill("Mismatch");
   await dialog.getByLabel("Email").fill(`ui-mismatch-${Date.now()}@example.com`);
-  await dialog.getByLabel("Password", { exact: true }).fill("password123");
+  await dialog.getByLabel("Password", { exact: true }).fill("Podokit3e-Str0ng!pw");
   await dialog.getByLabel("Confirm password").fill("different999");
   await dialog.getByRole("button", { name: "Create" }).click();
   await expect(dialog.getByText("Passwords do not match")).toBeVisible();
@@ -69,11 +69,11 @@ test("manage: set a password (and reject mismatch)", async ({ page }) => {
   await openManage(page, email);
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: "Security" }).click();
-  await dialog.getByLabel("New password", { exact: true }).fill("newpass1234");
+  await dialog.getByLabel("New password", { exact: true }).fill("Podokit3e-N3wStr0ng!pw");
   await dialog.getByLabel("Confirm new password").fill("different999");
   await dialog.getByRole("button", { name: "Set password" }).click();
   await expect(dialog.getByText("Passwords do not match")).toBeVisible();
-  await dialog.getByLabel("Confirm new password").fill("newpass1234");
+  await dialog.getByLabel("Confirm new password").fill("Podokit3e-N3wStr0ng!pw");
   await dialog.getByRole("button", { name: "Set password" }).click();
   await expect(page.getByText("Password updated")).toBeVisible();
 });
@@ -96,7 +96,7 @@ test("manage: revoke a user's session", async ({ page, playwright }) => {
   await seedUser(page, email);
   // create a session for the user in an isolated context (don't touch the admin cookie)
   const uctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: { origin: base } });
-  expect((await uctx.post("/api/auth/sign-in/email", { data: { email, password: "password123" } })).ok()).toBeTruthy();
+  expect((await uctx.post("/api/auth/sign-in/email", { data: { email, password: "Podokit3e-Str0ng!pw" } })).ok()).toBeTruthy();
   await uctx.dispose();
   await openManage(page, email);
   const dialog = page.getByRole("dialog");
@@ -125,7 +125,7 @@ test("users list shows pagination beyond one page", async ({ page }) => {
   for (let i = 0; i < 6; i += 1) {
     await page.request.post("/api/auth/admin/create-user", {
       headers: { origin: base },
-      data: { email: `pg-${Date.now()}-${i}@example.com`, password: "password123", name: `Pg${i}`, role: "user" },
+      data: { email: `pg-${Date.now()}-${i}@example.com`, password: "Podokit3e-Str0ng!pw", name: `Pg${i}`, role: "user" },
     });
   }
   await page.reload();

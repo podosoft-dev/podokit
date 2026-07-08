@@ -1,6 +1,6 @@
 {
   "name": "auth",
-  "description": "Full authentication (better-auth): email/password, sessions, and \u2014 via config \u2014 OAuth and 2FA. Installs a global guard so the API is secure by default; health and /api/auth stay public.",
+  "description": "Full authentication (better-auth): email/password, sessions, and — via config — OAuth and 2FA. Installs a global guard so the API is secure by default; health and /api/auth stay public.",
   "requires": [],
   "targetApp": "api",
   "dependencies": {
@@ -14,11 +14,13 @@
     "@types/nodemailer": "^7.0.4"
   },
   "env": [
-    "# auth (better-auth) \u2014 set a strong secret (>= 32 chars) in production",
+    "# auth (better-auth) — set a strong secret (>= 32 chars) in production",
     "BETTER_AUTH_SECRET=change-me-in-production-min-32-characters",
     "BETTER_AUTH_URL=http://localhost:3000",
     "# 2FA (TOTP): set true to enable the plugin",
     "AUTH_TWO_FACTOR=false",
+    "# Reject breached passwords via Have I Been Pwned (calls the public range API)",
+    "AUTH_HIBP=false",
     "# Email: SMTP for password reset + verification. Local dev targets Mailpit",
     "# (docker-compose), which captures mail at http://localhost:8025.",
     "SMTP_HOST=localhost",
@@ -26,7 +28,7 @@
     "MAIL_FROM=PodoKit <no-reply@example.com>",
     "# Require new sign-ups to verify their email before signing in",
     "AUTH_EMAIL_VERIFICATION=false",
-    "# OAuth (optional) \u2014 set a provider's id+secret to enable it",
+    "# OAuth (optional) — set a provider's id+secret to enable it",
     "# GOOGLE_CLIENT_ID=",
     "# GOOGLE_CLIENT_SECRET=",
     "# GITHUB_CLIENT_ID=",

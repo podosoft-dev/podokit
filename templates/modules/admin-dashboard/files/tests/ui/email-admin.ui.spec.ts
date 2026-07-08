@@ -23,7 +23,7 @@ test("admin sends a password reset email to a user", async ({ page }) => {
   const email = `admin-reset-${Date.now()}@example.com`;
   await page.request.post("/api/auth/admin/create-user", {
     headers: { origin: base },
-    data: { email, password: "password123", name: "AR", role: "user" },
+    data: { email, password: "Podokit3e-Str0ng!pw", name: "AR", role: "user" },
   });
   await clearMailpit();
   await page.locator("#toolbar-search").fill(email);
@@ -41,12 +41,12 @@ test("login shows a verification hint for unverified users", async ({ page, brow
   const caps = await (await page.request.get("/api/account/capabilities")).json();
   test.skip(caps.emailVerification !== true, "email verification disabled");
   const email = `login-unv-${Date.now()}@example.com`;
-  await page.request.post("/api/auth/sign-up/email", { headers: { origin: base }, data: { email, password: "password123", name: "LU" } });
+  await page.request.post("/api/auth/sign-up/email", { headers: { origin: base }, data: { email, password: "Podokit3e-Str0ng!pw", name: "LU" } });
   const anon = await browser.newContext();
   const p2 = await anon.newPage();
   await p2.goto(`${base}/login`);
   await p2.getByLabel("Email").fill(email);
-  await p2.getByLabel("Password").fill("password123");
+  await p2.getByLabel("Password").fill("Podokit3e-Str0ng!pw");
   await p2.getByRole("button", { name: "Sign in" }).click();
   await expect(p2.getByRole("link", { name: /resend verification/i })).toBeVisible();
   await anon.close();

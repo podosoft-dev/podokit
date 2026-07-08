@@ -58,7 +58,7 @@ test("two-factor setup shows a scannable QR code when enabled @smoke", async ({ 
   await expect(page.getByRole("button", { name: "Enable", exact: true })).toBeVisible();
   // Start setup (password + Enable) and confirm the QR renders. Stop before
   // verifying so 2FA stays inactive and the shared admin session keeps working.
-  await page.locator("#tf-on-pw").fill("password123");
+  await page.locator("#tf-on-pw").fill("Podokit3e-Str0ng!pw");
   await page.getByRole("button", { name: "Enable", exact: true }).click();
   await expect(page.getByRole("img", { name: "TOTP QR code" })).toBeVisible();
 });

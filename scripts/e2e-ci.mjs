@@ -133,6 +133,8 @@ async function main() {
       "ADMIN_EMAILS=admin@example.com",
       // Exercise the two-factor plugin end to end (setup QR, backup codes).
       "AUTH_TWO_FACTOR=true",
+      // Exercise the breached-password check (Have I Been Pwned).
+      "AUTH_HIBP=true",
       // Point mail at the CI Mailpit service when present so the email specs run;
       // otherwise the app logs mail and those specs skip.
       ...(process.env.SMTP_HOST
@@ -152,6 +154,8 @@ async function main() {
     ADMIN_EMAILS: "admin@example.com",
     // Must match the app .env so migrate creates the twoFactor table.
     AUTH_TWO_FACTOR: "true",
+    // Runtime flags for the built api (this env is what `node dist/main` gets).
+    AUTH_HIBP: "true",
   };
 
   step("migrate the auth tables");
