@@ -53,7 +53,7 @@ const en = {
     emailNotVerified: "Verify your email before signing in.",
   },
   nav: { overview: "Overview", users: "Users", sessions: "Sessions", audit: "Audit log", account: "Account", signOut: "Sign out" },
-  dashboard: { title: "Dashboard", welcome: "Welcome back, {name}.", yourRole: "Your role", signedInAs: "Signed in as" },
+  dashboard: { title: "Dashboard", welcome: "Welcome back, {name}.", yourRole: "Your role", signedInAs: "Signed in as", unverifiedUsers: "Unverified users" },
   audit: { title: "Audit log", when: "When", actor: "Actor", action: "Action", target: "Target", ip: "IP", empty: "No audit entries.", loadFailed: "Failed to load audit log", total: "{count} entries" },
   users: {
     title: "Users",
@@ -242,7 +242,7 @@ const ko: Messages = {
     resetFailed: "재설정에 실패했습니다",
   },
   nav: { overview: "개요", users: "회원", sessions: "세션", audit: "감사 로그", account: "계정", signOut: "로그아웃" },
-  dashboard: { title: "대시보드", welcome: "{name}님, 환영합니다.", yourRole: "내 권한", signedInAs: "로그인 계정" },
+  dashboard: { title: "대시보드", welcome: "{name}님, 환영합니다.", yourRole: "내 권한", signedInAs: "로그인 계정", unverifiedUsers: "미인증 사용자" },
   audit: { title: "감사 로그", when: "시각", actor: "수행자", action: "동작", target: "대상", ip: "IP", empty: "감사 기록이 없습니다.", loadFailed: "감사 로그를 불러오지 못했습니다", total: "항목 {count}개" },
   users: {
     title: "회원",
