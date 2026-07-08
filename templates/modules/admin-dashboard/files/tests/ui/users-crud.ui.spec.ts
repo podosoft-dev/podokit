@@ -130,3 +130,13 @@ test("users list shows pagination beyond one page", async ({ page }) => {
   await expect(nav).toBeVisible();
   await expect(nav.getByRole("button", { name: "Page 2" })).toBeVisible();
 });
+
+test("manage modal closes from its footer", async ({ page }) => {
+  await ready(page, "/admin/users");
+  const email = `ui-close-${Date.now()}@example.com`;
+  await seedUser(page, email);
+  await openManage(page, email);
+  // footer Close (a visible button, distinct from the header X) dismisses the modal
+  await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).last().click();
+  await expect(page.getByRole("dialog")).toBeHidden();
+});
