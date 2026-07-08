@@ -3,6 +3,7 @@
   import * as Table from "$lib/components/ui/table";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import DataTable, { type DataTableColumn, type SortState } from "$lib/components/data-table.svelte";
+  import TableToolbar, { type ToolbarSearchField } from "$lib/components/table-toolbar.svelte";
   import EllipsisIcon from "@lucide/svelte/icons/ellipsis";
   import { toast } from "svelte-sonner";
   import { api } from "$lib/api";
@@ -32,6 +33,10 @@
   let sort = $state<SortState | null>(null);
   let loading = $state(false);
   let busy = $state(false);
+  let search = $state("");
+  let appliedSearch = $state("");
+  let searchField = $state("email");
+  let appliedSearchField = $state("email");
 
   const columns: DataTableColumn<Row>[] = [
     { key: "user", label: i18n.t.adminSessions.user, sortable: true, value: (r) => r.userName },
@@ -40,6 +45,19 @@
     { key: "createdAt", label: i18n.t.adminSessions.since, sortable: true },
     { key: "actions", label: "", class: "w-10" },
   ];
+
+  const searchFields: ToolbarSearchField[] = [
+    { value: "email", label: i18n.t.users.email },
+    { value: "name", label: i18n.t.users.name },
+  ];
+
+  const filtered = $derived(
+    rows.filter((r) => {
+      if (!appliedSearch) return true;
+      const hay = (appliedSearchField === "name" ? r.userName : r.userEmail).toLowerCase();
+      return hay.includes(appliedSearch.toLowerCase());
+    }),
+  );
 
   async function load(): Promise<void> {
     loading = true;
@@ -85,15 +103,24 @@
 <div class="flex flex-col gap-4">
   <h1 class="text-2xl font-semibold">{i18n.t.adminSessions.title}</h1>
 
+  <TableToolbar
+    {searchFields}
+    bind:searchField
+    bind:search
+    searchHeading={i18n.t.toolbar.search}
+    searchButton={i18n.t.toolbar.searchButton}
+    onSearch={() => { appliedSearch = search; appliedSearchField = searchField; page = 1; }}
+  />
+
   <DataTable
     {columns}
-    {rows}
+    rows={filtered}
     getKey={(r) => r.id}
     empty={loading ? "…" : i18n.t.adminSessions.empty}
     bind:sort
     bind:page
     perPage={5}
-    label={fmt(i18n.t.adminSessions.total, { count: rows.length })}
+    label={fmt(i18n.t.adminSessions.total, { count: filtered.length })}
   >
     {#snippet row(r)}
       <Table.Cell>

@@ -12,6 +12,7 @@ const en = {
   common: { appName: "Admin" },
   landing: { title: "Welcome", subtitle: "This is your app's home page. Replace it with your own content — the admin area lives under /admin.", openAdmin: "Open admin" },
   language: { label: "Language" },
+  toolbar: { filter: "Filter", search: "Search", searchButton: "Search", all: "All" },
   theme: { toggle: "Toggle theme", light: "Light", dark: "Dark", system: "System" },
   auth: {
     signInTitle: "Sign in",
@@ -54,7 +55,7 @@ const en = {
   },
   nav: { overview: "Overview", users: "Users", sessions: "Sessions", audit: "Audit log", account: "Account", signOut: "Sign out" },
   dashboard: { title: "Dashboard", welcome: "Welcome back, {name}.", yourRole: "Your role", signedInAs: "Signed in as", unverifiedUsers: "Unverified users" },
-  audit: { title: "Audit log", when: "When", actor: "Actor", action: "Action", target: "Target", ip: "IP", empty: "No audit entries.", loadFailed: "Failed to load audit log", total: "{count} entries" },
+  audit: { title: "Audit log", when: "When", actor: "Actor", action: "Action", target: "Target", ip: "IP", empty: "No audit entries.", loadFailed: "Failed to load audit log", total: "{count} entries", searchField: "Actor or target" },
   users: {
     title: "Users",
     search: "Search by email…",
@@ -83,6 +84,8 @@ const en = {
     create: "Create",
     cancel: "Cancel",
     close: "Close",
+    roleAdmin: "Admin",
+    roleUser: "User",
     userCreated: "User created",
     setPassword: "Set password",
     newPassword: "New password",
@@ -202,6 +205,7 @@ const ko: Messages = {
   common: { appName: "관리자" },
   landing: { title: "환영합니다", subtitle: "앱의 홈 페이지입니다. 원하는 내용으로 교체하세요 — 관리자 기능은 /admin 에 있습니다.", openAdmin: "관리자 열기" },
   language: { label: "언어" },
+  toolbar: { filter: "필터", search: "검색", searchButton: "검색", all: "전체" },
   theme: { toggle: "테마 전환", light: "라이트", dark: "다크", system: "시스템" },
   auth: {
     signInTitle: "로그인",
@@ -244,7 +248,7 @@ const ko: Messages = {
   },
   nav: { overview: "개요", users: "회원", sessions: "세션", audit: "감사 로그", account: "계정", signOut: "로그아웃" },
   dashboard: { title: "대시보드", welcome: "{name}님, 환영합니다.", yourRole: "내 권한", signedInAs: "로그인 계정", unverifiedUsers: "미인증 사용자" },
-  audit: { title: "감사 로그", when: "시각", actor: "수행자", action: "동작", target: "대상", ip: "IP", empty: "감사 기록이 없습니다.", loadFailed: "감사 로그를 불러오지 못했습니다", total: "항목 {count}개" },
+  audit: { title: "감사 로그", when: "시각", actor: "수행자", action: "동작", target: "대상", ip: "IP", empty: "감사 기록이 없습니다.", loadFailed: "감사 로그를 불러오지 못했습니다", total: "항목 {count}개", searchField: "수행자·대상" },
   users: {
     title: "회원",
     search: "이메일로 검색…",
@@ -273,6 +277,8 @@ const ko: Messages = {
     create: "생성",
     cancel: "취소",
     close: "닫기",
+    roleAdmin: "관리자",
+    roleUser: "사용자",
     userCreated: "사용자를 생성했습니다",
     setPassword: "비밀번호 설정",
     newPassword: "새 비밀번호",

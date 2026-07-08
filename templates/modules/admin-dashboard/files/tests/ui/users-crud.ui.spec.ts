@@ -15,7 +15,8 @@ async function seedUser(page: Page, email: string): Promise<void> {
 
 // Open the Manage two-pane modal for a seeded user.
 async function openManage(page: Page, email: string): Promise<void> {
-  await page.getByPlaceholder("Search by email…").fill(email);
+  await page.locator("#toolbar-search").fill(email);
+  await page.getByRole("button", { name: "Search", exact: true }).click();
   await page.getByRole("row", { name: new RegExp(email) }).getByRole("button").click();
   await page.getByRole("menuitem", { name: "Manage" }).click();
 }
@@ -33,7 +34,8 @@ test("admin can create a user via the dialog @smoke", async ({ page }) => {
   // Wait for the create to settle (dialog closes + list reloads) before searching,
   // otherwise the search input can be refilled by the post-create reload.
   await expect(page.getByRole("dialog")).toBeHidden();
-  await page.getByPlaceholder("Search by email…").fill(email);
+  await page.locator("#toolbar-search").fill(email);
+  await page.getByRole("button", { name: "Search", exact: true }).click();
   await expect(page.getByRole("cell", { name: email })).toBeVisible();
 });
 
@@ -113,7 +115,8 @@ test("manage: delete a user from the danger zone", async ({ page }) => {
   await dialog.getByRole("button", { name: "Delete" }).click(); // arm
   await dialog.getByRole("button", { name: "Delete" }).click(); // confirm
   await expect(page.getByText("User deleted")).toBeVisible();
-  await page.getByPlaceholder("Search by email…").fill(email);
+  await page.locator("#toolbar-search").fill(email);
+  await page.getByRole("button", { name: "Search", exact: true }).click();
   await expect(page.getByRole("cell", { name: email })).toHaveCount(0);
 });
 
