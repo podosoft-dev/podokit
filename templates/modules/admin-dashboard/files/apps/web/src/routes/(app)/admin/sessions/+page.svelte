@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
+  import { Badge } from "$lib/components/ui/badge";
   import * as Table from "$lib/components/ui/table";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import DataTable, { type DataTableColumn, type SortState } from "$lib/components/data-table.svelte";
@@ -24,6 +25,8 @@
     userAgent?: string | null;
     ipAddress?: string | null;
     createdAt: string | Date;
+    expiresAt?: string | Date | null;
+    impersonatedBy?: string | null;
   };
 
   let rows = $state<Row[]>([]);
@@ -43,6 +46,7 @@
     { key: "device", label: i18n.t.adminSessions.device, sortable: true, value: (r) => r.userAgent },
     { key: "ip", label: i18n.t.adminSessions.ip, sortable: true, value: (r) => r.ipAddress },
     { key: "createdAt", label: i18n.t.adminSessions.since, sortable: true },
+    { key: "expiresAt", label: i18n.t.adminSessions.expires, sortable: true, value: (r) => (r.expiresAt ? new Date(r.expiresAt).getTime() : 0) },
     { key: "actions", label: "", class: "w-10" },
   ];
 
@@ -124,12 +128,16 @@
   >
     {#snippet row(r)}
       <Table.Cell>
-        <div class="font-medium">{r.userName}</div>
+        <div class="flex items-center gap-2">
+          <div class="font-medium">{r.userName}</div>
+          {#if r.impersonatedBy}<Badge variant="outline">{i18n.t.adminSessions.impersonated}</Badge>{/if}
+        </div>
         <div class="text-muted-foreground text-xs">{r.userEmail}</div>
       </Table.Cell>
       <Table.Cell class="max-w-xs truncate">{r.userAgent ?? i18n.t.adminSessions.unknown}</Table.Cell>
       <Table.Cell class="text-muted-foreground">{r.ipAddress ?? "—"}</Table.Cell>
       <Table.Cell class="text-muted-foreground">{formatDateTime(r.createdAt)}</Table.Cell>
+      <Table.Cell class="text-muted-foreground">{r.expiresAt ? formatDateTime(r.expiresAt) : "—"}</Table.Cell>
       <Table.Cell>
         <DropdownMenu.Root>
           <DropdownMenu.Trigger>
