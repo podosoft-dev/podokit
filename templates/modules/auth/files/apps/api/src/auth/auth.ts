@@ -1,5 +1,5 @@
 import { betterAuth, type BetterAuthOptions, type BetterAuthPlugin } from "better-auth";
-import { twoFactor } from "better-auth/plugins";
+import { twoFactor, haveIBeenPwned } from "better-auth/plugins";
 import { Pool } from "pg";
 import { actionEmail, sendMail } from "../mail/mailer";
 // podokit:auth-imports
@@ -30,6 +30,10 @@ function socialProviders(): NonNullable<BetterAuthOptions["socialProviders"]> {
 const plugins: BetterAuthPlugin[] = [];
 if (process.env.AUTH_TWO_FACTOR === "true") {
   plugins.push(twoFactor());
+}
+// Reject passwords found in known breaches (Have I Been Pwned, k-anonymity range API).
+if (process.env.AUTH_HIBP === "true") {
+  plugins.push(haveIBeenPwned());
 }
 // podokit:auth-plugins
 

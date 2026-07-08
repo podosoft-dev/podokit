@@ -8,6 +8,7 @@ type Capabilities = {
   deleteAccount: boolean;
   auditLog: boolean;
   emailVerification: boolean;
+  passwordBreachCheck: boolean;
 };
 
 // Protected by the global AuthGuard. Use @Session() to read the current user.
@@ -32,6 +33,7 @@ export class AccountController {
       deleteAccount: process.env.AUTH_ALLOW_DELETE === "true",
       auditLog: process.env.AUDIT_LOG_ENABLED === "true",
       emailVerification: process.env.AUTH_EMAIL_VERIFICATION === "true",
+      passwordBreachCheck: process.env.AUTH_HIBP === "true",
     };
   }
 }

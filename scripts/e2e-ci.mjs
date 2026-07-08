@@ -133,6 +133,8 @@ async function main() {
       "ADMIN_EMAILS=admin@example.com",
       // Exercise the two-factor plugin end to end (setup QR, backup codes).
       "AUTH_TWO_FACTOR=true",
+      // Exercise the breached-password check (Have I Been Pwned).
+      "AUTH_HIBP=true",
       // Point mail at the CI Mailpit service when present so the email specs run;
       // otherwise the app logs mail and those specs skip.
       ...(process.env.SMTP_HOST

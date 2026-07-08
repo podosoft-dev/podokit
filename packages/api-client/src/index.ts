@@ -28,6 +28,8 @@ export interface Capabilities {
   deleteAccount: boolean;
   auditLog: boolean;
   emailVerification: boolean;
+  /** Reject passwords found in known breaches (Have I Been Pwned) on sign-up/change. */
+  passwordBreachCheck: boolean;
 }
 
 /** Error thrown when the API returns the standard error envelope or a non-2xx status. */
