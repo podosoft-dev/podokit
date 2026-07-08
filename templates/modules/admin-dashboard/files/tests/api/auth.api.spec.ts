@@ -23,6 +23,24 @@ test("rejects a breached password on sign-up @smoke", async ({ playwright }) => 
   await ctx.dispose();
 });
 
+test("a user can sign in with a username @smoke", async ({ playwright }) => {
+  const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  const caps = await (await ctx.get("/api/account/capabilities")).json();
+  test.skip(!caps?.username, "username not enabled");
+  const email = `uname-${Date.now()}@example.com`;
+  const uname = `user${Date.now()}`;
+  const pw = "Podokit3e-Str0ng!pw";
+  await ctx.post("/api/auth/sign-up/email", { data: { email, password: pw, name: "Uname" } });
+  expect((await ctx.post("/api/auth/update-user", { data: { username: uname } })).ok()).toBeTruthy();
+  await ctx.dispose();
+  const ctx2 = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  const signedIn = await ctx2.post("/api/auth/sign-in/username", { data: { username: uname, password: pw } });
+  expect(signedIn.ok()).toBeTruthy();
+  const session = await (await ctx2.get("/api/auth/get-session")).json();
+  expect(session?.user?.username).toBe(uname);
+  await ctx2.dispose();
+});
+
 test("only admins can change settings @smoke", async ({ playwright }) => {
   const userCtx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   await userCtx.post("/api/auth/sign-in/email", { data: { email: USER.email, password: USER.password } });

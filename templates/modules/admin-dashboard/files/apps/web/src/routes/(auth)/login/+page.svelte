@@ -43,6 +43,7 @@
   }
 
   // Passwordless sign-in with an emailed one-time code (two steps: send, verify).
+  const usernameEnabled = $derived(data.capabilities?.username ?? false);
   const emailOtpEnabled = $derived(data.capabilities?.emailOtp ?? false);
   let otpSent = $state(false);
   let otpCode = $state("");
@@ -79,7 +80,11 @@
     loading = true;
     error = null;
     unverified = false;
-    const { error: authError } = await api.auth.signIn.email({ email, password });
+    // With the username plugin on, an identifier without "@" is treated as a username.
+    const asUsername = usernameEnabled && !email.includes("@");
+    const { error: authError } = asUsername
+      ? await api.auth.signIn.username({ username: email, password })
+      : await api.auth.signIn.email({ email, password });
     loading = false;
     if (authError) {
       // Surface an unverified address with a path to a fresh verification link.
@@ -109,8 +114,8 @@
         </Alert.Root>
       {/if}
       <div class="flex flex-col gap-2">
-        <Label for="email">{i18n.t.auth.email}</Label>
-        <Input id="email" type="email" bind:value={email} required autocomplete="email" />
+        <Label for="email">{usernameEnabled ? i18n.t.auth.emailOrUsername : i18n.t.auth.email}</Label>
+        <Input id="email" type={usernameEnabled ? "text" : "email"} bind:value={email} required autocomplete="username" />
       </div>
       <div class="flex flex-col gap-2">
         <div class="flex items-center justify-between">
