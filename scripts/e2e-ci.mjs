@@ -131,6 +131,8 @@ async function main() {
       "BETTER_AUTH_SECRET=e2e-secret-please-change-32-characters",
       `BETTER_AUTH_URL=http://localhost:${env.API_PORT}`,
       "ADMIN_EMAILS=admin@example.com",
+      // Exercise the two-factor plugin end to end (setup QR, backup codes).
+      "AUTH_TWO_FACTOR=true",
       // Point mail at the CI Mailpit service when present so the email specs run;
       // otherwise the app logs mail and those specs skip.
       ...(process.env.SMTP_HOST
@@ -148,6 +150,8 @@ async function main() {
     POSTGRES_DB: env.POSTGRES_DB,
     BETTER_AUTH_SECRET: "e2e-secret-please-change-32-characters",
     ADMIN_EMAILS: "admin@example.com",
+    // Must match the app .env so migrate creates the twoFactor table.
+    AUTH_TWO_FACTOR: "true",
   };
 
   step("migrate the auth tables");
