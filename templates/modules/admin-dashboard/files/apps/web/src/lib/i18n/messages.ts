@@ -108,6 +108,11 @@ const en = {
     unverified: "Unverified",
     sendVerification: "Send verification email",
     verificationSent: "Verification email sent",
+    markVerified: "Mark verified",
+    markedVerified: "Marked as verified",
+    sendResetEmail: "Send password reset email",
+    resetEmailSent: "Password reset email sent",
+    sendVerificationOnCreate: "Send verification email",
   },
   sessions: {
     title: "Active sessions",
@@ -291,6 +296,11 @@ const ko: Messages = {
     unverified: "미인증",
     sendVerification: "인증 메일 보내기",
     verificationSent: "인증 메일을 보냈습니다",
+    markVerified: "인증됨으로 표시",
+    markedVerified: "인증 처리했습니다",
+    sendResetEmail: "비밀번호 재설정 메일 보내기",
+    resetEmailSent: "재설정 메일을 보냈습니다",
+    sendVerificationOnCreate: "인증 메일 보내기",
   },
   sessions: {
     title: "활성 세션",

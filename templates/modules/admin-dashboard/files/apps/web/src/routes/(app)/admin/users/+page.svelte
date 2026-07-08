@@ -51,7 +51,7 @@
 
   // Create user
   let createOpen = $state(false);
-  let form = $state({ name: "", email: "", password: "", confirm: "", admin: false });
+  let form = $state({ name: "", email: "", password: "", confirm: "", admin: false, sendVerify: true });
   let createError = $state("");
   async function createUser(event: Event): Promise<void> {
     event.preventDefault();
@@ -70,8 +70,11 @@
     busy = false;
     if (error) return void toast.error(error.message ?? i18n.t.users.actionFailed);
     toast.success(i18n.t.users.userCreated);
+    if (form.sendVerify && emailVerificationEnabled) {
+      await api.auth.sendVerificationEmail({ email: form.email, callbackURL: `${location.origin}/admin` });
+    }
     createOpen = false;
-    form = { name: "", email: "", password: "", confirm: "", admin: false };
+    form = { name: "", email: "", password: "", confirm: "", admin: false, sendVerify: true };
     page = 1;
     await load();
   }
@@ -163,6 +166,26 @@
     busy = false;
     if (error) return void toast.error(error.message ?? i18n.t.users.actionFailed);
     toast.success(i18n.t.users.verificationSent);
+  }
+
+  async function markVerified(): Promise<void> {
+    if (!mUser) return;
+    busy = true;
+    const { error } = await api.auth.admin.updateUser({ userId: mUser.id, data: { emailVerified: true } });
+    busy = false;
+    if (error) return void toast.error(error.message ?? i18n.t.users.actionFailed);
+    mUser = { ...mUser, emailVerified: true };
+    toast.success(i18n.t.users.markedVerified);
+    await load();
+  }
+
+  async function sendResetEmail(): Promise<void> {
+    if (!mUser) return;
+    busy = true;
+    const { error } = await api.auth.requestPasswordReset({ email: mUser.email, redirectTo: `${location.origin}/reset-password` });
+    busy = false;
+    if (error) return void toast.error(error.message ?? i18n.t.users.actionFailed);
+    toast.success(i18n.t.users.resetEmailSent);
   }
 
   async function ban(event: Event): Promise<void> {
@@ -309,6 +332,9 @@
       <div class="flex flex-col gap-1"><Label for="c-confirm">{i18n.t.users.confirmPassword}</Label><Input id="c-confirm" type="password" bind:value={form.confirm} required /></div>
       {#if createError}<p class="text-destructive text-sm">{createError}</p>{/if}
       <Label class="flex items-center gap-2"><Checkbox bind:checked={form.admin} />{i18n.t.users.makeAdmin}</Label>
+      {#if emailVerificationEnabled}
+        <Label class="flex items-center gap-2"><Checkbox bind:checked={form.sendVerify} />{i18n.t.users.sendVerificationOnCreate}</Label>
+      {/if}
       <Dialog.Footer>
         <Button type="button" variant="outline" onclick={() => (createOpen = false)}>{i18n.t.users.cancel}</Button>
         <Button type="submit" disabled={busy}>{i18n.t.users.create}</Button>
@@ -348,6 +374,7 @@
                 {:else}
                   <Badge variant="secondary">{i18n.t.users.unverified}</Badge>
                   <Button type="button" variant="outline" size="sm" disabled={busy} onclick={resendVerification}>{i18n.t.users.sendVerification}</Button>
+                  <Button type="button" variant="outline" size="sm" disabled={busy} onclick={markVerified}>{i18n.t.users.markVerified}</Button>
                 {/if}
               </div>
             {/if}
@@ -361,6 +388,9 @@
               {#if mPwError}<p class="text-destructive text-sm">{mPwError}</p>{/if}
               <Button type="submit" class="w-fit" disabled={busy}>{i18n.t.users.setPassword}</Button>
             </form>
+            <div class="border-t pt-4">
+              <Button type="button" variant="outline" disabled={busy} onclick={sendResetEmail}>{i18n.t.users.sendResetEmail}</Button>
+            </div>
             <div class="border-t pt-4">
               {#if mUser?.banned}
                 <Button variant="outline" disabled={busy} onclick={unban}>{i18n.t.users.unban}</Button>
