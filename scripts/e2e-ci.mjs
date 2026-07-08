@@ -154,6 +154,8 @@ async function main() {
     ADMIN_EMAILS: "admin@example.com",
     // Must match the app .env so migrate creates the twoFactor table.
     AUTH_TWO_FACTOR: "true",
+    // Runtime flags for the built api (this env is what `node dist/main` gets).
+    AUTH_HIBP: "true",
   };
 
   step("migrate the auth tables");
