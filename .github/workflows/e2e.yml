@@ -38,6 +38,11 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      mailpit:
+        image: axllent/mailpit:latest
+        ports:
+          - 1025:1025
+          - 8025:8025
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -58,6 +63,9 @@ jobs:
           POSTGRES_USER: podokit
           POSTGRES_PASSWORD: podokit
           POSTGRES_DB: podokit
+          SMTP_HOST: localhost
+          SMTP_PORT: "1025"
+          MAILPIT_URL: http://localhost:8025
           KEEP: "1" # keep the generated app so the report survives for upload
       - name: Upload Playwright report
         if: always()

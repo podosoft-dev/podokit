@@ -30,6 +30,9 @@ test("admin can create a user via the dialog @smoke", async ({ page }) => {
   await dialog.getByLabel("Password", { exact: true }).fill("password123");
   await dialog.getByLabel("Confirm password").fill("password123");
   await dialog.getByRole("button", { name: "Create" }).click();
+  // Wait for the create to settle (dialog closes + list reloads) before searching,
+  // otherwise the search input can be refilled by the post-create reload.
+  await expect(page.getByRole("dialog")).toBeHidden();
   await page.getByPlaceholder("Search by email…").fill(email);
   await expect(page.getByRole("cell", { name: email })).toBeVisible();
 });

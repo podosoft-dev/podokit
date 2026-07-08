@@ -25,5 +25,18 @@ services:
       timeout: 5s
       retries: 5
 
+  # Local email catcher for dev: SMTP on 1025, web UI + REST API on 8025.
+  # Auth password-reset and verification mail lands here — open http://localhost:8025.
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "${SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8025/readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
 volumes:
   pgdata:

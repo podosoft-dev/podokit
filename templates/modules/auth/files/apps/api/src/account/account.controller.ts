@@ -2,7 +2,13 @@ import { Controller, Get } from "@nestjs/common";
 import { Session, type UserSession } from "@thallesp/nestjs-better-auth";
 import { ApiTags } from "@nestjs/swagger";
 
-type Capabilities = { twoFactor: boolean; providers: string[]; deleteAccount: boolean; auditLog: boolean };
+type Capabilities = {
+  twoFactor: boolean;
+  providers: string[];
+  deleteAccount: boolean;
+  auditLog: boolean;
+  emailVerification: boolean;
+};
 
 // Protected by the global AuthGuard. Use @Session() to read the current user.
 @ApiTags("account")
@@ -25,6 +31,7 @@ export class AccountController {
       providers,
       deleteAccount: process.env.AUTH_ALLOW_DELETE === "true",
       auditLog: process.env.AUDIT_LOG_ENABLED === "true",
+      emailVerification: process.env.AUTH_EMAIL_VERIFICATION === "true",
     };
   }
 }

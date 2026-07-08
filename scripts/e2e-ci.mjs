@@ -126,6 +126,11 @@ async function main() {
       "BETTER_AUTH_SECRET=e2e-secret-please-change-32-characters",
       `BETTER_AUTH_URL=http://localhost:${env.API_PORT}`,
       "ADMIN_EMAILS=admin@example.com",
+      // Point mail at the CI Mailpit service when present so the email specs run;
+      // otherwise the app logs mail and those specs skip.
+      ...(process.env.SMTP_HOST
+        ? [`SMTP_HOST=${process.env.SMTP_HOST}`, `SMTP_PORT=${process.env.SMTP_PORT ?? "1025"}`, "MAIL_FROM=PodoKit <no-reply@example.com>"]
+        : []),
     ].join("\n") + "\n",
   );
 

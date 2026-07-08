@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
+  import { page } from "$app/state";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
@@ -19,10 +20,25 @@
     event.preventDefault();
     loading = true;
     error = null;
-    const { error: authError } = await api.auth.signUp.email({ name, email, password });
-    loading = false;
+    // callbackURL: where the verification link lands once confirmed (absolute so
+    // it returns to the web app, not the API origin). Ignored when verification is off.
+    const { error: authError } = await api.auth.signUp.email({
+      name,
+      email,
+      password,
+      callbackURL: `${page.url.origin}/admin`,
+    });
     if (authError) {
+      loading = false;
       error = authError.message ?? i18n.t.auth.signUpFailed;
+      return;
+    }
+    // When email verification is required, sign-up creates no session — send the
+    // user to confirm their address instead of into the (guarded) app.
+    const { data: session } = await api.auth.getSession();
+    loading = false;
+    if (!session?.session) {
+      await goto(`/verify-email?email=${encodeURIComponent(email)}`);
       return;
     }
     await goto("/admin", { invalidateAll: true });
