@@ -1,5 +1,5 @@
 import { betterAuth, type BetterAuthOptions, type BetterAuthPlugin } from "better-auth";
-import { twoFactor, haveIBeenPwned, magicLink } from "better-auth/plugins";
+import { twoFactor, haveIBeenPwned, magicLink, emailOTP } from "better-auth/plugins";
 import { Pool } from "pg";
 import { actionEmail, sendMail } from "../mail/mailer";
 // podokit:auth-imports
@@ -39,6 +39,16 @@ const plugins: BetterAuthPlugin[] = [
         subject: "Your sign-in link",
         text: `Sign in: ${url}`,
         html: actionEmail("Sign in to your account", "Click the button below to sign in. This link expires shortly.", url, "Sign in"),
+      });
+    },
+  }),
+  emailOTP({
+    sendVerificationOTP: async ({ email, otp }: { email: string; otp: string; type: string }) => {
+      await sendMail({
+        to: email,
+        subject: "Your sign-in code",
+        text: `Your one-time code is ${otp}. It expires shortly.`,
+        html: `<p>Your one-time sign-in code is:</p><p style="font-size:24px;font-weight:bold;letter-spacing:3px">${otp}</p><p>It expires shortly.</p>`,
       });
     },
   }),

@@ -1,8 +1,26 @@
 import { expect, test } from "@playwright/test";
-import { clearMailpit, mailpitReachable, waitForLink } from "../helpers/mailpit";
+import { clearMailpit, mailpitReachable, waitForLink, waitForOtp } from "../helpers/mailpit";
 
 const base = process.env.E2E_BASE_URL ?? "http://localhost:5173";
 const origin = { origin: base };
+
+test("email one-time code signs a user in @smoke", async ({ playwright }) => {
+  test.skip(!(await mailpitReachable()), "Mailpit not available");
+  const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  const caps = await (await ctx.get("/api/account/capabilities")).json();
+  test.skip(!caps?.emailOtp, "email OTP not enabled");
+  const email = `otp-${Date.now()}@example.com`;
+  await ctx.post("/api/auth/sign-up/email", { data: { email, password: "Podokit3e-Str0ng!pw", name: "Otp" } });
+  await clearMailpit();
+  const requested = await ctx.post("/api/auth/email-otp/send-verification-otp", { data: { email, type: "sign-in" } });
+  expect(requested.ok()).toBeTruthy();
+  const otp = await waitForOtp(email);
+  const signedIn = await ctx.post("/api/auth/sign-in/email-otp", { data: { email, otp } });
+  expect(signedIn.ok()).toBeTruthy();
+  const session = await (await ctx.get("/api/auth/get-session")).json();
+  expect(session?.user?.email).toBe(email);
+  await ctx.dispose();
+});
 
 test("magic link signs a user in @smoke", async ({ playwright }) => {
   test.skip(!(await mailpitReachable()), "Mailpit not available");

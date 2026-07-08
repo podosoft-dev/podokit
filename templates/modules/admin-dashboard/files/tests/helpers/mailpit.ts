@@ -21,18 +21,29 @@ export async function clearMailpit(): Promise<void> {
 type MailpitList = { messages: Array<{ ID: string; To: Array<{ Address: string }> }> };
 type MailpitMessage = { Text?: string; HTML?: string };
 
-// Poll for the newest message addressed to `to` and return the first link in it.
-export async function waitForLink(to: string, timeoutMs = 10000): Promise<string> {
+// Poll for the newest message addressed to `to` and return the first match of
+// `pattern` in its text/HTML body.
+async function waitForMatch(to: string, pattern: RegExp, label: string, timeoutMs: number): Promise<string> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const list = (await (await fetch(`${MAILPIT}/api/v1/messages`)).json()) as MailpitList;
     const msg = list.messages?.find((m) => m.To?.some((t) => t.Address === to));
     if (msg) {
       const full = (await (await fetch(`${MAILPIT}/api/v1/message/${msg.ID}`)).json()) as MailpitMessage;
-      const match = `${full.Text ?? ""} ${full.HTML ?? ""}`.match(/https?:\/\/[^\s"<>]+/);
+      const match = `${full.Text ?? ""} ${full.HTML ?? ""}`.match(pattern);
       if (match) return match[0];
     }
     await new Promise((r) => setTimeout(r, 300));
   }
-  throw new Error(`no email with a link to ${to} within ${timeoutMs}ms`);
+  throw new Error(`no email with ${label} to ${to} within ${timeoutMs}ms`);
+}
+
+/** The first link in the newest email addressed to `to`. */
+export function waitForLink(to: string, timeoutMs = 10000): Promise<string> {
+  return waitForMatch(to, /https?:\/\/[^\s"<>]+/, "a link", timeoutMs);
+}
+
+/** The one-time numeric code in the newest email addressed to `to`. */
+export function waitForOtp(to: string, timeoutMs = 10000): Promise<string> {
+  return waitForMatch(to, /\b\d{4,8}\b/, "a one-time code", timeoutMs);
 }

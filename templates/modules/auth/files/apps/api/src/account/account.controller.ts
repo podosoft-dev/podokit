@@ -11,6 +11,7 @@ type Capabilities = {
   emailVerification: boolean;
   passwordBreachCheck: boolean;
   magicLink: boolean;
+  emailOtp: boolean;
 };
 
 function isAdmin(session: UserSession): boolean {
@@ -42,6 +43,7 @@ export class AccountController {
     return {
       twoFactor: flags.twoFactor,
       magicLink: flags.magicLink,
+      emailOtp: flags.emailOtp,
       // Server-enforced flags are boot-time (environment), not live-toggleable.
       providers,
       deleteAccount: process.env.AUTH_ALLOW_DELETE === "true",
