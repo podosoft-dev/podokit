@@ -50,3 +50,10 @@ test("login shows a verification hint for unverified users", async ({ page, brow
   await expect(p2.getByRole("link", { name: /resend verification/i })).toBeVisible();
   await anon.close();
 });
+
+test("overview omits the unverified-users card when the feature is off", async ({ page }) => {
+  await ready(page, "/admin");
+  const caps = await (await page.request.get("/api/account/capabilities")).json();
+  test.skip(caps.emailVerification === true, "email verification enabled");
+  await expect(page.getByText("Unverified users")).toHaveCount(0);
+});
