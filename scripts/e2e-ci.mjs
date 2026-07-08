@@ -142,6 +142,7 @@ async function main() {
       "AUTH_EMAIL_OTP=true",
       "AUTH_USERNAME=true",
       "AUTH_MULTI_SESSION=true",
+      "AUTH_PHONE_NUMBER=true",
       // Point mail at the CI Mailpit service when present so the email specs run;
       // otherwise the app logs mail and those specs skip.
       ...(process.env.SMTP_HOST
@@ -167,6 +168,7 @@ async function main() {
     AUTH_EMAIL_OTP: "true",
     AUTH_USERNAME: "true",
     AUTH_MULTI_SESSION: "true",
+    AUTH_PHONE_NUMBER: "true",
   };
 
   step("migrate the auth tables");

@@ -33,6 +33,13 @@ test("account shows a username field when enabled @smoke", async ({ page }) => {
   await expect(username).toBeVisible();
 });
 
+test("account shows a phone field when enabled @smoke", async ({ page }) => {
+  await ready(page, "/admin/account");
+  const phone = page.getByLabel("Phone number", { exact: true });
+  test.skip((await phone.count()) === 0, "phone number not enabled");
+  await expect(phone).toBeVisible();
+});
+
 test("admin can update their profile name", async ({ page }) => {
   await ready(page, "/admin/account");
   await page.getByLabel("Name", { exact: true }).fill("Admin Renamed");

@@ -9,6 +9,8 @@ export type SessionUser = {
   emailVerified?: boolean;
   twoFactorEnabled?: boolean | null;
   username?: string | null;
+  phoneNumber?: string | null;
+  phoneNumberVerified?: boolean | null;
 };
 
 declare global {

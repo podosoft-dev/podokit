@@ -23,6 +23,18 @@ test("rejects a breached password on sign-up @smoke", async ({ playwright }) => 
   await ctx.dispose();
 });
 
+test("phone number: sending a verification code is accepted @smoke", async ({ playwright }) => {
+  const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  const caps = await (await ctx.get("/api/account/capabilities")).json();
+  test.skip(!caps?.phoneNumber, "phone number not enabled");
+  const email = `phone-${Date.now()}@example.com`;
+  await ctx.post("/api/auth/sign-up/email", { data: { email, password: "Podokit3e-Str0ng!pw", name: "Phone" } });
+  // SMS delivery is a dev stub; we assert the request is accepted (code logged server-side).
+  const res = await ctx.post("/api/auth/phone-number/send-otp", { data: { phoneNumber: "+15555550123" } });
+  expect(res.ok()).toBeTruthy();
+  await ctx.dispose();
+});
+
 test("multi-session holds several accounts and switches between them @smoke", async ({ playwright }) => {
   const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const caps = await (await ctx.get("/api/account/capabilities")).json();

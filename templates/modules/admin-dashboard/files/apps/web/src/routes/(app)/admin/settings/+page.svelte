@@ -15,7 +15,7 @@
 
   // twoFactor and magicLink are admin-editable (stored in the DB, applied live).
   // The rest are server-enforced and configured via environment (read-only here).
-  type EditableFlag = "twoFactor" | "magicLink" | "emailOtp" | "username" | "multiSession";
+  type EditableFlag = "twoFactor" | "magicLink" | "emailOtp" | "username" | "multiSession" | "phoneNumber";
   type Feature = { name: string; desc: string; enabled: boolean; flag?: EditableFlag; env?: string; detail?: string; manageHref?: string };
   const features = $derived<Feature[]>([
     { name: i18n.t.settings.emailPassword, desc: i18n.t.settings.emailPasswordDesc, enabled: true },
@@ -23,6 +23,7 @@
     { name: i18n.t.settings.emailOtp, desc: i18n.t.settings.emailOtpDesc, enabled: caps.emailOtp, flag: "emailOtp" },
     { name: i18n.t.settings.username, desc: i18n.t.settings.usernameDesc, enabled: caps.username, flag: "username" },
     { name: i18n.t.settings.multiSession, desc: i18n.t.settings.multiSessionDesc, enabled: caps.multiSession, flag: "multiSession" },
+    { name: i18n.t.settings.phoneNumber, desc: i18n.t.settings.phoneNumberDesc, enabled: caps.phoneNumber, flag: "phoneNumber" },
     { name: i18n.t.settings.twoFactor, desc: i18n.t.settings.twoFactorDesc, enabled: caps.twoFactor, flag: "twoFactor", manageHref: "/admin/account" },
     { name: i18n.t.settings.emailVerification, desc: i18n.t.settings.emailVerificationDesc, enabled: caps.emailVerification, env: "AUTH_EMAIL_VERIFICATION" },
     { name: i18n.t.settings.socialProviders, desc: i18n.t.settings.socialProvidersDesc, enabled: caps.providers.length > 0, env: "GOOGLE_CLIENT_ID / GITHUB_CLIENT_ID", detail: caps.providers.join(", ") },
