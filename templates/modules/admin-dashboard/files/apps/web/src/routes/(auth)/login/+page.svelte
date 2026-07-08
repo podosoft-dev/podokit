@@ -42,6 +42,38 @@
     magicSent = true;
   }
 
+  // Passwordless sign-in with an emailed one-time code (two steps: send, verify).
+  const emailOtpEnabled = $derived(data.capabilities?.emailOtp ?? false);
+  let otpSent = $state(false);
+  let otpCode = $state("");
+  let otpLoading = $state(false);
+  async function sendOtp(): Promise<void> {
+    if (!email) {
+      error = i18n.t.auth.magicLinkNeedsEmail;
+      return;
+    }
+    otpLoading = true;
+    error = null;
+    const { error: authError } = await api.auth.emailOtp.sendVerificationOtp({ email, type: "sign-in" });
+    otpLoading = false;
+    if (authError) {
+      error = authError.message ?? i18n.t.auth.signInFailed;
+      return;
+    }
+    otpSent = true;
+  }
+  async function verifyOtp(): Promise<void> {
+    otpLoading = true;
+    error = null;
+    const { error: authError } = await api.auth.signIn.emailOtp({ email, otp: otpCode });
+    otpLoading = false;
+    if (authError) {
+      error = authError.message ?? i18n.t.auth.signInFailed;
+      return;
+    }
+    await goto(page.url.searchParams.get("redirect") ?? "/admin", { invalidateAll: true });
+  }
+
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     loading = true;
@@ -89,14 +121,31 @@
       </div>
       <Button type="submit" disabled={loading}>{loading ? i18n.t.auth.signingIn : i18n.t.auth.signIn}</Button>
     </form>
-    {#if magicLinkEnabled}
-      <div class="mt-4 border-t pt-4">
-        {#if magicSent}
-          <p class="text-muted-foreground text-sm" data-testid="magic-link-sent">{i18n.t.auth.magicLinkSent}</p>
-        {:else}
-          <Button type="button" variant="outline" class="w-full" disabled={magicLoading} onclick={sendMagicLink}>
-            {magicLoading ? i18n.t.auth.sending : i18n.t.auth.magicLinkButton}
-          </Button>
+    {#if magicLinkEnabled || emailOtpEnabled}
+      <div class="mt-4 flex flex-col gap-3 border-t pt-4">
+        {#if magicLinkEnabled}
+          {#if magicSent}
+            <p class="text-muted-foreground text-sm" data-testid="magic-link-sent">{i18n.t.auth.magicLinkSent}</p>
+          {:else}
+            <Button type="button" variant="outline" class="w-full" disabled={magicLoading} onclick={sendMagicLink}>
+              {magicLoading ? i18n.t.auth.sending : i18n.t.auth.magicLinkButton}
+            </Button>
+          {/if}
+        {/if}
+        {#if emailOtpEnabled}
+          {#if otpSent}
+            <div class="flex flex-col gap-2">
+              <Label for="otp">{i18n.t.auth.otpCode}</Label>
+              <Input id="otp" bind:value={otpCode} inputmode="numeric" autocomplete="one-time-code" />
+              <Button type="button" class="w-full" disabled={otpLoading || !otpCode} onclick={verifyOtp}>
+                {otpLoading ? i18n.t.auth.signingIn : i18n.t.auth.otpVerify}
+              </Button>
+            </div>
+          {:else}
+            <Button type="button" variant="outline" class="w-full" disabled={otpLoading} onclick={sendOtp}>
+              {otpLoading ? i18n.t.auth.sending : i18n.t.auth.otpButton}
+            </Button>
+          {/if}
         {/if}
       </div>
     {/if}

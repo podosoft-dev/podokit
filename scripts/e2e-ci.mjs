@@ -139,6 +139,7 @@ async function main() {
       // Exercise the breached-password check (Have I Been Pwned).
       "AUTH_HIBP=true",
       "AUTH_MAGIC_LINK=true",
+      "AUTH_EMAIL_OTP=true",
       // Point mail at the CI Mailpit service when present so the email specs run;
       // otherwise the app logs mail and those specs skip.
       ...(process.env.SMTP_HOST
@@ -161,6 +162,7 @@ async function main() {
     // Runtime flags for the built api (this env is what `node dist/main` gets).
     AUTH_HIBP: "true",
     AUTH_MAGIC_LINK: "true",
+    AUTH_EMAIL_OTP: "true",
   };
 
   step("migrate the auth tables");
