@@ -21,7 +21,7 @@ test("settings is reachable from the sidebar @smoke", async ({ page }) => {
 
 test("admin can toggle a feature flag and it applies live @smoke", async ({ page }) => {
   await ready(page, "/admin/settings");
-  const toggle = page.getByRole("checkbox", { name: "Magic link" });
+  const toggle = page.getByRole("switch", { name: "Magic link" });
   test.skip((await toggle.count()) === 0, "magic link toggle not present");
   // Serial workers (workers:1) make toggle-then-restore safe for other specs.
   await expect(toggle).toBeChecked();

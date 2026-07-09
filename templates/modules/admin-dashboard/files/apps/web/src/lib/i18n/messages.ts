@@ -61,6 +61,8 @@ const en = {
   nav: { overview: "Overview", users: "Users", sessions: "Sessions", audit: "Audit log", account: "Account", settings: "Settings", signOut: "Sign out" },
   settings: {
     title: "Settings", subtitle: "Which authentication features are enabled, and how they are configured.",
+    authFeaturesTitle: "Authentication features", authFeaturesSubtitle: "Toggle sign-in methods and security features. Changes apply immediately.",
+    serverConfigTitle: "Server configuration", serverConfigSubtitle: "Set through environment variables and applied at startup (read-only).",
     enabled: "Enabled", disabled: "Disabled", configuredVia: "Configured via {env}", manage: "Manage",
     saved: "Setting updated", saveFailed: "Failed to update setting",
     emailPassword: "Email & password", emailPasswordDesc: "Sign in with an email address and password.",
@@ -288,6 +290,8 @@ const ko: Messages = {
   nav: { overview: "개요", users: "회원", sessions: "세션", audit: "감사 로그", account: "계정", settings: "설정", signOut: "로그아웃" },
   settings: {
     title: "설정", subtitle: "활성화된 인증 기능과 구성 방법입니다.",
+    authFeaturesTitle: "인증 기능", authFeaturesSubtitle: "로그인 수단과 보안 기능을 켜고 끕니다. 변경은 즉시 적용됩니다.",
+    serverConfigTitle: "서버 구성", serverConfigSubtitle: "환경변수로 설정되어 시작 시 적용됩니다(읽기 전용).",
     enabled: "활성", disabled: "비활성", configuredVia: "{env} 로 구성", manage: "관리",
     saved: "설정을 변경했습니다", saveFailed: "설정 변경에 실패했습니다",
     emailPassword: "이메일·비밀번호", emailPasswordDesc: "이메일과 비밀번호로 로그인.",

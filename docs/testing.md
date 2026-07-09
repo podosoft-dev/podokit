@@ -106,21 +106,25 @@ node scripts/e2e-ci.mjs --smoke                 # @smoke subset (what PRs run)
 node scripts/e2e-ci.mjs --grep "magic link"     # only matching specs (fast feedback on one feature)
 ```
 
-### Why the Outer loop is slow — and how to iterate fast
+### Three-tier verification — how maintainers iterate fast
 
 The Outer run is dominated by **publish → `npx create` → `npm install` → build API + web**
 (minutes), not the Playwright run (seconds). So narrowing the tests (`--grep`) barely
-shortens a run — it mainly sharpens the signal. To actually iterate quickly:
+shortens a run — it mainly sharpens the signal. Split verification into three tiers:
 
-- **Author against the live app (A), not the Outer.** Keep one generated app running
-  (`dev-app.mjs` + `dev-watch` + `vite dev`/`nest start --watch`) and run just the spec
-  you're changing against it: `E2E_BASE_URL=http://localhost:<web-port> npx playwright test <spec> --grep @smoke`.
-  Template edits mirror instantly; each check is seconds. Enable the auth feature flags you
-  need (`AUTH_TWO_FACTOR`, `AUTH_HIBP`, `AUTH_MAGIC_LINK`, …) in that app's `.env`.
-- **Run the Outer once, as the gate** — before opening/merging a PR — with `--smoke`
-  (or `--grep` for the touched feature). Don't re-run the full Outer on every tweak.
-- Injection-target changes (`auth.ts`, `app.module.ts`) don't mirror; regenerate that one
-  app when you change them (see development.md).
+| Tier | When | What | Cost |
+|---|---|---|---|
+| 1 | every edit | `svelte-check` on the standing app's web; `nest build` on a regenerated app when injection targets changed | seconds |
+| 2 | before each feature commit | run just that feature's spec against the **standing verification app**: `E2E_BASE_URL=http://localhost:<web-port> npx playwright test <spec>` | seconds–1 min |
+| 3 | once per batch, before the PR | the full Outer: `node scripts/e2e-ci.mjs --smoke` (one feature only: `--grep "<pattern>"`) | ~6 min |
+
+Standing verification app rules:
+
+- Generate it once (`dev-app.mjs` + `dev-watch` + `vite dev`/`nest start --watch`) and keep
+  it running. Template edits to non-injected files mirror instantly.
+- Injection-target changes (`auth.ts`, `app.module.ts`, manifest `inject`) don't mirror —
+  **regenerate that one app** when you change them (see development.md). Don't re-run the
+  full Outer on every tweak; it's the per-batch gate, and CI repeats it once per PR.
 
 It starts Verdaccio (`scripts/verdaccio.yaml`), publishes the three packages
 (template-engine, api-client, cli) to it, runs the real `npx @podosoft/podokit create`

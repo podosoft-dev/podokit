@@ -41,7 +41,10 @@ curl -b cookies.txt localhost:3000/account/me
 
 - **Secure by default**: all module endpoints (jobs, storage, files, cache, …) are protected once `auth` is added.
 - **OAuth**: set `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` or `GITHUB_*` in `.env` to enable a provider.
-- **2FA (TOTP)**: set `AUTH_TWO_FACTOR=true`.
+- **Auth features (2FA, magic link, email OTP, username, multi-session, phone number)**: managed
+  from the admin **Settings** page (stored in the DB, applied live — no env vars, no restart).
+  Defaults are seeded by the `app_setting` migration. Server-enforced behaviours (email
+  verification, breached-password check, account deletion) stay environment flags.
 - Security/audit modules build on this (they require `auth`).
 
 
