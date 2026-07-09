@@ -15,22 +15,22 @@
   "inject": [
     {
       "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:imports",
+      "marker": "// podokit:end:imports",
       "text": "import { AuditModule } from \"./audit/audit.module\";"
     },
     {
       "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:module-imports",
+      "marker": "// podokit:end:module-imports",
       "text": "AuditModule,"
     },
     {
       "file": "apps/api/src/auth/auth.ts",
-      "marker": "// podokit:auth-imports",
+      "marker": "// podokit:end:auth-imports",
       "text": "import { auditAfterHook } from \"../audit/audit-hook\";"
     },
     {
       "file": "apps/api/src/auth/auth.ts",
-      "marker": "// podokit:auth-hooks",
+      "marker": "// podokit:end:auth-hooks",
       "text": "hooks.after = auditAfterHook;"
     }
   ],

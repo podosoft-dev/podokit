@@ -9,7 +9,8 @@ import { type AuthConfig, envAuthConfig, SUPPORTED_PROVIDER_IDS } from "./auth-c
 import { apiKey } from "@better-auth/api-key";
 import { passkey } from "@better-auth/passkey";
 import { oauthProvider } from "@better-auth/oauth-provider";
-// podokit:auth-imports
+// podokit:begin:auth-imports
+// podokit:end:auth-imports
 
 // Web origin(s) where the browser runs (WebAuthn ceremonies must match these).
 const webOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5001").split(",").map((o) => o.trim());
@@ -111,13 +112,15 @@ export function buildAuth(config: AuthConfig) {
   if (config.hibp) {
     plugins.push(haveIBeenPwned());
   }
-  // podokit:auth-plugins
+  // podokit:begin:auth-plugins
+  // podokit:end:auth-plugins
 
   // Request-time hooks. The feature gate turns the admin Settings toggles into a
   // real server boundary (disabled features 404). Other PodoKit modules add their
   // own hooks below the marker.
   const hooks: NonNullable<BetterAuthOptions["hooks"]> = { before: createFeatureGate(pool) };
-  // podokit:auth-hooks
+  // podokit:begin:auth-hooks
+  // podokit:end:auth-hooks
 
   return betterAuth({
     database: pool,
@@ -132,7 +135,8 @@ export function buildAuth(config: AuthConfig) {
           html: actionEmail("Reset your password", "Click the button below to choose a new password.", url, "Reset password"),
         });
       },
-      // podokit:auth-email-password
+      // podokit:begin:auth-email-password
+      // podokit:end:auth-email-password
     },
     emailVerification: {
       sendOnSignUp: config.requireEmailVerification,
@@ -189,7 +193,8 @@ export function buildAuth(config: AuthConfig) {
       // Self-service account deletion — admin-toggleable (auth_config), applied live.
       deleteUser: { enabled: config.allowDelete },
     },
-    // podokit:auth-options
+    // podokit:begin:auth-options
+    // podokit:end:auth-options
   });
 }
 

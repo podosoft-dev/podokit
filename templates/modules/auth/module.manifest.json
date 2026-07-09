@@ -47,47 +47,47 @@
   "inject": [
     {
       "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:imports",
+      "marker": "// podokit:end:imports",
       "text": "import { APP_GUARD } from \"@nestjs/core\";"
     },
     {
       "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:imports",
+      "marker": "// podokit:end:imports",
       "text": "import { AuthModule, AuthGuard } from \"@thallesp/nestjs-better-auth\";"
     },
     {
       "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:imports",
+      "marker": "// podokit:end:imports",
       "text": "import { authRuntime } from \"./auth/auth-provider\";"
     },
     {
       "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:imports",
+      "marker": "// podokit:end:imports",
       "text": "import { AccountModule } from \"./account/account.module\";"
     },
     {
       "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:imports",
+      "marker": "// podokit:end:imports",
       "text": "import { AuthConfigModule } from \"./auth-config/auth-config.module\";"
     },
     {
       "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:module-imports",
+      "marker": "// podokit:end:module-imports",
       "text": "AuthModule.forRoot(authRuntime),"
     },
     {
       "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:module-imports",
+      "marker": "// podokit:end:module-imports",
       "text": "AccountModule,"
     },
     {
       "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:module-imports",
+      "marker": "// podokit:end:module-imports",
       "text": "AuthConfigModule,"
     },
     {
       "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:providers",
+      "marker": "// podokit:end:providers",
       "text": "{ provide: APP_GUARD, useClass: AuthGuard },"
     }
   ],

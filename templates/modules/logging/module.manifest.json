@@ -15,8 +15,8 @@
     "LOG_LEVEL=info"
   ],
   "inject": [
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:imports", "text": "import { LoggingModule } from \"./logging/logging.module\";" },
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:module-imports", "text": "LoggingModule," }
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:imports", "text": "import { LoggingModule } from \"./logging/logging.module\";" },
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:module-imports", "text": "LoggingModule," }
   ],
   "instructions": [
     "Every HTTP request is now logged as structured JSON with a correlation id.",

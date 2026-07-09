@@ -18,8 +18,8 @@
     "S3_FORCE_PATH_STYLE=true"
   ],
   "inject": [
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:imports", "text": "import { StorageModule } from \"./storage/storage.module\";" },
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:module-imports", "text": "StorageModule," }
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:imports", "text": "import { StorageModule } from \"./storage/storage.module\";" },
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:module-imports", "text": "StorageModule," }
   ],
   "instructions": [
     "Start MinIO for local dev:  docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml up -d",

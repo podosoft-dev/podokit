@@ -5,8 +5,8 @@
   "targetApp": "api",
   "env": [],
   "inject": [
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:imports", "text": "import { EventsModule } from \"./events/events.module\";" },
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:module-imports", "text": "EventsModule," }
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:imports", "text": "import { EventsModule } from \"./events/events.module\";" },
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:module-imports", "text": "EventsModule," }
   ],
   "instructions": [
     "Stream events:  curl -N localhost:5002/events/stream",

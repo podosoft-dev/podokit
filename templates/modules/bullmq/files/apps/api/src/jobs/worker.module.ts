@@ -2,7 +2,8 @@ import { Module } from "@nestjs/common";
 import { BullModule } from "@nestjs/bullmq";
 import { DemoProcessor } from "./demo.processor";
 import { DEMO_QUEUE, redisConnection } from "./queue";
-// podokit:worker-imports
+// podokit:begin:worker-imports
+// podokit:end:worker-imports
 
 // Consumer side: runs BullMQ processors. Bootstrapped by main-worker.ts as a
 // separate process so workers scale independently of the API.
@@ -10,11 +11,13 @@ import { DEMO_QUEUE, redisConnection } from "./queue";
   imports: [
     BullModule.forRoot({ connection: redisConnection() }),
     BullModule.registerQueue({ name: DEMO_QUEUE }),
-    // podokit:worker-queues
+    // podokit:begin:worker-queues
+    // podokit:end:worker-queues
   ],
   providers: [
     DemoProcessor,
-    // podokit:worker-providers
+    // podokit:begin:worker-providers
+    // podokit:end:worker-providers
   ],
 })
 export class WorkerModule {}

@@ -67,7 +67,16 @@ describe("addModule (auth / better-auth)", () => {
     addModule({ projectRoot: project, module: "auth", modulesDir: MODULES });
     addModule({ projectRoot: project, module: "auth", modulesDir: MODULES });
     const appModule = readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8");
+    // wiring stays singular
     expect(appModule.match(/AuthModule\.forRoot\(authRuntime\),/g)?.length).toBe(1);
+    // fenced regions stay intact and singular (injection lands inside them)
+    expect(appModule.match(/\/\/ podokit:begin:module-imports/g)?.length).toBe(1);
+    expect(appModule.match(/\/\/ podokit:end:module-imports/g)?.length).toBe(1);
+    const region = appModule.slice(
+      appModule.indexOf("// podokit:begin:module-imports"),
+      appModule.indexOf("// podokit:end:module-imports"),
+    );
+    expect(region).toContain("AuthModule.forRoot(authRuntime),");
   });
 
   it("rejects an unknown module", () => {

@@ -13,8 +13,8 @@
     "RATE_LIMIT_MAX=100"
   ],
   "inject": [
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:imports", "text": "import { RateLimitModule } from \"./rate-limit/rate-limit.module\";" },
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:module-imports", "text": "RateLimitModule," }
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:imports", "text": "import { RateLimitModule } from \"./rate-limit/rate-limit.module\";" },
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:module-imports", "text": "RateLimitModule," }
   ],
   "instructions": [
     "Ensure Redis is running:  docker compose -f infra/docker/docker-compose.yml up -d",

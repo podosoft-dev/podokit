@@ -5,7 +5,8 @@ import { validateEnv } from "./config/env.validation";
 import { dataSourceOptions } from "./database/data-source";
 import { HealthModule } from "./health/health.module";
 import { TodosModule } from "./todos/todos.module";
-// podokit:imports
+// podokit:begin:imports
+// podokit:end:imports
 
 @Module({
   imports: [
@@ -13,10 +14,12 @@ import { TodosModule } from "./todos/todos.module";
     TypeOrmModule.forRoot(dataSourceOptions),
     HealthModule,
     TodosModule,
-    // podokit:module-imports
+    // podokit:begin:module-imports
+    // podokit:end:module-imports
   ],
   providers: [
-    // podokit:providers
+    // podokit:begin:providers
+    // podokit:end:providers
   ],
 })
 export class AppModule {}

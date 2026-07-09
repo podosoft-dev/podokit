@@ -10,8 +10,8 @@
     "# redis (REDIS_HOST / REDIS_PORT already defined above)"
   ],
   "inject": [
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:imports", "text": "import { RedisModule } from \"./redis/redis.module\";" },
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:module-imports", "text": "RedisModule," }
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:imports", "text": "import { RedisModule } from \"./redis/redis.module\";" },
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:module-imports", "text": "RedisModule," }
   ],
   "instructions": [
     "Start Redis:  docker compose -f infra/docker/docker-compose.yml up -d",

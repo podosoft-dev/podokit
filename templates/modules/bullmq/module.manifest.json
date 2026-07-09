@@ -17,12 +17,12 @@
   "inject": [
     {
       "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:imports",
+      "marker": "// podokit:end:imports",
       "text": "import { JobsModule } from \"./jobs/jobs.module\";"
     },
     {
       "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:module-imports",
+      "marker": "// podokit:end:module-imports",
       "text": "JobsModule,"
     }
   ],
