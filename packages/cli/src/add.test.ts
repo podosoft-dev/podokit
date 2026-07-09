@@ -55,6 +55,11 @@ describe("addModule (auth / better-auth)", () => {
     expect(readFileSync(join(project, "apps/api/src/health/health.controller.ts"), "utf8")).toContain("@Public()");
     // env example appended
     expect(readFileSync(join(project, ".env.example"), "utf8")).toContain("BETTER_AUTH_SECRET");
+    // the module is recorded in the manifest for future `podo update`
+    const manifest = JSON.parse(readFileSync(join(project, ".podokit/manifest.json"), "utf8")) as {
+      modules: { name: string }[];
+    };
+    expect(manifest.modules.map((m) => m.name)).toContain("auth");
   });
 
   it("is idempotent for wiring when applied twice", () => {

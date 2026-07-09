@@ -2,6 +2,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { copyTemplate, type TemplateVars } from "@podosoft/podokit-template-engine";
 import { DEFAULT_TEMPLATE } from "./templates";
+import { initLockfile } from "./lockfile";
 
 export type PackageManager = "npm" | "pnpm" | "yarn";
 
@@ -18,6 +19,8 @@ export interface CreateOptions {
   targetDir?: string;
   /** Package manager recorded in the generated project. Defaults to `npm`. */
   packageManager?: PackageManager;
+  /** PodoKit version stamped into the lockfile. Defaults to the CLI version. */
+  podokitVersion?: string;
 }
 
 export interface CreateResult {
@@ -68,6 +71,13 @@ export function create(options: CreateOptions): CreateResult {
 
   const vars: TemplateVars = { projectName: name, packageManager };
   copyTemplate(templateDir, projectDir, vars);
+
+  initLockfile(projectDir, {
+    template,
+    packageManager,
+    answers: { projectName: name, packageManager },
+    version: options.podokitVersion,
+  });
 
   return { projectDir, packageManager, template };
 }

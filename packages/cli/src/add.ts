@@ -7,6 +7,7 @@ import {
   type JsonObject,
   type TemplateVars,
 } from "@podosoft/podokit-template-engine";
+import { recordModules } from "./lockfile";
 
 interface Injection {
   file: string;
@@ -31,6 +32,8 @@ export interface AddOptions {
   projectRoot: string;
   module: string;
   modulesDir: string;
+  /** PodoKit version stamped into the lockfile. Defaults to the CLI version. */
+  podokitVersion?: string;
 }
 
 export interface AddResult {
@@ -93,7 +96,10 @@ function isApplied(projectRoot: string, modulesDir: string, module: string): boo
  * and inject wiring at markers. Missing required modules are added first.
  */
 export function addModule(options: AddOptions): AddResult {
-  return applyModule(options.projectRoot, options.module, options.modulesDir, new Set());
+  const result = applyModule(options.projectRoot, options.module, options.modulesDir, new Set());
+  // Record the module (and any auto-added requirements) and refresh the lock.
+  recordModules(options.projectRoot, [...result.added, result.module], options.podokitVersion);
+  return result;
 }
 
 function applyModule(
