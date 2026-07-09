@@ -60,53 +60,54 @@
     <h1 class="text-2xl font-semibold">{i18n.t.settings.title}</h1>
     <p class="text-muted-foreground text-sm">{i18n.t.settings.subtitle}</p>
   </div>
-  <Card.Root>
-    <Card.Header>
-      <Card.Title>{i18n.t.settings.authFeaturesTitle}</Card.Title>
-      <Card.Description>{i18n.t.settings.authFeaturesSubtitle}</Card.Description>
-    </Card.Header>
-    <Card.Content class="divide-y p-0">
+  <section class="flex flex-col gap-3">
+    <div>
+      <h2 class="text-lg font-semibold">{i18n.t.settings.authFeaturesTitle}</h2>
+      <p class="text-muted-foreground text-sm">{i18n.t.settings.authFeaturesSubtitle}</p>
+    </div>
+    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {#each authFeatures as f (f.name)}
-        <div class="flex items-center justify-between gap-4 p-4">
-          <div class="flex flex-col gap-0.5">
+        <Card.Root class="flex flex-col gap-1.5 p-4">
+          <div class="flex items-start justify-between gap-3">
             <label for={`flag-${f.flag}`} class="font-medium">{f.name}</label>
-            <p class="text-muted-foreground text-sm">{f.desc}</p>
-            {#if f.manageHref}
-              <a href={f.manageHref} class="text-primary mt-1 text-sm font-medium hover:underline">{i18n.t.settings.manage}</a>
-            {/if}
+            <Switch
+              class="shrink-0"
+              id={`flag-${f.flag}`}
+              aria-label={f.name}
+              checked={f.enabled}
+              disabled={saving}
+              onCheckedChange={(v) => toggle(f.flag!, v === true)}
+            />
           </div>
-          <Switch
-            id={`flag-${f.flag}`}
-            aria-label={f.name}
-            checked={f.enabled}
-            disabled={saving}
-            onCheckedChange={(v) => toggle(f.flag!, v === true)}
-          />
-        </div>
+          <p class="text-muted-foreground text-sm">{f.desc}</p>
+          {#if f.manageHref}
+            <a href={f.manageHref} class="text-primary mt-auto pt-1 text-sm font-medium hover:underline">{i18n.t.settings.manage}</a>
+          {/if}
+        </Card.Root>
       {/each}
-    </Card.Content>
-  </Card.Root>
+    </div>
+  </section>
 
-  <Card.Root>
-    <Card.Header>
-      <Card.Title>{i18n.t.settings.serverConfigTitle}</Card.Title>
-      <Card.Description>{i18n.t.settings.serverConfigSubtitle}</Card.Description>
-    </Card.Header>
-    <Card.Content class="divide-y p-0">
+  <section class="flex flex-col gap-3">
+    <div>
+      <h2 class="text-lg font-semibold">{i18n.t.settings.serverConfigTitle}</h2>
+      <p class="text-muted-foreground text-sm">{i18n.t.settings.serverConfigSubtitle}</p>
+    </div>
+    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {#each serverConfig as f (f.name)}
-        <div class="flex items-center justify-between gap-4 p-4">
-          <div class="flex flex-col gap-0.5">
+        <Card.Root class="flex flex-col gap-1.5 p-4">
+          <div class="flex items-start justify-between gap-3">
             <span class="font-medium">{f.name}</span>
-            <p class="text-muted-foreground text-sm">{f.desc}</p>
-            {#if f.enabled && f.detail}<p class="text-muted-foreground text-xs">{f.detail}</p>{/if}
-            {#if f.env}<p class="text-muted-foreground text-xs">{fmt(i18n.t.settings.configuredVia, { env: f.env })}</p>{/if}
+            <Badge variant={f.enabled ? "secondary" : "outline"} class="shrink-0 gap-1.5">
+              <span class={`size-1.5 rounded-full ${f.enabled ? "bg-green-500" : "bg-muted-foreground/40"}`}></span>
+              {f.enabled ? i18n.t.settings.enabled : i18n.t.settings.disabled}
+            </Badge>
           </div>
-          <Badge variant={f.enabled ? "secondary" : "outline"} class="shrink-0 gap-1.5">
-            <span class={`size-1.5 rounded-full ${f.enabled ? "bg-green-500" : "bg-muted-foreground/40"}`}></span>
-            {f.enabled ? i18n.t.settings.enabled : i18n.t.settings.disabled}
-          </Badge>
-        </div>
+          <p class="text-muted-foreground text-sm">{f.desc}</p>
+          {#if f.enabled && f.detail}<p class="text-muted-foreground text-xs">{f.detail}</p>{/if}
+          {#if f.env}<p class="text-muted-foreground mt-auto pt-1 text-xs">{fmt(i18n.t.settings.configuredVia, { env: f.env })}</p>{/if}
+        </Card.Root>
       {/each}
-    </Card.Content>
-  </Card.Root>
+    </div>
+  </section>
 </div>
