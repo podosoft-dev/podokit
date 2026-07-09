@@ -24,7 +24,8 @@ export class InitAppSettings1720400000000 implements MigrationInterface {
         ('username', 'true'),
         ('multiSession', 'true'),
         ('phoneNumber', 'false'),
-        ('apiKey', 'true')
+        ('apiKey', 'true'),
+        ('passkey', 'true')
       ON CONFLICT ("key") DO NOTHING
     `);
   }

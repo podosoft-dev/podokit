@@ -12,6 +12,7 @@ const FEATURE_PATHS: Array<{ flag: FeatureFlag; prefixes: string[] }> = [
   { flag: "multiSession", prefixes: ["/multi-session/"] },
   { flag: "phoneNumber", prefixes: ["/phone-number/", "/sign-in/phone-number"] },
   { flag: "apiKey", prefixes: ["/api-key/"] },
+  { flag: "passkey", prefixes: ["/passkey/", "/sign-in/passkey"] },
 ];
 
 const CACHE_TTL_MS = 3_000;

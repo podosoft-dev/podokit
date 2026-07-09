@@ -4,7 +4,11 @@ import { Pool } from "pg";
 import { actionEmail, sendMail } from "../mail/mailer";
 import { createFeatureGate } from "./feature-gate";
 import { apiKey } from "@better-auth/api-key";
+import { passkey } from "@better-auth/passkey";
 // podokit:auth-imports
+
+// Web origin(s) where the browser runs (WebAuthn ceremonies must match these).
+const webOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5173").split(",").map((o) => o.trim());
 
 const pool = new Pool({
   host: process.env.POSTGRES_HOST ?? "localhost",
@@ -76,6 +80,10 @@ const plugins: BetterAuthPlugin[] = [
   }),
   // User-issued API keys (DB-backed). Distinct from the static X-API-Key module.
   apiKey(),
+  // Passwordless sign-in with WebAuthn passkeys. The ceremony runs at the web
+  // origin, so expected origins are the CORS origins and rpID is their host.
+  // Change rpName to your product name (shown in the browser passkey prompt).
+  passkey({ rpName: "PodoKit", rpID: new URL(webOrigins[0]).hostname, origin: webOrigins }),
 ];
 // Reject passwords found in known breaches (Have I Been Pwned, k-anonymity range
 // API). Server-enforced, so it's an environment flag applied at startup.

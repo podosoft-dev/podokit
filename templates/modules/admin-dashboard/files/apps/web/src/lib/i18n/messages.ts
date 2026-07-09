@@ -59,6 +59,12 @@ const en = {
     emailNotVerified: "Verify your email before signing in.",
   },
   nav: { overview: "Overview", users: "Users", sessions: "Sessions", audit: "Audit log", account: "Account", settings: "Settings", signOut: "Sign out" },
+  passkeys: {
+    title: "Passkeys", subtitle: "Passwordless sign-in with your device (Face ID, fingerprint, security key).",
+    name: "Name", namePlaceholder: "e.g. MacBook", add: "Add passkey", remove: "Remove", untitled: "Passkey",
+    added: "Passkey added", addFailed: "Failed to add passkey", removed: "Passkey removed", removeFailed: "Failed to remove passkey",
+    empty: "No passkeys yet.",
+  },
   apiKeys: {
     title: "API keys", subtitle: "Personal keys for programmatic access. Send as an x-api-key header.",
     name: "Name", namePlaceholder: "e.g. CI pipeline", create: "Create key",
@@ -81,6 +87,7 @@ const en = {
     multiSession: "Multi-account sessions", multiSessionDesc: "Let one browser stay signed into several accounts and switch between them.",
     phoneNumber: "Phone number", phoneNumberDesc: "Register and verify a phone number via SMS (configure a provider for real delivery).",
     apiKey: "API keys", apiKeyDesc: "Let users create personal API keys for programmatic access.",
+    passkey: "Passkeys", passkeyDesc: "Let users register passkeys for passwordless sign-in.",
     twoFactor: "Two-factor authentication", twoFactorDesc: "TOTP second factor with backup codes.",
     socialProviders: "Social providers", socialProvidersDesc: "OAuth sign-in (Google, GitHub).",
     breachCheck: "Breached-password check", breachCheckDesc: "Reject passwords found in known breaches (Have I Been Pwned).",
@@ -297,6 +304,12 @@ const ko: Messages = {
     resetFailed: "재설정에 실패했습니다",
   },
   nav: { overview: "개요", users: "회원", sessions: "세션", audit: "감사 로그", account: "계정", settings: "설정", signOut: "로그아웃" },
+  passkeys: {
+    title: "패스키", subtitle: "기기로 비밀번호 없이 로그인(Face ID, 지문, 보안 키).",
+    name: "이름", namePlaceholder: "예: MacBook", add: "패스키 추가", remove: "삭제", untitled: "패스키",
+    added: "패스키를 추가했습니다", addFailed: "패스키 추가에 실패했습니다", removed: "패스키를 삭제했습니다", removeFailed: "패스키 삭제에 실패했습니다",
+    empty: "아직 패스키가 없습니다.",
+  },
   apiKeys: {
     title: "API 키", subtitle: "프로그래밍 방식 접근용 개인 키. x-api-key 헤더로 전송합니다.",
     name: "이름", namePlaceholder: "예: CI 파이프라인", create: "키 생성",
@@ -319,6 +332,7 @@ const ko: Messages = {
     multiSession: "다중 계정 세션", multiSessionDesc: "한 브라우저에서 여러 계정에 로그인하고 전환.",
     phoneNumber: "전화번호", phoneNumberDesc: "SMS로 전화번호 등록·인증(실발송은 프로바이더 연동 필요).",
     apiKey: "API 키", apiKeyDesc: "프로그래밍 방식 접근을 위한 개인 API 키 발급을 허용.",
+    passkey: "패스키", passkeyDesc: "비밀번호 없는 로그인을 위한 패스키 등록을 허용.",
     twoFactor: "2단계 인증", twoFactorDesc: "TOTP 2차 인증 + 백업 코드.",
     socialProviders: "소셜 로그인", socialProvidersDesc: "OAuth 로그인 (Google, GitHub).",
     breachCheck: "유출 비밀번호 검사", breachCheckDesc: "유출된 비밀번호 거부 (Have I Been Pwned).",

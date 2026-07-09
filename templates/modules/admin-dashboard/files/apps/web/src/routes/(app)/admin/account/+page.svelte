@@ -163,6 +163,36 @@
     toast.success(i18n.t.account.twoFactorDisabled);
   }
 
+  // Passkeys (WebAuthn) — passwordless credentials bound to this device/browser.
+  type Passkey = { id: string; name: string | null; createdAt: string | Date };
+  let passkeys = $state<Passkey[]>([]);
+  let newPasskeyName = $state("");
+  let passkeyBusy = $state(false);
+  async function loadPasskeys(): Promise<void> {
+    if (!caps.passkey) return;
+    const { data: res } = await api.auth.passkey.listUserPasskeys();
+    passkeys = (res ?? []) as Passkey[];
+  }
+  async function registerPasskey(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    passkeyBusy = true;
+    // Triggers the browser WebAuthn ceremony (navigator.credentials.create).
+    const { error } = await api.auth.passkey.addPasskey({ name: newPasskeyName.trim() || undefined });
+    passkeyBusy = false;
+    if (error) return void toast.error(error.message ?? i18n.t.passkeys.addFailed);
+    newPasskeyName = "";
+    toast.success(i18n.t.passkeys.added);
+    await loadPasskeys();
+  }
+  async function deletePasskey(id: string): Promise<void> {
+    passkeyBusy = true;
+    const { error } = await api.auth.passkey.deletePasskey({ id });
+    passkeyBusy = false;
+    if (error) return void toast.error(error.message ?? i18n.t.passkeys.removeFailed);
+    toast.success(i18n.t.passkeys.removed);
+    await loadPasskeys();
+  }
+
   // Connected accounts
   type Account = { id: string; providerId: string; accountId: string };
   let accounts = $state<Account[]>([]);
@@ -295,6 +325,7 @@
     void loadAccounts();
     void loadDeviceSessions();
     void loadApiKeys();
+    void loadPasskeys();
   });
 </script>
 
@@ -442,6 +473,42 @@
                     <Input id="tf-on-pw" type="password" bind:value={twoFaPassword} autocomplete="current-password" />
                   </div>
                   <Button class="w-fit" disabled={twoFaBusy || !twoFaPassword} onclick={enable2fa}>{i18n.t.account.enable}</Button>
+                {/if}
+              </Card.Content>
+            </Card.Root>
+          {/if}
+          {#if caps.passkey}
+            <Card.Root>
+              <Card.Header>
+                <Card.Title>{i18n.t.passkeys.title}</Card.Title>
+                <Card.Description>{i18n.t.passkeys.subtitle}</Card.Description>
+              </Card.Header>
+              <Card.Content class="flex flex-col gap-4">
+                <form class="flex items-end gap-2" onsubmit={registerPasskey}>
+                  <div class="flex flex-1 flex-col gap-2">
+                    <Label for="passkey-name">{i18n.t.passkeys.name}</Label>
+                    <Input id="passkey-name" bind:value={newPasskeyName} placeholder={i18n.t.passkeys.namePlaceholder} />
+                  </div>
+                  <Button type="submit" disabled={passkeyBusy}>{i18n.t.passkeys.add}</Button>
+                </form>
+                {#if passkeys.length}
+                  <div class="rounded-md border">
+                    <Table.Root>
+                      <Table.Body>
+                        {#each passkeys as pk (pk.id)}
+                          <Table.Row>
+                            <Table.Cell class="font-medium">{pk.name || i18n.t.passkeys.untitled}</Table.Cell>
+                            <Table.Cell class="text-muted-foreground">{formatDateTime(pk.createdAt)}</Table.Cell>
+                            <Table.Cell class="w-10">
+                              <Button variant="ghost" size="sm" disabled={passkeyBusy} onclick={() => deletePasskey(pk.id)}>{i18n.t.passkeys.remove}</Button>
+                            </Table.Cell>
+                          </Table.Row>
+                        {/each}
+                      </Table.Body>
+                    </Table.Root>
+                  </div>
+                {:else}
+                  <p class="text-muted-foreground text-sm">{i18n.t.passkeys.empty}</p>
                 {/if}
               </Card.Content>
             </Card.Root>
