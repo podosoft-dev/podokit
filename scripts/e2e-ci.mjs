@@ -150,6 +150,11 @@ async function main() {
     ].join("\n") + "\n",
   );
 
+  // Local SMS sink (the dev "Mailpit for SMS") — the api posts OTPs here and the
+  // phone-number spec reads them back over REST.
+  const smsSinkPort = process.env.SMS_SINK_PORT ?? "8095";
+  const smsSinkURL = `http://localhost:${smsSinkPort}`;
+
   const pgEnv = {
     ...process.env,
     POSTGRES_HOST: env.POSTGRES_HOST,
@@ -162,6 +167,8 @@ async function main() {
     // Runtime env for the built api (`node dist/main` below). Auth feature flags
     // are DB-backed (migration-seeded), so only server-enforced env remains.
     AUTH_HIBP: "true",
+    // Route phone-number OTPs to the local SMS sink so the phone spec can read them.
+    SMS_WEBHOOK_URL: `${smsSinkURL}/sms`,
   };
 
   step("migrate the auth tables");
@@ -175,6 +182,8 @@ async function main() {
   run("npm", ["run", "build", "-w", "app-web"], { cwd: target });
 
   step("start api + web");
+  bg("node", [join(target, "infra/docker/sms-sink.mjs")], { cwd: target, env: { ...process.env, PORT: smsSinkPort } });
+  await waitFor(`${smsSinkURL}/readyz`, "sms-sink");
   bg("node", ["dist/main"], {
     cwd: join(target, "apps/api"),
     env: { ...pgEnv, PORT: env.API_PORT, BETTER_AUTH_URL: `http://localhost:${env.API_PORT}`, CORS_ORIGIN: webURL },
@@ -191,7 +200,7 @@ async function main() {
   // --grep wins when given (run just one feature's specs); otherwise --smoke runs
   // the @smoke subset, and the default runs everything.
   const testArgs = ["playwright", "test", ...(grep ? ["--grep", grep] : smoke ? ["--grep", "@smoke"] : [])];
-  run("npx", testArgs, { cwd: join(target, "tests"), env: { ...process.env, E2E_BASE_URL: webURL } });
+  run("npx", testArgs, { cwd: join(target, "tests"), env: { ...process.env, E2E_BASE_URL: webURL, SMS_SINK_URL: smsSinkURL } });
 
   console.log("\n✓ faithful e2e passed");
 }
