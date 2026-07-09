@@ -2,7 +2,16 @@ import { betterAuth, type BetterAuthOptions, type BetterAuthPlugin } from "bette
 import { twoFactor, haveIBeenPwned, magicLink, emailOTP, username, multiSession, phoneNumber } from "better-auth/plugins";
 import { Pool } from "pg";
 import { actionEmail, sendMail } from "../mail/mailer";
+import { createFeatureGate } from "./feature-gate";
 // podokit:auth-imports
+
+const pool = new Pool({
+  host: process.env.POSTGRES_HOST ?? "localhost",
+  port: Number(process.env.POSTGRES_PORT ?? 5432),
+  user: process.env.POSTGRES_USER ?? "podokit",
+  password: process.env.POSTGRES_PASSWORD ?? "podokit",
+  database: process.env.POSTGRES_DB ?? "podokit",
+});
 
 // Email verification is opt-in: when on, new sign-ups must confirm their address
 // before they can sign in.
@@ -72,14 +81,14 @@ if (process.env.AUTH_HIBP === "true") {
 }
 // podokit:auth-plugins
 
+// Request-time hooks. The feature gate turns the admin Settings toggles into a
+// real server boundary (disabled features 404). Other PodoKit modules add their
+// own hooks below the marker.
+const hooks: NonNullable<BetterAuthOptions["hooks"]> = { before: createFeatureGate(pool) };
+// podokit:auth-hooks
+
 export const auth = betterAuth({
-  database: new Pool({
-    host: process.env.POSTGRES_HOST ?? "localhost",
-    port: Number(process.env.POSTGRES_PORT ?? 5432),
-    user: process.env.POSTGRES_USER ?? "podokit",
-    password: process.env.POSTGRES_PASSWORD ?? "podokit",
-    database: process.env.POSTGRES_DB ?? "podokit",
-  }),
+  database: pool,
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: emailVerificationEnabled,
@@ -107,6 +116,7 @@ export const auth = betterAuth({
   },
   socialProviders: socialProviders(),
   plugins,
+  hooks,
   secret: process.env.BETTER_AUTH_SECRET ?? "change-me-in-production-min-32-characters",
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
   advanced: {

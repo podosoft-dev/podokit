@@ -82,6 +82,27 @@ test("only admins can change settings @smoke", async ({ playwright }) => {
   await userCtx.dispose();
 });
 
+test("disabling a feature blocks its endpoint server-side and re-enabling restores it @smoke", async ({ playwright }) => {
+  // Uses a fresh admin context (not the shared storageState) so it never rotates
+  // the seeded session. Toggles a flag and confirms the feature gate enforces it.
+  const admin = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  await admin.post("/api/auth/sign-in/email", { data: { email: ADMIN.email, password: ADMIN.password } });
+  const caps = await (await admin.get("/api/account/capabilities")).json();
+  test.skip(!caps?.magicLink, "magic link not enabled");
+
+  // A disabled feature's endpoint 404s; the gate reads the flag through a short cache.
+  const status = (): Promise<number> =>
+    admin.post("/api/auth/sign-in/magic-link", { data: { email: "probe@example.com" } }).then((r) => r.status());
+
+  expect((await admin.put("/api/account/settings", { data: { magicLink: false } })).ok()).toBeTruthy();
+  await expect.poll(status, { timeout: 8000 }).toBe(404);
+
+  expect((await admin.put("/api/account/settings", { data: { magicLink: true } })).ok()).toBeTruthy();
+  await expect.poll(status, { timeout: 8000 }).not.toBe(404);
+
+  await admin.dispose();
+});
+
 test("sign-in with a wrong password is rejected", async ({ request }) => {
   const res = await request.post("/api/auth/sign-in/email", {
     headers: origin,

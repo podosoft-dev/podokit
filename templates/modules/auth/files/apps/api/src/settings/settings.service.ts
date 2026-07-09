@@ -3,27 +3,15 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { AppSetting } from "./app-setting.entity";
 
+import { FLAG_DEFAULTS, FEATURE_FLAGS, type FeatureFlag } from "./flag-defaults";
+
 /** Admin-editable feature flags — the DB (app_setting) is the single source of
  *  truth. Defaults are seeded by the InitAppSettings migration and changed live
  *  from the admin Settings page. Only features whose plugin can be mounted
  *  unconditionally live here; their endpoints are blocked server-side when off
  *  (see auth/feature-gate.ts). Server-enforced flags (email verification, breach
  *  check, self-deletion) and secrets/infra stay in the environment. */
-export type FeatureFlag = "twoFactor" | "magicLink" | "emailOtp" | "username" | "multiSession" | "phoneNumber";
-
-/** Shipped defaults — must match the rows seeded by the InitAppSettings migration.
- *  Used only defensively before the migration has run. phoneNumber is off by
- *  default because real delivery needs an SMS provider. */
-export const FLAG_DEFAULTS: Record<FeatureFlag, boolean> = {
-  twoFactor: true,
-  magicLink: true,
-  emailOtp: true,
-  username: true,
-  multiSession: true,
-  phoneNumber: false,
-};
-
-export const FEATURE_FLAGS = Object.keys(FLAG_DEFAULTS) as FeatureFlag[];
+export { FEATURE_FLAGS, type FeatureFlag };
 
 @Injectable()
 export class SettingsService implements OnModuleInit {

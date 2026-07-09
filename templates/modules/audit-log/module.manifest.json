@@ -27,8 +27,8 @@
     },
     {
       "file": "apps/api/src/auth/auth.ts",
-      "marker": "// podokit:auth-options",
-      "text": "hooks: { after: auditAfterHook },"
+      "marker": "// podokit:auth-hooks",
+      "text": "hooks.after = auditAfterHook;"
     }
   ],
   "instructions": [
