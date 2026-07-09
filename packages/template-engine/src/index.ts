@@ -115,6 +115,70 @@ export function insertAtMarker(content: string, marker: string, text: string): s
   return lines.join("\n");
 }
 
+/**
+ * Remove the first line equal to `text` (trimmed), the inverse of
+ * {@link insertAtMarker}. No-op if the line is absent (idempotent). Used by
+ * `podo remove` and by update when recomputing a region from scratch.
+ */
+export function removeAtMarker(content: string, text: string): string {
+  const needle = text.trim();
+  const lines = content.split("\n");
+  const index = lines.findIndex((line) => line.trim() === needle);
+  if (index === -1) return content;
+  lines.splice(index, 1);
+  return lines.join("\n");
+}
+
+/** A fenced region located within a file. Line indices are 0-based, exclusive of the fences. */
+export interface Region {
+  /** Body lines between the fences (fence lines excluded). */
+  lines: string[];
+  /** Index of the `begin` fence line. */
+  beginLine: number;
+  /** Index of the `end` fence line. */
+  endLine: number;
+  /** Indentation of the `begin` fence, reused when rewriting the body. */
+  indent: string;
+}
+
+const beginFence = (name: string): string => `// podokit:begin:${name}`;
+const endFence = (name: string): string => `// podokit:end:${name}`;
+
+/**
+ * Locate the fenced region `// podokit:begin:<name>` … `// podokit:end:<name>`.
+ * Returns null if either fence is missing. The region body is everything
+ * between the fence lines, which update recomputes from the module set.
+ */
+export function extractRegion(content: string, name: string): Region | null {
+  const lines = content.split("\n");
+  const beginLine = lines.findIndex((line) => line.includes(beginFence(name)));
+  if (beginLine === -1) return null;
+  const endLine = lines.findIndex((line, i) => i > beginLine && line.includes(endFence(name)));
+  if (endLine === -1) return null;
+  return {
+    lines: lines.slice(beginLine + 1, endLine),
+    beginLine,
+    endLine,
+    indent: lines[beginLine]!.match(/^\s*/)?.[0] ?? "",
+  };
+}
+
+/**
+ * Replace the body of the fenced region `<name>` with `body`, preserving the
+ * fence lines and applying the begin fence's indentation to each body line.
+ * Throws if the region is not found.
+ */
+export function replaceRegion(content: string, name: string, body: string[]): string {
+  const region = extractRegion(content, name);
+  if (!region) {
+    throw new Error(`Region not found: ${name}`);
+  }
+  const indented = body.map((line) => (line.length ? `${region.indent}${line}` : line));
+  const lines = content.split("\n");
+  lines.splice(region.beginLine + 1, region.endLine - region.beginLine - 1, ...indented);
+  return lines.join("\n");
+}
+
 function isPlainObject(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

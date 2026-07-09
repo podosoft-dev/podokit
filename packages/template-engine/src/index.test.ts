@@ -11,6 +11,9 @@ import {
   renderTemplate,
   writeTree,
   hashContent,
+  removeAtMarker,
+  extractRegion,
+  replaceRegion,
 } from "./index";
 
 const created: string[] = [];
@@ -84,6 +87,56 @@ describe("insertAtMarker", () => {
 
   it("throws when the marker is missing", () => {
     expect(() => insertAtMarker(src, "// nope", "X")).toThrow(/Marker not found/);
+  });
+});
+
+describe("removeAtMarker", () => {
+  const src = ["imports: [", "    AuthModule,", "    HealthModule,", "  ],"].join("\n");
+  it("removes the first matching line and is idempotent", () => {
+    const once = removeAtMarker(src, "AuthModule,");
+    expect(once).not.toContain("AuthModule,");
+    expect(removeAtMarker(once, "AuthModule,")).toBe(once);
+  });
+  it("inverts insertAtMarker", () => {
+    const withMarker = ["imports: [", "    // podokit:end:module-imports", "  ],"].join("\n");
+    const inserted = insertAtMarker(withMarker, "// podokit:end:module-imports", "AuthModule,");
+    expect(removeAtMarker(inserted, "AuthModule,")).toBe(withMarker);
+  });
+});
+
+describe("fenced regions", () => {
+  const src = [
+    "  imports: [",
+    "    HealthModule,",
+    "    // podokit:begin:module-imports",
+    "    AuthModule,",
+    "    // podokit:end:module-imports",
+    "  ],",
+  ].join("\n");
+
+  it("extractRegion returns the body between fences", () => {
+    const region = extractRegion(src, "module-imports");
+    expect(region?.lines).toEqual(["    AuthModule,"]);
+    expect(region?.indent).toBe("    ");
+  });
+
+  it("extractRegion returns null when a fence is missing", () => {
+    expect(extractRegion(src, "nope")).toBeNull();
+    expect(extractRegion("// podokit:begin:x", "x")).toBeNull();
+  });
+
+  it("replaceRegion rewrites the body and preserves fences with indentation", () => {
+    const out = replaceRegion(src, "module-imports", ["AuthModule,", "RedisModule,"]);
+    expect(out).toContain("    // podokit:begin:module-imports\n    AuthModule,\n    RedisModule,\n    // podokit:end:module-imports");
+    expect(extractRegion(out, "module-imports")?.lines).toEqual(["    AuthModule,", "    RedisModule,"]);
+  });
+
+  it("replaceRegion with an empty body clears the region", () => {
+    expect(extractRegion(replaceRegion(src, "module-imports", []), "module-imports")?.lines).toEqual([]);
+  });
+
+  it("replaceRegion throws when the region is missing", () => {
+    expect(() => replaceRegion(src, "nope", [])).toThrow(/Region not found/);
   });
 });
 
