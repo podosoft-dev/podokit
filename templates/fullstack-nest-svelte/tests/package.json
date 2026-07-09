@@ -9,6 +9,7 @@
     "test:e2e:report": "playwright show-report"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.1"
+    "@playwright/test": "^1.61.1",
+    "otpauth": "^9.5.1"
   }
 }
