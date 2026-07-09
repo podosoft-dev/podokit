@@ -286,6 +286,35 @@ npm run dev
 - Password reset link is logged to the API console in dev; wire a real mailer via `emailAndPassword.sendResetPassword` for production.
 - **i18n**: all pages are localized (English default + Korean); a language switch sits on the login screen and in the dashboard header. Add locales/strings in `apps/web/src/lib/i18n/messages.ts`.
 
+#### Roles and permissions (access control)
+
+Roles and their permissions are defined in `apps/api/src/auth/permissions.ts` and
+wired into the admin plugin. Out of the box there are three roles — `admin`
+(full control), `moderator` (manage the example `content` resource), and `user`
+(read content) — and the assignable names are surfaced to the UI through
+`/account/capabilities`, so the Users page role picker stays in sync with the server.
+
+Extend it by adding resources/actions to the `statement` and granting them to roles:
+
+```ts
+// apps/api/src/auth/permissions.ts
+export const statement = { ...defaultStatements, invoice: ["read", "issue", "void"] } as const;
+export const roles = {
+  admin: ac.newRole({ ...adminAc.statements, content: ["read","create","update","delete"], invoice: ["read","issue","void"] }),
+  moderator: ac.newRole({ content: ["read","create","update","delete"], invoice: ["read"] }),
+  user: ac.newRole({ ...userAc.statements, content: ["read"] }),
+};
+```
+
+Guard your own routes by permission instead of by role — the server is authoritative:
+
+```ts
+const { success } = await auth.api.userHasPermission({
+  body: { userId: session.user.id, permissions: { invoice: ["issue"] } },
+});
+if (!success) throw new ForbiddenException();
+```
+
 ## Roadmap
 
 More modules are planned — redis, queue (BullMQ), object storage (S3), file
