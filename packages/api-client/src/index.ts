@@ -48,6 +48,8 @@ export interface Capabilities {
   passkey: boolean;
   /** Organizations: multi-tenant teams with members and invitations. */
   organization: boolean;
+  /** Act as an OIDC identity provider (issue tokens to registered clients). */
+  oidcProvider: boolean;
   /** Assignable role names (access-control). */
   roles: string[];
 }

@@ -1,5 +1,5 @@
 import { betterAuth, type BetterAuthOptions, type BetterAuthPlugin } from "better-auth";
-import { twoFactor, haveIBeenPwned, magicLink, emailOTP, username, multiSession, phoneNumber, organization } from "better-auth/plugins";
+import { twoFactor, haveIBeenPwned, magicLink, emailOTP, username, multiSession, phoneNumber, organization, oidcProvider } from "better-auth/plugins";
 import { Pool } from "pg";
 import { actionEmail, sendMail } from "../mail/mailer";
 import { createFeatureGate } from "./feature-gate";
@@ -101,6 +101,10 @@ const plugins: BetterAuthPlugin[] = [
       });
     },
   }),
+  // Act as an OIDC identity provider: other apps can "Sign in with this app".
+  // Register clients at /api/auth/oauth2/register; discovery is served at
+  // /api/auth/.well-known/openid-configuration. See docs/modules.md.
+  oidcProvider({ loginPage: "/login" }),
 ];
 // Reject passwords found in known breaches (Have I Been Pwned, k-anonymity range
 // API). Server-enforced, so it's an environment flag applied at startup.
