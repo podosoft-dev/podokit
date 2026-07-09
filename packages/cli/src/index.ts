@@ -5,12 +5,16 @@ import { create, assertValidName, type PackageManager } from "./create";
 import { resolveCreateOptions, type Ask } from "./prompt";
 import { templateListText } from "./templates";
 import { addModule, listModules } from "./add";
+import { status, diff, doctor } from "./inspect";
 
 const HELP = `podo — PodoKit project generator
 
 Usage:
   podo create <name> [options]
   podo add <module>
+  podo status              Show version, modules, file tiers, and local edits
+  podo diff                List PodoKit-managed files you have edited
+  podo doctor              Check framework versions against supported ranges
 
 Options:
   --template <t> Template to scaffold (see below)
@@ -94,6 +98,61 @@ async function main(argv: string[]): Promise<void> {
       process.stdout.write(`\nAdded ${result.module}.\n`);
       if (result.instructions.length) {
         process.stdout.write(`\nNext steps:\n${result.instructions.map((i) => `  ${i}`).join("\n")}\n`);
+      }
+    } catch (err) {
+      fail((err as Error).message);
+    }
+    return;
+  }
+
+  if (args.command === "status") {
+    try {
+      const s = status(process.cwd());
+      const tiers = `managed ${s.tiers.managed}, assembled ${s.tiers.assembled}, owned ${s.tiers.owned}`;
+      process.stdout.write(
+        `PodoKit ${s.podokitVersion}  (template: ${s.template}, ${s.packageManager})\n` +
+          `Modules: ${s.modules.length ? s.modules.join(", ") : "(none)"}\n` +
+          `Files:   ${tiers}\n` +
+          `Edited:  ${s.drifted.length} managed file(s)${s.missing.length ? `, ${s.missing.length} missing` : ""}\n` +
+          (s.drifted.length ? s.drifted.map((f) => `  ~ ${f}`).join("\n") + "\n" : ""),
+      );
+    } catch (err) {
+      fail((err as Error).message);
+    }
+    return;
+  }
+
+  if (args.command === "diff") {
+    try {
+      const { drifted, missing } = diff(process.cwd());
+      if (!drifted.length && !missing.length) {
+        process.stdout.write("No local edits to PodoKit-managed files.\n");
+      } else {
+        process.stdout.write(
+          [...drifted.map((f) => `edited   ${f}`), ...missing.map((f) => `missing  ${f}`)].join("\n") + "\n",
+        );
+      }
+    } catch (err) {
+      fail((err as Error).message);
+    }
+    return;
+  }
+
+  if (args.command === "doctor") {
+    try {
+      const findings = doctor(process.cwd());
+      if (!findings.length) {
+        process.stdout.write("No known frameworks found to check.\n");
+      } else {
+        for (const f of findings) {
+          const mark = f.ok ? "ok  " : "WARN";
+          process.stdout.write(`${mark} ${f.package} ${f.installed} (supported: ${f.supported})\n`);
+        }
+      }
+      if (findings.some((f) => !f.ok)) {
+        process.stdout.write(
+          "\nSome frameworks are outside the supported range; @podosoft/* extensions may not match.\n",
+        );
       }
     } catch (err) {
       fail((err as Error).message);

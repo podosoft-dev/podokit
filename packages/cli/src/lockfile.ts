@@ -166,6 +166,40 @@ export function computeFilesLock(projectRoot: string, ownedGlobs: string[]): Fil
   return { schemaVersion: LOCK_SCHEMA_VERSION, files };
 }
 
+export function readFilesLock(projectRoot: string): FilesLock | null {
+  const file = filesLockPath(projectRoot);
+  return existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as FilesLock) : null;
+}
+
+export interface Drift {
+  /** Managed/assembled files whose content differs from what PodoKit wrote. */
+  drifted: string[];
+  /** Locked files that no longer exist on disk. */
+  missing: string[];
+}
+
+/**
+ * Compare the current disk against the lock: report managed/assembled files the
+ * user has edited (hash mismatch) or deleted. Owned files are never reported —
+ * they belong to the user. Returns empty drift when there is no lock.
+ */
+export function computeDrift(projectRoot: string): Drift {
+  const lock = readFilesLock(projectRoot);
+  const drifted: string[] = [];
+  const missing: string[] = [];
+  if (!lock) return { drifted, missing };
+  for (const [rel, entry] of Object.entries(lock.files)) {
+    if (entry.tier === "owned") continue;
+    const abs = join(projectRoot, rel);
+    if (!existsSync(abs)) {
+      missing.push(rel);
+      continue;
+    }
+    if (hashContent(readFileSync(abs)) !== entry.outHash) drifted.push(rel);
+  }
+  return { drifted: drifted.sort(), missing: missing.sort() };
+}
+
 export interface InitLockOptions {
   template: string;
   packageManager: string;
