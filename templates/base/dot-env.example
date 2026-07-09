@@ -1,15 +1,20 @@
 # Copy to .env and adjust. Never commit real secrets.
+
+# ── Required (runtime) ───────────────────────────────────────────────
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
 POSTGRES_USER=podokit
 POSTGRES_PASSWORD=podokit
 POSTGRES_DB=podokit
 
-REDIS_HOST=localhost
-REDIS_PORT=6379
-
 APP_BASE_URL=http://localhost:5173
 API_BASE_URL=http://localhost:3000
 BACKEND_INTERNAL_URL=http://localhost:3000
 CORS_ORIGIN=http://localhost:5173
 PORT=3000
+
+# ── Optional / development ───────────────────────────────────────────
+# Redis — only needed by cache/queue modules. Start it with:
+# docker compose --profile cache up
+REDIS_HOST=localhost
+REDIS_PORT=6379

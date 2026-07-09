@@ -1,4 +1,5 @@
 services:
+  # --- Runtime (always started by `docker compose up`) ---
   postgres:
     image: postgres:16-alpine
     environment:
@@ -15,8 +16,11 @@ services:
       timeout: 5s
       retries: 5
 
+  # --- Runtime, but only needed by cache/queue modules. Start with:
+  #     docker compose --profile cache up
   redis:
     image: redis:7-alpine
+    profiles: ["cache"]
     ports:
       - "${REDIS_PORT:-6379}:6379"
     healthcheck:

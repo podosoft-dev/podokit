@@ -41,11 +41,28 @@ npm install                                     # picks up the new local build
 
 ```bash
 cd /tmp/myapp
-docker compose -f infra/docker/docker-compose.yml up -d      # postgres (+ redis)
+docker compose -f infra/docker/docker-compose.yml up -d                   # runtime: postgres
+docker compose -f infra/docker/docker-compose.yml --profile dev up -d     # + dev tools (mailpit, sms-sink)
 # if the app uses the auth module, create the auth tables:
 npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
 npm run dev                    # API + web
 ```
+
+### Which services run when (compose profiles)
+
+Services are split by what they're for, using Docker Compose profiles:
+
+| Service | Profile | Needed for |
+|---|---|---|
+| `postgres` | *(none)* | **Runtime** — always started by `docker compose up`. |
+| `redis` | `cache` | **Runtime, conditional** — only the cache/queue modules (redis, bullmq, rate-limit, job-progress, sse). Start with `--profile cache`. |
+| `mailpit` | `dev` | **Development/testing** — local email catcher (SMTP 1025, UI/REST 8025). |
+| `sms-sink` | `dev` | **Development/testing** — local SMS catcher; the app posts OTPs here via `SMS_WEBHOOK_URL`, tests read them over REST (port 8095). |
+| `minio` / `minio-init` | `dev` | **Development/testing** — local S3 (object-storage-s3 module overlay); in production point `S3_*` at a real service. |
+
+So `docker compose up` starts only what the app needs to **run**; `--profile dev up` adds the
+tools you need to **develop and test** locally. In production you provide managed Postgres
+(and Redis if used) and real SMTP/SMS/S3 providers — the `dev` tools never ship.
 
 ## Verifying template / module changes
 
