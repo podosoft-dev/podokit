@@ -10,8 +10,10 @@ test("sessions table shows the expires column @smoke", async ({ page }) => {
 test("admin sees user sessions across users @smoke", async ({ page }) => {
   await ready(page, "/admin/sessions");
   await expect(page.getByRole("heading", { name: "User sessions" })).toBeVisible();
-  // another user's session is listed here (the across-users admin view); scope to
-  // the table, not the sidebar, and match the first row.
+  // Search by exact address — robust to pagination as sessions accumulate (the
+  // admin account alone can fill the first page). This is the across-users view.
+  await page.locator("#toolbar-search").fill("user@example.com");
+  await page.getByRole("button", { name: "Search", exact: true }).click();
   await expect(page.getByRole("main").getByText("user@example.com").first()).toBeVisible();
   // row actions are available
   await page.getByRole("row", { name: /user@example.com/ }).first().getByRole("button").click();
