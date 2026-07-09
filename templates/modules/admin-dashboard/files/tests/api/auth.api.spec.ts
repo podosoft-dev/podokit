@@ -182,6 +182,42 @@ test("a user can create, list and delete an organization @smoke", async ({ playw
   await ctx.dispose();
 });
 
+test("an organization can have a parent and manager members @smoke", async ({ playwright }) => {
+  const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  const caps = await (await ctx.get("/api/account/capabilities")).json();
+  test.skip(!caps?.organization, "organizations not enabled");
+  const pw = "Podokit3e-Str0ng!pw";
+  await ctx.post("/api/auth/sign-up/email", { data: { email: `orgp-${Date.now()}@example.com`, password: pw, name: "Owner" } });
+
+  // A parent org, then a child that points at it.
+  const parent = await (await ctx.post("/api/auth/organization/create", { data: { name: "HQ", slug: `hq-${Date.now()}` } })).json();
+  const child = await ctx.post("/api/auth/organization/create", {
+    data: { name: "Sales", slug: `sales-${Date.now()}`, parentOrganizationId: parent.id },
+  });
+  expect(child.ok()).toBeTruthy();
+  const childId = (await child.json()).id as string;
+  const full = await (await ctx.get(`/api/auth/organization/get-full-organization?organizationId=${childId}`)).json();
+  expect(full.parentOrganizationId).toBe(parent.id);
+
+  // Add two existing users as managers (role-based → any number).
+  const managers: string[] = [];
+  for (let i = 0; i < 2; i++) {
+    const mCtx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+    const email = `mgr-${Date.now()}-${i}@example.com`;
+    await mCtx.post("/api/auth/sign-up/email", { data: { email, password: pw, name: `Mgr${i}` } });
+    managers.push((await (await mCtx.get("/api/auth/get-session")).json()).user.id);
+    await mCtx.dispose();
+  }
+  for (const userId of managers) {
+    const added = await ctx.post("/api/account/org-member", { data: { userId, organizationId: childId, role: "manager" } });
+    expect(added.ok()).toBeTruthy();
+  }
+  const full2 = await (await ctx.get(`/api/auth/organization/get-full-organization?organizationId=${childId}`)).json();
+  const mgrCount = (full2.members ?? []).filter((m: { role: string }) => m.role === "manager").length;
+  expect(mgrCount).toBe(2);
+  await ctx.dispose();
+});
+
 // OIDC discovery + the enabled/disabled behaviour is covered by the front-channel
 // test in tests/ui/oidc.ui.spec.ts (which owns toggling the oidcProvider flag), and
 // the server-side gate is covered generically by the feature-toggle test above.

@@ -77,6 +77,7 @@ const en = {
     created: "Created", delete: "Delete", cancel: "Cancel", empty: "No organizations yet.",
     submit: "Create", createdMsg: "Organization created", deletedMsg: "Organization deleted", actionFailed: "Action failed",
     manage: "Manage", membersDesc: "Members and pending invitations.", members: "Members", pending: "Pending invitations",
+    parent: "Parent organization", noParent: "None (top level)", managers: "Managers", managersHint: "Existing users to add as managers (any number).",
     inviteEmail: "Invite by email", invite: "Invite", invited: "Invitation sent", remove: "Remove", cancelInvite: "Cancel",
   },
   consent: {
@@ -343,6 +344,7 @@ const ko: Messages = {
     created: "생성일", delete: "삭제", cancel: "취소", empty: "아직 조직이 없습니다.",
     submit: "만들기", createdMsg: "조직을 만들었습니다", deletedMsg: "조직을 삭제했습니다", actionFailed: "작업에 실패했습니다",
     manage: "관리", membersDesc: "멤버와 대기 중인 초대.", members: "멤버", pending: "대기 중 초대",
+    parent: "상위 조직", noParent: "없음(최상위)", managers: "매니저", managersHint: "매니저로 추가할 기존 사용자(여러 명 가능).",
     inviteEmail: "이메일로 초대", invite: "초대", invited: "초대를 보냈습니다", remove: "제거", cancelInvite: "취소",
   },
   consent: {

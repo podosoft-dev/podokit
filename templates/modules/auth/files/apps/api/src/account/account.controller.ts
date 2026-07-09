@@ -1,8 +1,11 @@
-import { Body, Controller, ForbiddenException, Get, Put } from "@nestjs/common";
+import { Body, Controller, ForbiddenException, Get, Post, Put, Req } from "@nestjs/common";
+import type { Request } from "express";
+import { fromNodeHeaders } from "better-auth/node";
 import { Public, Session, type UserSession } from "@thallesp/nestjs-better-auth";
 import { ApiTags } from "@nestjs/swagger";
 import { FEATURE_FLAGS, SettingsService, type FeatureFlag } from "../settings/settings.service";
 import { ROLE_NAMES } from "../auth/permissions";
+import { auth } from "../auth/auth";
 
 type Capabilities = {
   twoFactor: boolean;
@@ -85,5 +88,24 @@ export class AccountController {
       if (typeof body?.[flag] === "boolean") update[flag] = body[flag];
     }
     return this.settings.setMany(update);
+  }
+
+  // Add an existing user to an organization with a role (e.g. "manager"), so several
+  // members can hold it. better-auth's addMember is server-only; this exposes it and
+  // delegates org-level authorization to better-auth via the caller's session headers.
+  @Post("org-member")
+  async addOrgMember(
+    @Req() req: Request,
+    @Body() body: { organizationId: string; userId: string; role: string },
+  ): Promise<unknown> {
+    // addMember is a server-only better-auth endpoint (not on the typed public api);
+    // it exists at runtime, so reach it through a narrow cast.
+    const api = auth.api as unknown as {
+      addMember: (opts: { body: { organizationId: string; userId: string; role: string }; headers: Headers }) => Promise<unknown>;
+    };
+    return api.addMember({
+      body: { organizationId: body.organizationId, userId: body.userId, role: body.role },
+      headers: fromNodeHeaders(req.headers),
+    });
   }
 }
