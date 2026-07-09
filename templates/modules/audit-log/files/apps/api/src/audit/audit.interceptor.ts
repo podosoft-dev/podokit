@@ -6,6 +6,7 @@ import { type Observable, tap } from "rxjs";
 import { auth } from "../auth/auth";
 import { AUDIT_KEY, type AuditMeta } from "./audit.decorator";
 import { AuditService } from "./audit.service";
+import { auditEnabled } from "./audit-enabled";
 
 // Records handlers explicitly marked with @Audit(...). Nothing is logged unless
 // you opt a route in, so the trail stays meaningful (semantic actions, not raw
@@ -25,6 +26,7 @@ export class AuditInterceptor implements NestInterceptor {
   }
 
   private async log(meta: AuditMeta, req: Request, result: unknown): Promise<void> {
+    if (!(await auditEnabled())) return;
     let actorId: string | null = null;
     let actorName: string | null = null;
     let actorEmail: string | null = null;

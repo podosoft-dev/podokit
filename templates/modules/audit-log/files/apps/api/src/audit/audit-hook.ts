@@ -1,5 +1,6 @@
 import { createAuthMiddleware } from "better-auth/api";
 import { recordAudit } from "./audit-events";
+import { auditEnabled } from "./audit-enabled";
 
 // Map mutating auth/admin endpoints to semantic action codes. better-auth is
 // mounted as middleware and bypasses the NestJS interceptor, so these security
@@ -38,6 +39,7 @@ const ACTIONS: Record<string, string> = {
 export const auditAfterHook = createAuthMiddleware(async (ctx) => {
   const action = ACTIONS[ctx.path];
   if (!action) return;
+  if (!(await auditEnabled())) return;
   const context = ctx.context as {
     session?: { user?: { id?: string; name?: string; email?: string } };
     newSession?: { user?: { id?: string; name?: string; email?: string } };

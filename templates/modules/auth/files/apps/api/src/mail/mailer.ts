@@ -1,30 +1,54 @@
 import nodemailer, { type Transporter } from "nodemailer";
+import { pool } from "../auth/db";
+import { createConfigStore, type SmtpConfig } from "../auth/config-store";
 
-// One transport for the whole app. Point SMTP_* at your provider in production;
-// in local dev it targets Mailpit (docker-compose), which captures every message
-// at http://localhost:8025. With no SMTP_HOST set, fall back to a transport that
-// just logs the message so nothing crashes for lack of mail config.
-const from = process.env.MAIL_FROM ?? "PodoKit <no-reply@example.com>";
+// SMTP is admin-configurable in the DB (auth_config), falling back to SMTP_* env,
+// and applied live: the transport is rebuilt when the config changes (short TTL),
+// so no restart is needed. With neither DB nor env config, fall back to a transport
+// that just logs the message so nothing crashes for lack of mail config.
+const store = createConfigStore(pool);
+const TTL_MS = 3_000;
 
-function createTransport(): Transporter {
-  if (!process.env.SMTP_HOST) {
-    return nodemailer.createTransport({ jsonTransport: true });
-  }
+function buildTransport(smtp: SmtpConfig | null): Transporter {
+  if (!smtp) return nodemailer.createTransport({ jsonTransport: true });
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT ?? 1025),
-    secure: process.env.SMTP_SECURE === "true",
-    auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS ?? "" } : undefined,
+    host: smtp.host,
+    port: smtp.port,
+    secure: smtp.secure,
+    auth: smtp.user ? { user: smtp.user, pass: smtp.pass ?? "" } : undefined,
   });
 }
 
-const transport = createTransport();
+let transport = buildTransport(null);
+let transportFrom = process.env.MAIL_FROM ?? "PodoKit <no-reply@example.com>";
+let hasSmtp = false;
+let checkedAt = 0;
+let signature = "";
+
+async function getTransport(): Promise<Transporter> {
+  if (checkedAt !== 0 && Date.now() - checkedAt < TTL_MS) return transport;
+  checkedAt = Date.now();
+  try {
+    const smtp = await store.smtpConfig();
+    const next = JSON.stringify(smtp ?? null);
+    if (next !== signature) {
+      transport = buildTransport(smtp);
+      transportFrom = smtp?.from ?? process.env.MAIL_FROM ?? "PodoKit <no-reply@example.com>";
+      hasSmtp = !!smtp;
+      signature = next;
+    }
+  } catch {
+    /* keep the last-good transport */
+  }
+  return transport;
+}
 
 export type Mail = { to: string; subject: string; text: string; html?: string };
 
 export async function sendMail(mail: Mail): Promise<void> {
-  const info = await transport.sendMail({ from, ...mail });
-  if (!process.env.SMTP_HOST) {
+  const t = await getTransport();
+  const info = await t.sendMail({ from: transportFrom, ...mail });
+  if (!hasSmtp) {
     // JSON transport: surface the message so the link is grabbable from logs.
     console.log(`[mailer] no SMTP configured; message not delivered:\n${info.message as string}`);
   }

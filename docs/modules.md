@@ -40,11 +40,24 @@ curl -b cookies.txt localhost:5002/account/me
 ```
 
 - **Secure by default**: all module endpoints (jobs, storage, files, cache, …) are protected once `auth` is added.
-- **OAuth**: set `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` or `GITHUB_*` in `.env` to enable a provider.
-- **Auth features (2FA, magic link, email OTP, username, multi-session, phone number)**: managed
-  from the admin **Settings** page (stored in the DB, applied live — no env vars, no restart).
-  Defaults are seeded by the `app_setting` migration. Server-enforced behaviours (email
-  verification, breached-password check, account deletion) stay environment flags.
+- **Configure it in the admin Settings page, not env.** Social OAuth providers, SMTP, the
+  server-enforced toggles (email verification, breached-password check, account deletion, and —
+  with the audit-log module — audit logging), and the feature flags (2FA, magic link, email OTP,
+  username, multi-session, phone number, …) are all stored in the DB and **applied live — no
+  restart** (paste a client id/secret and social login works on the next request). Only
+  `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are required env vars; the rest are optional
+  fallbacks/overrides that the DB config takes precedence over (handy for secrets-manager
+  injection in production).
+- **Social login is dynamic.** The "Social login" card manages providers add/edit/delete: pick
+  any better-auth-supported provider (Google, GitHub, Apple, Microsoft, Discord, Kakao, Naver,
+  … — see `auth/auth-config.ts` `SUPPORTED_SOCIAL_PROVIDERS`), paste its client id/secret, and it
+  takes effect on the next request. Each provider is one `social.<id>` row in `auth_config`;
+  removing it deletes the row. `GOOGLE_CLIENT_*` / `GITHUB_CLIENT_*` env vars still seed those two
+  as a fallback.
+- **Secrets are encrypted at rest**: OAuth client secrets and the SMTP password are stored with
+  AES-256-GCM, the key derived from `BETTER_AUTH_SECRET` (never in the DB it protects). They are
+  never returned to the browser (the API exposes only a `hasSecret` flag). Keep
+  `BETTER_AUTH_SECRET` stable — rotating it makes previously-saved DB secrets undecryptable.
 - **Bearer tokens (API/mobile clients)**: always on. Sign-in returns the session token in
   a `set-auth-token` response header; send it back as `Authorization: Bearer <token>` to
   authenticate without a cookie. Useful for native apps and server-to-server calls.
@@ -208,7 +221,9 @@ through pino as well, create the app with `{ bufferLogs: true }` and call
 Audit logging built on `auth` (added automatically). A **global interceptor**
 records every mutating request (POST/PUT/PATCH/DELETE) to an `audit_logs` table
 with the **acting user**, method, path, and status. Read recent entries at
-`/audit-logs`.
+`/audit-logs`. On/off is an **admin toggle on the Settings page** (stored in the
+DB, applied live — no restart); `AUDIT_LOG_ENABLED` is only the fallback default
+until an admin sets it (leave it `true` so the trail is on out of the box).
 
 ```bash
 npx @podosoft/podokit add audit-log   # also adds auth

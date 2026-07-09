@@ -6,7 +6,10 @@
   ],
   "targetApp": "api",
   "env": [
-    "# audit-log: surfaces the admin Audit log page in the dashboard",
+    "# audit-log: on/off is managed on the admin Settings page (stored in the DB,",
+    "# applied live, no restart). This env var is the fallback default used until an",
+    "# admin sets it — leave it 'true' so the trail is on out of the box; the DB value",
+    "# (Settings page) overrides it once set.",
     "AUDIT_LOG_ENABLED=true"
   ],
   "inject": [

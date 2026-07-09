@@ -6,6 +6,11 @@ import { ApiTags } from "@nestjs/swagger";
 import { FEATURE_FLAGS, SettingsService, type FeatureFlag } from "../settings/settings.service";
 import { ROLE_NAMES } from "../auth/permissions";
 import { auth } from "../auth/auth";
+import { pool } from "../auth/db";
+import { createConfigStore } from "../auth/config-store";
+
+// Reads OAuth/server-toggle state (DB-first, env fallback) for capabilities.
+const configStore = createConfigStore(pool);
 
 type Capabilities = {
   twoFactor: boolean;
@@ -47,12 +52,11 @@ export class AccountController {
   // Public so the login page (unauthenticated) can offer available sign-in methods.
   @Public()
   @Get("capabilities")
-  capabilities(): Capabilities {
+  async capabilities(): Promise<Capabilities> {
     const flags = this.settings.flags();
-    const providers = [
-      process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET ? "google" : null,
-      process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET ? "github" : null,
-    ].filter((p): p is string => p !== null);
+    // OAuth providers + server-enforced toggles are DB-backed (env fallback) and
+    // applied live, so read them from the config store rather than process.env.
+    const snapshot = await configStore.capabilitiesSnapshot();
     return {
       twoFactor: flags.twoFactor,
       magicLink: flags.magicLink,
@@ -64,12 +68,11 @@ export class AccountController {
       passkey: flags.passkey,
       organization: flags.organization,
       oidcProvider: flags.oidcProvider,
-      // Server-enforced flags are boot-time (environment), not live-toggleable.
-      providers,
-      deleteAccount: process.env.AUTH_ALLOW_DELETE === "true",
-      auditLog: process.env.AUDIT_LOG_ENABLED === "true",
-      emailVerification: process.env.AUTH_EMAIL_VERIFICATION === "true",
-      passwordBreachCheck: process.env.AUTH_HIBP === "true",
+      providers: snapshot.providers,
+      deleteAccount: snapshot.allowDelete,
+      emailVerification: snapshot.requireEmailVerification,
+      passwordBreachCheck: snapshot.passwordBreachCheck,
+      auditLog: snapshot.auditLog,
       roles: ROLE_NAMES,
     };
   }
