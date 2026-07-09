@@ -182,27 +182,9 @@ test("a user can create, list and delete an organization @smoke", async ({ playw
   await ctx.dispose();
 });
 
-test("OIDC discovery is served only while the provider is enabled @smoke", async ({ playwright }) => {
-  const admin = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
-  await admin.post("/api/auth/sign-in/email", { data: { email: ADMIN.email, password: ADMIN.password } });
-  const caps = await (await admin.get("/api/account/capabilities")).json();
-  test.skip(typeof caps?.oidcProvider !== "boolean", "oidc provider not present");
-
-  const discoveryStatus = (): Promise<number> =>
-    admin.get("/api/auth/.well-known/openid-configuration").then((r) => r.status());
-
-  // Enable → the OpenID configuration is served with the standard endpoints.
-  await admin.put("/api/account/settings", { data: { oidcProvider: true } });
-  await expect.poll(discoveryStatus, { timeout: 8000 }).toBe(200);
-  const cfg = await (await admin.get("/api/auth/.well-known/openid-configuration")).json();
-  expect(typeof cfg.issuer).toBe("string");
-  expect(typeof cfg.token_endpoint).toBe("string");
-
-  // Disable → the discovery endpoint is gated off again (restore the default).
-  await admin.put("/api/account/settings", { data: { oidcProvider: false } });
-  await expect.poll(discoveryStatus, { timeout: 8000 }).toBe(404);
-  await admin.dispose();
-});
+// OIDC discovery + the enabled/disabled behaviour is covered by the front-channel
+// test in tests/ui/oidc.ui.spec.ts (which owns toggling the oidcProvider flag), and
+// the server-side gate is covered generically by the feature-toggle test above.
 
 test("only admins can change settings @smoke", async ({ playwright }) => {
   const userCtx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
