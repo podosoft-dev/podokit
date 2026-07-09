@@ -63,6 +63,21 @@ For anything auth/session related (login, admin, cookies), do a full local run
 (compose + migrate + `npm run dev`) and exercise the flow in the browser — a
 build passing is necessary but not sufficient.
 
+### The standing verification app
+
+Keep one generated app running throughout a work session (api `nest start --watch`,
+web `vite dev`, plus `dev-watch` to mirror template edits). It doubles as the target
+for fast spec runs — from the app's `tests/` workspace:
+
+```bash
+E2E_BASE_URL=http://localhost:5173 npx playwright test ui/settings.ui.spec.ts
+```
+
+Non-injected template files mirror live; when you change an injection target
+(`auth.ts`, `app.module.ts`, a manifest `inject`) regenerate this one app with
+`dev-app.mjs`. Run the full Verdaccio e2e (`scripts/e2e-ci.mjs --smoke`) once per
+batch of changes, as the pre-PR gate — see [testing.md](./testing.md).
+
 ## Testing
 
 End-to-end/ui tests ship inside every generated app (`tests/` workspace) and run
