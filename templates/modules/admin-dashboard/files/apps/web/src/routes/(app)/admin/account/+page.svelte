@@ -22,13 +22,14 @@
   // Optional features (resolved by the layout) so we only show enabled sections.
   const caps = $derived(data.capabilities);
 
-  type SectionKey = "profile" | "security" | "connected" | "sessions" | "danger";
+  type SectionKey = "profile" | "security" | "connected" | "sessions" | "apiKeys" | "danger";
   let section = $state<SectionKey>("profile");
   const navItems = $derived<SectionKey[]>([
     "profile",
     "security",
     ...(caps.providers.length ? (["connected"] as const) : []),
     "sessions",
+    ...(caps.apiKey ? (["apiKeys"] as const) : []),
     ...(caps.deleteAccount ? (["danger"] as const) : []),
   ]);
 
@@ -42,7 +43,10 @@
   async function saveProfile(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     savingProfile = true;
-    const { error } = await api.auth.updateUser({ name, ...(caps.username ? { username } : {}) });
+    // Only send username when it's set and actually changed — updateUser rejects
+    // an empty username, which would block name-only edits for users without one.
+    const usernameChanged = caps.username && username.trim() !== "" && username !== (data.user.username ?? "");
+    const { error } = await api.auth.updateUser({ name, ...(usernameChanged ? { username: username.trim() } : {}) });
     savingProfile = false;
     if (error) toast.error(error.message ?? i18n.t.account.saveFailed);
     else toast.success(i18n.t.account.saved);
@@ -206,7 +210,13 @@
   async function loadSessions(): Promise<void> {
     const { data: res, error } = await api.auth.listSessions();
     if (error) return void toast.error(error.message ?? i18n.t.sessions.loadFailed);
-    sessions = (res ?? []) as Session[];
+    // Current session first (users expect it on top; also keeps it on page 1),
+    // then newest to oldest.
+    sessions = ((res ?? []) as Session[]).sort((a, b) => {
+      if (a.id === data.currentSessionId) return -1;
+      if (b.id === data.currentSessionId) return 1;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
   }
   async function revoke(token: string): Promise<void> {
     busy = true;
@@ -245,10 +255,46 @@
     await goto("/admin", { invalidateAll: true });
   }
 
+  // Personal API keys (apiKey plugin). The full key is shown once on creation.
+  type ApiKey = { id: string; name: string | null; start: string | null; createdAt: string | Date; expiresAt: string | Date | null };
+  let apiKeys = $state<ApiKey[]>([]);
+  let newKeyName = $state("");
+  let createdKey = $state<string | null>(null);
+  let keyBusy = $state(false);
+  async function loadApiKeys(): Promise<void> {
+    if (!caps.apiKey) return;
+    const { data: res } = await api.auth.apiKey.list();
+    // the endpoint returns { apiKeys: [...] }; tolerate a bare array too
+    apiKeys = (Array.isArray(res) ? res : ((res as { apiKeys?: ApiKey[] } | null)?.apiKeys ?? [])) as ApiKey[];
+  }
+  async function createApiKey(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    keyBusy = true;
+    const { data: res, error } = await api.auth.apiKey.create({ name: newKeyName.trim() || undefined });
+    keyBusy = false;
+    if (error) return void toast.error(error.message ?? i18n.t.account.saveFailed);
+    createdKey = res?.key ?? null;
+    newKeyName = "";
+    await loadApiKeys();
+  }
+  async function deleteApiKey(keyId: string): Promise<void> {
+    keyBusy = true;
+    const { error } = await api.auth.apiKey.delete({ keyId });
+    keyBusy = false;
+    if (error) return void toast.error(error.message ?? i18n.t.apiKeys.revokeFailed);
+    toast.success(i18n.t.apiKeys.revoked);
+    await loadApiKeys();
+  }
+  async function copyKey(): Promise<void> {
+    if (createdKey) await navigator.clipboard.writeText(createdKey).catch(() => undefined);
+    toast.success(i18n.t.apiKeys.copied);
+  }
+
   $effect(() => {
     void loadSessions();
     void loadAccounts();
     void loadDeviceSessions();
+    void loadApiKeys();
   });
 </script>
 
@@ -481,6 +527,63 @@
             </div>
           </Card.Content>
         </Card.Root>
+      {:else if section === "apiKeys"}
+        <Card.Root>
+          <Card.Header>
+            <Card.Title>{i18n.t.apiKeys.title}</Card.Title>
+            <Card.Description>{i18n.t.apiKeys.subtitle}</Card.Description>
+          </Card.Header>
+          <Card.Content class="flex flex-col gap-4">
+            <form class="flex items-end gap-2" onsubmit={createApiKey}>
+              <div class="flex flex-1 flex-col gap-2">
+                <Label for="key-name">{i18n.t.apiKeys.name}</Label>
+                <Input id="key-name" bind:value={newKeyName} placeholder={i18n.t.apiKeys.namePlaceholder} />
+              </div>
+              <Button type="submit" disabled={keyBusy}>{i18n.t.apiKeys.create}</Button>
+            </form>
+            {#if apiKeys.length}
+              <div class="rounded-md border">
+                <Table.Root>
+                  <Table.Header>
+                    <Table.Row>
+                      <Table.Head>{i18n.t.apiKeys.name}</Table.Head>
+                      <Table.Head>{i18n.t.apiKeys.keyColumn}</Table.Head>
+                      <Table.Head>{i18n.t.apiKeys.created}</Table.Head>
+                      <Table.Head class="w-10"></Table.Head>
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body>
+                    {#each apiKeys as k (k.id)}
+                      <Table.Row>
+                        <Table.Cell class="font-medium">{k.name || i18n.t.apiKeys.untitled}</Table.Cell>
+                        <Table.Cell class="text-muted-foreground font-mono text-xs">{k.start ? `${k.start}…` : "—"}</Table.Cell>
+                        <Table.Cell class="text-muted-foreground">{formatDateTime(k.createdAt)}</Table.Cell>
+                        <Table.Cell>
+                          <Button variant="ghost" size="sm" disabled={keyBusy} onclick={() => deleteApiKey(k.id)}>{i18n.t.apiKeys.revoke}</Button>
+                        </Table.Cell>
+                      </Table.Row>
+                    {/each}
+                  </Table.Body>
+                </Table.Root>
+              </div>
+            {:else}
+              <p class="text-muted-foreground text-sm">{i18n.t.apiKeys.empty}</p>
+            {/if}
+          </Card.Content>
+        </Card.Root>
+        <Dialog.Root open={createdKey !== null} onOpenChange={(v) => { if (!v) createdKey = null; }}>
+          <Dialog.Content>
+            <Dialog.Header>
+              <Dialog.Title>{i18n.t.apiKeys.createdTitle}</Dialog.Title>
+              <Dialog.Description>{i18n.t.apiKeys.createdDesc}</Dialog.Description>
+            </Dialog.Header>
+            <div class="bg-muted rounded-md p-3 font-mono text-sm break-all">{createdKey}</div>
+            <Dialog.Footer>
+              <Button variant="outline" onclick={copyKey}>{i18n.t.apiKeys.copy}</Button>
+              <Button onclick={() => (createdKey = null)}>{i18n.t.apiKeys.done}</Button>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog.Root>
       {:else if section === "danger"}
         <Card.Root class="border-destructive/50">
           <Card.Header>

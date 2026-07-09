@@ -3,6 +3,7 @@ import { twoFactor, haveIBeenPwned, magicLink, emailOTP, username, multiSession,
 import { Pool } from "pg";
 import { actionEmail, sendMail } from "../mail/mailer";
 import { createFeatureGate } from "./feature-gate";
+import { apiKey } from "@better-auth/api-key";
 // podokit:auth-imports
 
 const pool = new Pool({
@@ -73,6 +74,8 @@ const plugins: BetterAuthPlugin[] = [
       console.warn(`[phone-number] SMS not configured \u2014 OTP for ${to}: ${code}`);
     },
   }),
+  // User-issued API keys (DB-backed). Distinct from the static X-API-Key module.
+  apiKey(),
 ];
 // Reject passwords found in known breaches (Have I Been Pwned, k-anonymity range
 // API). Server-enforced, so it's an environment flag applied at startup.

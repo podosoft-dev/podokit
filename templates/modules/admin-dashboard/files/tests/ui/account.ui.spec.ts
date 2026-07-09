@@ -33,6 +33,24 @@ test("account shows a username field when enabled @smoke", async ({ page }) => {
   await expect(username).toBeVisible();
 });
 
+test("account can create and revoke an API key when enabled @smoke", async ({ page }) => {
+  await ready(page, "/admin/account");
+  const nav = page.getByRole("button", { name: "API keys" });
+  test.skip((await nav.count()) === 0, "api keys not enabled");
+  await nav.click();
+  const name = `ui-${Date.now()}`;
+  await page.getByLabel("Name", { exact: true }).fill(name);
+  await page.getByRole("button", { name: "Create key" }).click();
+  // the full key is shown once in a dialog
+  await expect(page.getByText("API key created")).toBeVisible();
+  await page.getByRole("button", { name: "Done" }).click();
+  // it now appears in the list; revoke it to clean up
+  const row = page.getByRole("row", { name: new RegExp(name) });
+  await expect(row).toBeVisible();
+  await row.getByRole("button", { name: "Revoke" }).click();
+  await expect(page.getByText("Key revoked")).toBeVisible();
+});
+
 test("account shows a phone field when enabled @smoke", async ({ page }) => {
   await ready(page, "/admin/account");
   const phone = page.getByLabel("Phone number", { exact: true });
