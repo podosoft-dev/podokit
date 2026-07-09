@@ -23,8 +23,13 @@
     },
     {
       "file": "apps/api/src/auth/auth.ts",
+      "marker": "// podokit:auth-imports",
+      "text": "import { ac, roles } from \"./permissions\";"
+    },
+    {
+      "file": "apps/api/src/auth/auth.ts",
       "marker": "// podokit:auth-plugins",
-      "text": "plugins.push(admin({ defaultRole: \"user\", adminRoles: [\"admin\"] }));"
+      "text": "plugins.push(admin({ defaultRole: \"user\", adminRoles: [\"admin\"], ac, roles }));"
     },
     {
       "file": "apps/api/src/auth/auth.ts",
