@@ -9,6 +9,11 @@
     value?: (row: Row) => string | number | boolean | Date | null | undefined;
   };
   export type SortState = { key: string; dir: "asc" | "desc" };
+
+  // Shared page size for all admin tables — sized so a desktop viewport shows a
+  // full list at a glance (rather than the old 5-row pages). Change it here to
+  // retune every table at once.
+  export const DEFAULT_PAGE_SIZE = 15;
 </script>
 
 <script lang="ts" generics="Row">

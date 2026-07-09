@@ -3,7 +3,7 @@
   import { Badge } from "$lib/components/ui/badge";
   import * as Table from "$lib/components/ui/table";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-  import DataTable, { type DataTableColumn, type SortState } from "$lib/components/data-table.svelte";
+  import DataTable, { type DataTableColumn, type SortState, DEFAULT_PAGE_SIZE } from "$lib/components/data-table.svelte";
   import TableToolbar, { type ToolbarSearchField } from "$lib/components/table-toolbar.svelte";
   import EllipsisIcon from "@lucide/svelte/icons/ellipsis";
   import { toast } from "svelte-sonner";
@@ -123,7 +123,7 @@
     empty={loading ? "…" : i18n.t.adminSessions.empty}
     bind:sort
     bind:page
-    perPage={5}
+    perPage={DEFAULT_PAGE_SIZE}
     label={fmt(i18n.t.adminSessions.total, { count: filtered.length })}
   >
     {#snippet row(r)}

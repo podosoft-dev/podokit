@@ -6,7 +6,7 @@
   import * as Table from "$lib/components/ui/table";
   import * as Dialog from "$lib/components/ui/dialog";
   import * as Select from "$lib/components/ui/select";
-  import DataTable, { type DataTableColumn, type SortState } from "$lib/components/data-table.svelte";
+  import DataTable, { type DataTableColumn, type SortState, DEFAULT_PAGE_SIZE } from "$lib/components/data-table.svelte";
   import { toast } from "svelte-sonner";
   import { api } from "$lib/api";
   import { getI18n, fmt, formatDateTime } from "$lib/i18n";
@@ -164,7 +164,7 @@
     getKey={(o) => o.id}
     bind:sort
     bind:page={listPage}
-    perPage={10}
+    perPage={DEFAULT_PAGE_SIZE}
     label={fmt(i18n.t.organizations.total, { count: orgs.length })}
     empty={i18n.t.organizations.empty}
   >

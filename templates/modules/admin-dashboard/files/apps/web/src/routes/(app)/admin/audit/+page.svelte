@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Badge } from "$lib/components/ui/badge";
   import * as Table from "$lib/components/ui/table";
-  import DataTable, { type DataTableColumn, type SortState } from "$lib/components/data-table.svelte";
+  import DataTable, { type DataTableColumn, type SortState, DEFAULT_PAGE_SIZE } from "$lib/components/data-table.svelte";
   import TableToolbar, { type ToolbarFilter, type ToolbarSearchField } from "$lib/components/table-toolbar.svelte";
   import { toast } from "svelte-sonner";
   import { getI18n, fmt, formatDateTime } from "$lib/i18n";
@@ -102,7 +102,7 @@
     empty={i18n.t.audit.empty}
     bind:sort
     bind:page
-    perPage={10}
+    perPage={DEFAULT_PAGE_SIZE}
     label={fmt(i18n.t.audit.total, { count: filtered.length })}
   >
     {#snippet row(e)}
