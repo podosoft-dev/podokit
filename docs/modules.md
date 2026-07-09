@@ -315,6 +315,33 @@ const { success } = await auth.api.userHasPermission({
 if (!success) throw new ForbiddenException();
 ```
 
+#### Enterprise: OIDC provider & SSO
+
+**Be an identity provider (OIDC).** Turn on *OIDC provider* in Settings and this app
+issues tokens to registered OAuth clients — other apps can "Sign in with this app".
+Discovery is at `GET /api/auth/.well-known/openid-configuration` (404 while disabled).
+Register a client and drive the standard flow:
+
+```bash
+curl -X POST /api/auth/oauth2/register -H 'content-type: application/json' \
+  -d '{"client_name":"My App","redirect_uris":["https://app.example.com/callback"]}'
+# → client_id / client_secret; then authorize → consent → /api/auth/oauth2/token
+```
+
+The authorize endpoint redirects unauthenticated users to `loginPage` (`/login`) and,
+for untrusted clients, to a consent screen — add a consent route and pass
+`consentPage` to `oidcProvider(...)` in `apps/api/src/auth/auth.ts` to customize it.
+
+**Consume an external IdP (SSO).** To let users sign in *through* a corporate or
+third-party provider, add the bundled `genericOAuth` plugin (any OAuth2/OIDC issuer,
+configured from env) or the `@better-auth/sso` add-on for enterprise OIDC/SAML.
+Because these need a real external IdP, verify them with a manual round trip:
+
+1. Register this app (or the IdP) with client id/secret + redirect URI (env only).
+2. Start sign-in, complete the IdP login, confirm the callback creates a session.
+3. For SAML/SCIM, install the add-on, map attributes/claims, and test provisioning
+   against your IdP — these are deployment-specific and left as extension points.
+
 ## Roadmap
 
 More modules are planned — redis, queue (BullMQ), object storage (S3), file

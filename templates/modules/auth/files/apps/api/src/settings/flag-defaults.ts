@@ -6,7 +6,7 @@
  *
  *  Must match the rows seeded by the InitAppSettings migration. phoneNumber is
  *  off by default because real delivery needs an SMS provider. */
-export type FeatureFlag = "twoFactor" | "magicLink" | "emailOtp" | "username" | "multiSession" | "phoneNumber" | "apiKey" | "passkey" | "organization";
+export type FeatureFlag = "twoFactor" | "magicLink" | "emailOtp" | "username" | "multiSession" | "phoneNumber" | "apiKey" | "passkey" | "organization" | "oidcProvider";
 
 export const FLAG_DEFAULTS: Record<FeatureFlag, boolean> = {
   twoFactor: true,
@@ -18,6 +18,8 @@ export const FLAG_DEFAULTS: Record<FeatureFlag, boolean> = {
   apiKey: true,
   passkey: true,
   organization: true,
+  // Acting as an OIDC identity provider is an enterprise opt-in; off by default.
+  oidcProvider: false,
 };
 
 export const FEATURE_FLAGS = Object.keys(FLAG_DEFAULTS) as FeatureFlag[];

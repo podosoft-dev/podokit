@@ -19,6 +19,7 @@ type Capabilities = {
   apiKey: boolean;
   passkey: boolean;
   organization: boolean;
+  oidcProvider: boolean;
   /** Assignable role names (access-control), for the admin role picker. */
   roles: string[];
 };
@@ -59,6 +60,7 @@ export class AccountController {
       apiKey: flags.apiKey,
       passkey: flags.passkey,
       organization: flags.organization,
+      oidcProvider: flags.oidcProvider,
       // Server-enforced flags are boot-time (environment), not live-toggleable.
       providers,
       deleteAccount: process.env.AUTH_ALLOW_DELETE === "true",

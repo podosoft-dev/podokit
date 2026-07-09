@@ -14,6 +14,7 @@ const FEATURE_PATHS: Array<{ flag: FeatureFlag; prefixes: string[] }> = [
   { flag: "apiKey", prefixes: ["/api-key/"] },
   { flag: "passkey", prefixes: ["/passkey/", "/sign-in/passkey"] },
   { flag: "organization", prefixes: ["/organization"] },
+  { flag: "oidcProvider", prefixes: ["/oauth2/", "/.well-known/openid-configuration"] },
 ];
 
 const CACHE_TTL_MS = 3_000;
