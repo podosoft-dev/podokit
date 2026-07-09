@@ -6,14 +6,17 @@ import { ready } from "../helpers/hydration";
 test("users table sorts by a column header (server) @smoke", async ({ page }) => {
   await ready(page, "/admin/users");
   const header = page.getByRole("columnheader", { name: /Name/ });
+  // Click the sort button *inside* the header — a bare name match collides with
+  // the sidebar user button (a "Renamed" account contains "name").
+  const sortByName = header.getByRole("button");
   const firstName = () => page.getByRole("row").nth(1).getByRole("cell").first().innerText();
 
-  await page.getByRole("button", { name: "Name" }).click();
+  await sortByName.click();
   await expect(header).toHaveAttribute("aria-sort", "ascending");
   await page.waitForTimeout(400); // server refetch
   const asc = await firstName();
 
-  await page.getByRole("button", { name: "Name" }).click();
+  await sortByName.click();
   await expect(header).toHaveAttribute("aria-sort", "descending");
   await page.waitForTimeout(400);
   const desc = await firstName();

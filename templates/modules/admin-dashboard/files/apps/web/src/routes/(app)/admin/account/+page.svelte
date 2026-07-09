@@ -8,7 +8,7 @@
   import * as Card from "$lib/components/ui/card";
   import * as Table from "$lib/components/ui/table";
   import * as Dialog from "$lib/components/ui/dialog";
-  import TablePagination from "$lib/components/table-pagination.svelte";
+  import DataTable, { type DataTableColumn, type SortState } from "$lib/components/data-table.svelte";
   import { toast } from "svelte-sonner";
   import { api } from "$lib/api";
   import { getI18n, fmt, formatDateTime } from "$lib/i18n";
@@ -168,6 +168,13 @@
   // Passkeys (WebAuthn) — passwordless credentials bound to this device/browser.
   type Passkey = { id: string; name: string | null; createdAt: string | Date };
   let passkeys = $state<Passkey[]>([]);
+  let passkeysPage = $state(1);
+  let passkeysSort = $state<SortState | null>(null);
+  const passkeysColumns: DataTableColumn<Passkey>[] = [
+    { key: "name", label: i18n.t.passkeys.name, sortable: true, value: (p) => p.name ?? "" },
+    { key: "createdAt", label: i18n.t.passkeys.created, sortable: true, value: (p) => new Date(p.createdAt).getTime() },
+    { key: "actions", label: "", class: "w-10" },
+  ];
   let newPasskeyName = $state("");
   let passkeyBusy = $state(false);
   async function loadPasskeys(): Promise<void> {
@@ -237,8 +244,15 @@
   const PAGE_SIZE = 5;
   let sessions = $state<Session[]>([]);
   let sessionsPage = $state(1);
+  let sessionsSort = $state<SortState | null>(null);
   let busy = $state(false);
-  const pagedSessions = $derived(sessions.slice((sessionsPage - 1) * PAGE_SIZE, sessionsPage * PAGE_SIZE));
+  const sessionsColumns: DataTableColumn<Session>[] = [
+    { key: "userAgent", label: i18n.t.sessions.device, sortable: true, value: (s) => s.userAgent ?? "" },
+    { key: "ipAddress", label: i18n.t.sessions.ip, sortable: true, value: (s) => s.ipAddress ?? "" },
+    { key: "createdAt", label: i18n.t.sessions.since, sortable: true, value: (s) => new Date(s.createdAt).getTime() },
+    { key: "status", label: i18n.t.sessions.status },
+    { key: "actions", label: "", class: "w-10" },
+  ];
   async function loadSessions(): Promise<void> {
     const { data: res, error } = await api.auth.listSessions();
     if (error) return void toast.error(error.message ?? i18n.t.sessions.loadFailed);
@@ -290,6 +304,14 @@
   // Personal API keys (apiKey plugin). The full key is shown once on creation.
   type ApiKey = { id: string; name: string | null; start: string | null; createdAt: string | Date; expiresAt: string | Date | null };
   let apiKeys = $state<ApiKey[]>([]);
+  let apiKeysPage = $state(1);
+  let apiKeysSort = $state<SortState | null>(null);
+  const apiKeysColumns: DataTableColumn<ApiKey>[] = [
+    { key: "name", label: i18n.t.apiKeys.name, sortable: true, value: (k) => k.name ?? "" },
+    { key: "keyColumn", label: i18n.t.apiKeys.keyColumn },
+    { key: "createdAt", label: i18n.t.apiKeys.created, sortable: true, value: (k) => new Date(k.createdAt).getTime() },
+    { key: "actions", label: "", class: "w-10" },
+  ];
   let newKeyName = $state("");
   let createdKey = $state<string | null>(null);
   let keyBusy = $state(false);
@@ -493,25 +515,24 @@
                   </div>
                   <Button type="submit" disabled={passkeyBusy}>{i18n.t.passkeys.add}</Button>
                 </form>
-                {#if passkeys.length}
-                  <div class="rounded-md border">
-                    <Table.Root>
-                      <Table.Body>
-                        {#each passkeys as pk (pk.id)}
-                          <Table.Row>
-                            <Table.Cell class="font-medium">{pk.name || i18n.t.passkeys.untitled}</Table.Cell>
-                            <Table.Cell class="text-muted-foreground">{formatDateTime(pk.createdAt)}</Table.Cell>
-                            <Table.Cell class="w-10">
-                              <Button variant="ghost" size="sm" disabled={passkeyBusy} onclick={() => deletePasskey(pk.id)}>{i18n.t.passkeys.remove}</Button>
-                            </Table.Cell>
-                          </Table.Row>
-                        {/each}
-                      </Table.Body>
-                    </Table.Root>
-                  </div>
-                {:else}
-                  <p class="text-muted-foreground text-sm">{i18n.t.passkeys.empty}</p>
-                {/if}
+                <DataTable
+                  columns={passkeysColumns}
+                  rows={passkeys}
+                  getKey={(pk) => pk.id}
+                  bind:sort={passkeysSort}
+                  bind:page={passkeysPage}
+                  perPage={PAGE_SIZE}
+                  label={fmt(i18n.t.passkeys.total, { count: passkeys.length })}
+                  empty={i18n.t.passkeys.empty}
+                >
+                  {#snippet row(pk)}
+                    <Table.Cell class="font-medium">{pk.name || i18n.t.passkeys.untitled}</Table.Cell>
+                    <Table.Cell class="text-muted-foreground">{formatDateTime(pk.createdAt)}</Table.Cell>
+                    <Table.Cell>
+                      <Button variant="ghost" size="sm" disabled={passkeyBusy} onclick={() => deletePasskey(pk.id)}>{i18n.t.passkeys.remove}</Button>
+                    </Table.Cell>
+                  {/snippet}
+                </DataTable>
               </Card.Content>
             </Card.Root>
           {/if}
@@ -562,38 +583,27 @@
             <Button variant="outline" size="sm" disabled={busy || sessions.length <= 1} onclick={signOutOthers}>{i18n.t.sessions.signOutOthers}</Button>
           </Card.Header>
           <Card.Content>
-            <div class="rounded-md border">
-              <Table.Root>
-                <Table.Header>
-                  <Table.Row>
-                    <Table.Head>{i18n.t.sessions.device}</Table.Head>
-                    <Table.Head>{i18n.t.sessions.ip}</Table.Head>
-                    <Table.Head>{i18n.t.sessions.since}</Table.Head>
-                    <Table.Head>{i18n.t.sessions.status}</Table.Head>
-                    <Table.Head class="w-10"></Table.Head>
-                  </Table.Row>
-                </Table.Header>
-                <Table.Body>
-                  {#each pagedSessions as s (s.id)}
-                    {@const isCurrent = s.id === data.currentSessionId}
-                    <Table.Row>
-                      <Table.Cell class="max-w-xs truncate">{s.userAgent ?? i18n.t.sessions.unknown}</Table.Cell>
-                      <Table.Cell class="text-muted-foreground">{s.ipAddress ?? "—"}</Table.Cell>
-                      <Table.Cell class="text-muted-foreground">{formatDateTime(s.createdAt)}</Table.Cell>
-                      <Table.Cell>{#if isCurrent}<Badge>{i18n.t.sessions.current}</Badge>{/if}</Table.Cell>
-                      <Table.Cell>
-                        <Button variant="ghost" size="sm" disabled={busy || isCurrent} onclick={() => revoke(s.token)}>{i18n.t.sessions.revoke}</Button>
-                      </Table.Cell>
-                    </Table.Row>
-                  {:else}
-                    <Table.Row><Table.Cell colspan={5} class="text-muted-foreground py-8 text-center">{i18n.t.sessions.empty}</Table.Cell></Table.Row>
-                  {/each}
-                </Table.Body>
-              </Table.Root>
-            </div>
-            <div class="mt-4">
-              <TablePagination count={sessions.length} perPage={PAGE_SIZE} bind:page={sessionsPage} label={fmt(i18n.t.sessions.total, { count: sessions.length })} />
-            </div>
+            <DataTable
+              columns={sessionsColumns}
+              rows={sessions}
+              getKey={(s) => s.id}
+              bind:sort={sessionsSort}
+              bind:page={sessionsPage}
+              perPage={PAGE_SIZE}
+              label={fmt(i18n.t.sessions.total, { count: sessions.length })}
+              empty={i18n.t.sessions.empty}
+            >
+              {#snippet row(s)}
+                {@const isCurrent = s.id === data.currentSessionId}
+                <Table.Cell class="max-w-xs truncate">{s.userAgent ?? i18n.t.sessions.unknown}</Table.Cell>
+                <Table.Cell class="text-muted-foreground">{s.ipAddress ?? "—"}</Table.Cell>
+                <Table.Cell class="text-muted-foreground">{formatDateTime(s.createdAt)}</Table.Cell>
+                <Table.Cell>{#if isCurrent}<Badge>{i18n.t.sessions.current}</Badge>{/if}</Table.Cell>
+                <Table.Cell>
+                  <Button variant="ghost" size="sm" disabled={busy || isCurrent} onclick={() => revoke(s.token)}>{i18n.t.sessions.revoke}</Button>
+                </Table.Cell>
+              {/snippet}
+            </DataTable>
           </Card.Content>
         </Card.Root>
       {:else if section === "apiKeys"}
@@ -610,34 +620,25 @@
               </div>
               <Button type="submit" disabled={keyBusy}>{i18n.t.apiKeys.create}</Button>
             </form>
-            {#if apiKeys.length}
-              <div class="rounded-md border">
-                <Table.Root>
-                  <Table.Header>
-                    <Table.Row>
-                      <Table.Head>{i18n.t.apiKeys.name}</Table.Head>
-                      <Table.Head>{i18n.t.apiKeys.keyColumn}</Table.Head>
-                      <Table.Head>{i18n.t.apiKeys.created}</Table.Head>
-                      <Table.Head class="w-10"></Table.Head>
-                    </Table.Row>
-                  </Table.Header>
-                  <Table.Body>
-                    {#each apiKeys as k (k.id)}
-                      <Table.Row>
-                        <Table.Cell class="font-medium">{k.name || i18n.t.apiKeys.untitled}</Table.Cell>
-                        <Table.Cell class="text-muted-foreground font-mono text-xs">{k.start ? `${k.start}…` : "—"}</Table.Cell>
-                        <Table.Cell class="text-muted-foreground">{formatDateTime(k.createdAt)}</Table.Cell>
-                        <Table.Cell>
-                          <Button variant="ghost" size="sm" disabled={keyBusy} onclick={() => deleteApiKey(k.id)}>{i18n.t.apiKeys.revoke}</Button>
-                        </Table.Cell>
-                      </Table.Row>
-                    {/each}
-                  </Table.Body>
-                </Table.Root>
-              </div>
-            {:else}
-              <p class="text-muted-foreground text-sm">{i18n.t.apiKeys.empty}</p>
-            {/if}
+            <DataTable
+              columns={apiKeysColumns}
+              rows={apiKeys}
+              getKey={(k) => k.id}
+              bind:sort={apiKeysSort}
+              bind:page={apiKeysPage}
+              perPage={PAGE_SIZE}
+              label={fmt(i18n.t.apiKeys.total, { count: apiKeys.length })}
+              empty={i18n.t.apiKeys.empty}
+            >
+              {#snippet row(k)}
+                <Table.Cell class="font-medium">{k.name || i18n.t.apiKeys.untitled}</Table.Cell>
+                <Table.Cell class="text-muted-foreground font-mono text-xs">{k.start ? `${k.start}…` : "—"}</Table.Cell>
+                <Table.Cell class="text-muted-foreground">{formatDateTime(k.createdAt)}</Table.Cell>
+                <Table.Cell>
+                  <Button variant="ghost" size="sm" disabled={keyBusy} onclick={() => deleteApiKey(k.id)}>{i18n.t.apiKeys.revoke}</Button>
+                </Table.Cell>
+              {/snippet}
+            </DataTable>
           </Card.Content>
         </Card.Root>
         <Dialog.Root open={createdKey !== null} onOpenChange={(v) => { if (!v) createdKey = null; }}>
