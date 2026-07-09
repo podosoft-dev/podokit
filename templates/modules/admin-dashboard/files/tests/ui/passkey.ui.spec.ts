@@ -31,6 +31,6 @@ test("register a passkey and sign in with it @smoke", async ({ page, baseURL }) 
   // Sign out, then sign back in using only the passkey.
   await page.context().request.post("/api/auth/sign-out", { headers: origin });
   await ready(page, "/login");
-  await page.getByRole("button", { name: "Sign in with a passkey" }).click();
+  await page.getByRole("button", { name: "Use a passkey" }).click();
   await expect(page).toHaveURL(/\/admin(\/|$)/);
 });
