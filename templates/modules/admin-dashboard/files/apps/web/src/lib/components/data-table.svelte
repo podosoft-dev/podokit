@@ -89,50 +89,56 @@
   const count = $derived(total ?? rows.length);
 </script>
 
-<div class="flex flex-col gap-4">
-  <div class="rounded-md border">
-    <Table.Root>
-      <Table.Header>
-        <Table.Row>
-          {#each columns as col (col.key)}
-            <Table.Head
-              class={col.class}
-              aria-sort={sort?.key === col.key ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
-            >
-              {#if col.sortable}
-                <Button variant="ghost" size="sm" class="-mx-2 h-auto gap-1 px-2 py-1 font-medium" onclick={() => toggle(col)}>
-                  {col.label}
-                  {#if sort?.key === col.key}
-                    {#if sort.dir === "asc"}<ChevronUpIcon class="size-3.5" />{:else}<ChevronDownIcon class="size-3.5" />{/if}
-                  {:else}
-                    <ChevronsUpDownIcon class="size-3.5 opacity-40" />
-                  {/if}
-                </Button>
-              {:else}
+<div class="rounded-md border">
+  <Table.Root>
+    <Table.Header>
+      <Table.Row>
+        {#each columns as col (col.key)}
+          <Table.Head
+            class={col.class}
+            aria-sort={sort?.key === col.key ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
+          >
+            {#if col.sortable}
+              <Button variant="ghost" size="sm" class="-mx-2 h-auto gap-1 px-2 py-1 font-medium" onclick={() => toggle(col)}>
                 {col.label}
-              {/if}
-            </Table.Head>
-          {/each}
-        </Table.Row>
-      </Table.Header>
-      <Table.Body>
-        {#each view as r, i (getKey(r, i))}
-          <Table.Row>{@render row(r)}</Table.Row>
-        {:else}
-          <Table.Row>
-            <Table.Cell colspan={columns.length} class="text-muted-foreground py-8 text-center">{empty}</Table.Cell>
-          </Table.Row>
+                {#if sort?.key === col.key}
+                  {#if sort.dir === "asc"}<ChevronUpIcon class="size-3.5" />{:else}<ChevronDownIcon class="size-3.5" />{/if}
+                {:else}
+                  <ChevronsUpDownIcon class="size-3.5 opacity-40" />
+                {/if}
+              </Button>
+            {:else}
+              {col.label}
+            {/if}
+          </Table.Head>
         {/each}
-      </Table.Body>
-    </Table.Root>
-  </div>
-  {#if perPage}
-    <TablePagination
-      {count}
-      {perPage}
-      bind:page
-      {label}
-      onPageChange={manualPagination ? (p) => onChange?.({ sort, page: p }) : undefined}
-    />
-  {/if}
+      </Table.Row>
+    </Table.Header>
+    <Table.Body>
+      {#each view as r, i (getKey(r, i))}
+        <Table.Row>{@render row(r)}</Table.Row>
+      {:else}
+        <Table.Row>
+          <Table.Cell colspan={columns.length} class="text-muted-foreground py-8 text-center">{empty}</Table.Cell>
+        </Table.Row>
+      {/each}
+    </Table.Body>
+    <!-- Pagination lives in the table footer so every DataTable is consistent
+         top-to-bottom (sortable header, rows, footer pager). -->
+    {#if perPage}
+      <Table.Footer class="bg-transparent">
+        <Table.Row class="hover:bg-transparent">
+          <Table.Cell colspan={columns.length} class="py-2">
+            <TablePagination
+              {count}
+              {perPage}
+              bind:page
+              {label}
+              onPageChange={manualPagination ? (p) => onChange?.({ sort, page: p }) : undefined}
+            />
+          </Table.Cell>
+        </Table.Row>
+      </Table.Footer>
+    {/if}
+  </Table.Root>
 </div>

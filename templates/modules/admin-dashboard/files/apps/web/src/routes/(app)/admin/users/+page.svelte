@@ -9,7 +9,6 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import * as Select from "$lib/components/ui/select";
-  import TablePagination from "$lib/components/table-pagination.svelte";
   import DataTable, { type DataTableColumn, type SortState } from "$lib/components/data-table.svelte";
   import TableToolbar, { type ToolbarFilter, type ToolbarSearchField } from "$lib/components/table-toolbar.svelte";
   import EllipsisIcon from "@lucide/svelte/icons/ellipsis";
@@ -170,7 +169,13 @@
   // sessions
   let mSessions = $state<Session[]>([]);
   let mSessionsPage = $state(1);
-  const mPagedSessions = $derived(mSessions.slice((mSessionsPage - 1) * PAGE_SIZE, mSessionsPage * PAGE_SIZE));
+  let mSessionsSort = $state<SortState | null>(null);
+  const mSessionsColumns: DataTableColumn<Session>[] = [
+    { key: "userAgent", label: i18n.t.adminSessions.device, sortable: true },
+    { key: "ipAddress", label: i18n.t.adminSessions.ip, sortable: true },
+    { key: "createdAt", label: i18n.t.adminSessions.since, sortable: true, value: (s) => new Date(s.createdAt).getTime() },
+    { key: "actions", label: "", class: "w-10" },
+  ];
   // danger
   let mDeleteArmed = $state(false);
 
@@ -500,31 +505,23 @@
             <div class="flex justify-end">
               <Button variant="outline" size="sm" disabled={busy || mSessions.length === 0} onclick={revokeAllSessions}>{i18n.t.adminSessions.revokeAll}</Button>
             </div>
-            <div class="rounded-md border">
-              <Table.Root>
-                <Table.Header>
-                  <Table.Row>
-                    <Table.Head>{i18n.t.adminSessions.device}</Table.Head>
-                    <Table.Head>{i18n.t.adminSessions.ip}</Table.Head>
-                    <Table.Head>{i18n.t.adminSessions.since}</Table.Head>
-                    <Table.Head class="w-10"></Table.Head>
-                  </Table.Row>
-                </Table.Header>
-                <Table.Body>
-                  {#each mPagedSessions as s (s.id)}
-                    <Table.Row>
-                      <Table.Cell class="max-w-40 truncate">{s.userAgent ?? i18n.t.adminSessions.unknown}</Table.Cell>
-                      <Table.Cell class="text-muted-foreground">{s.ipAddress ?? "—"}</Table.Cell>
-                      <Table.Cell class="text-muted-foreground">{formatDateTime(s.createdAt)}</Table.Cell>
-                      <Table.Cell><Button variant="ghost" size="sm" disabled={busy} onclick={() => revokeSession(s.token)}>{i18n.t.users.revokeSession}</Button></Table.Cell>
-                    </Table.Row>
-                  {:else}
-                    <Table.Row><Table.Cell colspan={4} class="text-muted-foreground py-8 text-center">{i18n.t.adminSessions.empty}</Table.Cell></Table.Row>
-                  {/each}
-                </Table.Body>
-              </Table.Root>
-            </div>
-            <TablePagination count={mSessions.length} perPage={PAGE_SIZE} bind:page={mSessionsPage} />
+            <DataTable
+              columns={mSessionsColumns}
+              rows={mSessions}
+              getKey={(s) => s.id}
+              bind:sort={mSessionsSort}
+              bind:page={mSessionsPage}
+              perPage={PAGE_SIZE}
+              label={fmt(i18n.t.adminSessions.total, { count: mSessions.length })}
+              empty={i18n.t.adminSessions.empty}
+            >
+              {#snippet row(s)}
+                <Table.Cell class="max-w-40 truncate">{s.userAgent ?? i18n.t.adminSessions.unknown}</Table.Cell>
+                <Table.Cell class="text-muted-foreground">{s.ipAddress ?? "—"}</Table.Cell>
+                <Table.Cell class="text-muted-foreground">{formatDateTime(s.createdAt)}</Table.Cell>
+                <Table.Cell><Button variant="ghost" size="sm" disabled={busy} onclick={() => revokeSession(s.token)}>{i18n.t.users.revokeSession}</Button></Table.Cell>
+              {/snippet}
+            </DataTable>
           </div>
         {:else if mSection === "danger"}
           <div class="border-destructive/50 flex flex-col gap-3 rounded-md border p-4">

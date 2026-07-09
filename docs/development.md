@@ -105,10 +105,23 @@ workflow).
 
 ## Data tables
 
-Admin list views (users, sessions, audit log, ...) share one table component,
-`$lib/components/data-table.svelte`, so header, sortable columns (asc/desc), and
-the pagination footer behave the same everywhere. Use it for any new table —
-don't assemble `Table.*` primitives by hand.
+Admin list views (users, sessions, audit log, organizations, and the API
+keys / passkeys / sessions tables on the account page) share one table
+component, `$lib/components/data-table.svelte`, so the header, sortable columns
+(asc/desc), and the pagination footer behave the same everywhere. Use it for
+**every** table — do not assemble `Table.Root`/`Table.Header`/`Table.Body`
+primitives by hand, whether the table is on a page or inside a dialog/modal, and
+even when the row count is small enough that pagination rarely shows. The users
+page is the reference implementation.
+
+The pagination lives **inside the table footer** (`<Table.Footer>` / `tfoot`) —
+`DataTable` renders `TablePagination` in a footer cell so the pager is bounded by
+the table top-to-bottom. Never place a pagination control in a sibling element
+below the table. Pass `perPage={0}` if a table genuinely needs no footer.
+
+Sortable headers are the default: give every data column `sortable: true` (only
+action/status-style columns stay non-sortable), and supply a `value` accessor for
+nested or derived sort keys.
 
 Define columns and render each row's cells with a `row` snippet:
 
@@ -146,7 +159,8 @@ Two modes:
   `total`, and refetch in `onChange` using the emitted `sort` (`sortBy` /
   `sortDirection`) and `page`. Use for very large server-side lists.
 
-Pagination is handled inside via `TablePagination`; don't add a separate footer.
+Pagination is handled inside the table's `tfoot` via `TablePagination`; don't add
+a separate pager outside the table.
 
 ## Search & filters (TableToolbar)
 

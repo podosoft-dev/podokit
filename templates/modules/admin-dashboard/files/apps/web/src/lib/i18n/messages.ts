@@ -64,7 +64,7 @@ const en = {
     title: "Passkeys", subtitle: "Passwordless sign-in with your device (Face ID, fingerprint, security key).",
     name: "Name", namePlaceholder: "e.g. MacBook", add: "Add passkey", remove: "Remove", untitled: "Passkey",
     added: "Passkey added", addFailed: "Failed to add passkey", removed: "Passkey removed", removeFailed: "Failed to remove passkey",
-    empty: "No passkeys yet.",
+    empty: "No passkeys yet.", created: "Created", total: "{count} passkeys",
   },
   acceptInvitation: {
     title: "Organization invitation", pending: "Accepting your invitation…",
@@ -74,7 +74,7 @@ const en = {
   organizations: {
     title: "Organizations", subtitle: "Multi-tenant teams. Create organizations and invite members.",
     create: "New organization", createTitle: "Create organization", name: "Name", slug: "Slug",
-    created: "Created", delete: "Delete", cancel: "Cancel", empty: "No organizations yet.",
+    created: "Created", delete: "Delete", cancel: "Cancel", empty: "No organizations yet.", total: "{count} organizations",
     submit: "Create", createdMsg: "Organization created", deletedMsg: "Organization deleted", actionFailed: "Action failed",
     manage: "Manage", membersDesc: "Members and pending invitations.", members: "Members", pending: "Pending invitations",
     parent: "Parent organization", noParent: "None (top level)", managers: "Managers", managersHint: "Existing users to add as managers (any number).",
@@ -88,7 +88,7 @@ const en = {
     title: "API keys", subtitle: "Personal keys for programmatic access. Send as an x-api-key header.",
     name: "Name", namePlaceholder: "e.g. CI pipeline", create: "Create key",
     keyColumn: "Key", created: "Created", untitled: "Untitled", revoke: "Revoke",
-    revoked: "Key revoked", revokeFailed: "Failed to revoke key", empty: "No API keys yet.",
+    revoked: "Key revoked", revokeFailed: "Failed to revoke key", empty: "No API keys yet.", total: "{count} API keys",
     createdTitle: "API key created", createdDesc: "Copy it now — you will not be able to see it again.",
     copy: "Copy", copied: "Copied to clipboard", done: "Done",
   },
@@ -331,7 +331,7 @@ const ko: Messages = {
     title: "패스키", subtitle: "기기로 비밀번호 없이 로그인(Face ID, 지문, 보안 키).",
     name: "이름", namePlaceholder: "예: MacBook", add: "패스키 추가", remove: "삭제", untitled: "패스키",
     added: "패스키를 추가했습니다", addFailed: "패스키 추가에 실패했습니다", removed: "패스키를 삭제했습니다", removeFailed: "패스키 삭제에 실패했습니다",
-    empty: "아직 패스키가 없습니다.",
+    empty: "아직 패스키가 없습니다.", created: "생성일", total: "패스키 {count}개",
   },
   acceptInvitation: {
     title: "조직 초대", pending: "초대를 수락하는 중…",
@@ -341,7 +341,7 @@ const ko: Messages = {
   organizations: {
     title: "조직", subtitle: "멀티테넌트 팀. 조직을 만들고 멤버를 초대합니다.",
     create: "새 조직", createTitle: "조직 만들기", name: "이름", slug: "슬러그",
-    created: "생성일", delete: "삭제", cancel: "취소", empty: "아직 조직이 없습니다.",
+    created: "생성일", delete: "삭제", cancel: "취소", empty: "아직 조직이 없습니다.", total: "조직 {count}개",
     submit: "만들기", createdMsg: "조직을 만들었습니다", deletedMsg: "조직을 삭제했습니다", actionFailed: "작업에 실패했습니다",
     manage: "관리", membersDesc: "멤버와 대기 중인 초대.", members: "멤버", pending: "대기 중 초대",
     parent: "상위 조직", noParent: "없음(최상위)", managers: "매니저", managersHint: "매니저로 추가할 기존 사용자(여러 명 가능).",
@@ -355,7 +355,7 @@ const ko: Messages = {
     title: "API 키", subtitle: "프로그래밍 방식 접근용 개인 키. x-api-key 헤더로 전송합니다.",
     name: "이름", namePlaceholder: "예: CI 파이프라인", create: "키 생성",
     keyColumn: "키", created: "생성일", untitled: "제목 없음", revoke: "폐기",
-    revoked: "키를 폐기했습니다", revokeFailed: "키 폐기에 실패했습니다", empty: "아직 API 키가 없습니다.",
+    revoked: "키를 폐기했습니다", revokeFailed: "키 폐기에 실패했습니다", empty: "아직 API 키가 없습니다.", total: "API 키 {count}개",
     createdTitle: "API 키 생성됨", createdDesc: "지금 복사하세요 — 다시 볼 수 없습니다.",
     copy: "복사", copied: "클립보드에 복사됨", done: "완료",
   },

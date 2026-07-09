@@ -3,18 +3,27 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { Checkbox } from "$lib/components/ui/checkbox";
-  import * as Card from "$lib/components/ui/card";
   import * as Table from "$lib/components/ui/table";
   import * as Dialog from "$lib/components/ui/dialog";
   import * as Select from "$lib/components/ui/select";
+  import DataTable, { type DataTableColumn, type SortState } from "$lib/components/data-table.svelte";
   import { toast } from "svelte-sonner";
   import { api } from "$lib/api";
-  import { getI18n, formatDateTime } from "$lib/i18n";
+  import { getI18n, fmt, formatDateTime } from "$lib/i18n";
 
   const i18n = getI18n();
 
   type Org = { id: string; name: string; slug: string; parentOrganizationId?: string | null; createdAt: string | Date };
   let orgs = $state<Org[]>([]);
+  let sort = $state<SortState | null>({ key: "createdAt", dir: "desc" });
+  let listPage = $state(1);
+  const columns: DataTableColumn<Org>[] = [
+    { key: "name", label: i18n.t.organizations.name, sortable: true },
+    { key: "slug", label: i18n.t.organizations.slug, sortable: true },
+    { key: "parent", label: i18n.t.organizations.parent, sortable: true, value: (o) => orgName(o.parentOrganizationId) },
+    { key: "createdAt", label: i18n.t.organizations.created, sortable: true },
+    { key: "actions", label: "", class: "w-10" },
+  ];
   let busy = $state(false);
   let createOpen = $state(false);
   let form = $state({ name: "", slug: "", parentOrganizationId: "" });
@@ -149,39 +158,27 @@
     <Button onclick={() => (createOpen = true)}>{i18n.t.organizations.create}</Button>
   </div>
 
-  <Card.Root>
-    <Card.Content class="p-0">
-      {#if orgs.length}
-        <Table.Root>
-          <Table.Header>
-            <Table.Row>
-              <Table.Head>{i18n.t.organizations.name}</Table.Head>
-              <Table.Head>{i18n.t.organizations.slug}</Table.Head>
-              <Table.Head>{i18n.t.organizations.parent}</Table.Head>
-              <Table.Head>{i18n.t.organizations.created}</Table.Head>
-              <Table.Head class="w-10"></Table.Head>
-            </Table.Row>
-          </Table.Header>
-          <Table.Body>
-            {#each orgs as org (org.id)}
-              <Table.Row>
-                <Table.Cell class="font-medium">{org.name}</Table.Cell>
-                <Table.Cell class="text-muted-foreground font-mono text-xs">{org.slug}</Table.Cell>
-                <Table.Cell class="text-muted-foreground">{orgName(org.parentOrganizationId)}</Table.Cell>
-                <Table.Cell class="text-muted-foreground">{formatDateTime(org.createdAt)}</Table.Cell>
-                <Table.Cell class="flex justify-end gap-1">
-                  <Button variant="ghost" size="sm" onclick={() => openManage(org)}>{i18n.t.organizations.manage}</Button>
-                  <Button variant="ghost" size="sm" disabled={busy} onclick={() => deleteOrg(org.id)}>{i18n.t.organizations.delete}</Button>
-                </Table.Cell>
-              </Table.Row>
-            {/each}
-          </Table.Body>
-        </Table.Root>
-      {:else}
-        <p class="text-muted-foreground p-6 text-sm">{i18n.t.organizations.empty}</p>
-      {/if}
-    </Card.Content>
-  </Card.Root>
+  <DataTable
+    {columns}
+    rows={orgs}
+    getKey={(o) => o.id}
+    bind:sort
+    bind:page={listPage}
+    perPage={10}
+    label={fmt(i18n.t.organizations.total, { count: orgs.length })}
+    empty={i18n.t.organizations.empty}
+  >
+    {#snippet row(org)}
+      <Table.Cell class="font-medium">{org.name}</Table.Cell>
+      <Table.Cell class="text-muted-foreground font-mono text-xs">{org.slug}</Table.Cell>
+      <Table.Cell class="text-muted-foreground">{orgName(org.parentOrganizationId)}</Table.Cell>
+      <Table.Cell class="text-muted-foreground">{formatDateTime(org.createdAt)}</Table.Cell>
+      <Table.Cell class="flex justify-end gap-1">
+        <Button variant="ghost" size="sm" onclick={() => openManage(org)}>{i18n.t.organizations.manage}</Button>
+        <Button variant="ghost" size="sm" disabled={busy} onclick={() => deleteOrg(org.id)}>{i18n.t.organizations.delete}</Button>
+      </Table.Cell>
+    {/snippet}
+  </DataTable>
 </div>
 
 <Dialog.Root bind:open={manageOpen}>
