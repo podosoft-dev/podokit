@@ -122,6 +122,27 @@ test("access control enforces custom role permissions @smoke", async ({ playwrig
   await admin.dispose();
 });
 
+test("a user can create, list and delete an organization @smoke", async ({ playwright }) => {
+  const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  const caps = await (await ctx.get("/api/account/capabilities")).json();
+  test.skip(!caps?.organization, "organizations not enabled");
+  const email = `org-${Date.now()}@example.com`;
+  await ctx.post("/api/auth/sign-up/email", { data: { email, password: "Podokit3e-Str0ng!pw", name: "Org" } });
+
+  const slug = `acme-${Date.now()}`;
+  const created = await ctx.post("/api/auth/organization/create", { data: { name: "Acme", slug } });
+  expect(created.ok()).toBeTruthy();
+  const orgId = (await created.json())?.id as string;
+  expect(typeof orgId).toBe("string");
+
+  const list = (await (await ctx.get("/api/auth/organization/list")).json()) as Array<{ id: string; slug: string }>;
+  expect(list.some((o) => o.slug === slug)).toBeTruthy();
+
+  const del = await ctx.post("/api/auth/organization/delete", { data: { organizationId: orgId } });
+  expect(del.ok()).toBeTruthy();
+  await ctx.dispose();
+});
+
 test("only admins can change settings @smoke", async ({ playwright }) => {
   const userCtx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   await userCtx.post("/api/auth/sign-in/email", { data: { email: USER.email, password: USER.password } });

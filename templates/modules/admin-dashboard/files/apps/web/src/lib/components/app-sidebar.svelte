@@ -6,13 +6,14 @@
   import UsersIcon from "@lucide/svelte/icons/users";
   import MonitorSmartphoneIcon from "@lucide/svelte/icons/monitor-smartphone";
   import ScrollTextIcon from "@lucide/svelte/icons/scroll-text";
+  import Building2Icon from "@lucide/svelte/icons/building-2";
   import SettingsIcon from "@lucide/svelte/icons/settings";
   import { getI18n } from "$lib/i18n";
   import type { SessionUser } from "../../app.d.ts";
   import type { Messages } from "$lib/i18n/messages";
   import type { Component } from "svelte";
 
-  let { user, capabilities }: { user: SessionUser; capabilities?: { auditLog?: boolean } } = $props();
+  let { user, capabilities }: { user: SessionUser; capabilities?: { auditLog?: boolean; organization?: boolean } } = $props();
   const i18n = getI18n();
 
   type NavItem = { href: string; key: keyof Messages["nav"]; icon: Component; adminOnly?: boolean };
@@ -20,6 +21,9 @@
     { href: "/admin", key: "overview", icon: LayoutDashboardIcon },
     { href: "/admin/users", key: "users", icon: UsersIcon, adminOnly: true },
     { href: "/admin/sessions", key: "sessions", icon: MonitorSmartphoneIcon, adminOnly: true },
+    ...(capabilities?.organization
+      ? [{ href: "/admin/organizations", key: "organizations", icon: Building2Icon, adminOnly: true } as NavItem]
+      : []),
     ...(capabilities?.auditLog
       ? [{ href: "/admin/audit", key: "audit", icon: ScrollTextIcon, adminOnly: true } as NavItem]
       : []),
