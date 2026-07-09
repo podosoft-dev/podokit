@@ -3,19 +3,17 @@
   "version": "0.1.0",
   "description": "Shared PodoKit contracts: capability flags, the REST error envelope, and stable error codes used by both the NestJS backend and the SvelteKit frontend.",
   "license": "Apache-2.0",
-  "type": "module",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/podosoft-dev/podokit.git",
     "directory": "packages/contracts"
   },
   "main": "./dist/index.js",
-  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "default": "./dist/index.js"
     }
   },
   "files": [

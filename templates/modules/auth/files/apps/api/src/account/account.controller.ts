@@ -8,29 +8,10 @@ import { ROLE_NAMES } from "../auth/permissions";
 import { auth } from "../auth/auth";
 import { pool } from "../auth/db";
 import { createConfigStore } from "../auth/config-store";
+import type { Capabilities } from "@podosoft/podokit-contracts";
 
 // Reads OAuth/server-toggle state (DB-first, env fallback) for capabilities.
 const configStore = createConfigStore(pool);
-
-type Capabilities = {
-  twoFactor: boolean;
-  providers: string[];
-  deleteAccount: boolean;
-  auditLog: boolean;
-  emailVerification: boolean;
-  passwordBreachCheck: boolean;
-  magicLink: boolean;
-  emailOtp: boolean;
-  username: boolean;
-  multiSession: boolean;
-  phoneNumber: boolean;
-  apiKey: boolean;
-  passkey: boolean;
-  organization: boolean;
-  oidcProvider: boolean;
-  /** Assignable role names (access-control), for the admin role picker. */
-  roles: string[];
-};
 
 function isAdmin(session: UserSession): boolean {
   const role = session.user?.role;

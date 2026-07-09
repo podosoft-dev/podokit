@@ -14,6 +14,7 @@
     "migration:generate": "npm run typeorm -- migration:generate"
   },
   "dependencies": {
+    "@podosoft/podokit-contracts": "^0.1.0",
     "@nestjs/common": "^11.1.27",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.1.27",
