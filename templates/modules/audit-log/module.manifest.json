@@ -34,6 +34,6 @@
   "instructions": [
     "Run migrations to create the audit_logs table:  npm run migration:run -w <app>-api",
     "Auth/admin actions (login, ban, role changes, session revocation, user CRUD) are recorded via a better-auth hook; your own mutating NestJS routes are recorded by the interceptor.",
-    "List recent entries (admin session required):  curl -b cookies.txt localhost:3000/audit-logs"
+    "List recent entries (admin session required):  curl -b cookies.txt localhost:5002/audit-logs"
   ]
 }

@@ -14,8 +14,8 @@ cp .env.example .env
 npm run dev
 ```
 
-- API: http://localhost:3000 (health at `/health`)
-- Web: http://localhost:5173
+- API: http://localhost:5002 (health at `/health`)
+- Web: http://localhost:5001
 
 When run in a terminal, `podo create` lists the templates with descriptions and asks which one (and which package manager) to use. Pass flags (or `--yes`) to skip the prompts.
 

@@ -2,7 +2,7 @@
 
 # ── Required (runtime) ───────────────────────────────────────────────
 NODE_ENV=development
-PORT=3000
+PORT=5002
 
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
@@ -11,8 +11,8 @@ POSTGRES_PASSWORD=podokit
 POSTGRES_DB=podokit
 
 # Web -> API boundary (server-side only; not exposed to the browser)
-BACKEND_INTERNAL_URL=http://localhost:3000
-CORS_ORIGIN=http://localhost:5173
+BACKEND_INTERNAL_URL=http://localhost:5002
+CORS_ORIGIN=http://localhost:5001
 
 # ── Optional / development ───────────────────────────────────────────
 # Redis — only needed by cache/queue modules. Start it with:

@@ -4,7 +4,7 @@ import { defineConfig, devices } from "@playwright/test";
 // the API). Start it first (see docs/testing.md) — locally via the dev harness,
 // in CI via scripts/e2e-ci.mjs. Two projects: `api` (request-only, backend e2e)
 // and `ui` (chromium, pages). Files are routed by suffix (*.api/*.ui.spec.ts).
-const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5173";
+const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5001";
 
 export default defineConfig({
   testDir: ".",

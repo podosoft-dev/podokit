@@ -10,6 +10,6 @@ npm run test:e2e:report  # open the HTML report
 ```
 
 The suite runs against a live stack (web on `E2E_BASE_URL`, default
-`http://localhost:5173`, proxying `/api/*` to the API). Start PostgreSQL, run the
+`http://localhost:5001`, proxying `/api/*` to the API). Start PostgreSQL, run the
 auth migration, and start the API + web first. Files ending in `*.api.spec.ts` run
 in the request-only `api` project; `*.ui.spec.ts` run in the chromium `ui` project.

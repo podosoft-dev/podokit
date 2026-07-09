@@ -1,5 +1,5 @@
 import { betterAuth, type BetterAuthOptions, type BetterAuthPlugin } from "better-auth";
-import { twoFactor, haveIBeenPwned, magicLink, emailOTP, username, multiSession, phoneNumber, organization, jwt } from "better-auth/plugins";
+import { twoFactor, haveIBeenPwned, magicLink, emailOTP, username, multiSession, phoneNumber, organization, jwt, bearer } from "better-auth/plugins";
 import { Pool } from "pg";
 import { actionEmail, sendMail } from "../mail/mailer";
 import { sendSms } from "../sms/sms";
@@ -11,7 +11,7 @@ import { oauthProvider } from "@better-auth/oauth-provider";
 // podokit:auth-imports
 
 // Web origin(s) where the browser runs (WebAuthn ceremonies must match these).
-const webOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5173").split(",").map((o) => o.trim());
+const webOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5001").split(",").map((o) => o.trim());
 
 const pool = new Pool({
   host: process.env.POSTGRES_HOST ?? "localhost",
@@ -109,6 +109,10 @@ const plugins: BetterAuthPlugin[] = [
       });
     },
   }),
+  // Accept the session token via `Authorization: Bearer <token>` (returned in the
+  // `set-auth-token` response header on sign-in) instead of a cookie — for API and
+  // mobile clients. Infrastructure plugin (always on), like jwt(); no UI toggle.
+  bearer(),
   // JWT/JWKS signing keys — required by the OAuth provider to sign id_tokens.
   jwt(),
   // Act as an OAuth2/OIDC identity provider: other apps can "Sign in with this app".
@@ -160,7 +164,7 @@ export const auth = betterAuth({
   plugins,
   hooks,
   secret: process.env.BETTER_AUTH_SECRET ?? "change-me-in-production-min-32-characters",
-  baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+  baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:5002",
   advanced: {
     ipAddress: {
       // The API sits behind the SvelteKit server proxy, which forwards the

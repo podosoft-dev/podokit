@@ -34,9 +34,9 @@ npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
 npm run dev
 
 # sign up (sets a session cookie), then call a protected route
-curl -c cookies.txt -XPOST localhost:3000/api/auth/sign-up/email \
+curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-up/email \
   -H 'content-type: application/json' -d '{"email":"a@example.com","password":"password123","name":"A"}'
-curl -b cookies.txt localhost:3000/account/me
+curl -b cookies.txt localhost:5002/account/me
 ```
 
 - **Secure by default**: all module endpoints (jobs, storage, files, cache, …) are protected once `auth` is added.
@@ -45,6 +45,17 @@ curl -b cookies.txt localhost:3000/account/me
   from the admin **Settings** page (stored in the DB, applied live — no env vars, no restart).
   Defaults are seeded by the `app_setting` migration. Server-enforced behaviours (email
   verification, breached-password check, account deletion) stay environment flags.
+- **Bearer tokens (API/mobile clients)**: always on. Sign-in returns the session token in
+  a `set-auth-token` response header; send it back as `Authorization: Bearer <token>` to
+  authenticate without a cookie. Useful for native apps and server-to-server calls.
+
+  ```bash
+  # grab the token from the sign-in response header, then call a protected route with it
+  TOKEN=$(curl -si -XPOST localhost:5002/api/auth/sign-in/email \
+    -H 'content-type: application/json' -d '{"email":"a@example.com","password":"password123"}' \
+    | awk -F': ' 'tolower($1)=="set-auth-token"{print $2}' | tr -d '\r')
+  curl -H "Authorization: Bearer $TOKEN" localhost:5002/account/me
+  ```
 - Security/audit modules build on this (they require `auth`).
 
 
@@ -65,8 +76,8 @@ npm run dev
 # terminal 2 — worker (consumer)
 npm run dev:worker -w my-app-api
 
-curl -XPOST localhost:3000/jobs -H 'content-type: application/json' -d '{"text":"hello"}'
-curl localhost:3000/jobs/<id>   # waiting -> active -> completed
+curl -XPOST localhost:5002/jobs -H 'content-type: application/json' -d '{"text":"hello"}'
+curl localhost:5002/jobs/<id>   # waiting -> active -> completed
 ```
 
 Without the worker running, jobs stay `waiting`; start the worker and they complete.
@@ -92,9 +103,9 @@ npm install
 docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml up -d
 npm run dev
 
-curl -XPUT localhost:3000/storage/hello -H 'content-type: application/json' -d '{"content":"hi"}'
-curl localhost:3000/storage/hello            # { key, content }
-curl localhost:3000/storage/hello/presigned  # { url }
+curl -XPUT localhost:5002/storage/hello -H 'content-type: application/json' -d '{"content":"hi"}'
+curl localhost:5002/storage/hello            # { key, content }
+curl localhost:5002/storage/hello/presigned  # { url }
 ```
 
 **Providers** (set in `.env`):
@@ -116,7 +127,7 @@ npm install
 docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml up -d
 npm run dev
 
-curl -F 'file=@./photo.png' localhost:3000/files
+curl -F 'file=@./photo.png' localhost:5002/files
 # → { key, url }  (url is a presigned download link)
 ```
 
@@ -131,9 +142,9 @@ npx @podosoft/podokit add sse
 npm run dev
 
 # terminal 1 — stream
-curl -N localhost:3000/events/stream
+curl -N localhost:5002/events/stream
 # terminal 2 — publish
-curl -XPOST localhost:3000/events -H 'content-type: application/json' -d '{"message":"hello"}'
+curl -XPOST localhost:5002/events -H 'content-type: application/json' -d '{"message":"hello"}'
 ```
 
 Pairs well with `bullmq` — inject `EventsService` into the worker to stream job progress.
@@ -150,8 +161,8 @@ npm install
 docker compose -f infra/docker/docker-compose.yml up -d   # redis
 npm run dev
 
-curl -XPUT localhost:3000/cache/greeting -H 'content-type: application/json' -d '{"value":"hi","ttl":60}'
-curl localhost:3000/cache/greeting   # { key, value }
+curl -XPUT localhost:5002/cache/greeting -H 'content-type: application/json' -d '{"value":"hi","ttl":60}'
+curl localhost:5002/cache/greeting   # { key, value }
 ```
 
 ### `job-progress`
@@ -169,8 +180,8 @@ docker compose -f infra/docker/docker-compose.yml up -d   # postgres + redis
 npm run dev                          # terminal 1 — API
 npm run dev:worker -w my-app-api     # terminal 2 — worker
 
-curl -N localhost:3000/events/stream                                             # terminal 3 — watch
-curl -XPOST localhost:3000/progress -H 'content-type: application/json' -d '{"steps":5}'
+curl -N localhost:5002/events/stream                                             # terminal 3 — watch
+curl -XPOST localhost:5002/progress -H 'content-type: application/json' -d '{"steps":5}'
 # the stream shows job-progress events: 20 -> 40 -> 60 -> 80 -> 100
 ```
 
@@ -185,7 +196,7 @@ JSON in production.
 npx @podosoft/podokit add logging
 npm install
 npm run dev
-curl localhost:3000/health   # watch the API log a structured "request completed" line
+curl localhost:5002/health   # watch the API log a structured "request completed" line
 ```
 
 Set `LOG_LEVEL` (`debug|info|warn|error`) in `.env`. To route Nest's own logs
@@ -208,10 +219,10 @@ npm run migration:run -w my-app-api   # creates audit_logs
 npm run dev
 
 # sign in, make a change, then see who did it
-curl -c cookies.txt -XPOST localhost:3000/api/auth/sign-up/email \
+curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-up/email \
   -H 'content-type: application/json' -d '{"email":"a@example.com","password":"password123","name":"A"}'
-curl -b cookies.txt -XPOST localhost:3000/todos -H 'content-type: application/json' -d '{"title":"hi"}'
-curl -b cookies.txt localhost:3000/audit-logs   # [{ userId, method:"POST", path:"/todos", statusCode:201, ... }]
+curl -b cookies.txt -XPOST localhost:5002/todos -H 'content-type: application/json' -d '{"title":"hi"}'
+curl -b cookies.txt localhost:5002/audit-logs   # [{ userId, method:"POST", path:"/todos", statusCode:201, ... }]
 ```
 
 ### `rate-limit`
@@ -241,7 +252,7 @@ key instead). Requires `auth` (auto-added).
 ```bash
 npx @podosoft/podokit add api-key-auth   # also adds auth
 # set API_KEYS=key1,key2 in .env, then:
-curl -H 'x-api-key: key1' localhost:3000/machine/ping   # { ok: true, via: "api-key" }
+curl -H 'x-api-key: key1' localhost:5002/machine/ping   # { ok: true, via: "api-key" }
 ```
 
 Protect your own machine routes with `@ApiKeyProtected()`. Keys are checked against

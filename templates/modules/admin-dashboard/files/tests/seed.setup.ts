@@ -1,7 +1,7 @@
 import { test as setup, expect } from "@playwright/test";
 import { ADMIN, USER, adminState, userState, type Account } from "./helpers/accounts";
 
-const base = process.env.E2E_BASE_URL ?? "http://localhost:5173";
+const base = process.env.E2E_BASE_URL ?? "http://localhost:5001";
 
 // Seed a session via the API (reliable, no UI hydration races) and save its
 // cookies as storageState for the browser `ui` project to reuse.
@@ -31,7 +31,7 @@ setup("enable optional features", async ({ playwright }) => {
   const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: { origin: base } });
   await ctx.post("/api/auth/sign-in/email", { data: { email: ADMIN.email, password: ADMIN.password } });
   const res = await ctx.put("/api/account/settings", { data: { phoneNumber: true } });
-  expect(res.ok(), "enable phoneNumber via settings").toBeTruthy();
+  expect(res.ok(), "enable optional features via settings").toBeTruthy();
   await ctx.dispose();
 });
 

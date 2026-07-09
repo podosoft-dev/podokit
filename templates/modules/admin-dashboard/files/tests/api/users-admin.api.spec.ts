@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { ADMIN, USER } from "../helpers/accounts";
 
-const base = process.env.E2E_BASE_URL ?? "http://localhost:5173";
+const base = process.env.E2E_BASE_URL ?? "http://localhost:5001";
 const origin = { origin: base };
 
 async function signedIn(
