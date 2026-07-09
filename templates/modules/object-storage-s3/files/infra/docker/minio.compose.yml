@@ -1,12 +1,13 @@
-# MinIO for local S3-compatible object storage (dev).
-# The default docker-compose.yml is postgres + redis; add MinIO with:
+# MinIO for local S3-compatible object storage — development only (in production
+# point S3_* at a real S3-compatible service). Part of the `dev` profile; add it with:
 #
-#   docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml up -d
+#   docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml --profile dev up -d
 #
 # Console: http://localhost:9001  (S3 API: http://localhost:9000)
 services:
   minio:
     image: minio/minio:latest
+    profiles: ["dev"]
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-podokit}
@@ -20,6 +21,7 @@ services:
   # Waits for MinIO, then creates the bucket and exits.
   minio-init:
     image: minio/mc:latest
+    profiles: ["dev"]
     depends_on:
       - minio
     entrypoint: >

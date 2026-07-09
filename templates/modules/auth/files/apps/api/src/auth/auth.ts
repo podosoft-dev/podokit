@@ -2,6 +2,7 @@ import { betterAuth, type BetterAuthOptions, type BetterAuthPlugin } from "bette
 import { twoFactor, haveIBeenPwned, magicLink, emailOTP, username, multiSession, phoneNumber, organization, oidcProvider } from "better-auth/plugins";
 import { Pool } from "pg";
 import { actionEmail, sendMail } from "../mail/mailer";
+import { sendSms } from "../sms/sms";
 import { createFeatureGate } from "./feature-gate";
 import { apiKey } from "@better-auth/api-key";
 import { passkey } from "@better-auth/passkey";
@@ -75,7 +76,7 @@ const plugins: BetterAuthPlugin[] = [
   // wire a real provider in sendOTP for production.
   phoneNumber({
     sendOTP: async ({ phoneNumber: to, code }: { phoneNumber: string; code: string }) => {
-      console.warn(`[phone-number] SMS not configured \u2014 OTP for ${to}: ${code}`);
+      await sendSms({ to, body: `Your verification code is ${code}` });
     },
   }),
   // User-issued API keys (DB-backed). Distinct from the static X-API-Key module.

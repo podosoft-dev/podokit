@@ -144,6 +144,9 @@ async function main() {
       ...(process.env.SMTP_HOST
         ? [`SMTP_HOST=${process.env.SMTP_HOST}`, `SMTP_PORT=${process.env.SMTP_PORT ?? "1025"}`, "MAIL_FROM=PodoKit <no-reply@example.com>"]
         : []),
+      // Route phone-number OTPs to the SMS sink when present so its spec can read
+      // the code back; otherwise the app logs it and the spec skips.
+      ...(process.env.SMS_WEBHOOK_URL ? [`SMS_WEBHOOK_URL=${process.env.SMS_WEBHOOK_URL}`] : []),
     ].join("\n") + "\n",
   );
 
