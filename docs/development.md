@@ -87,7 +87,7 @@ web `vite dev`, plus `dev-watch` to mirror template edits). It doubles as the ta
 for fast spec runs — from the app's `tests/` workspace:
 
 ```bash
-E2E_BASE_URL=http://localhost:5173 npx playwright test ui/settings.ui.spec.ts
+E2E_BASE_URL=http://localhost:5001 npx playwright test ui/settings.ui.spec.ts
 ```
 
 Non-injected template files mirror live; when you change an injection target

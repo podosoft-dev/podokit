@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ready } from "../helpers/hydration";
 
-const base = process.env.E2E_BASE_URL ?? "http://localhost:5173";
+const base = process.env.E2E_BASE_URL ?? "http://localhost:5001";
 
 // Seed a throwaway user via the API (admin cookies come from storageState) so
 // the mutating UI tests don't touch the shared admin/user seed accounts.

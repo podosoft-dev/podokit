@@ -61,12 +61,12 @@ npm run test:e2e:report  # open the HTML report
 ```
 
 The suite runs against a **live stack**: the web on `E2E_BASE_URL` (default
-`http://localhost:5173`) proxying `/api/*` to the API. Bring it up first:
+`http://localhost:5001`) proxying `/api/*` to the API. Bring it up first:
 
 ```bash
 docker compose -f infra/docker/docker-compose.yml up -d postgres
 npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts   # if using auth/admin-dashboard
-npm run dev            # api on :3000, web on :5173
+npm run dev            # api on :5002, web on :5001
 # then, in another shell:
 npm run test:e2e
 ```

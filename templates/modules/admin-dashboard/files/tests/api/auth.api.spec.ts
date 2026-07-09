@@ -3,7 +3,7 @@ import { ADMIN, USER } from "../helpers/accounts";
 import { clearSms, smsSinkReachable, waitForSmsOtp } from "../helpers/sms";
 import { totpCode } from "../helpers/totp";
 
-const base = process.env.E2E_BASE_URL ?? "http://localhost:5173";
+const base = process.env.E2E_BASE_URL ?? "http://localhost:5001";
 const origin = { origin: base };
 
 // Accounts are created by the `setup` project (this `api` project depends on it).
@@ -111,6 +111,28 @@ test("a user can sign in with a username @smoke", async ({ playwright }) => {
   const session = await (await ctx2.get("/api/auth/get-session")).json();
   expect(session?.user?.username).toBe(uname);
   await ctx2.dispose();
+});
+
+test("bearer token authenticates API requests without a cookie @smoke", async ({ playwright }) => {
+  const email = `bearer-${Date.now()}@example.com`;
+  const pw = "Podokit3e-Str0ng!pw";
+  const signup = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  await signup.post("/api/auth/sign-up/email", { data: { email, password: pw, name: "Bearer" } });
+  const signIn = await signup.post("/api/auth/sign-in/email", { data: { email, password: pw } });
+  expect(signIn.ok()).toBeTruthy();
+  // The bearer plugin accepts the session token as `Authorization: Bearer`. Take it
+  // from the session cookie the sign-in set (equivalent to the set-auth-token header).
+  const state = await signup.storageState();
+  const token = state.cookies.find((c) => c.name.endsWith("session_token"))?.value;
+  expect(token, "sign-in set a session token").toBeTruthy();
+  await signup.dispose();
+  // Fresh context = no session cookie; authenticate purely via the bearer header.
+  const api = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  expect((await api.get("/api/account/me")).status()).toBe(401);
+  const authed = await api.get("/api/account/me", { headers: { Authorization: `Bearer ${token}` } });
+  expect(authed.ok()).toBeTruthy();
+  expect((await authed.json())?.email).toBe(email);
+  await api.dispose();
 });
 
 test("a user can create, list and revoke a personal API key @smoke", async ({ playwright }) => {

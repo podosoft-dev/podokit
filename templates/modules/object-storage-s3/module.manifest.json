@@ -23,9 +23,9 @@
   ],
   "instructions": [
     "Start MinIO for local dev:  docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml up -d",
-    "Store an object:  curl -XPUT localhost:3000/storage/hello -H 'content-type: application/json' -d '{\"content\":\"hi\"}'",
-    "Read it back:     curl localhost:3000/storage/hello",
-    "Presigned URL:    curl localhost:3000/storage/hello/presigned",
+    "Store an object:  curl -XPUT localhost:5002/storage/hello -H 'content-type: application/json' -d '{\"content\":\"hi\"}'",
+    "Read it back:     curl localhost:5002/storage/hello",
+    "Presigned URL:    curl localhost:5002/storage/hello/presigned",
     "For AWS S3: set STORAGE_PROVIDER=aws, remove S3_ENDPOINT, set S3_FORCE_PATH_STYLE=false and real credentials/bucket."
   ]
 }

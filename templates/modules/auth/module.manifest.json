@@ -19,7 +19,7 @@
   "env": [
     "# ── Auth (better-auth) — BETTER_AUTH_SECRET + URL are required ──",
     "BETTER_AUTH_SECRET=change-me-in-production-min-32-characters",
-    "BETTER_AUTH_URL=http://localhost:3000",
+    "BETTER_AUTH_URL=http://localhost:5002",
     "# Auth features (2FA, magic link, email OTP, username, multi-session, phone number)",
     "# are managed on the admin Settings page (stored in the DB; defaults seeded by migration).",
     "# --- Optional / development ---",
@@ -81,8 +81,8 @@
   "instructions": [
     "Set BETTER_AUTH_SECRET in .env (>= 32 chars).",
     "Create the auth tables:  npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts",
-    "Sign up:  curl -c cookies.txt -XPOST localhost:3000/api/auth/sign-up/email -H 'content-type: application/json' -d '{\"email\":\"a@example.com\",\"password\":\"password123\",\"name\":\"A\"}'",
-    "Call a protected route with the session:  curl -b cookies.txt localhost:3000/account/me",
+    "Sign up:  curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-up/email -H 'content-type: application/json' -d '{\"email\":\"a@example.com\",\"password\":\"password123\",\"name\":\"A\"}'",
+    "Call a protected route with the session:  curl -b cookies.txt localhost:5002/account/me",
     "Everything is now protected by default; mark public routes with @Public(). Enable OAuth by setting a provider's env vars. Manage auth features (2FA, magic link, OTP, username, multi-session, phone number) on the admin Settings page."
   ]
 }

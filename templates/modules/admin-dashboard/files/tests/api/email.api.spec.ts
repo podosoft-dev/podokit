@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { clearMailpit, mailpitReachable, waitForLink, waitForOtp } from "../helpers/mailpit";
 
-const base = process.env.E2E_BASE_URL ?? "http://localhost:5173";
+const base = process.env.E2E_BASE_URL ?? "http://localhost:5001";
 const origin = { origin: base };
 
 test("email one-time code signs a user in @smoke", async ({ playwright }) => {

@@ -18,8 +18,8 @@ docker compose -f infra/docker/docker-compose.yml up -d
 {{packageManager}} run dev
 ```
 
-- API: http://localhost:3000 — health at `/health`, docs at `/api-docs`
-- Web: http://localhost:5173
+- API: http://localhost:5002 — health at `/health`, docs at `/api-docs`
+- Web: http://localhost:5001
 
 ## Database & migrations
 

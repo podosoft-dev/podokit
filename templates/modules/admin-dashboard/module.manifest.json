@@ -34,7 +34,7 @@
     {
       "file": "apps/api/src/auth/auth.ts",
       "marker": "// podokit:auth-options",
-      "text": "trustedOrigins: (process.env.CORS_ORIGIN ?? \"http://localhost:5173\").split(\",\").map((origin) => origin.trim()),\n  databaseHooks: {\n    user: {\n      create: {\n        before: async (user) => ({\n          data: {\n            ...user,\n            role: (process.env.ADMIN_EMAILS ?? \"\")\n              .split(\",\")\n              .map((email) => email.trim().toLowerCase())\n              .includes(user.email.toLowerCase())\n              ? \"admin\"\n              : \"user\",\n          },\n        }),\n      },\n    },\n  },"
+      "text": "trustedOrigins: (process.env.CORS_ORIGIN ?? \"http://localhost:5001\").split(\",\").map((origin) => origin.trim()),\n  databaseHooks: {\n    user: {\n      create: {\n        before: async (user) => ({\n          data: {\n            ...user,\n            role: (process.env.ADMIN_EMAILS ?? \"\")\n              .split(\",\")\n              .map((email) => email.trim().toLowerCase())\n              .includes(user.email.toLowerCase())\n              ? \"admin\"\n              : \"user\",\n          },\n        }),\n      },\n    },\n  },"
     }
   ],
   "instructions": [

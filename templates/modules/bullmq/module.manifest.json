@@ -29,8 +29,8 @@
   "instructions": [
     "Ensure Redis is running:  docker compose -f infra/docker/docker-compose.yml up -d",
     "Run the worker in a separate terminal:  npm run dev:worker -w <app>-api",
-    "Enqueue a job:  curl -XPOST localhost:3000/jobs -H 'content-type: application/json' -d '{\"text\":\"hello\"}'",
-    "Check status:   curl localhost:3000/jobs/<id>  (state goes waiting -> active -> completed)",
+    "Enqueue a job:  curl -XPOST localhost:5002/jobs -H 'content-type: application/json' -d '{\"text\":\"hello\"}'",
+    "Check status:   curl localhost:5002/jobs/<id>  (state goes waiting -> active -> completed)",
     "Deploy the worker as its own process: k3s manifest added at infra/k3s/worker-deployment.yaml; Docker Compose example at infra/docker/worker.compose.example.yml"
   ]
 }

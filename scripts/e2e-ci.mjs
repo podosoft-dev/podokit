@@ -24,8 +24,10 @@ const grep = grepIdx !== -1 ? args[grepIdx + 1] : process.env.GREP;
 
 const env = {
   REGISTRY_PORT: process.env.REGISTRY_PORT ?? "4873",
-  API_PORT: process.env.API_PORT ?? "3000",
-  WEB_PORT: process.env.WEB_PORT ?? "5173",
+  // Distinct from the dev-app default ports (web 5001 / api 5002) so a running
+  // standing dev app never collides with the isolated Outer verification.
+  API_PORT: process.env.API_PORT ?? "5012",
+  WEB_PORT: process.env.WEB_PORT ?? "5011",
   POSTGRES_HOST: process.env.POSTGRES_HOST ?? "localhost",
   POSTGRES_PORT: process.env.POSTGRES_PORT ?? "5432",
   POSTGRES_USER: process.env.POSTGRES_USER ?? "podokit",

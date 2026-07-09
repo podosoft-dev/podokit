@@ -29,8 +29,8 @@ cp .env.example .env
 npm run dev
 ```
 
-- API: http://localhost:3000 — health check at `/health`
-- Web: http://localhost:5173
+- API: http://localhost:5002 — health check at `/health`
+- Web: http://localhost:5001
 
 ## Templates
 

@@ -13,7 +13,7 @@
   ],
   "instructions": [
     "Start MinIO (or configure AWS S3):  docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml up -d",
-    "Upload a file:  curl -F 'file=@./some.png' localhost:3000/files",
+    "Upload a file:  curl -F 'file=@./some.png' localhost:5002/files",
     "The response includes { key, url } — a presigned download URL."
   ]
 }

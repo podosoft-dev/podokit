@@ -5,7 +5,7 @@ const FORWARDED_HEADERS = ["authorization", "cookie", "content-type", "accept", 
 const RELAYED_RESPONSE_HEADERS = ["content-type", "location", "cache-control"];
 
 export function backendBaseUrl(): string {
-  return process.env.BACKEND_INTERNAL_URL ?? "http://localhost:3000";
+  return process.env.BACKEND_INTERNAL_URL ?? "http://localhost:5002";
 }
 
 // Normalize the resolved client IP for the forwarded header. better-auth stores

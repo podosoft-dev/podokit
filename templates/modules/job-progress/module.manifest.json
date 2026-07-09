@@ -16,8 +16,8 @@
   "instructions": [
     "Start Redis + Postgres:  docker compose -f infra/docker/docker-compose.yml up -d",
     "Run API and worker in separate terminals:  npm run dev   /   npm run dev:worker -w <app>-api",
-    "Watch progress:  curl -N localhost:3000/events/stream",
-    "Start a job:     curl -XPOST localhost:3000/progress -H 'content-type: application/json' -d '{\"steps\":5}'",
+    "Watch progress:  curl -N localhost:5002/events/stream",
+    "Start a job:     curl -XPOST localhost:5002/progress -H 'content-type: application/json' -d '{\"steps\":5}'",
     "The stream shows job-progress events 20 -> 40 -> ... -> 100 pushed from the worker via Redis."
   ]
 }

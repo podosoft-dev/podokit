@@ -9,8 +9,8 @@
     { "file": "apps/api/src/app.module.ts", "marker": "// podokit:module-imports", "text": "EventsModule," }
   ],
   "instructions": [
-    "Stream events:  curl -N localhost:3000/events/stream",
-    "Publish a message (in another terminal):  curl -XPOST localhost:3000/events -H 'content-type: application/json' -d '{\"message\":\"hello\"}'",
+    "Stream events:  curl -N localhost:5002/events/stream",
+    "Publish a message (in another terminal):  curl -XPOST localhost:5002/events -H 'content-type: application/json' -d '{\"message\":\"hello\"}'",
     "Inject EventsService anywhere to push updates (e.g. job progress)."
   ]
 }

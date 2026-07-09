@@ -14,6 +14,6 @@
   "instructions": [
     "Set API_KEYS in .env (comma-separated).",
     "Protect a route for machine clients with @ApiKeyProtected() (bypasses the user session, requires X-API-Key).",
-    "Call it:  curl -H 'x-api-key: dev-key-please-change' localhost:3000/machine/ping"
+    "Call it:  curl -H 'x-api-key: dev-key-please-change' localhost:5002/machine/ping"
   ]
 }

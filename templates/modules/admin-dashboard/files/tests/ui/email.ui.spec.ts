@@ -3,7 +3,7 @@ import { anonState } from "../helpers/accounts";
 import { ready } from "../helpers/hydration";
 import { clearMailpit, mailpitReachable, waitForLink } from "../helpers/mailpit";
 
-const base = process.env.E2E_BASE_URL ?? "http://localhost:5173";
+const base = process.env.E2E_BASE_URL ?? "http://localhost:5001";
 const origin = { origin: base };
 
 // The reset flow is for signed-out users — run without the seeded session.

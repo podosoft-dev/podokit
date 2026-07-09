@@ -3,7 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 // admin-dashboard overlay: adds a `setup` project that seeds admin/user sessions
 // (storageState) which the `ui` project reuses. Serial + single worker because
 // tests share one backend/DB. Runs against a live stack on E2E_BASE_URL.
-const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5173";
+const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5001";
 
 export default defineConfig({
   testDir: ".",

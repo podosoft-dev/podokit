@@ -15,7 +15,7 @@
   ],
   "instructions": [
     "Start Redis:  docker compose -f infra/docker/docker-compose.yml up -d",
-    "Set a value:  curl -XPUT localhost:3000/cache/greeting -H 'content-type: application/json' -d '{\"value\":\"hi\",\"ttl\":60}'",
-    "Read it back: curl localhost:3000/cache/greeting"
+    "Set a value:  curl -XPUT localhost:5002/cache/greeting -H 'content-type: application/json' -d '{\"value\":\"hi\",\"ttl\":60}'",
+    "Read it back: curl localhost:5002/cache/greeting"
   ]
 }
