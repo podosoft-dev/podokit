@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { ADMIN, USER } from "../helpers/accounts";
+import { clearSms, smsSinkReachable, waitForSmsOtp } from "../helpers/sms";
+import { totpCode } from "../helpers/totp";
 
 const base = process.env.E2E_BASE_URL ?? "http://localhost:5173";
 const origin = { origin: base };
@@ -23,16 +25,53 @@ test("rejects a breached password on sign-up @smoke", async ({ playwright }) => 
   await ctx.dispose();
 });
 
-test("phone number: sending a verification code is accepted @smoke", async ({ playwright }) => {
+test("phone number: verify with the code delivered to the SMS sink @smoke", async ({ playwright }) => {
   const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const caps = await (await ctx.get("/api/account/capabilities")).json();
   test.skip(!caps?.phoneNumber, "phone number not enabled");
+  test.skip(!(await smsSinkReachable()), "SMS sink not reachable");
+  await clearSms();
   const email = `phone-${Date.now()}@example.com`;
   await ctx.post("/api/auth/sign-up/email", { data: { email, password: "Podokit3e-Str0ng!pw", name: "Phone" } });
-  // SMS delivery is a dev stub; we assert the request is accepted (code logged server-side).
-  const res = await ctx.post("/api/auth/phone-number/send-otp", { data: { phoneNumber: "+15555550123" } });
-  expect(res.ok()).toBeTruthy();
+  // Unique number per run so the "phone already exists" guard never trips.
+  const phone = `+1555${Date.now().toString().slice(-7)}`;
+
+  const sent = await ctx.post("/api/auth/phone-number/send-otp", { data: { phoneNumber: phone } });
+  expect(sent.ok()).toBeTruthy();
+  const code = await waitForSmsOtp(phone); // read the real code back from the sink
+
+  const verified = await ctx.post("/api/auth/phone-number/verify", {
+    data: { phoneNumber: phone, code, updatePhoneNumber: true },
+  });
+  expect(verified.ok()).toBeTruthy();
+  const session = await (await ctx.get("/api/auth/get-session")).json();
+  expect(session?.user?.phoneNumber).toBe(phone);
+  expect(session?.user?.phoneNumberVerified).toBe(true);
   await ctx.dispose();
+});
+
+test("two-factor: enable with a real TOTP code and require it at sign-in @smoke", async ({ playwright }) => {
+  const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  const caps = await (await ctx.get("/api/account/capabilities")).json();
+  test.skip(!caps?.twoFactor, "two-factor not enabled");
+  const email = `tf-${Date.now()}@example.com`;
+  const pw = "Podokit3e-Str0ng!pw";
+  await ctx.post("/api/auth/sign-up/email", { data: { email, password: pw, name: "TF" } });
+
+  // Enable 2FA and confirm it with a code computed from the returned otpauth URI.
+  const enable = await (await ctx.post("/api/auth/two-factor/enable", { data: { password: pw } })).json();
+  expect(typeof enable.totpURI).toBe("string");
+  const verified = await ctx.post("/api/auth/two-factor/verify-totp", { data: { code: totpCode(enable.totpURI) } });
+  expect(verified.ok()).toBeTruthy();
+
+  // A fresh sign-in must now be challenged for the second factor (no full session).
+  const ctx2 = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  const signin = await (await ctx2.post("/api/auth/sign-in/email", { data: { email, password: pw } })).json();
+  expect(signin.twoFactorRedirect).toBe(true);
+  const session = await (await ctx2.get("/api/auth/get-session")).json();
+  expect(session?.user).toBeFalsy();
+  await ctx.dispose();
+  await ctx2.dispose();
 });
 
 test("multi-session holds several accounts and switches between them @smoke", async ({ playwright }) => {
