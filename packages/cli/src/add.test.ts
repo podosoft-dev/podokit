@@ -47,7 +47,7 @@ describe("addModule (auth / better-auth)", () => {
     expect(apiPkg.dependencies["@thallesp/nestjs-better-auth"]).toBeDefined();
     // secure-by-default: global guard wired
     const appModule = readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8");
-    expect(appModule).toContain("AuthModule.forRoot(auth),");
+    expect(appModule).toContain("AuthModule.forRoot(authRuntime),");
     expect(appModule).toContain("{ provide: APP_GUARD, useClass: AuthGuard },");
     // the demo /account controller is registered via its module
     expect(appModule).toContain("AccountModule,");
@@ -62,7 +62,7 @@ describe("addModule (auth / better-auth)", () => {
     addModule({ projectRoot: project, module: "auth", modulesDir: MODULES });
     addModule({ projectRoot: project, module: "auth", modulesDir: MODULES });
     const appModule = readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8");
-    expect(appModule.match(/AuthModule\.forRoot\(auth\),/g)?.length).toBe(1);
+    expect(appModule.match(/AuthModule\.forRoot\(authRuntime\),/g)?.length).toBe(1);
   });
 
   it("rejects an unknown module", () => {
