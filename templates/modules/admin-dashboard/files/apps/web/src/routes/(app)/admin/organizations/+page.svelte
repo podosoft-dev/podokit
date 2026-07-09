@@ -48,6 +48,55 @@
     await load();
   }
 
+  // Members & invitations for one organization.
+  type Member = { id: string; role: string; user: { email: string; name: string } };
+  type Invitation = { id: string; email: string; role: string; status: string };
+  let manageOpen = $state(false);
+  let manageOrg = $state<Org | null>(null);
+  let members = $state<Member[]>([]);
+  let invitations = $state<Invitation[]>([]);
+  let inviteEmail = $state("");
+
+  async function openManage(org: Org): Promise<void> {
+    manageOrg = org;
+    manageOpen = true;
+    members = [];
+    invitations = [];
+    await refreshMembers();
+  }
+  async function refreshMembers(): Promise<void> {
+    if (!manageOrg) return;
+    const { data } = await api.auth.organization.getFullOrganization({ query: { organizationId: manageOrg.id } });
+    members = ((data as { members?: Member[] } | null)?.members ?? []) as Member[];
+    invitations = (((data as { invitations?: Invitation[] } | null)?.invitations ?? []) as Invitation[]).filter((i) => i.status === "pending");
+  }
+  async function invite(event: SubmitEvent): Promise<void> {
+    event.preventDefault();
+    if (!manageOrg) return;
+    busy = true;
+    const { error } = await api.auth.organization.inviteMember({ email: inviteEmail.trim(), role: "member", organizationId: manageOrg.id });
+    busy = false;
+    if (error) return void toast.error(error.message ?? i18n.t.organizations.actionFailed);
+    toast.success(i18n.t.organizations.invited);
+    inviteEmail = "";
+    await refreshMembers();
+  }
+  async function removeMember(memberIdOrEmail: string): Promise<void> {
+    if (!manageOrg) return;
+    busy = true;
+    const { error } = await api.auth.organization.removeMember({ memberIdOrEmail, organizationId: manageOrg.id });
+    busy = false;
+    if (error) return void toast.error(error.message ?? i18n.t.organizations.actionFailed);
+    await refreshMembers();
+  }
+  async function cancelInvite(invitationId: string): Promise<void> {
+    busy = true;
+    const { error } = await api.auth.organization.cancelInvitation({ invitationId });
+    busy = false;
+    if (error) return void toast.error(error.message ?? i18n.t.organizations.actionFailed);
+    await refreshMembers();
+  }
+
   $effect(() => {
     void load();
   });
@@ -80,7 +129,8 @@
                 <Table.Cell class="font-medium">{org.name}</Table.Cell>
                 <Table.Cell class="text-muted-foreground font-mono text-xs">{org.slug}</Table.Cell>
                 <Table.Cell class="text-muted-foreground">{formatDateTime(org.createdAt)}</Table.Cell>
-                <Table.Cell>
+                <Table.Cell class="flex justify-end gap-1">
+                  <Button variant="ghost" size="sm" onclick={() => openManage(org)}>{i18n.t.organizations.manage}</Button>
                   <Button variant="ghost" size="sm" disabled={busy} onclick={() => deleteOrg(org.id)}>{i18n.t.organizations.delete}</Button>
                 </Table.Cell>
               </Table.Row>
@@ -93,6 +143,42 @@
     </Card.Content>
   </Card.Root>
 </div>
+
+<Dialog.Root bind:open={manageOpen}>
+  <Dialog.Content class="max-w-lg">
+    <Dialog.Header>
+      <Dialog.Title>{manageOrg?.name}</Dialog.Title>
+      <Dialog.Description>{i18n.t.organizations.membersDesc}</Dialog.Description>
+    </Dialog.Header>
+    <form class="flex items-end gap-2" onsubmit={invite}>
+      <div class="flex flex-1 flex-col gap-1">
+        <Label for="invite-email">{i18n.t.organizations.inviteEmail}</Label>
+        <Input id="invite-email" type="email" bind:value={inviteEmail} placeholder="teammate@example.com" required />
+      </div>
+      <Button type="submit" disabled={busy || !inviteEmail.trim()}>{i18n.t.organizations.invite}</Button>
+    </form>
+    <div class="flex flex-col gap-2">
+      <p class="text-sm font-medium">{i18n.t.organizations.members}</p>
+      {#each members as m (m.id)}
+        <div class="flex items-center justify-between gap-2 rounded-md border p-2 text-sm">
+          <div><span class="font-medium">{m.user.name || m.user.email}</span> <span class="text-muted-foreground">· {m.role}</span></div>
+          {#if m.role !== "owner"}
+            <Button variant="ghost" size="sm" disabled={busy} onclick={() => removeMember(m.id)}>{i18n.t.organizations.remove}</Button>
+          {/if}
+        </div>
+      {/each}
+      {#if invitations.length}
+        <p class="text-sm font-medium">{i18n.t.organizations.pending}</p>
+        {#each invitations as inv (inv.id)}
+          <div class="flex items-center justify-between gap-2 rounded-md border border-dashed p-2 text-sm">
+            <span class="text-muted-foreground">{inv.email} · {inv.role}</span>
+            <Button variant="ghost" size="sm" disabled={busy} onclick={() => cancelInvite(inv.id)}>{i18n.t.organizations.cancelInvite}</Button>
+          </div>
+        {/each}
+      {/if}
+    </div>
+  </Dialog.Content>
+</Dialog.Root>
 
 <Dialog.Root bind:open={createOpen}>
   <Dialog.Content>
