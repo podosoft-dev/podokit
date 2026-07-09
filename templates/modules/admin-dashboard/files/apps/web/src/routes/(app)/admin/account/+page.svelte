@@ -8,7 +8,7 @@
   import * as Card from "$lib/components/ui/card";
   import * as Table from "$lib/components/ui/table";
   import * as Dialog from "$lib/components/ui/dialog";
-  import DataTable, { type DataTableColumn, type SortState } from "$lib/components/data-table.svelte";
+  import DataTable, { type DataTableColumn, type SortState, DEFAULT_PAGE_SIZE } from "$lib/components/data-table.svelte";
   import { toast } from "svelte-sonner";
   import { api } from "$lib/api";
   import { getI18n, fmt, formatDateTime } from "$lib/i18n";
@@ -241,7 +241,7 @@
 
   // Sessions — this user's own devices
   type Session = { id: string; token: string; userAgent?: string | null; ipAddress?: string | null; createdAt: string | Date };
-  const PAGE_SIZE = 5;
+  const PAGE_SIZE = DEFAULT_PAGE_SIZE;
   let sessions = $state<Session[]>([]);
   let sessionsPage = $state(1);
   let sessionsSort = $state<SortState | null>(null);

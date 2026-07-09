@@ -9,7 +9,7 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import * as Select from "$lib/components/ui/select";
-  import DataTable, { type DataTableColumn, type SortState } from "$lib/components/data-table.svelte";
+  import DataTable, { type DataTableColumn, type SortState, DEFAULT_PAGE_SIZE } from "$lib/components/data-table.svelte";
   import TableToolbar, { type ToolbarFilter, type ToolbarSearchField } from "$lib/components/table-toolbar.svelte";
   import EllipsisIcon from "@lucide/svelte/icons/ellipsis";
   import PlusIcon from "@lucide/svelte/icons/plus";
@@ -38,7 +38,7 @@
     banExpires?: string | Date | null;
   };
 
-  const PAGE_SIZE = 5;
+  const PAGE_SIZE = DEFAULT_PAGE_SIZE;
   const LOAD_LIMIT = 500; // bounded client-side list; add server-side filtering for larger deployments
   let users = $state<Row[]>([]);
   let page = $state(1);
