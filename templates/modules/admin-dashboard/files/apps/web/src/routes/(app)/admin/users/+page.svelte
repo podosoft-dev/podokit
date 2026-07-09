@@ -8,6 +8,7 @@
   import * as Table from "$lib/components/ui/table";
   import * as Dialog from "$lib/components/ui/dialog";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import * as Select from "$lib/components/ui/select";
   import TablePagination from "$lib/components/table-pagination.svelte";
   import DataTable, { type DataTableColumn, type SortState } from "$lib/components/data-table.svelte";
   import TableToolbar, { type ToolbarFilter, type ToolbarSearchField } from "$lib/components/table-toolbar.svelte";
@@ -21,6 +22,10 @@
   let { data }: { data: PageData } = $props();
   const i18n = getI18n();
   const emailVerificationEnabled = $derived(data.capabilities.emailVerification);
+  // Assignable roles come from the server (access-control); label the known ones.
+  const roleNames = $derived(data.capabilities.roles ?? ["admin", "user"]);
+  const roleLabel = (r: string): string =>
+    ({ admin: i18n.t.users.roleAdmin, user: i18n.t.users.roleUser, moderator: i18n.t.users.roleModerator }) [r] ?? r;
 
   type Row = {
     id: string;
@@ -58,15 +63,11 @@
     { key: "createdAt", label: i18n.t.users.joined, sortable: true, value: (u) => (u.createdAt ? new Date(u.createdAt).getTime() : 0) },
     { key: "actions", label: "", class: "w-10" },
   ];
-  const filters: ToolbarFilter[] = [
+  const filters = $derived<ToolbarFilter[]>([
     {
       key: "role",
       label: i18n.t.users.role,
-      options: [
-        { value: "", label: i18n.t.toolbar.all },
-        { value: "admin", label: i18n.t.users.roleAdmin },
-        { value: "user", label: i18n.t.users.roleUser },
-      ],
+      options: [{ value: "", label: i18n.t.toolbar.all }, ...roleNames.map((r) => ({ value: r, label: roleLabel(r) }))],
     },
     {
       key: "status",
@@ -77,7 +78,7 @@
         { value: "banned", label: i18n.t.users.banned },
       ],
     },
-  ];
+  ]);
   const searchFields: ToolbarSearchField[] = [
     { value: "email", label: i18n.t.users.email },
     { value: "name", label: i18n.t.users.name },
@@ -119,7 +120,7 @@
 
   // Create user
   let createOpen = $state(false);
-  let form = $state({ name: "", email: "", password: "", confirm: "", admin: false, sendVerify: true });
+  let form = $state({ name: "", email: "", password: "", confirm: "", role: "user", sendVerify: true });
   let createError = $state("");
   async function createUser(event: Event): Promise<void> {
     event.preventDefault();
@@ -133,7 +134,9 @@
       name: form.name,
       email: form.email,
       password: form.password,
-      role: form.admin ? "admin" : "user",
+      // Roles are server-driven (capabilities.roles); the typed client only knows
+      // the built-in ones, so assert at this boundary — the server validates it.
+      role: form.role as "admin" | "user",
     });
     busy = false;
     if (error) return void toast.error(error.message ?? i18n.t.users.actionFailed);
@@ -142,7 +145,7 @@
       await api.auth.sendVerificationEmail({ email: form.email, callbackURL: `${location.origin}/admin` });
     }
     createOpen = false;
-    form = { name: "", email: "", password: "", confirm: "", admin: false, sendVerify: true };
+    form = { name: "", email: "", password: "", confirm: "", role: "user", sendVerify: true };
     page = 1;
     await load();
   }
@@ -157,7 +160,7 @@
   // profile
   let mName = $state("");
   let mEmail = $state("");
-  let mAdmin = $state(false);
+  let mRole = $state("user");
   // security
   let mNewPassword = $state("");
   let mConfirmPassword = $state("");
@@ -176,7 +179,7 @@
     mSection = "profile";
     mName = u.name;
     mEmail = u.email;
-    mAdmin = u.role === "admin";
+    mRole = u.role ?? "user";
     mNewPassword = "";
     mConfirmPassword = "";
     mPwError = "";
@@ -199,7 +202,7 @@
     event.preventDefault();
     if (!mUser) return;
     busy = true;
-    const nextRole = mAdmin ? "admin" : "user";
+    const nextRole = mRole;
     // Profile fields go through updateUser; role changes go through the dedicated
     // setRole endpoint (aligns with the admin plugin's access-control model).
     const { error } = await api.auth.admin.updateUser({
@@ -207,7 +210,9 @@
       data: { name: mName, email: mEmail },
     });
     if (!error && nextRole !== (mUser.role ?? "user")) {
-      const { error: roleError } = await api.auth.admin.setRole({ userId: mUser.id, role: nextRole });
+      // Custom roles are valid at runtime (server-enforced); assert past the
+      // typed client, which only knows the built-in roles.
+      const { error: roleError } = await api.auth.admin.setRole({ userId: mUser.id, role: nextRole as "admin" | "user" });
       if (roleError) {
         busy = false;
         return void toast.error(roleError.message ?? i18n.t.users.actionFailed);
@@ -398,7 +403,15 @@
       <div class="flex flex-col gap-1"><Label for="c-password">{i18n.t.users.password}</Label><Input id="c-password" type="password" bind:value={form.password} required /></div>
       <div class="flex flex-col gap-1"><Label for="c-confirm">{i18n.t.users.confirmPassword}</Label><Input id="c-confirm" type="password" bind:value={form.confirm} required /></div>
       {#if createError}<p class="text-destructive text-sm">{createError}</p>{/if}
-      <Label class="flex items-center gap-2"><Checkbox bind:checked={form.admin} />{i18n.t.users.makeAdmin}</Label>
+      <div class="flex flex-col gap-1">
+        <Label for="c-role">{i18n.t.users.role}</Label>
+        <Select.Root type="single" bind:value={form.role}>
+          <Select.Trigger id="c-role" class="w-full">{roleLabel(form.role)}</Select.Trigger>
+          <Select.Content>
+            {#each roleNames as r (r)}<Select.Item value={r}>{roleLabel(r)}</Select.Item>{/each}
+          </Select.Content>
+        </Select.Root>
+      </div>
       {#if emailVerificationEnabled}
         <Label class="flex items-center gap-2"><Checkbox bind:checked={form.sendVerify} />{i18n.t.users.sendVerificationOnCreate}</Label>
       {/if}
@@ -433,7 +446,15 @@
           <form class="flex flex-col gap-3" onsubmit={saveProfile}>
             <div class="flex flex-col gap-1"><Label for="m-name">{i18n.t.users.name}</Label><Input id="m-name" bind:value={mName} required /></div>
             <div class="flex flex-col gap-1"><Label for="m-email">{i18n.t.users.email}</Label><Input id="m-email" type="email" bind:value={mEmail} required /></div>
-            <Label class="flex items-center gap-2"><Checkbox bind:checked={mAdmin} />{i18n.t.users.makeAdmin}</Label>
+            <div class="flex flex-col gap-1">
+              <Label for="m-role">{i18n.t.users.role}</Label>
+              <Select.Root type="single" bind:value={mRole}>
+                <Select.Trigger id="m-role" class="w-full">{roleLabel(mRole)}</Select.Trigger>
+                <Select.Content>
+                  {#each roleNames as r (r)}<Select.Item value={r}>{roleLabel(r)}</Select.Item>{/each}
+                </Select.Content>
+              </Select.Root>
+            </div>
             {#if mUser?.banned}<Badge variant="destructive" class="w-fit">{i18n.t.users.banned}</Badge>{/if}
             {#if emailVerificationEnabled}
               <div class="flex items-center gap-2">
