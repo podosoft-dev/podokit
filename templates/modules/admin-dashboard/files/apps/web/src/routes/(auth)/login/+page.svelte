@@ -75,6 +75,21 @@
     await goto(page.url.searchParams.get("redirect") ?? "/admin", { invalidateAll: true });
   }
 
+  // Passwordless sign-in with a registered passkey (WebAuthn), shown when enabled.
+  const passkeyEnabled = $derived(data.capabilities?.passkey ?? false);
+  let passkeyLoading = $state(false);
+  async function signInWithPasskey(): Promise<void> {
+    passkeyLoading = true;
+    error = null;
+    const res = await api.auth.signIn.passkey();
+    passkeyLoading = false;
+    if (res?.error) {
+      error = res.error.message ?? i18n.t.auth.signInFailed;
+      return;
+    }
+    await goto(page.url.searchParams.get("redirect") ?? "/admin", { invalidateAll: true });
+  }
+
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     loading = true;
@@ -126,8 +141,13 @@
       </div>
       <Button type="submit" disabled={loading}>{loading ? i18n.t.auth.signingIn : i18n.t.auth.signIn}</Button>
     </form>
-    {#if magicLinkEnabled || emailOtpEnabled}
+    {#if magicLinkEnabled || emailOtpEnabled || passkeyEnabled}
       <div class="mt-4 flex flex-col gap-3 border-t pt-4">
+        {#if passkeyEnabled}
+          <Button type="button" variant="outline" class="w-full" disabled={passkeyLoading} onclick={signInWithPasskey}>
+            {passkeyLoading ? i18n.t.auth.signingIn : i18n.t.auth.passkeyButton}
+          </Button>
+        {/if}
         {#if magicLinkEnabled}
           {#if magicSent}
             <p class="text-muted-foreground text-sm" data-testid="magic-link-sent">{i18n.t.auth.magicLinkSent}</p>
