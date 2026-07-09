@@ -3,25 +3,27 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { AppSetting } from "./app-setting.entity";
 
-/** Admin-editable feature flags. Stored in the DB so they can be toggled from the
- *  UI. The matching env var is only a first-run default (used until a value is
- *  saved). Keep secrets/infra (BETTER_AUTH_SECRET, POSTGRES_*, SMTP_*, OAuth
- *  client id/secret, ...) in the environment — those are not managed here. */
-// Only features whose plugin can be mounted unconditionally and gated in the UI
-// live via capabilities. Server-enforced flags (email verification, breach check,
-// self-deletion) are read by the auth server at boot and stay in the environment.
+/** Admin-editable feature flags — the DB (app_setting) is the single source of
+ *  truth. Defaults are seeded by the InitAppSettings migration and changed live
+ *  from the admin Settings page. Only features whose plugin can be mounted
+ *  unconditionally live here; their endpoints are blocked server-side when off
+ *  (see auth/feature-gate.ts). Server-enforced flags (email verification, breach
+ *  check, self-deletion) and secrets/infra stay in the environment. */
 export type FeatureFlag = "twoFactor" | "magicLink" | "emailOtp" | "username" | "multiSession" | "phoneNumber";
 
-const ENV_DEFAULT: Record<FeatureFlag, string> = {
-  twoFactor: "AUTH_TWO_FACTOR",
-  magicLink: "AUTH_MAGIC_LINK",
-  emailOtp: "AUTH_EMAIL_OTP",
-  username: "AUTH_USERNAME",
-  multiSession: "AUTH_MULTI_SESSION",
-  phoneNumber: "AUTH_PHONE_NUMBER",
+/** Shipped defaults — must match the rows seeded by the InitAppSettings migration.
+ *  Used only defensively before the migration has run. phoneNumber is off by
+ *  default because real delivery needs an SMS provider. */
+export const FLAG_DEFAULTS: Record<FeatureFlag, boolean> = {
+  twoFactor: true,
+  magicLink: true,
+  emailOtp: true,
+  username: true,
+  multiSession: true,
+  phoneNumber: false,
 };
 
-export const FEATURE_FLAGS = Object.keys(ENV_DEFAULT) as FeatureFlag[];
+export const FEATURE_FLAGS = Object.keys(FLAG_DEFAULTS) as FeatureFlag[];
 
 @Injectable()
 export class SettingsService implements OnModuleInit {
@@ -38,16 +40,16 @@ export class SettingsService implements OnModuleInit {
       const rows = await this.repo.find();
       this.cache = new Map(rows.map((r) => [r.key, r.value]));
     } catch {
-      // Table not migrated yet — fall back to env defaults until it exists.
+      // Table not migrated yet — fall back to the shipped defaults until it exists.
       this.cache = new Map();
     }
   }
 
-  /** DB value if an admin has set it, otherwise the env default (false if unset). */
+  /** DB value (migration-seeded or admin-set); shipped default if the row is missing. */
   getBool(flag: FeatureFlag): boolean {
     const stored = this.cache.get(flag);
     if (stored !== undefined) return stored === "true";
-    return process.env[ENV_DEFAULT[flag]] === "true";
+    return FLAG_DEFAULTS[flag];
   }
 
   flags(): Record<FeatureFlag, boolean> {

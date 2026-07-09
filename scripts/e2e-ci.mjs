@@ -134,15 +134,11 @@ async function main() {
       "BETTER_AUTH_SECRET=e2e-secret-please-change-32-characters",
       `BETTER_AUTH_URL=http://localhost:${env.API_PORT}`,
       "ADMIN_EMAILS=admin@example.com",
-      // Exercise the two-factor plugin end to end (setup QR, backup codes).
-      "AUTH_TWO_FACTOR=true",
-      // Exercise the breached-password check (Have I Been Pwned).
+      // Auth feature flags (2FA, magic link, OTP, username, multi-session) live in
+      // the DB — the app_setting migration seeds them on; seed.setup toggles the
+      // phoneNumber flag for its tests. Only server-enforced flags are env:
+      // exercise the breached-password check end to end.
       "AUTH_HIBP=true",
-      "AUTH_MAGIC_LINK=true",
-      "AUTH_EMAIL_OTP=true",
-      "AUTH_USERNAME=true",
-      "AUTH_MULTI_SESSION=true",
-      "AUTH_PHONE_NUMBER=true",
       // Point mail at the CI Mailpit service when present so the email specs run;
       // otherwise the app logs mail and those specs skip.
       ...(process.env.SMTP_HOST
@@ -160,15 +156,9 @@ async function main() {
     POSTGRES_DB: env.POSTGRES_DB,
     BETTER_AUTH_SECRET: "e2e-secret-please-change-32-characters",
     ADMIN_EMAILS: "admin@example.com",
-    // Must match the app .env so migrate creates the twoFactor table.
-    AUTH_TWO_FACTOR: "true",
-    // Runtime flags for the built api (this env is what `node dist/main` gets).
+    // Runtime env for the built api (`node dist/main` below). Auth feature flags
+    // are DB-backed (migration-seeded), so only server-enforced env remains.
     AUTH_HIBP: "true",
-    AUTH_MAGIC_LINK: "true",
-    AUTH_EMAIL_OTP: "true",
-    AUTH_USERNAME: "true",
-    AUTH_MULTI_SESSION: "true",
-    AUTH_PHONE_NUMBER: "true",
   };
 
   step("migrate the auth tables");

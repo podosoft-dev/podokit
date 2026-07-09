@@ -24,6 +24,17 @@ setup("seed admin session", async ({ playwright }) => {
   await seedSession(playwright, ADMIN, adminState);
 });
 
+// Feature flags are DB-backed (seeded by the app_setting migration). phoneNumber
+// ships off (needs an SMS provider); turn it on here so its specs run — this also
+// exercises the admin settings API on every suite run.
+setup("enable optional features", async ({ playwright }) => {
+  const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: { origin: base } });
+  await ctx.post("/api/auth/sign-in/email", { data: { email: ADMIN.email, password: ADMIN.password } });
+  const res = await ctx.put("/api/account/settings", { data: { phoneNumber: true } });
+  expect(res.ok(), "enable phoneNumber via settings").toBeTruthy();
+  await ctx.dispose();
+});
+
 setup("seed user session", async ({ playwright }) => {
   await seedSession(playwright, USER, userState);
 });

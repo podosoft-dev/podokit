@@ -12,6 +12,20 @@ export class InitAppSettings1720400000000 implements MigrationInterface {
         CONSTRAINT "PK_app_setting_key" PRIMARY KEY ("key")
       )
     `);
+    // Shipped defaults for the admin-managed auth feature flags (single source of
+    // truth is this table; toggle them on the admin Settings page). Must match
+    // FLAG_DEFAULTS in settings/settings.service.ts. phoneNumber ships off —
+    // real SMS delivery needs a provider wired into sendOTP.
+    await queryRunner.query(`
+      INSERT INTO "app_setting" ("key", "value") VALUES
+        ('twoFactor', 'true'),
+        ('magicLink', 'true'),
+        ('emailOtp', 'true'),
+        ('username', 'true'),
+        ('multiSession', 'true'),
+        ('phoneNumber', 'false')
+      ON CONFLICT ("key") DO NOTHING
+    `);
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {

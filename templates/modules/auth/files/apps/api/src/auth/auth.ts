@@ -27,9 +27,10 @@ function socialProviders(): NonNullable<BetterAuthOptions["socialProviders"]> {
 }
 
 // Plugins are collected here so other PodoKit modules can add their own.
-// twoFactor and magicLink are always mounted; whether the UI offers them is an
-// admin-editable, DB-backed setting (see /account/capabilities), so they can be
-// toggled live without a restart. Their endpoints are opt-in either way.
+// Feature plugins (2FA, magic link, email OTP, username, multi-session, phone
+// number) are always mounted; whether each is available is a DB-backed admin
+// setting — defaults seeded by the app_setting migration, toggled live on the
+// admin Settings page (see settings/settings.service.ts).
 const plugins: BetterAuthPlugin[] = [
   twoFactor(),
   magicLink({
