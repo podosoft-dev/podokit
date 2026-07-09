@@ -344,10 +344,54 @@ confirm the callback carries a `code` → exchange it for `access_token`/`id_tok
 call `GET /api/auth/oauth2/userinfo` with the access token.
 
 **Consume an external IdP (SSO).** To sign users in *through* a corporate/third-party
-provider, add the bundled `genericOAuth` plugin (any OAuth2/OIDC issuer, env-configured)
-or the `@better-auth/sso` add-on for enterprise OIDC/SAML. SAML/SCIM provisioning is
-deployment-specific — install the add-on, map attributes/claims, and verify against your
-IdP as an extension point.
+provider you have two options, in increasing order of effort:
+
+- **`genericOAuth` (bundled)** — any OAuth2/OIDC issuer (Google Workspace, Okta,
+  Auth0, Keycloak, Microsoft Entra…), configured with env: issuer URL, client id/secret,
+  and scopes. This is the recommended path for most OIDC providers and needs no extra
+  dependency.
+- **`@better-auth/sso` (add-on)** — for organization-scoped SSO and **SAML 2.0** IdPs
+  that OIDC can't cover. It's an **enterprise add-on: off by default and a separate
+  dependency** — install it only when you need SAML.
+
+##### SAML SSO (enterprise add-on)
+
+SAML is intentionally not wired into the starter (extra dependency, per-IdP config). Add
+it deliberately:
+
+1. `npm i @better-auth/sso` in `apps/api`.
+2. Mount the `sso()` plugin in `auth/auth.ts` (an injection target — regenerate or edit the
+   assembled file; don't hand-copy the base module over it).
+3. Register your IdP: metadata/entrypoint URL, the SP entity id + ACS callback
+   (`/api/auth/sso/saml2/callback`), the signing certificate, and an **attribute map**
+   (SAML assertion attributes → user fields such as email, name, and group/role).
+4. Keep it env-gated so it stays off in environments without an IdP.
+
+Attribute/claim mapping is deployment-specific — map your IdP's assertion (or OIDC claims)
+to the app's user fields and, if you use organizations, to org membership/roles.
+
+**Manual round-trip checklist (external IdP).** SAML can't be exercised by the automated
+suite (it needs a live IdP), so verify a new integration by hand:
+
+1. Metadata: the SP metadata is reachable and the IdP accepts the entity id + ACS URL.
+2. Initiate: `/api/auth/sso/saml2/authorize` (or the org-scoped variant) redirects to the IdP.
+3. Authenticate at the IdP and confirm it posts a signed assertion back to the ACS callback.
+4. Assertion: signature validates against the configured certificate; attribute map yields
+   the expected email/name/roles.
+5. Session: a PodoKit session is created (new users provisioned per your policy) and the
+   user lands authenticated.
+6. Negative: a tampered/expired assertion is rejected; SSO endpoints 404 when the add-on is off.
+
+##### SCIM provisioning (extension point)
+
+SCIM 2.0 (automated user/group provisioning from an IdP) is **not implemented** in the
+starter — it's a documented extension point. To add it, build a NestJS controller that
+implements the SCIM endpoints your IdP calls (`/scim/v2/Users`, `/scim/v2/Groups`, with
+GET/POST/PUT/PATCH/DELETE), guard it with a bearer token the IdP sends, and map SCIM
+resource attributes to the better-auth user/organization tables (create/update/deactivate
+on the corresponding lifecycle events). Treat deactivation as a soft-disable (ban/revoke
+sessions) rather than a hard delete. This lives entirely in your app code; PodoKit only
+provides the identity tables it writes to.
 
 #### Organizations: hierarchy & managers
 
