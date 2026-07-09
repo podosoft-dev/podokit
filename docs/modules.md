@@ -349,6 +349,23 @@ or the `@better-auth/sso` add-on for enterprise OIDC/SAML. SAML/SCIM provisionin
 deployment-specific — install the add-on, map attributes/claims, and verify against your
 IdP as an extension point.
 
+#### Organizations: hierarchy & managers
+
+Organizations (multi-tenant teams) come from better-auth, extended where it falls short:
+
+- **Parent organization** — orgs carry a `parentOrganizationId` (added via
+  `schema.organization.additionalFields` in `auth.ts`) so they form a hierarchy. Pick a
+  parent when creating an org; the list shows it. This is a data-level link — deep cycle
+  checks and permission inheritance down the tree are left as extension points.
+- **Managers** — a custom `manager` member role (see `auth/org-permissions.ts`, alongside
+  the built-in owner/admin/member). It's role-based, so an org can have **any number of
+  managers**. Assign existing users as managers when creating an org, or from the manage
+  dialog. Because better-auth's `addMember` is server-only, the app exposes it through a
+  thin `POST /account/org-member` endpoint that delegates org authorization to better-auth.
+
+Add your own org fields/roles the same way: extend `additionalFields` and the
+`org-permissions.ts` roles, then re-run the better-auth migration.
+
 ## Roadmap
 
 More modules are planned — redis, queue (BullMQ), object storage (S3), file
