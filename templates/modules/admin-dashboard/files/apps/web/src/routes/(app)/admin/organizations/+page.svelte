@@ -2,40 +2,77 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
+  import { Checkbox } from "$lib/components/ui/checkbox";
   import * as Card from "$lib/components/ui/card";
   import * as Table from "$lib/components/ui/table";
   import * as Dialog from "$lib/components/ui/dialog";
+  import * as Select from "$lib/components/ui/select";
   import { toast } from "svelte-sonner";
   import { api } from "$lib/api";
   import { getI18n, formatDateTime } from "$lib/i18n";
 
   const i18n = getI18n();
 
-  type Org = { id: string; name: string; slug: string; createdAt: string | Date };
+  type Org = { id: string; name: string; slug: string; parentOrganizationId?: string | null; createdAt: string | Date };
   let orgs = $state<Org[]>([]);
   let busy = $state(false);
   let createOpen = $state(false);
-  let form = $state({ name: "", slug: "" });
+  let form = $state({ name: "", slug: "", parentOrganizationId: "" });
+  // Existing users, so managers can be picked at creation (empty = none).
+  type AppUser = { id: string; name: string; email: string };
+  let users = $state<AppUser[]>([]);
+  let managerIds = $state<string[]>([]);
+
+  const orgName = (id?: string | null): string => (id ? (orgs.find((o) => o.id === id)?.name ?? "—") : "—");
 
   async function load(): Promise<void> {
     const { data } = await api.auth.organization.list();
     orgs = (data ?? []) as Org[];
   }
+  async function loadUsers(): Promise<void> {
+    const { data } = await api.auth.admin.listUsers({ query: { limit: 100 } });
+    users = ((data?.users ?? []) as AppUser[]);
+  }
 
-  // Derive a slug from the name unless the user typed one.
+  // Derive a slug from the name; fall back to a unique one for non-ASCII names.
   const slugify = (s: string): string =>
     s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const derivedSlug = (name: string): string => slugify(name) || `org-${Date.now().toString(36)}`;
+
+  function toggleManager(id: string): void {
+    managerIds = managerIds.includes(id) ? managerIds.filter((m) => m !== id) : [...managerIds, id];
+  }
+
+  // parentOrganizationId is a server additionalField not in the client's inferred
+  // create type; assert at the call boundary.
+  type CreateArg = Parameters<typeof api.auth.organization.create>[0];
 
   async function createOrg(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     busy = true;
-    const slug = form.slug.trim() || slugify(form.name);
-    const { error } = await api.auth.organization.create({ name: form.name.trim(), slug });
+    const slug = form.slug.trim() || derivedSlug(form.name);
+    const { data: org, error } = await api.auth.organization.create({
+      name: form.name.trim(),
+      slug,
+      ...(form.parentOrganizationId ? { parentOrganizationId: form.parentOrganizationId } : {}),
+    } as CreateArg);
+    if (error) {
+      busy = false;
+      return void toast.error(error.message ?? i18n.t.organizations.actionFailed);
+    }
+    // Add the chosen existing users as managers (role-based, so any number). Goes
+    // through our /account/org-member endpoint (better-auth's addMember is server-only).
+    const orgId = (org as { id?: string } | null)?.id;
+    if (orgId) {
+      for (const userId of managerIds) {
+        await api.post("/account/org-member", { organizationId: orgId, userId, role: "manager" }).catch(() => undefined);
+      }
+    }
     busy = false;
-    if (error) return void toast.error(error.message ?? i18n.t.organizations.actionFailed);
     toast.success(i18n.t.organizations.createdMsg);
     createOpen = false;
-    form = { name: "", slug: "" };
+    form = { name: "", slug: "", parentOrganizationId: "" };
+    managerIds = [];
     await load();
   }
 
@@ -99,6 +136,7 @@
 
   $effect(() => {
     void load();
+    void loadUsers();
   });
 </script>
 
@@ -119,6 +157,7 @@
             <Table.Row>
               <Table.Head>{i18n.t.organizations.name}</Table.Head>
               <Table.Head>{i18n.t.organizations.slug}</Table.Head>
+              <Table.Head>{i18n.t.organizations.parent}</Table.Head>
               <Table.Head>{i18n.t.organizations.created}</Table.Head>
               <Table.Head class="w-10"></Table.Head>
             </Table.Row>
@@ -128,6 +167,7 @@
               <Table.Row>
                 <Table.Cell class="font-medium">{org.name}</Table.Cell>
                 <Table.Cell class="text-muted-foreground font-mono text-xs">{org.slug}</Table.Cell>
+                <Table.Cell class="text-muted-foreground">{orgName(org.parentOrganizationId)}</Table.Cell>
                 <Table.Cell class="text-muted-foreground">{formatDateTime(org.createdAt)}</Table.Cell>
                 <Table.Cell class="flex justify-end gap-1">
                   <Button variant="ghost" size="sm" onclick={() => openManage(org)}>{i18n.t.organizations.manage}</Button>
@@ -192,8 +232,32 @@
       </div>
       <div class="flex flex-col gap-1">
         <Label for="o-slug">{i18n.t.organizations.slug}</Label>
-        <Input id="o-slug" bind:value={form.slug} placeholder={form.name ? slugify(form.name) : "acme"} />
+        <Input id="o-slug" bind:value={form.slug} placeholder={form.name ? derivedSlug(form.name) : "acme"} />
       </div>
+      <div class="flex flex-col gap-1">
+        <Label for="o-parent">{i18n.t.organizations.parent}</Label>
+        <Select.Root type="single" bind:value={form.parentOrganizationId}>
+          <Select.Trigger id="o-parent" class="w-full">{form.parentOrganizationId ? orgName(form.parentOrganizationId) : i18n.t.organizations.noParent}</Select.Trigger>
+          <Select.Content>
+            <Select.Item value="">{i18n.t.organizations.noParent}</Select.Item>
+            {#each orgs as o (o.id)}<Select.Item value={o.id}>{o.name}</Select.Item>{/each}
+          </Select.Content>
+        </Select.Root>
+      </div>
+      {#if users.length}
+        <div class="flex flex-col gap-1">
+          <Label>{i18n.t.organizations.managers}</Label>
+          <p class="text-muted-foreground text-xs">{i18n.t.organizations.managersHint}</p>
+          <div class="max-h-40 overflow-y-auto rounded-md border p-2">
+            {#each users as u (u.id)}
+              <Label class="flex items-center gap-2 py-1 text-sm font-normal">
+                <Checkbox checked={managerIds.includes(u.id)} onCheckedChange={() => toggleManager(u.id)} />
+                {u.name || u.email} <span class="text-muted-foreground">· {u.email}</span>
+              </Label>
+            {/each}
+          </div>
+        </div>
+      {/if}
       <Dialog.Footer>
         <Button type="button" variant="outline" onclick={() => (createOpen = false)}>{i18n.t.organizations.cancel}</Button>
         <Button type="submit" disabled={busy || !form.name.trim()}>{i18n.t.organizations.submit}</Button>

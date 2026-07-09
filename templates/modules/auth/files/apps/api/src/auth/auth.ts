@@ -4,6 +4,7 @@ import { Pool } from "pg";
 import { actionEmail, sendMail } from "../mail/mailer";
 import { sendSms } from "../sms/sms";
 import { createFeatureGate } from "./feature-gate";
+import { orgAc, orgRoles } from "./org-permissions";
 import { apiKey } from "@better-auth/api-key";
 import { passkey } from "@better-auth/passkey";
 import { oauthProvider } from "@better-auth/oauth-provider";
@@ -88,6 +89,11 @@ const plugins: BetterAuthPlugin[] = [
   passkey({ rpName: "PodoKit", rpID: new URL(webOrigins[0]).hostname, origin: webOrigins }),
   // Multi-tenant organizations: teams with members, roles, and email invitations.
   organization({
+    // Custom member roles (adds "manager") and a parent-organization link so orgs
+    // can form a hierarchy. See org-permissions.ts.
+    ac: orgAc,
+    roles: orgRoles,
+    schema: { organization: { additionalFields: { parentOrganizationId: { type: "string", required: false, input: true } } } },
     sendInvitationEmail: async (data: { email: string; id: string; organization: { name: string }; inviter: { user: { name: string; email: string } } }) => {
       const url = `${webOrigins[0]}/accept-invitation/${data.id}`;
       await sendMail({
