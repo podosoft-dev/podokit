@@ -12,7 +12,7 @@
   const i18n = getI18n();
   const caps = $derived(data.capabilities);
 
-  type EditableFlag = "twoFactor" | "magicLink" | "emailOtp" | "username" | "multiSession" | "phoneNumber" | "apiKey" | "passkey";
+  type EditableFlag = "twoFactor" | "magicLink" | "emailOtp" | "username" | "multiSession" | "phoneNumber" | "apiKey" | "passkey" | "organization";
   type Feature = { name: string; desc: string; enabled: boolean; flag?: EditableFlag; env?: string; detail?: string; manageHref?: string };
 
   // Admin-editable, stored in the DB, applied live (a disabled feature's
@@ -26,6 +26,7 @@
     { name: i18n.t.settings.twoFactor, desc: i18n.t.settings.twoFactorDesc, enabled: caps.twoFactor, flag: "twoFactor", manageHref: "/admin/account" },
     { name: i18n.t.settings.apiKey, desc: i18n.t.settings.apiKeyDesc, enabled: caps.apiKey, flag: "apiKey", manageHref: "/admin/account" },
     { name: i18n.t.settings.passkey, desc: i18n.t.settings.passkeyDesc, enabled: caps.passkey, flag: "passkey", manageHref: "/admin/account" },
+    { name: i18n.t.settings.organization, desc: i18n.t.settings.organizationDesc, enabled: caps.organization, flag: "organization", manageHref: "/admin/organizations" },
   ]);
 
   // Server-enforced, configured via environment (read-only here). emailPassword

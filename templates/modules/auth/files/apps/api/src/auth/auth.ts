@@ -1,5 +1,5 @@
 import { betterAuth, type BetterAuthOptions, type BetterAuthPlugin } from "better-auth";
-import { twoFactor, haveIBeenPwned, magicLink, emailOTP, username, multiSession, phoneNumber } from "better-auth/plugins";
+import { twoFactor, haveIBeenPwned, magicLink, emailOTP, username, multiSession, phoneNumber, organization } from "better-auth/plugins";
 import { Pool } from "pg";
 import { actionEmail, sendMail } from "../mail/mailer";
 import { createFeatureGate } from "./feature-gate";
@@ -84,6 +84,23 @@ const plugins: BetterAuthPlugin[] = [
   // origin, so expected origins are the CORS origins and rpID is their host.
   // Change rpName to your product name (shown in the browser passkey prompt).
   passkey({ rpName: "PodoKit", rpID: new URL(webOrigins[0]).hostname, origin: webOrigins }),
+  // Multi-tenant organizations: teams with members, roles, and email invitations.
+  organization({
+    sendInvitationEmail: async (data: { email: string; id: string; organization: { name: string }; inviter: { user: { name: string; email: string } } }) => {
+      const url = `${webOrigins[0]}/accept-invitation/${data.id}`;
+      await sendMail({
+        to: data.email,
+        subject: `You are invited to ${data.organization.name}`,
+        text: `${data.inviter.user.name} invited you to ${data.organization.name}. Accept: ${url}`,
+        html: actionEmail(
+          `Join ${data.organization.name}`,
+          `${data.inviter.user.name} (${data.inviter.user.email}) invited you to join ${data.organization.name}.`,
+          url,
+          "Accept invitation",
+        ),
+      });
+    },
+  }),
 ];
 // Reject passwords found in known breaches (Have I Been Pwned, k-anonymity range
 // API). Server-enforced, so it's an environment flag applied at startup.

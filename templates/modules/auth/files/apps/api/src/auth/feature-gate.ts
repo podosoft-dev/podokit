@@ -13,6 +13,7 @@ const FEATURE_PATHS: Array<{ flag: FeatureFlag; prefixes: string[] }> = [
   { flag: "phoneNumber", prefixes: ["/phone-number/", "/sign-in/phone-number"] },
   { flag: "apiKey", prefixes: ["/api-key/"] },
   { flag: "passkey", prefixes: ["/passkey/", "/sign-in/passkey"] },
+  { flag: "organization", prefixes: ["/organization"] },
 ];
 
 const CACHE_TTL_MS = 3_000;

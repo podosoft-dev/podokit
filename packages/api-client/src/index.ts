@@ -1,5 +1,5 @@
 import { createAuthClient } from "better-auth/client";
-import { adminClient, twoFactorClient, magicLinkClient, emailOTPClient, usernameClient, multiSessionClient, phoneNumberClient } from "better-auth/client/plugins";
+import { adminClient, twoFactorClient, magicLinkClient, emailOTPClient, usernameClient, multiSessionClient, phoneNumberClient, organizationClient } from "better-auth/client/plugins";
 import { apiKeyClient } from "@better-auth/api-key/client";
 import { passkeyClient } from "@better-auth/passkey/client";
 
@@ -46,6 +46,8 @@ export interface Capabilities {
   apiKey: boolean;
   /** Register passkeys (WebAuthn) for passwordless sign-in. */
   passkey: boolean;
+  /** Organizations: multi-tenant teams with members and invitations. */
+  organization: boolean;
   /** Assignable role names (access-control). */
   roles: string[];
 }
@@ -106,7 +108,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
   const makeAuthClient = () =>
     createAuthClient({
       baseURL: authOrigin,
-      plugins: [adminClient(), twoFactorClient(), magicLinkClient(), emailOTPClient(), usernameClient(), multiSessionClient(), phoneNumberClient(), apiKeyClient(), passkeyClient()],
+      plugins: [adminClient(), twoFactorClient(), magicLinkClient(), emailOTPClient(), usernameClient(), multiSessionClient(), phoneNumberClient(), apiKeyClient(), passkeyClient(), organizationClient()],
       fetchOptions: {
         credentials,
         ...(options.fetch ? { customFetchImpl: options.fetch } : {}),

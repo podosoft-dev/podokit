@@ -18,6 +18,7 @@ type Capabilities = {
   phoneNumber: boolean;
   apiKey: boolean;
   passkey: boolean;
+  organization: boolean;
   /** Assignable role names (access-control), for the admin role picker. */
   roles: string[];
 };
@@ -57,6 +58,7 @@ export class AccountController {
       phoneNumber: flags.phoneNumber,
       apiKey: flags.apiKey,
       passkey: flags.passkey,
+      organization: flags.organization,
       // Server-enforced flags are boot-time (environment), not live-toggleable.
       providers,
       deleteAccount: process.env.AUTH_ALLOW_DELETE === "true",
