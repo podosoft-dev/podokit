@@ -317,30 +317,37 @@ if (!success) throw new ForbiddenException();
 
 #### Enterprise: OIDC provider & SSO
 
-**Be an identity provider (OIDC).** Turn on *OIDC provider* in Settings and this app
-issues tokens to registered OAuth clients — other apps can "Sign in with this app".
-Discovery is at `GET /api/auth/.well-known/openid-configuration` (404 while disabled).
-Register a client and drive the standard flow:
+**Be an identity provider (OIDC/OAuth2).** Turn on *OIDC provider* in Settings and this
+app issues tokens to registered clients — other apps can "Sign in with this app". It's
+built on `@better-auth/oauth-provider` and signs id_tokens with the `jwt` plugin's keys
+(exposed at the discovery `jwks_uri`). Discovery is at
+`GET /api/auth/.well-known/openid-configuration` (404 while disabled).
+
+Register a client, then run the authorization-code + PKCE flow:
 
 ```bash
-curl -X POST /api/auth/oauth2/register -H 'content-type: application/json' \
+curl -X POST /api/auth/oauth2/create-client -H 'content-type: application/json' \
   -d '{"client_name":"My App","redirect_uris":["https://app.example.com/callback"]}'
-# → client_id / client_secret; then authorize → consent → /api/auth/oauth2/token
+# → client_id / client_secret
+# then in the browser: /api/auth/oauth2/authorize?client_id=…&redirect_uri=…&response_type=code
+#   &scope=openid%20profile%20email&code_challenge=…&code_challenge_method=S256
 ```
 
-The authorize endpoint redirects unauthenticated users to `loginPage` (`/login`) and,
-for untrusted clients, to a consent screen — add a consent route and pass
-`consentPage` to `oidcProvider(...)` in `apps/api/src/auth/auth.ts` to customize it.
+The authorize endpoint sends unauthenticated users to `loginPage` (`/login`) and, for a
+new client, hands off to the consent page (`/oauth2/consent`, provided) before redirecting
+back to the client with a `code`. Exchange it at `POST /api/auth/oauth2/token`.
 
-**Consume an external IdP (SSO).** To let users sign in *through* a corporate or
-third-party provider, add the bundled `genericOAuth` plugin (any OAuth2/OIDC issuer,
-configured from env) or the `@better-auth/sso` add-on for enterprise OIDC/SAML.
-Because these need a real external IdP, verify them with a manual round trip:
+Drive it with a certified OIDC client (e.g. `openid-client`) rather than by hand — that
+library also validates the id_token. **Manual round-trip checklist** for verifying an
+integration: register a client → complete authorize + login + consent in the browser →
+confirm the callback carries a `code` → exchange it for `access_token`/`id_token` →
+call `GET /api/auth/oauth2/userinfo` with the access token.
 
-1. Register this app (or the IdP) with client id/secret + redirect URI (env only).
-2. Start sign-in, complete the IdP login, confirm the callback creates a session.
-3. For SAML/SCIM, install the add-on, map attributes/claims, and test provisioning
-   against your IdP — these are deployment-specific and left as extension points.
+**Consume an external IdP (SSO).** To sign users in *through* a corporate/third-party
+provider, add the bundled `genericOAuth` plugin (any OAuth2/OIDC issuer, env-configured)
+or the `@better-auth/sso` add-on for enterprise OIDC/SAML. SAML/SCIM provisioning is
+deployment-specific — install the add-on, map attributes/claims, and verify against your
+IdP as an extension point.
 
 ## Roadmap
 
