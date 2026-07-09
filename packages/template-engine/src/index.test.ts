@@ -14,6 +14,7 @@ import {
   removeAtMarker,
   extractRegion,
   replaceRegion,
+  threeWayMerge,
 } from "./index";
 
 const created: string[] = [];
@@ -137,6 +138,30 @@ describe("fenced regions", () => {
 
   it("replaceRegion throws when the region is missing", () => {
     expect(() => replaceRegion(src, "nope", [])).toThrow(/Region not found/);
+  });
+});
+
+describe("threeWayMerge", () => {
+  it("returns next when only next changed", () => {
+    expect(threeWayMerge("a\nb", "a\nb", "a\nB").merged).toBe("a\nB");
+  });
+  it("returns current when only current changed", () => {
+    const r = threeWayMerge("a\nb", "a\nB", "a\nb");
+    expect(r.merged).toBe("a\nB");
+    expect(r.conflicts).toBe(0);
+  });
+  it("merges non-overlapping changes cleanly", () => {
+    // current edits the last line, next edits the first — disjoint
+    const r = threeWayMerge("a\nb\nc", "a\nb\nC", "A\nb\nc");
+    expect(r.conflicts).toBe(0);
+    expect(r.merged).toBe("A\nb\nC");
+  });
+  it("emits git-style markers on overlapping edits", () => {
+    const r = threeWayMerge("a\nb\nc", "a\nX\nc", "a\nY\nc");
+    expect(r.conflicts).toBe(1);
+    expect(r.merged).toContain("<<<<<<< current");
+    expect(r.merged).toContain("=======");
+    expect(r.merged).toContain(">>>>>>> podokit");
   });
 });
 

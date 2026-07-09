@@ -6,6 +6,7 @@ import { resolveCreateOptions, type Ask } from "./prompt";
 import { templateListText } from "./templates";
 import { addModule, listModules } from "./add";
 import { status, diff, doctor } from "./inspect";
+import { planUpdate, summarize } from "./update";
 
 const HELP = `podo — PodoKit project generator
 
@@ -15,6 +16,7 @@ Usage:
   podo status              Show version, modules, file tiers, and local edits
   podo diff                List PodoKit-managed files you have edited
   podo doctor              Check framework versions against supported ranges
+  podo update              Preview what a version update would change (dry-run)
 
 Options:
   --template <t> Template to scaffold (see below)
@@ -152,6 +154,30 @@ async function main(argv: string[]): Promise<void> {
       if (findings.some((f) => !f.ok)) {
         process.stdout.write(
           "\nSome frameworks are outside the supported range; @podosoft/* extensions may not match.\n",
+        );
+      }
+    } catch (err) {
+      fail((err as Error).message);
+    }
+    return;
+  }
+
+  if (args.command === "update") {
+    try {
+      const plan = planUpdate(process.cwd(), join(__dirname, "templates"));
+      const counts = summarize(plan);
+      const shown = plan.changes.filter((c) => c.action !== "up-to-date" && c.action !== "skip");
+      process.stdout.write(
+        `podo update ${plan.fromVersion} -> ${plan.toVersion}  (template: ${plan.template}; modules: ${plan.modules.join(", ") || "none"})\n\n`,
+      );
+      if (!shown.length) {
+        process.stdout.write("Everything is up to date.\n");
+      } else {
+        for (const c of shown) {
+          process.stdout.write(`  ${c.action.padEnd(9)} ${c.path}  (${c.note})\n`);
+        }
+        process.stdout.write(
+          `\n${counts.update} update, ${counts.add} add, ${counts.remove} remove, ${counts.conflict} conflict. Dry-run — nothing was written.\n`,
         );
       }
     } catch (err) {

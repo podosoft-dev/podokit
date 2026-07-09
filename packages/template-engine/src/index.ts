@@ -179,6 +179,91 @@ export function replaceRegion(content: string, name: string, body: string[]): st
   return lines.join("\n");
 }
 
+export interface MergeResult {
+  merged: string;
+  conflicts: number;
+}
+
+/** LCS match pairs [aIndex, bIndex] between two line arrays. */
+function lcsMatches(a: string[], b: string[]): Array<[number, number]> {
+  const m = a.length;
+  const n = b.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0));
+  for (let i = m - 1; i >= 0; i -= 1) {
+    for (let j = n - 1; j >= 0; j -= 1) {
+      dp[i]![j] = a[i] === b[j] ? dp[i + 1]![j + 1]! + 1 : Math.max(dp[i + 1]![j]!, dp[i]![j + 1]!);
+    }
+  }
+  const out: Array<[number, number]> = [];
+  let i = 0;
+  let j = 0;
+  while (i < m && j < n) {
+    if (a[i] === b[j]) {
+      out.push([i, j]);
+      i += 1;
+      j += 1;
+    } else if (dp[i + 1]![j]! >= dp[i]![j + 1]!) {
+      i += 1;
+    } else {
+      j += 1;
+    }
+  }
+  return out;
+}
+
+/**
+ * Three-way line merge (diff3). Non-conflicting changes from `next` are applied
+ * on top of `current`; regions changed on both sides against `base` are emitted
+ * as git-style conflict markers. Dependency-free — enough for the small managed
+ * files PodoKit updates.
+ */
+export function threeWayMerge(
+  base: string,
+  current: string,
+  next: string,
+  labels: { current?: string; next?: string } = {},
+): MergeResult {
+  if (current === next) return { merged: current, conflicts: 0 };
+  if (base === current) return { merged: next, conflicts: 0 };
+  if (base === next) return { merged: current, conflicts: 0 };
+
+  const O = base.split("\n");
+  const A = current.split("\n");
+  const B = next.split("\n");
+  const ma = new Map(lcsMatches(O, A));
+  const mb = new Map(lcsMatches(O, B));
+
+  const seq: Array<[number, number, number]> = [[-1, -1, -1]];
+  for (let o = 0; o < O.length; o += 1) {
+    if (ma.has(o) && mb.has(o)) seq.push([o, ma.get(o)!, mb.get(o)!]);
+  }
+  seq.push([O.length, A.length, B.length]);
+
+  const curLabel = labels.current ?? "current";
+  const nextLabel = labels.next ?? "podokit";
+  const out: string[] = [];
+  let conflicts = 0;
+  for (let k = 1; k < seq.length; k += 1) {
+    const [po, pa, pb] = seq[k - 1]!;
+    const [o, a, b] = seq[k]!;
+    const oh = O.slice(po + 1, o);
+    const ah = A.slice(pa + 1, a);
+    const bh = B.slice(pb + 1, b);
+    if (ah.join("\n") === oh.join("\n")) {
+      out.push(...bh);
+    } else if (bh.join("\n") === oh.join("\n")) {
+      out.push(...ah);
+    } else if (ah.join("\n") === bh.join("\n")) {
+      out.push(...ah);
+    } else {
+      conflicts += 1;
+      out.push(`<<<<<<< ${curLabel}`, ...ah, "=======", ...bh, `>>>>>>> ${nextLabel}`);
+    }
+    if (o < O.length) out.push(O[o]!);
+  }
+  return { merged: out.join("\n"), conflicts };
+}
+
 function isPlainObject(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
