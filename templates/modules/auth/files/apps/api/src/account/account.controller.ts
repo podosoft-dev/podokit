@@ -2,6 +2,7 @@ import { Body, Controller, ForbiddenException, Get, Put } from "@nestjs/common";
 import { Public, Session, type UserSession } from "@thallesp/nestjs-better-auth";
 import { ApiTags } from "@nestjs/swagger";
 import { FEATURE_FLAGS, SettingsService, type FeatureFlag } from "../settings/settings.service";
+import { ROLE_NAMES } from "../auth/permissions";
 
 type Capabilities = {
   twoFactor: boolean;
@@ -17,6 +18,8 @@ type Capabilities = {
   phoneNumber: boolean;
   apiKey: boolean;
   passkey: boolean;
+  /** Assignable role names (access-control), for the admin role picker. */
+  roles: string[];
 };
 
 function isAdmin(session: UserSession): boolean {
@@ -60,6 +63,7 @@ export class AccountController {
       auditLog: process.env.AUDIT_LOG_ENABLED === "true",
       emailVerification: process.env.AUTH_EMAIL_VERIFICATION === "true",
       passwordBreachCheck: process.env.AUTH_HIBP === "true",
+      roles: ROLE_NAMES,
     };
   }
 

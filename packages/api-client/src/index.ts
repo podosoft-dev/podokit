@@ -46,6 +46,8 @@ export interface Capabilities {
   apiKey: boolean;
   /** Register passkeys (WebAuthn) for passwordless sign-in. */
   passkey: boolean;
+  /** Assignable role names (access-control). */
+  roles: string[];
 }
 
 /** Error thrown when the API returns the standard error envelope or a non-2xx status. */

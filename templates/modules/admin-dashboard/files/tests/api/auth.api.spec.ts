@@ -95,6 +95,33 @@ test("a user can create, list and revoke a personal API key @smoke", async ({ pl
   await ctx.dispose();
 });
 
+test("access control enforces custom role permissions @smoke", async ({ playwright }) => {
+  const admin = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  await admin.post("/api/auth/sign-in/email", { data: { email: ADMIN.email, password: ADMIN.password } });
+  const caps = await (await admin.get("/api/account/capabilities")).json();
+  expect(caps.roles).toEqual(expect.arrayContaining(["admin", "moderator", "user"]));
+
+  // A default user lacks the content:create permission.
+  const email = `ac-${Date.now()}@example.com`;
+  const pw = "Podokit3e-Str0ng!pw";
+  const u = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  await u.post("/api/auth/sign-up/email", { data: { email, password: pw, name: "AC" } });
+  const before = await (await u.post("/api/auth/admin/has-permission", { data: { permissions: { content: ["create"] } } })).json();
+  expect(before.success).toBeFalsy();
+  const me = await (await u.get("/api/auth/get-session")).json();
+  await u.dispose();
+
+  // Promote to moderator; a fresh session now passes the same check.
+  const set = await admin.post("/api/auth/admin/set-role", { data: { userId: me.user.id, role: "moderator" } });
+  expect(set.ok()).toBeTruthy();
+  const u2 = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  await u2.post("/api/auth/sign-in/email", { data: { email, password: pw } });
+  const after = await (await u2.post("/api/auth/admin/has-permission", { data: { permissions: { content: ["create"] } } })).json();
+  expect(after.success).toBeTruthy();
+  await u2.dispose();
+  await admin.dispose();
+});
+
 test("only admins can change settings @smoke", async ({ playwright }) => {
   const userCtx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   await userCtx.post("/api/auth/sign-in/email", { data: { email: USER.email, password: USER.password } });

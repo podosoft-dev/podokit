@@ -16,6 +16,7 @@ export const load: LayoutServerLoad = async ({ locals, fetch }) => {
     phoneNumber: false,
     apiKey: false,
     passkey: false,
+    roles: ["admin", "user"],
   };
   try {
     const res = await fetch("/api/account/capabilities");
