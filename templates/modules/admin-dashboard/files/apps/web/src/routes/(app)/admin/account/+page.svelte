@@ -67,7 +67,9 @@
   }
   async function verifyPhone(): Promise<void> {
     phoneBusy = true;
-    const { error } = await api.auth.phoneNumber.verify({ phoneNumber: phone, code: phoneCode });
+    // updatePhoneNumber: save the verified number on the current user (without it,
+    // verify follows the sign-in path and never associates the phone).
+    const { error } = await api.auth.phoneNumber.verify({ phoneNumber: phone, code: phoneCode, updatePhoneNumber: true });
     phoneBusy = false;
     if (error) return void toast.error(error.message ?? i18n.t.account.saveFailed);
     phoneOtpSent = false;
