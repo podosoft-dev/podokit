@@ -79,6 +79,10 @@ const en = {
     manage: "Manage", membersDesc: "Members and pending invitations.", members: "Members", pending: "Pending invitations",
     inviteEmail: "Invite by email", invite: "Invite", invited: "Invitation sent", remove: "Remove", cancelInvite: "Cancel",
   },
+  consent: {
+    title: "Authorize access", subtitle: "An application is requesting access to your account.",
+    requests: "It will be able to access:", allow: "Allow", deny: "Deny",
+  },
   apiKeys: {
     title: "API keys", subtitle: "Personal keys for programmatic access. Send as an x-api-key header.",
     name: "Name", namePlaceholder: "e.g. CI pipeline", create: "Create key",
@@ -340,6 +344,10 @@ const ko: Messages = {
     submit: "만들기", createdMsg: "조직을 만들었습니다", deletedMsg: "조직을 삭제했습니다", actionFailed: "작업에 실패했습니다",
     manage: "관리", membersDesc: "멤버와 대기 중인 초대.", members: "멤버", pending: "대기 중 초대",
     inviteEmail: "이메일로 초대", invite: "초대", invited: "초대를 보냈습니다", remove: "제거", cancelInvite: "취소",
+  },
+  consent: {
+    title: "접근 승인", subtitle: "한 애플리케이션이 계정 접근을 요청합니다.",
+    requests: "접근 가능 범위:", allow: "허용", deny: "거부",
   },
   apiKeys: {
     title: "API 키", subtitle: "프로그래밍 방식 접근용 개인 키. x-api-key 헤더로 전송합니다.",

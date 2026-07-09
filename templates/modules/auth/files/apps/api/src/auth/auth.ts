@@ -1,11 +1,12 @@
 import { betterAuth, type BetterAuthOptions, type BetterAuthPlugin } from "better-auth";
-import { twoFactor, haveIBeenPwned, magicLink, emailOTP, username, multiSession, phoneNumber, organization, oidcProvider } from "better-auth/plugins";
+import { twoFactor, haveIBeenPwned, magicLink, emailOTP, username, multiSession, phoneNumber, organization, jwt } from "better-auth/plugins";
 import { Pool } from "pg";
 import { actionEmail, sendMail } from "../mail/mailer";
 import { sendSms } from "../sms/sms";
 import { createFeatureGate } from "./feature-gate";
 import { apiKey } from "@better-auth/api-key";
 import { passkey } from "@better-auth/passkey";
+import { oauthProvider } from "@better-auth/oauth-provider";
 // podokit:auth-imports
 
 // Web origin(s) where the browser runs (WebAuthn ceremonies must match these).
@@ -102,10 +103,12 @@ const plugins: BetterAuthPlugin[] = [
       });
     },
   }),
-  // Act as an OIDC identity provider: other apps can "Sign in with this app".
-  // Register clients at /api/auth/oauth2/register; discovery is served at
+  // JWT/JWKS signing keys — required by the OAuth provider to sign id_tokens.
+  jwt(),
+  // Act as an OAuth2/OIDC identity provider: other apps can "Sign in with this app".
+  // Register clients at /api/auth/oauth2/create-client; discovery at
   // /api/auth/.well-known/openid-configuration. See docs/modules.md.
-  oidcProvider({ loginPage: "/login" }),
+  oauthProvider({ loginPage: "/login", consentPage: "/oauth2/consent" }),
 ];
 // Reject passwords found in known breaches (Have I Been Pwned, k-anonymity range
 // API). Server-enforced, so it's an environment flag applied at startup.
