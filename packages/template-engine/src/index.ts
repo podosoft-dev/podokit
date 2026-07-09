@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync, mkdirSync, writeFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { createHash } from "node:crypto";
 
 /** Variables available for token substitution in template files. */
 export type TemplateVars = Record<string, string>;
@@ -33,28 +34,65 @@ function isTextFile(name: string): boolean {
   return name.startsWith("dot-") || TEXT_FILE.test(name);
 }
 
+/** One rendered file in a virtual project tree. `text` files were token-rendered. */
+export interface VfsFile {
+  content: string | Buffer;
+  text: boolean;
+}
+
 /**
- * Recursively copy a template directory to `destDir`, rendering tokens in
- * text files and applying the `dot-` name convention. Directories are created
- * as needed. Binary files are copied verbatim.
+ * A rendered project as an in-memory map of POSIX-relative path → file. Used to
+ * assemble a project (or an old/new template version) without touching disk, so
+ * `podo update` can diff versions before writing anything.
+ */
+export type VfsTree = Map<string, VfsFile>;
+
+/**
+ * Render a template directory into an in-memory {@link VfsTree}: token-render
+ * text files, apply the `dot-` name convention to every path segment, and read
+ * binary files verbatim. Nothing is written to disk.
+ */
+export function renderTemplate(srcDir: string, vars: TemplateVars, prefix = ""): VfsTree {
+  const tree: VfsTree = new Map();
+  for (const entry of readdirSync(srcDir)) {
+    const srcPath = join(srcDir, entry);
+    const relPath = prefix ? `${prefix}/${resolveOutputName(entry)}` : resolveOutputName(entry);
+    if (statSync(srcPath).isDirectory()) {
+      for (const [key, file] of renderTemplate(srcPath, vars, relPath)) tree.set(key, file);
+    } else if (isTextFile(entry)) {
+      tree.set(relPath, { content: renderTokens(readFileSync(srcPath, "utf8"), vars), text: true });
+    } else {
+      tree.set(relPath, { content: readFileSync(srcPath), text: false });
+    }
+  }
+  return tree;
+}
+
+/** Write a {@link VfsTree} to `destDir`, creating parent directories as needed. */
+export function writeTree(tree: VfsTree, destDir: string): void {
+  for (const [relPath, file] of tree) {
+    const destPath = join(destDir, relPath);
+    mkdirSync(dirname(destPath), { recursive: true });
+    writeFileSync(destPath, file.content);
+  }
+}
+
+/**
+ * Recursively copy a template directory to `destDir`, rendering tokens in text
+ * files and applying the `dot-` name convention. Thin wrapper over
+ * {@link renderTemplate} + {@link writeTree}.
  */
 export function copyTemplate(srcDir: string, destDir: string, vars: TemplateVars): void {
   mkdirSync(destDir, { recursive: true });
-  for (const entry of readdirSync(srcDir)) {
-    const srcPath = join(srcDir, entry);
-    const outName = resolveOutputName(entry);
-    const destPath = join(destDir, outName);
-    if (statSync(srcPath).isDirectory()) {
-      copyTemplate(srcPath, destPath, vars);
-      continue;
-    }
-    if (isTextFile(entry)) {
-      const rendered = renderTokens(readFileSync(srcPath, "utf8"), vars);
-      writeFileSync(destPath, rendered);
-    } else {
-      writeFileSync(destPath, readFileSync(srcPath));
-    }
-  }
+  writeTree(renderTemplate(srcDir, vars), destDir);
+}
+
+/**
+ * Content hash used by the generation lockfile to detect user edits. Stable
+ * `sha256:<hex>` over the exact bytes PodoKit last wrote to a file.
+ */
+export function hashContent(content: string | Buffer): string {
+  return `sha256:${createHash("sha256").update(content).digest("hex")}`;
 }
 
 /**

@@ -2,7 +2,16 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { renderTokens, resolveOutputName, mergePackageJson, copyTemplate, insertAtMarker } from "./index";
+import {
+  renderTokens,
+  resolveOutputName,
+  mergePackageJson,
+  copyTemplate,
+  insertAtMarker,
+  renderTemplate,
+  writeTree,
+  hashContent,
+} from "./index";
 
 const created: string[] = [];
 function tmp(): string {
@@ -92,5 +101,48 @@ describe("copyTemplate", () => {
     expect(readFileSync(join(dest, "README.md"), "utf8")).toBe("# demo");
     expect(existsSync(join(dest, ".gitignore"))).toBe(true);
     expect(readFileSync(join(dest, "apps", "info.txt"), "utf8")).toBe("app demo");
+  });
+});
+
+describe("renderTemplate / writeTree", () => {
+  it("renders to an in-memory tree with POSIX paths and dot- convention", () => {
+    const src = tmp();
+    writeFileSync(join(src, "README.md"), "# {{projectName}}");
+    writeFileSync(join(src, "dot-gitignore"), "node_modules");
+    mkdirSync(join(src, "apps"));
+    writeFileSync(join(src, "apps", "info.txt"), "app {{projectName}}");
+
+    const tree = renderTemplate(src, { projectName: "demo" });
+
+    expect([...tree.keys()].sort()).toEqual([".gitignore", "README.md", "apps/info.txt"]);
+    expect(tree.get("README.md")).toEqual({ content: "# demo", text: true });
+    expect(tree.get("apps/info.txt")?.content).toBe("app demo");
+  });
+
+  it("writeTree(renderTemplate(...)) matches copyTemplate on disk", () => {
+    const src = tmp();
+    writeFileSync(join(src, "README.md"), "# {{projectName}}");
+    mkdirSync(join(src, "apps"));
+    writeFileSync(join(src, "apps", "info.txt"), "app {{projectName}}");
+    const viaCopy = join(tmp(), "copy");
+    const viaTree = join(tmp(), "tree");
+
+    copyTemplate(src, viaCopy, { projectName: "x" });
+    writeTree(renderTemplate(src, { projectName: "x" }), viaTree);
+
+    expect(readFileSync(join(viaTree, "apps", "info.txt"), "utf8")).toBe(
+      readFileSync(join(viaCopy, "apps", "info.txt"), "utf8"),
+    );
+  });
+});
+
+describe("hashContent", () => {
+  it("is stable and prefixed", () => {
+    expect(hashContent("hello")).toBe(hashContent("hello"));
+    expect(hashContent("hello")).toMatch(/^sha256:[0-9a-f]{64}$/);
+  });
+  it("differs for different content and matches string/Buffer", () => {
+    expect(hashContent("a")).not.toBe(hashContent("b"));
+    expect(hashContent("a")).toBe(hashContent(Buffer.from("a")));
   });
 });
