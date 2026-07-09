@@ -65,11 +65,18 @@ const en = {
     added: "Passkey added", addFailed: "Failed to add passkey", removed: "Passkey removed", removeFailed: "Failed to remove passkey",
     empty: "No passkeys yet.",
   },
+  acceptInvitation: {
+    title: "Organization invitation", pending: "Accepting your invitation…",
+    ok: "You have joined the organization.", error: "This invitation is invalid or has expired.",
+    goToOrgs: "Go to organizations",
+  },
   organizations: {
     title: "Organizations", subtitle: "Multi-tenant teams. Create organizations and invite members.",
     create: "New organization", createTitle: "Create organization", name: "Name", slug: "Slug",
     created: "Created", delete: "Delete", cancel: "Cancel", empty: "No organizations yet.",
     submit: "Create", createdMsg: "Organization created", deletedMsg: "Organization deleted", actionFailed: "Action failed",
+    manage: "Manage", membersDesc: "Members and pending invitations.", members: "Members", pending: "Pending invitations",
+    inviteEmail: "Invite by email", invite: "Invite", invited: "Invitation sent", remove: "Remove", cancelInvite: "Cancel",
   },
   apiKeys: {
     title: "API keys", subtitle: "Personal keys for programmatic access. Send as an x-api-key header.",
@@ -318,11 +325,18 @@ const ko: Messages = {
     added: "패스키를 추가했습니다", addFailed: "패스키 추가에 실패했습니다", removed: "패스키를 삭제했습니다", removeFailed: "패스키 삭제에 실패했습니다",
     empty: "아직 패스키가 없습니다.",
   },
+  acceptInvitation: {
+    title: "조직 초대", pending: "초대를 수락하는 중…",
+    ok: "조직에 합류했습니다.", error: "유효하지 않거나 만료된 초대입니다.",
+    goToOrgs: "조직으로 이동",
+  },
   organizations: {
     title: "조직", subtitle: "멀티테넌트 팀. 조직을 만들고 멤버를 초대합니다.",
     create: "새 조직", createTitle: "조직 만들기", name: "이름", slug: "슬러그",
     created: "생성일", delete: "삭제", cancel: "취소", empty: "아직 조직이 없습니다.",
     submit: "만들기", createdMsg: "조직을 만들었습니다", deletedMsg: "조직을 삭제했습니다", actionFailed: "작업에 실패했습니다",
+    manage: "관리", membersDesc: "멤버와 대기 중인 초대.", members: "멤버", pending: "대기 중 초대",
+    inviteEmail: "이메일로 초대", invite: "초대", invited: "초대를 보냈습니다", remove: "제거", cancelInvite: "취소",
   },
   apiKeys: {
     title: "API 키", subtitle: "프로그래밍 방식 접근용 개인 키. x-api-key 헤더로 전송합니다.",

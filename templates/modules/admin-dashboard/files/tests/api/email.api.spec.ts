@@ -22,6 +22,33 @@ test("email one-time code signs a user in @smoke", async ({ playwright }) => {
   await ctx.dispose();
 });
 
+test("organization invitation can be sent and accepted @smoke", async ({ playwright }) => {
+  const owner = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  const caps = await (await owner.get("/api/account/capabilities")).json();
+  test.skip(!caps?.organization, "organizations not enabled");
+  const pw = "Podokit3e-Str0ng!pw";
+  await owner.post("/api/auth/sign-up/email", { data: { email: `owner-${Date.now()}@example.com`, password: pw, name: "Owner" } });
+  const orgId = (await (await owner.post("/api/auth/organization/create", { data: { name: "Invco", slug: `invco-${Date.now()}` } })).json())?.id as string;
+
+  // invite a fresh user
+  const inviteeEmail = `invitee-${Date.now()}@example.com`;
+  const inv = await owner.post("/api/auth/organization/invite-member", { data: { email: inviteeEmail, role: "member", organizationId: orgId } });
+  expect(inv.ok()).toBeTruthy();
+  const invitationId = (await inv.json())?.id as string;
+
+  // the invitee signs up and accepts
+  const invitee = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  await invitee.post("/api/auth/sign-up/email", { data: { email: inviteeEmail, password: pw, name: "Invitee" } });
+  const accepted = await invitee.post("/api/auth/organization/accept-invitation", { data: { invitationId } });
+  expect(accepted.ok()).toBeTruthy();
+  await invitee.dispose();
+
+  // the owner now sees two members
+  const full = await (await owner.get(`/api/auth/organization/get-full-organization?organizationId=${orgId}`)).json();
+  expect((full?.members ?? []).length).toBeGreaterThanOrEqual(2);
+  await owner.dispose();
+});
+
 test("magic link signs a user in @smoke", async ({ playwright }) => {
   test.skip(!(await mailpitReachable()), "Mailpit not available");
   const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
