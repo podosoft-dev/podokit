@@ -247,6 +247,20 @@ curl -H 'x-api-key: key1' localhost:3000/machine/ping   # { ok: true, via: "api-
 Protect your own machine routes with `@ApiKeyProtected()`. Keys are checked against
 the `API_KEYS` allowlist with a constant-time comparison.
 
+> **`api-key-auth` vs. personal API keys.** These solve different problems — pick by
+> who holds the key:
+>
+> | | `api-key-auth` module | Personal API keys (auth feature) |
+> |---|---|---|
+> | Holder | Your own machines/services | End users |
+> | Source of keys | Static allowlist in `API_KEYS` (env) | Users mint them in the account UI |
+> | Storage | None (env only) | Database, per user |
+> | Use it to | Protect internal `@ApiKeyProtected()` routes | Let users script against their own account |
+>
+> The personal keys are part of the `auth` module (toggle on the admin Settings page,
+> manage under Account → API keys) and authenticate as the issuing user. Use both
+> together when you have both service-to-service traffic and user-facing API access.
+
 ### `admin-dashboard`
 
 A ready-made admin dashboard on top of `auth` (added automatically): login /

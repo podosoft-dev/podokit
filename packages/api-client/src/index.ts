@@ -1,5 +1,7 @@
 import { createAuthClient } from "better-auth/client";
 import { adminClient, twoFactorClient, magicLinkClient, emailOTPClient, usernameClient, multiSessionClient, phoneNumberClient } from "better-auth/client/plugins";
+import { apiKeyClient } from "@better-auth/api-key/client";
+import { passkeyClient } from "@better-auth/passkey/client";
 
 /** Options for {@link createApiClient}. */
 export interface ApiClientOptions {
@@ -40,6 +42,10 @@ export interface Capabilities {
   multiSession: boolean;
   /** Register and verify a phone number (SMS OTP). */
   phoneNumber: boolean;
+  /** Issue and manage personal API keys. */
+  apiKey: boolean;
+  /** Register passkeys (WebAuthn) for passwordless sign-in. */
+  passkey: boolean;
 }
 
 /** Error thrown when the API returns the standard error envelope or a non-2xx status. */
@@ -98,7 +104,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
   const makeAuthClient = () =>
     createAuthClient({
       baseURL: authOrigin,
-      plugins: [adminClient(), twoFactorClient(), magicLinkClient(), emailOTPClient(), usernameClient(), multiSessionClient(), phoneNumberClient()],
+      plugins: [adminClient(), twoFactorClient(), magicLinkClient(), emailOTPClient(), usernameClient(), multiSessionClient(), phoneNumberClient(), apiKeyClient(), passkeyClient()],
       fetchOptions: {
         credentials,
         ...(options.fetch ? { customFetchImpl: options.fetch } : {}),

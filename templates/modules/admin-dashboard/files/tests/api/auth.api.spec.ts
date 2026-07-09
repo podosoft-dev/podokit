@@ -74,6 +74,27 @@ test("a user can sign in with a username @smoke", async ({ playwright }) => {
   await ctx2.dispose();
 });
 
+test("a user can create, list and revoke a personal API key @smoke", async ({ playwright }) => {
+  const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  const caps = await (await ctx.get("/api/account/capabilities")).json();
+  test.skip(!caps?.apiKey, "api keys not enabled");
+  const email = `apikey-${Date.now()}@example.com`;
+  await ctx.post("/api/auth/sign-up/email", { data: { email, password: "Podokit3e-Str0ng!pw", name: "Key" } });
+
+  const created = await ctx.post("/api/auth/api-key/create", { data: { name: "ci" } });
+  expect(created.ok()).toBeTruthy();
+  const key = (await created.json())?.key as string;
+  expect(typeof key).toBe("string");
+  expect(key.length).toBeGreaterThan(0);
+
+  const body = (await (await ctx.get("/api/auth/api-key/list")).json()) as { apiKeys: Array<{ id: string; name: string | null }> };
+  expect(body.apiKeys.some((k) => k.name === "ci")).toBeTruthy();
+
+  const del = await ctx.post("/api/auth/api-key/delete", { data: { keyId: body.apiKeys[0].id } });
+  expect(del.ok()).toBeTruthy();
+  await ctx.dispose();
+});
+
 test("only admins can change settings @smoke", async ({ playwright }) => {
   const userCtx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   await userCtx.post("/api/auth/sign-in/email", { data: { email: USER.email, password: USER.password } });

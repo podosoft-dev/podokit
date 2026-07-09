@@ -33,6 +33,46 @@ test("account shows a username field when enabled @smoke", async ({ page }) => {
   await expect(username).toBeVisible();
 });
 
+test("account can create and revoke an API key when enabled @smoke", async ({ page }) => {
+  await ready(page, "/admin/account");
+  const nav = page.getByRole("button", { name: "API keys" });
+  test.skip((await nav.count()) === 0, "api keys not enabled");
+  await nav.click();
+  const name = `ui-${Date.now()}`;
+  await page.getByLabel("Name", { exact: true }).fill(name);
+  await page.getByRole("button", { name: "Create key" }).click();
+  // the full key is shown once in a dialog
+  await expect(page.getByText("API key created")).toBeVisible();
+  await page.getByRole("button", { name: "Done" }).click();
+  // it now appears in the list; revoke it to clean up
+  const row = page.getByRole("row", { name: new RegExp(name) });
+  await expect(row).toBeVisible();
+  await row.getByRole("button", { name: "Revoke" }).click();
+  await expect(page.getByText("Key revoked")).toBeVisible();
+});
+
+test("account can register and remove a passkey when enabled @smoke", async ({ page }) => {
+  await ready(page, "/admin/account");
+  await page.getByRole("button", { name: "Security" }).click();
+  const addBtn = page.getByRole("button", { name: "Add passkey" });
+  test.skip((await addBtn.count()) === 0, "passkeys not enabled");
+  // A virtual authenticator lets the WebAuthn ceremony resolve without hardware.
+  const client = await page.context().newCDPSession(page);
+  await client.send("WebAuthn.enable");
+  await client.send("WebAuthn.addVirtualAuthenticator", {
+    options: { protocol: "ctap2", transport: "internal", hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true },
+  });
+  const pkName = `pk-${Date.now()}`;
+  await page.getByLabel("Name", { exact: true }).fill(pkName);
+  await addBtn.click();
+  await expect(page.getByText("Passkey added")).toBeVisible();
+  const row = page.getByRole("row", { name: new RegExp(pkName) });
+  await expect(row).toBeVisible();
+  // remove it so the shared admin account keeps no leftover credential
+  await row.getByRole("button", { name: "Remove" }).click();
+  await expect(page.getByText("Passkey removed")).toBeVisible();
+});
+
 test("account shows a phone field when enabled @smoke", async ({ page }) => {
   await ready(page, "/admin/account");
   const phone = page.getByLabel("Phone number", { exact: true });
