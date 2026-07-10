@@ -1,4 +1,5 @@
 import { getContext, setContext } from "svelte";
+import { site } from "$lib/site.svelte";
 import type { Locale, Messages } from "./messages";
 
 const KEY = Symbol("i18n");
@@ -20,8 +21,20 @@ export function fmt(template: string, values: Record<string, string | number>): 
   );
 }
 
-// Render a timestamp in the viewer's own locale and timezone (browser defaults),
-// so dates always match the user's regional settings. Used across all pages.
+// Render a timestamp in the site's configured timezone when an admin has set one
+// (Settings → General), otherwise in the viewer's own browser timezone. Used
+// across all pages.
 export function formatDateTime(value: string | Date): string {
-  return new Date(value).toLocaleString();
+  const date = new Date(value);
+  const timeZone = site.value.timezone || undefined;
+  if (timeZone) {
+    // A misconfigured timezone would throw a RangeError — fall back to the
+    // browser default rather than breaking the page.
+    try {
+      return date.toLocaleString(undefined, { timeZone });
+    } catch {
+      /* invalid timeZone — use the browser default below */
+    }
+  }
+  return date.toLocaleString();
 }

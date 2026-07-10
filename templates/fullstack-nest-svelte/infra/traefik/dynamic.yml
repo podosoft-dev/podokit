@@ -3,7 +3,7 @@
 http:
   routers:
     web:
-      rule: "Host(`app.localhost`)"
+      rule: "PathPrefix(`/`)"  # any host on this dedicated proxy -> web
       entryPoints: [web]
       service: web
   services:

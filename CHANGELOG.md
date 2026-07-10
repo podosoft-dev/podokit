@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-10
+
 ### Added
 - **`llms.txt` and GitMCP.** A repo-root `llms.txt` gives LLMs a curated index of
   the docs and packages. The README/getting-started now document **GitMCP**
@@ -39,12 +41,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   watch` gives instant web HMR and restarts the api on change. A `devcontainer.json`
   lets editors and AI agents work inside the container. The host `npm run dev` loop
   still works unchanged. See the [development guide](docs/development.md).
+- **Site settings.** admin-dashboard's `/admin/settings` is now split into
+  **General** and **Authentication** tabs. The General tab configures the whole
+  site and every value takes effect without a rebuild: the **site name** (browser
+  tab title) and **favicon** (uploaded to object storage), the **brand color**
+  (applied as the theme's primary accent), a **meta description**, a public
+  **footer** with support-email/terms/privacy links, the **default language and
+  timezone**, a **maintenance mode** that holds non-admins on a maintenance page,
+  and a **sign-up toggle** that closes public registration (the sign-up endpoint
+  returns 403 and the UI hides the link). Values are stored server-side
+  (`/site/settings`). Requires the `object-storage-s3` module.
+- **Default site title and favicon.** New apps ship a real browser `<title>` and a
+  PodoKit SVG favicon instead of the framework defaults.
+- A **back-to-home** link in the admin sidebar footer returns to the landing page.
+
+### Changed
+- **Faster dev reload.** The generated API's `npm run dev` uses Nest's SWC builder
+  for near-instant recompiles; the production `nest build` still uses tsc.
 
 ### Fixed
 - **`file-upload` module build.** The generated app's API tsconfig restricts
   `types` to `["node"]`, which suppressed `@types/multer`'s global augmentation and
   broke the build on `Express.Multer.File`. The files controller now loads it
   explicitly with a `/// <reference types="multer" />` directive.
+- **shadcn-svelte tabs.** The vendored tabs primitive targeted a `data-active`
+  attribute that current bits-ui doesn't emit, so the active tab lost its
+  highlight; restored the official component (`data-[state=active]`).
+- **General settings layout** now fills the content width responsively instead of
+  being left-skewed on wide screens.
+- **Containerized dev builds.** `Dockerfile.dev` resolves dependencies inside the
+  container (no host lockfile copy) so platform-specific optional binaries like
+  `@swc/cli` install correctly on Linux.
 
 ## [0.5.1] - 2026-07-10
 
@@ -140,7 +167,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 - `fullstack-nest-svelte`: add missing `@types/express` so the generated API builds cleanly. Verified end-to-end: install, build (API + web), API starts, `/health` returns 200.
 
-[Unreleased]: https://github.com/podosoft-dev/podokit/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/podosoft-dev/podokit/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/podosoft-dev/podokit/compare/v0.5.1...v0.6.0
+[0.5.1]: https://github.com/podosoft-dev/podokit/compare/v0.5.0...v0.5.1
+[0.5.0]: https://github.com/podosoft-dev/podokit/compare/v0.3.0...v0.5.0
 [0.3.0]: https://github.com/podosoft-dev/podokit/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/podosoft-dev/podokit/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/podosoft-dev/podokit/compare/v0.1.0...v0.1.1

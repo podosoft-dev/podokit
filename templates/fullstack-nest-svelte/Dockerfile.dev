@@ -11,7 +11,10 @@ RUN apt-get update \
 WORKDIR /app
 
 # Install workspace dependencies (cached unless a package.json changes).
-COPY package.json package-lock.json ./
+# NB: the host package-lock.json is intentionally NOT copied — a lockfile
+# generated on macOS/Windows prunes platform-specific optional deps and can drop
+# packages (e.g. @swc/cli) on linux. Resolving fresh in-container avoids that.
+COPY package.json ./
 COPY apps/api/package.json ./apps/api/package.json
 COPY apps/web/package.json ./apps/web/package.json
 RUN npm install

@@ -12,7 +12,7 @@ export default defineConfig({
     ? {
         host: true,
         port: 5001,
-        allowedHosts: ["app.localhost"],
+        allowedHosts: true,
         hmr: { clientPort: 80 },
       }
     : undefined,

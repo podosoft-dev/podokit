@@ -7,6 +7,8 @@
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import * as Dialog from "$lib/components/ui/dialog";
+  import * as Tabs from "$lib/components/ui/tabs";
+  import GeneralSettings from "./general-settings.svelte";
   import { toast } from "svelte-sonner";
   import { api } from "$lib/api";
   import { getI18n } from "$lib/i18n";
@@ -220,19 +222,32 @@
     <p class="text-muted-foreground text-sm">{i18n.t.settings.subtitle}</p>
   </div>
 
-  {#each sections as section (section.title)}
-    <section class="flex flex-col gap-3">
-      <div>
-        <h2 class="text-lg font-semibold">{section.title}</h2>
-        <p class="text-muted-foreground text-sm">{section.subtitle}</p>
-      </div>
-      <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {#each section.items as item (item.key)}
-          {@render card(item)}
-        {/each}
-      </div>
-    </section>
-  {/each}
+  <Tabs.Root value="general">
+    <Tabs.List>
+      <Tabs.Trigger value="general">{i18n.t.general.tab}</Tabs.Trigger>
+      <Tabs.Trigger value="auth">{i18n.t.settings.tab}</Tabs.Trigger>
+    </Tabs.List>
+
+    <Tabs.Content value="general" class="mt-6">
+      <GeneralSettings />
+    </Tabs.Content>
+
+    <Tabs.Content value="auth" class="mt-6 flex flex-col gap-6">
+      {#each sections as section (section.title)}
+        <section class="flex flex-col gap-3">
+          <div>
+            <h2 class="text-lg font-semibold">{section.title}</h2>
+            <p class="text-muted-foreground text-sm">{section.subtitle}</p>
+          </div>
+          <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {#each section.items as item (item.key)}
+              {@render card(item)}
+            {/each}
+          </div>
+        </section>
+      {/each}
+    </Tabs.Content>
+  </Tabs.Root>
 </div>
 
 <!-- Social login: manage every provider (list ⇄ add/edit form) in one dialog -->
