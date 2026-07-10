@@ -307,6 +307,9 @@ const en = {
     verified: "Verified",
     unverified: "Unverified",
   },
+  // Modules add their i18n blocks here.
+  // podokit:begin:messages-en
+  // podokit:end:messages-en
 };
 
 export type Messages = typeof en;
@@ -610,6 +613,9 @@ const ko: Messages = {
     verified: "인증됨",
     unverified: "미인증",
   },
+  // Modules add their i18n blocks here.
+  // podokit:begin:messages-ko
+  // podokit:end:messages-ko
 };
 
 export const messages: Record<Locale, Messages> = { en, ko };

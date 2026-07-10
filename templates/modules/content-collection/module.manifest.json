@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "name": "content-collection",
   "description": "Config-driven content collections (services, solutions, portfolio, team, …) on one collection_item table. Public read API + admin CRUD; items carry a jsonb metadata field for project-specific fields. Managed card/detail components + owned pages ship with the web side.",
-  "requires": ["admin-dashboard", "file-upload"],
+  "requires": ["admin-dashboard", "file-upload", "markdown"],
   "targetApp": "api",
   "inject": [
     {
@@ -14,6 +14,31 @@
       "file": "apps/api/src/app.module.ts",
       "marker": "// podokit:end:module-imports",
       "text": "ContentCollectionModule,"
+    },
+    {
+      "file": "apps/web/src/routes/+layout.server.ts",
+      "marker": "// podokit:end:public-paths",
+      "text": "  \"/collections\","
+    },
+    {
+      "file": "apps/web/src/lib/admin/registry.svelte.ts",
+      "marker": "// podokit:end:admin-nav-imports",
+      "text": "import LayersIcon from \"@lucide/svelte/icons/layers\";"
+    },
+    {
+      "file": "apps/web/src/lib/admin/registry.svelte.ts",
+      "marker": "// podokit:end:admin-nav-entries",
+      "text": "  { href: \"/admin/collections\", label: (t) => t.collections.nav, icon: LayersIcon, adminOnly: true },"
+    },
+    {
+      "file": "apps/web/src/lib/i18n/messages.ts",
+      "marker": "// podokit:end:messages-en",
+      "text": "  collections: { nav: \"Collections\", title_: \"Collections\", subtitle: \"Manage content collections (services, portfolio, …).\", collection: \"Collection\", add: \"Add item\", editTitle: \"Edit item\", title: \"Title\", slug: \"Slug\", summary: \"Summary\", body: \"Body (Markdown)\", order: \"Order\", status: \"Status\", edit: \"Edit\", delete: \"Delete\", cancel: \"Cancel\", save: \"Save\", saving: \"Saving…\", saved: \"Saved\", deleted: \"Deleted\", saveError: \"Failed to save\", loading: \"Loading…\", empty: \"No items yet.\" },"
+    },
+    {
+      "file": "apps/web/src/lib/i18n/messages.ts",
+      "marker": "// podokit:end:messages-ko",
+      "text": "  collections: { nav: \"컬렉션\", title_: \"컬렉션\", subtitle: \"콘텐츠 컬렉션(서비스·포트폴리오 등)을 관리합니다.\", collection: \"컬렉션\", add: \"항목 추가\", editTitle: \"항목 편집\", title: \"제목\", slug: \"슬러그\", summary: \"요약\", body: \"본문(마크다운)\", order: \"순서\", status: \"상태\", edit: \"편집\", delete: \"삭제\", cancel: \"취소\", save: \"저장\", saving: \"저장 중…\", saved: \"저장됨\", deleted: \"삭제됨\", saveError: \"저장 실패\", loading: \"불러오는 중…\", empty: \"항목이 없습니다.\" },"
     },
     {
       "file": "AGENTS.md",

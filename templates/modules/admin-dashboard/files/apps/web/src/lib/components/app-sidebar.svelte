@@ -18,18 +18,18 @@
 
   type NavItem = AdminNavEntry;
   const items = $derived<NavItem[]>([
-    { href: "/admin", key: "overview", icon: LayoutDashboardIcon },
-    { href: "/admin/users", key: "users", icon: UsersIcon, adminOnly: true },
-    { href: "/admin/sessions", key: "sessions", icon: MonitorSmartphoneIcon, adminOnly: true },
+    { href: "/admin", label: (t) => t.nav.overview, icon: LayoutDashboardIcon },
+    { href: "/admin/users", label: (t) => t.nav.users, icon: UsersIcon, adminOnly: true },
+    { href: "/admin/sessions", label: (t) => t.nav.sessions, icon: MonitorSmartphoneIcon, adminOnly: true },
     ...(capabilities?.organization
-      ? [{ href: "/admin/organizations", key: "organizations", icon: Building2Icon, adminOnly: true } as NavItem]
+      ? [{ href: "/admin/organizations", label: (t) => t.nav.organizations, icon: Building2Icon, adminOnly: true } as NavItem]
       : []),
     ...(capabilities?.auditLog
-      ? [{ href: "/admin/audit", key: "audit", icon: ScrollTextIcon, adminOnly: true } as NavItem]
+      ? [{ href: "/admin/audit", label: (t) => t.nav.audit, icon: ScrollTextIcon, adminOnly: true } as NavItem]
       : []),
     // Module-contributed entries (present only for installed modules).
     ...moduleNavEntries,
-    { href: "/admin/settings", key: "settings", icon: SettingsIcon, adminOnly: true },
+    { href: "/admin/settings", label: (t) => t.nav.settings, icon: SettingsIcon, adminOnly: true },
   ]);
   const visible = $derived(items.filter((item) => !item.adminOnly || user.role === "admin"));
 </script>
@@ -48,11 +48,11 @@
       <Sidebar.Menu>
         {#each visible as item (item.href)}
           <Sidebar.MenuItem>
-            <Sidebar.MenuButton isActive={page.url.pathname === item.href} tooltipContent={i18n.t.nav[item.key]}>
+            <Sidebar.MenuButton isActive={page.url.pathname === item.href} tooltipContent={item.label(i18n.t)}>
               {#snippet child({ props })}
                 <a href={item.href} {...props}>
                   <item.icon />
-                  <span>{i18n.t.nav[item.key]}</span>
+                  <span>{item.label(i18n.t)}</span>
                 </a>
               {/snippet}
             </Sidebar.MenuButton>
