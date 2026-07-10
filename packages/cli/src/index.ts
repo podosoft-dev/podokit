@@ -7,6 +7,7 @@ import { templateListText } from "./templates";
 import { addModule, listModules } from "./add";
 import { status, diff, doctor } from "./inspect";
 import { planUpdate, applyUpdate, summarize } from "./update";
+import { eject } from "./eject";
 
 const HELP = `podo — PodoKit project generator
 
@@ -16,7 +17,8 @@ Usage:
   podo status              Show version, modules, file tiers, and local edits
   podo diff                List PodoKit-managed files you have edited
   podo doctor              Check framework versions against supported ranges
-  podo update              Preview what a version update would change (dry-run)
+  podo update [--apply]    Preview (or apply) what a version update would change
+  podo eject <path...>     Take ownership of managed files (update skips them)
 
 Options:
   --template <t> Template to scaffold (see below)
@@ -202,6 +204,28 @@ async function main(argv: string[]): Promise<void> {
           `\n${counts.update} update, ${counts.add} add, ${counts.remove} remove, ${counts.conflict} conflict. ` +
             `Dry-run — nothing was written. Re-run with --apply to write (use --from <dir> for a 3-way merge).\n`,
         );
+      }
+    } catch (err) {
+      fail((err as Error).message);
+    }
+    return;
+  }
+
+  if (args.command === "eject") {
+    const targets = argv.filter((a) => !a.startsWith("-")).slice(1);
+    if (!targets.length) {
+      fail("Usage: podo eject <path...>");
+    }
+    try {
+      const result = eject(process.cwd(), targets);
+      if (result.ejected.length) {
+        process.stdout.write(`Ejected (now owned): ${result.ejected.join(", ")}\n`);
+      }
+      if (result.unknown.length) {
+        process.stdout.write(`Not tracked, skipped: ${result.unknown.join(", ")}\n`);
+      }
+      if (!result.ejected.length && !result.unknown.length) {
+        process.stdout.write("Nothing to eject (already owned).\n");
       }
     } catch (err) {
       fail((err as Error).message);
