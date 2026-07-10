@@ -9,7 +9,7 @@
   },
   "scripts": {
     "start:worker": "node dist/main-worker",
-    "dev:worker": "nest start --watch --entryFile main-worker"
+    "dev:worker": "nest start --watch --builder swc --entryFile main-worker"
   },
   "env": [
     "# bullmq uses REDIS_HOST / REDIS_PORT (already defined above)"
