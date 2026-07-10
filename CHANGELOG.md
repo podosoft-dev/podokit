@@ -7,11 +7,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- **`llms.txt` and GitMCP.** A repo-root `llms.txt` gives LLMs a curated index of
+  the docs and packages. The README/getting-started now document **GitMCP**
+  (`https://gitmcp.io/podosoft-dev/podokit`) — register it as a remote MCP server
+  to search the PodoKit docs and code from any AI tool, no install.
 - **`@podosoft/podokit-mcp` — a local MCP server.** A [Model Context Protocol](https://modelcontextprotocol.io)
   server that runs on your machine via `npx` (no hosting) so AI coding tools get
-  first-class access to PodoKit: `list_modules`, `add_module`, `project_status`,
-  `list_local_edits`, `check_versions`, `preview_update`, and `search_docs`.
-  Generated projects ship a `.mcp.json` that points editors/agents at it.
+  first-class access to PodoKit: `list_templates`, `create_project`, `list_modules`,
+  `add_module`, `project_status`, `list_local_edits`, `check_versions`,
+  `preview_update`, and `search_docs`. Registered **globally** it can scaffold a
+  project **from an empty folder** — "create a fullstack app with auth" runs
+  `create_project` + `add_module`. Generated projects also ship a `.mcp.json`.
 - **AI coding agent support in generated projects.** `podo create` now writes an
   `AGENTS.md` (the open standard read by Codex, Cursor, Copilot, Gemini, …)
   covering the stack, commands, code style, and `podo` tooling; a `CLAUDE.md` that

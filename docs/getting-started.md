@@ -66,6 +66,26 @@ run locally via `npx` — no hosting): agents can list/add modules, check the
 project status, preview updates, and search the docs directly. See
 [`@podosoft/podokit-mcp`](https://www.npmjs.com/package/@podosoft/podokit-mcp).
 
+For docs search without any install, register **GitMCP** as a remote MCP server —
+`https://gitmcp.io/podosoft-dev/podokit` — which lets an AI tool query the PodoKit
+docs and code straight from the public repo.
+
+### Start a project from scratch with an AI agent
+
+You don't even need an existing project. Register the MCP server **globally**:
+
+```bash
+claude mcp add --scope user podokit -- npx -y @podosoft/podokit-mcp
+```
+
+Then, in an empty folder, ask your agent to build one:
+
+> "Create a fullstack PodoKit app called **blog** with auth and admin-dashboard."
+
+The agent uses the MCP tools `list_templates` → `create_project` → `add_module`
+(auth, admin-dashboard) and runs `npm install` — going from an empty directory to
+a running starter in a single prompt, with the conventions already loaded.
+
 ## Keep your project up to date
 
 Your project records how it was assembled in a committed `.podokit/` directory,

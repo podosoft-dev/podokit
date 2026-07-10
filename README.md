@@ -157,6 +157,36 @@ SvelteKit route, using the DataTable, running `podo add`/`podo update`); modules
 extend `AGENTS.md` with their own conventions as you add them. Skip it all with
 `podo create --no-ai`.
 
+Projects also ship a `.mcp.json` wiring up the **PodoKit MCP server**
+([`@podosoft/podokit-mcp`](packages/mcp/README.md)) — run locally via `npx`, no
+hosting — so agents can list/add modules, check project status, preview updates,
+and search the docs. And you can point any MCP-capable tool at the docs remotely
+with **GitMCP** (no install): register the URL
+`https://gitmcp.io/podosoft-dev/podokit`, e.g. for Cursor/Claude Code:
+
+```json
+{ "mcpServers": { "podokit-docs": { "url": "https://gitmcp.io/podosoft-dev/podokit" } } }
+```
+
+A repo-root [`llms.txt`](llms.txt) gives LLMs a curated index of these docs.
+
+### Start a project from scratch with an AI agent
+
+Register the MCP server **globally** so it's available before any project exists:
+
+```bash
+claude mcp add --scope user podokit -- npx -y @podosoft/podokit-mcp
+# Cursor/Codex: add the same command in their MCP settings
+```
+
+Then, in an empty folder, tell your agent:
+
+> "Create a fullstack PodoKit app called **blog** with auth and admin-dashboard."
+
+It calls `list_templates` → `create_project` → `add_module` and runs
+`npm install` — from nothing to a running starter in one prompt, with the
+conventions already loaded from `AGENTS.md`.
+
 ## Documentation
 
 - [Getting Started](docs/getting-started.md)

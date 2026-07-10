@@ -12,12 +12,14 @@ import {
   addModule,
   builtinModulesDir,
   builtinTemplatesDir,
+  create,
   diff,
   doctor,
   listModules,
   planUpdate,
   status,
   summarize,
+  TEMPLATES,
 } from "@podosoft/podokit";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -43,6 +45,38 @@ function inProject<T>(projectDir: string | undefined, body: (dir: string) => T):
 const projectDirSchema = { projectDir: z.string().optional().describe("Project root; defaults to the current directory") };
 
 const server = new McpServer({ name: "podokit", version: "0.1.0" });
+
+server.registerTool(
+  "list_templates",
+  { description: "List the PodoKit project templates you can scaffold with `create_project` (fullstack, todo, base)." },
+  async () => text(TEMPLATES.map((t) => `- ${t.name}: ${t.description}`).join("\n")),
+);
+
+server.registerTool(
+  "create_project",
+  {
+    description:
+      "Scaffold a new PodoKit project from scratch (= `podo create`). Creates the app files in a new directory; then run `add_module` for features and `npm install`. Use this to start a project in an empty folder.",
+    inputSchema: {
+      name: z.string().describe("Project name (also the default directory name)"),
+      template: z.string().optional().describe("Template: fullstack-nest-svelte (default), todo, or base"),
+      targetDir: z.string().optional().describe("Where to create it; defaults to <cwd>/<name>"),
+      ai: z.boolean().optional().describe("Include AI agent guidance (AGENTS.md, skills, .mcp.json). Default true."),
+    },
+  },
+  async ({ name, template, targetDir, ai }) => {
+    try {
+      const dir = targetDir ?? join(process.cwd(), name);
+      const r = create({ name, template, targetDir: dir, templatesDir: builtinTemplatesDir(), ai });
+      return text(
+        `Created ${r.template} project "${name}" at ${r.projectDir}.\n` +
+          `Next: add features with add_module (projectDir="${r.projectDir}"), then run \`npm install\` there.`,
+      );
+    } catch (err) {
+      return fail(`create_project failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  },
+);
 
 server.registerTool(
   "list_modules",
