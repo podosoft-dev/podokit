@@ -485,6 +485,17 @@ version independently. A package module is just a `module.manifest.json` (with a
 bundled one; the CLI rejects a manifest that needs a newer PodoKit. `podo add`
 with no argument lists both bundled and installed package modules.
 
+## Adding admin nav & settings (module registry)
+
+When `admin-dashboard` is installed, a module can add its own **sidebar nav entry**
+and **settings tab** by injecting into the registry
+`apps/web/src/lib/admin/registry.svelte.ts` at its `// podokit:begin/end:admin-nav`
+and `:admin-settings` markers. The sidebar and the settings page render from these
+arrays, so the admin menu grows and shrinks with the installed module set — no
+edits to `app-sidebar.svelte` or the settings page. A nav entry is
+`{ href, key, icon, adminOnly? }` (with `key` an i18n `nav` key the module also
+adds); a settings tab is `{ value, label, component }`.
+
 ## Keeping modules up to date
 
 Modules are wired into your project through `.podokit/` fenced regions, so a
