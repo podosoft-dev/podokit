@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-10
+
 ### Added
 - **`llms.txt` and GitMCP.** A repo-root `llms.txt` gives LLMs a curated index of
   the docs and packages. The README/getting-started now document **GitMCP**
@@ -165,7 +167,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 - `fullstack-nest-svelte`: add missing `@types/express` so the generated API builds cleanly. Verified end-to-end: install, build (API + web), API starts, `/health` returns 200.
 
-[Unreleased]: https://github.com/podosoft-dev/podokit/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/podosoft-dev/podokit/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/podosoft-dev/podokit/compare/v0.5.1...v0.6.0
+[0.5.1]: https://github.com/podosoft-dev/podokit/compare/v0.5.0...v0.5.1
+[0.5.0]: https://github.com/podosoft-dev/podokit/compare/v0.3.0...v0.5.0
 [0.3.0]: https://github.com/podosoft-dev/podokit/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/podosoft-dev/podokit/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/podosoft-dev/podokit/compare/v0.1.0...v0.1.1
