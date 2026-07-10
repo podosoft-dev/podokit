@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-07-10
+
+### Changed
+- Documentation refresh for v0.5.0. The root and CLI READMEs now cover the
+  `podo status`/`diff`/`doctor`/`update`/`eject` commands and the
+  `@podosoft/podokit-contracts`, `@podosoft/podokit-api-client`, and
+  `@podosoft/podokit-auth` packages; the updating guide documents `podo update`
+  (3-way merge) and `podo eject`.
+- Added a README for `@podosoft/podokit-auth` (previously missing on npm).
+- Added admin-dashboard screenshots (users, audit log, runtime settings) and
+  fixed stale ports (`:3000`/`:5173` → `:5002`/`:5001`) and admin route paths
+  (`/dashboard/*` → `/admin/*`) across the docs.
+
 ## [0.5.0] - 2026-07-10
 
 ### Added
