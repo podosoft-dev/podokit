@@ -1,9 +1,20 @@
 import type { Handle } from "@sveltejs/kit";
 import { serverApiClient } from "$lib/server/api";
 import { resolveLocale } from "$lib/i18n/messages";
+import type { SiteSettings } from "$lib/site.svelte";
 
 export const handle: Handle = async ({ event, resolve }) => {
-  event.locals.locale = resolveLocale(event.cookies.get("locale"));
+  // Public site settings (branding, locale/timezone defaults, maintenance, …),
+  // loaded once here and reused by the layout load. A visitor with no locale
+  // cookie falls back to the admin-configured site locale, then the app default.
+  let site: SiteSettings | null = null;
+  try {
+    site = await serverApiClient(event).get<SiteSettings>("/site/settings");
+  } catch {
+    site = null;
+  }
+  event.locals.site = site;
+  event.locals.locale = resolveLocale(event.cookies.get("locale") ?? site?.locale ?? undefined);
   try {
     const { data } = await serverApiClient(event).auth.getSession();
     event.locals.user = (data?.user as App.Locals["user"]) ?? null;

@@ -22,6 +22,8 @@
   // so SSR renders the saved branding too. Empty falls back to the app.html default.
   const branding = $derived({
     name: site.value.name ?? data.site?.name ?? "",
+    description: site.value.description ?? data.site?.description ?? "",
+    brandColor: site.value.brandColor ?? data.site?.brandColor ?? "",
     hasFavicon: site.value.hasFavicon || Boolean(data.site?.hasFavicon),
     faviconVersion: site.value.faviconVersion ?? data.site?.faviconVersion ?? "",
   });
@@ -30,9 +32,26 @@
   $effect(() => {
     if (branding.name) document.title = branding.name;
   });
+  // Apply the brand color as the theme's primary accent live. Clearing it in
+  // Settings restores the stylesheet default (remove the inline override).
+  $effect(() => {
+    const root = document.documentElement;
+    if (branding.brandColor) {
+      root.style.setProperty("--primary", branding.brandColor);
+      root.style.setProperty("--sidebar-primary", branding.brandColor);
+      root.style.setProperty("--ring", branding.brandColor);
+    } else {
+      root.style.removeProperty("--primary");
+      root.style.removeProperty("--sidebar-primary");
+      root.style.removeProperty("--ring");
+    }
+  });
 </script>
 
 <svelte:head>
+  {#if branding.description}
+    <meta name="description" content={branding.description} />
+  {/if}
   {#if branding.hasFavicon}
     <link rel="icon" href={`/api/site/favicon?v=${branding.faviconVersion}`} />
   {/if}

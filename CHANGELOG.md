@@ -40,12 +40,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   lets editors and AI agents work inside the container. The host `npm run dev` loop
   still works unchanged. See the [development guide](docs/development.md).
 - **Site settings.** admin-dashboard's `/admin/settings` is now split into
-  **General** and **Authentication** tabs. The General tab manages the site name
-  (applied live to the browser tab title), a browser favicon uploaded to object
-  storage, and site metadata — description, support email, footer, brand color,
-  terms/privacy URLs, locale, timezone — plus maintenance-mode and signup toggles.
-  Values are stored server-side (`/site/settings`) and applied without a rebuild.
-  Requires the `object-storage-s3` module.
+  **General** and **Authentication** tabs. The General tab configures the whole
+  site and every value takes effect without a rebuild: the **site name** (browser
+  tab title) and **favicon** (uploaded to object storage), the **brand color**
+  (applied as the theme's primary accent), a **meta description**, a public
+  **footer** with support-email/terms/privacy links, the **default language and
+  timezone**, a **maintenance mode** that holds non-admins on a maintenance page,
+  and a **sign-up toggle** that closes public registration (the sign-up endpoint
+  returns 403 and the UI hides the link). Values are stored server-side
+  (`/site/settings`). Requires the `object-storage-s3` module.
 - **Default site title and favicon.** New apps ship a real browser `<title>` and a
   PodoKit SVG favicon instead of the framework defaults.
 - A **back-to-home** link in the admin sidebar footer returns to the landing page.

@@ -11,6 +11,8 @@ export const localeNames: Record<Locale, string> = {
 const en = {
   common: { appName: "Admin" },
   landing: { title: "Welcome", subtitle: "This is your app's home page. Replace it with your own content — the admin area lives under /admin.", openAdmin: "Open admin" },
+  footer: { support: "Support", terms: "Terms", privacy: "Privacy" },
+  maintenance: { title: "Under maintenance", subtitle: "The site is temporarily unavailable. Please check back soon.", adminHint: "Administrators can sign in to manage the site.", signIn: "Admin sign in" },
   language: { label: "Language" },
   toolbar: { filter: "Filter", search: "Search", searchButton: "Search", all: "All" },
   theme: { toggle: "Toggle theme", light: "Light", dark: "Dark", system: "System" },
@@ -312,6 +314,8 @@ export type Messages = typeof en;
 const ko: Messages = {
   common: { appName: "관리자" },
   landing: { title: "환영합니다", subtitle: "앱의 홈 페이지입니다. 원하는 내용으로 교체하세요 — 관리자 기능은 /admin 에 있습니다.", openAdmin: "관리자 열기" },
+  footer: { support: "고객지원", terms: "이용약관", privacy: "개인정보처리방침" },
+  maintenance: { title: "점검 중", subtitle: "사이트를 일시적으로 사용할 수 없습니다. 잠시 후 다시 확인해 주세요.", adminHint: "관리자는 로그인하여 사이트를 관리할 수 있습니다.", signIn: "관리자 로그인" },
   language: { label: "언어" },
   toolbar: { filter: "필터", search: "검색", searchButton: "검색", all: "전체" },
   theme: { toggle: "테마 전환", light: "라이트", dark: "다크", system: "시스템" },

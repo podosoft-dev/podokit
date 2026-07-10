@@ -1,4 +1,5 @@
 import type { Locale } from "$lib/i18n/messages";
+import type { SiteSettings } from "$lib/site.svelte";
 
 export type SessionUser = {
   id: string;
@@ -19,6 +20,7 @@ declare global {
       user: SessionUser | null;
       session: { id: string; impersonatedBy?: string | null } | null;
       locale: Locale;
+      site: SiteSettings | null;
     }
   }
 }

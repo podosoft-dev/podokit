@@ -8,11 +8,14 @@
   import * as Alert from "$lib/components/ui/alert";
   import { api } from "$lib/api";
   import { getI18n } from "$lib/i18n";
+  import { site } from "$lib/site.svelte";
 
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
   const i18n = getI18n();
+  // Hide the sign-up link when registration is closed from admin Settings.
+  const signupOpen = $derived(site.value.allowSignup !== "false");
   let email = $state("");
   let password = $state("");
   let error = $state<string | null>(null);
@@ -175,7 +178,9 @@
       </div>
     {/if}
   </Card.Content>
-  <Card.Footer class="justify-center">
-    <p class="text-muted-foreground text-sm">{i18n.t.auth.noAccount} <a href="/signup" class="text-foreground hover:underline">{i18n.t.auth.signUp}</a></p>
-  </Card.Footer>
+  {#if signupOpen}
+    <Card.Footer class="justify-center">
+      <p class="text-muted-foreground text-sm">{i18n.t.auth.noAccount} <a href="/signup" class="text-foreground hover:underline">{i18n.t.auth.signUp}</a></p>
+    </Card.Footer>
+  {/if}
 </Card.Root>
