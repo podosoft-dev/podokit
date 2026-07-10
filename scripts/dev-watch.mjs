@@ -88,6 +88,10 @@ const sources = [
 
 function shouldMirror(rel, base, isBase) {
   if (HARD_SKIP.has(base)) return false;
+  // Never mirror env files: they hold instance config/secrets (BETTER_AUTH_SECRET,
+  // per-host CORS_ORIGIN/BETTER_AUTH_URL). The template ships defaults; the running
+  // instance's values must be preserved. (`.env`, `.env.docker`, `dot-env.*`, …)
+  if (base.startsWith(".env") || base.startsWith("dot-env")) return false;
   if (injectTargets.has(rel)) return false; // marker/injection target
   if (isBase && overlayPaths.has(rel)) return false; // a module owns this path
   return true;
