@@ -74,6 +74,12 @@ const WALK_IGNORE = new Set([
 export const DEFAULT_OWNED_GLOBS = [
   "apps/web/src/routes/**",
   "apps/web/src/lib/components/ui/**",
+  // AI agent guidance — yours to customize; update never touches it.
+  "AGENTS.md",
+  "CLAUDE.md",
+  ".claude/**",
+  ".cursor/**",
+  ".github/copilot-instructions.md",
 ];
 
 const TEXT_EXT = /\.(json|md|ts|tsx|js|mjs|cjs|css|html|yml|yaml|txt|env|svelte|gitignore|example)$/i;

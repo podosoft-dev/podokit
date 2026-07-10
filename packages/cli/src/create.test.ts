@@ -55,6 +55,30 @@ describe("create (integration against templates)", () => {
     expect(existsSync(join(target, ".podokit", "files.lock"))).toBe(true);
   });
 
+  it("ships AI agent guidance by default and omits it with ai:false", () => {
+    const withAi = join(tmp(), "with-ai");
+    create({ name: "with-ai", templatesDir: REPO_TEMPLATES, targetDir: withAi });
+    expect(existsSync(join(withAi, "AGENTS.md"))).toBe(true);
+    expect(readFileSync(join(withAi, "CLAUDE.md"), "utf8")).toContain("@AGENTS.md");
+    expect(existsSync(join(withAi, ".cursor/rules/podokit.mdc"))).toBe(true);
+    expect(existsSync(join(withAi, ".github/copilot-instructions.md"))).toBe(true);
+    expect(existsSync(join(withAi, ".claude/skills/podokit-nest-endpoint/SKILL.md"))).toBe(true);
+    // AI files are user-owned so `podo update` never touches them
+    const lock = JSON.parse(readFileSync(join(withAi, ".podokit/files.lock"), "utf8")) as {
+      files: Record<string, { tier: string }>;
+    };
+    expect(lock.files["AGENTS.md"].tier).toBe("owned");
+
+    const noAi = join(tmp(), "no-ai");
+    create({ name: "no-ai", templatesDir: REPO_TEMPLATES, targetDir: noAi, ai: false });
+    expect(existsSync(join(noAi, "AGENTS.md"))).toBe(false);
+    expect(existsSync(join(noAi, "CLAUDE.md"))).toBe(false);
+    expect(existsSync(join(noAi, ".claude"))).toBe(false);
+    expect(existsSync(join(noAi, ".cursor"))).toBe(false);
+    // the app itself is still generated
+    expect(existsSync(join(noAi, "apps/api/src/main.ts"))).toBe(true);
+  });
+
   it("scaffolds the clean fullstack template by default (no domain code)", () => {
     const target = join(tmp(), "app");
     const result = create({ name: "app", templatesDir: REPO_TEMPLATES, targetDir: target });

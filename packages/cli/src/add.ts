@@ -13,6 +13,8 @@ interface Injection {
   file: string;
   marker: string;
   text: string;
+  /** Skip (instead of failing) if the target file or marker is absent. */
+  optional?: boolean;
 }
 
 export interface ModuleManifest {
@@ -162,9 +164,12 @@ function applyModule(
   for (const injection of manifest.inject ?? []) {
     const target = join(projectRoot, injection.file);
     if (!existsSync(target)) {
+      if (injection.optional) continue;
       throw new Error(`Cannot wire module: ${injection.file} not found.`);
     }
-    writeFileSync(target, insertAtMarker(readFileSync(target, "utf8"), injection.marker, injection.text));
+    const content = readFileSync(target, "utf8");
+    if (injection.optional && !content.includes(injection.marker)) continue;
+    writeFileSync(target, insertAtMarker(content, injection.marker, injection.text));
   }
 
   const instructions = (manifest.instructions ?? []).map((line) => line.replace(/<app>/g, appName));

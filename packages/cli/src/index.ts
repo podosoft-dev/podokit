@@ -24,6 +24,7 @@ Options:
   --template <t> Template to scaffold (see below)
   --dir <path>   Target directory (default: ./<name>)
   --pm <name>    Package manager: npm | pnpm | yarn (default: npm)
+  --no-ai        Skip AI agent guidance (AGENTS.md, CLAUDE.md, editor rules)
   -y, --yes      Skip prompts and accept defaults
   -h, --help     Show this help
 
@@ -46,10 +47,11 @@ interface ParsedArgs {
   apply: boolean;
   yes: boolean;
   help: boolean;
+  ai: boolean;
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
-  const parsed: ParsedArgs = { help: false, yes: false, apply: false };
+  const parsed: ParsedArgs = { help: false, yes: false, apply: false, ai: true };
   const positionals: string[] = [];
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -57,6 +59,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
       parsed.help = true;
     } else if (arg === "-y" || arg === "--yes") {
       parsed.yes = true;
+    } else if (arg === "--no-ai") {
+      parsed.ai = false;
     } else if (arg === "--apply") {
       parsed.apply = true;
     } else if (arg === "--template") {
@@ -268,6 +272,7 @@ async function main(argv: string[]): Promise<void> {
       template: resolved.template,
       targetDir: args.dir,
       packageManager: resolved.packageManager,
+      ai: args.ai,
     });
     const relPath = relative(process.cwd(), result.projectDir) || ".";
     const rel = relPath.startsWith("..") ? result.projectDir : relPath;

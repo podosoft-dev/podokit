@@ -143,6 +143,20 @@ podo update --apply  # apply it — clean updates written, your edits 3-way merg
 Files you own (routes, your components, shadcn UI) are never touched. See
 [docs/updating.md](docs/updating.md).
 
+## AI coding agents
+
+Generated projects come ready for AI coding tools. `podo create` writes an
+[`AGENTS.md`](https://agents.md) — the open standard read by Codex, Cursor,
+Copilot, Gemini, and more — describing the stack, commands (web :5001 / api
+:5002), code style (Svelte 5 runes, shadcn-svelte + shared `DataTable`, the
+error-code envelope), and the `podo` tooling. `CLAUDE.md` imports it
+(`@AGENTS.md`) for Claude Code, with thin `.cursor/rules` and
+`.github/copilot-instructions.md` pointers included too. Claude Code **skills**
+(`.claude/skills/`) add procedural know-how (scaffolding a NestJS endpoint or a
+SvelteKit route, using the DataTable, running `podo add`/`podo update`); modules
+extend `AGENTS.md` with their own conventions as you add them. Skip it all with
+`podo create --no-ai`.
+
 ## Documentation
 
 - [Getting Started](docs/getting-started.md)

@@ -62,6 +62,19 @@ describe("addModule (auth / better-auth)", () => {
     expect(manifest.modules.map((m) => m.name)).toContain("auth");
   });
 
+  it("injects module guidance into AGENTS.md, and tolerates its absence", () => {
+    const project = generate("fullstack-nest-svelte");
+    addModule({ projectRoot: project, module: "auth", modulesDir: MODULES });
+    const agents = readFileSync(join(project, "AGENTS.md"), "utf8");
+    expect(agents).toContain("### auth (better-auth)");
+    expect(agents.match(/<!-- podokit:end:agents-modules -->/g)?.length).toBe(1);
+
+    // an app generated with --no-ai has no AGENTS.md; the optional inject must not throw
+    const noAi = join(tmp(), "no-ai");
+    create({ name: "app", template: "fullstack-nest-svelte", templatesDir: REPO_TEMPLATES, targetDir: noAi, ai: false });
+    expect(() => addModule({ projectRoot: noAi, module: "auth", modulesDir: MODULES })).not.toThrow();
+  });
+
   it("is idempotent for wiring when applied twice", () => {
     const project = generate("fullstack-nest-svelte");
     addModule({ projectRoot: project, module: "auth", modulesDir: MODULES });

@@ -91,6 +91,12 @@
       "file": "apps/api/src/app.module.ts",
       "marker": "// podokit:end:providers",
       "text": "{ provide: APP_GUARD, useClass: AuthGuard },"
+    },
+    {
+      "file": "AGENTS.md",
+      "marker": "<!-- podokit:end:agents-modules -->",
+      "optional": true,
+      "text": "### auth (better-auth)\n- The API is **secure by default**: every route needs a session except `/health` and `/api/auth/*`. Opt a route out with `@Public()`; read the user with `@Session()`.\n- Configure OAuth providers, SMTP, and the server toggles on the admin **Settings** page (DB-backed, applied live \u2014 not via env). Only `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are required env vars.\n- Create the auth tables: `npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts`.\n"
     }
   ],
   "instructions": [
