@@ -20,6 +20,14 @@
   "bin": {
     "podo": "dist/index.js"
   },
+  "main": "dist/lib.js",
+  "types": "dist/lib.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/lib.d.ts",
+      "default": "./dist/lib.js"
+    }
+  },
   "files": [
     "dist"
   ],

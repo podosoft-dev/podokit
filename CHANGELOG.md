@@ -7,6 +7,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- **`@podosoft/podokit-mcp` — a local MCP server.** A [Model Context Protocol](https://modelcontextprotocol.io)
+  server that runs on your machine via `npx` (no hosting) so AI coding tools get
+  first-class access to PodoKit: `list_modules`, `add_module`, `project_status`,
+  `list_local_edits`, `check_versions`, `preview_update`, and `search_docs`.
+  Generated projects ship a `.mcp.json` that points editors/agents at it.
 - **AI coding agent support in generated projects.** `podo create` now writes an
   `AGENTS.md` (the open standard read by Codex, Cursor, Copilot, Gemini, …)
   covering the stack, commands, code style, and `podo` tooling; a `CLAUDE.md` that
