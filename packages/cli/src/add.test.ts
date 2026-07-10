@@ -61,6 +61,21 @@ describe("module-declared ownedGlobs", () => {
   });
 });
 
+describe("app.extensions DI slot", () => {
+  it("ships an owned extensions file wired into app.module", () => {
+    const project = generate("fullstack-nest-svelte");
+    expect(existsSync(join(project, "apps/api/src/app.extensions.ts"))).toBe(true);
+    const appModule = readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8");
+    expect(appModule).toContain("import { extensionImports, extensionProviders }");
+    expect(appModule).toContain("...extensionImports");
+    expect(appModule).toContain("...extensionProviders");
+    const lock = JSON.parse(readFileSync(join(project, ".podokit/files.lock"), "utf8")) as {
+      files: Record<string, { tier: string }>;
+    };
+    expect(lock.files["apps/api/src/app.extensions.ts"].tier).toBe("owned");
+  });
+});
+
 function writeFile(path: string, content: string): void {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, content);

@@ -77,6 +77,28 @@ you `podo add` such a module, its `ownedGlobs` are merged into your project's
 `ownedGlobs`, so those files are yours to restyle and `podo update` never
 touches them.
 
+## Overriding providers — `app.extensions.ts`
+
+To change how the backend behaves without editing managed code, use the owned
+slot `apps/api/src/app.extensions.ts`. Export extra modules/providers, or
+override a PodoKit-provided provider by its token:
+
+```ts
+// apps/api/src/app.extensions.ts
+import type { Provider } from "@nestjs/common";
+import { Mailer } from "./mailer/mailer";
+import { MyMailer } from "./my-mailer";
+
+export const extensionProviders: Provider[] = [
+  { provide: Mailer, useClass: MyMailer },
+];
+```
+
+`AppModule` spreads these in *after* the module-wired providers, so a same-token
+override here wins. The file is **owned** — `podo update` never touches it. This
+is the seam for swapping the mailer transport, the contact-form sink, a storage
+adapter, and so on, while still receiving updates to everything else.
+
 ## Framework compatibility
 
 PodoKit ships its reusable pieces as `@podosoft/*` packages that plug into the

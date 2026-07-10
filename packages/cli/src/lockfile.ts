@@ -74,6 +74,8 @@ const WALK_IGNORE = new Set([
 export const DEFAULT_OWNED_GLOBS = [
   "apps/web/src/routes/**",
   "apps/web/src/lib/components/ui/**",
+  // Owned Nest DI extension slot — override providers here; update never touches it.
+  "apps/api/src/app.extensions.ts",
   // AI agent guidance — yours to customize; update never touches it.
   "AGENTS.md",
   "CLAUDE.md",
