@@ -2,14 +2,16 @@
   "name": "admin-dashboard",
   "description": "Admin dashboard UI (SvelteKit + shadcn-svelte): login/signup/password-reset, a sidebar shell, and user + session management via the better-auth admin plugin. Requires auth.",
   "requires": [
-    "auth"
+    "auth",
+    "object-storage-s3"
   ],
   "targetApp": "web",
   "dependencies": {
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
-    "@types/qrcode": "^1.5.5"
+    "@types/qrcode": "^1.5.5",
+    "@types/multer": "^1.4.12"
   },
   "env": [
     "# admin-dashboard: emails auto-promoted to the admin role on sign-up (comma-separated)",
@@ -41,6 +43,16 @@
       "marker": "<!-- podokit:end:agents-modules -->",
       "optional": true,
       "text": "### admin-dashboard\n- Admin console lives at `/admin/*` (users, sessions, organizations, audit, settings, account). Emails in `ADMIN_EMAILS` become admins on sign-up.\n- **Every list/table MUST use the shared `$lib/components/data-table.svelte` (`DataTable`)** \u2014 it gives sortable headers + a footer pagination. Add search/filters with `$lib/components/table-toolbar.svelte`. Never assemble `Table.Root`/`Table.Header`/`Table.Body` by hand.\n"
+    },
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:end:imports",
+      "text": "import { SiteSettingsModule } from \"./site-settings/site-settings.module\";"
+    },
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:end:module-imports",
+      "text": "SiteSettingsModule,"
     }
   ],
   "instructions": [
