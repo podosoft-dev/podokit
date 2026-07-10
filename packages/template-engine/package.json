@@ -1,6 +1,6 @@
 {
   "name": "@podosoft/podokit-template-engine",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Template rendering, copying, and package.json merge utilities for PodoKit.",
   "license": "Apache-2.0",
   "repository": {
