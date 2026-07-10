@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { create } from "./create";
 import { addModule, listModules } from "./add";
 
@@ -29,6 +29,42 @@ describe("listModules", () => {
     expect(listModules(MODULES).map((m) => m.name)).toContain("auth");
   });
 });
+
+describe("module-declared ownedGlobs", () => {
+  it("merges into the manifest so the module's public path stays owned", () => {
+    const project = generate("fullstack-nest-svelte");
+    // a throwaway fixture module that ships a $lib file and declares it owned
+    const modulesDir = join(tmp(), "modules");
+    const fileRel = "apps/web/src/lib/widget/Widget.svelte";
+    writeFile(join(modulesDir, "widget", "files", fileRel), "<p>widget</p>");
+    writeFile(
+      join(modulesDir, "widget", "module.manifest.json"),
+      JSON.stringify({
+        name: "widget",
+        description: "test",
+        targetApp: "web",
+        ownedGlobs: ["apps/web/src/lib/widget/**"],
+      }),
+    );
+
+    const result = addModule({ projectRoot: project, module: "widget", modulesDir });
+    expect(result.ownedGlobs).toContain("apps/web/src/lib/widget/**");
+
+    const manifest = JSON.parse(readFileSync(join(project, ".podokit/manifest.json"), "utf8")) as {
+      ownedGlobs: string[];
+    };
+    expect(manifest.ownedGlobs).toContain("apps/web/src/lib/widget/**");
+    const lock = JSON.parse(readFileSync(join(project, ".podokit/files.lock"), "utf8")) as {
+      files: Record<string, { tier: string }>;
+    };
+    expect(lock.files[fileRel].tier).toBe("owned");
+  });
+});
+
+function writeFile(path: string, content: string): void {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, content);
+}
 
 describe("addModule (auth / better-auth)", () => {
   it("overlays files, merges deps, appends env, and wires a global guard", () => {

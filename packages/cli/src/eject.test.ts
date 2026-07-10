@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initLockfile, readFilesLock } from "./lockfile";
+import { initLockfile, readFilesLock, readManifest, recordModules } from "./lockfile";
 import { eject } from "./eject";
 import { NotAProjectError } from "./inspect";
 
@@ -42,5 +42,14 @@ describe("eject", () => {
   });
   it("throws outside a project", () => {
     expect(() => eject(tmp(), ["x"])).toThrow(NotAProjectError);
+  });
+  it("persists to manifest.ownedGlobs and stays owned across a later recompute", () => {
+    const root = project();
+    eject(root, ["apps/api/src/main.ts"]);
+    // recorded on the manifest (the durable source of truth for recompute)
+    expect(readManifest(root)?.ownedGlobs).toContain("apps/api/src/main.ts");
+    // a subsequent add/update rebuilds every tier from ownedGlobs — must stay owned
+    recordModules(root, ["some-module"]);
+    expect(readFilesLock(root)?.files["apps/api/src/main.ts"].tier).toBe("owned");
   });
 });

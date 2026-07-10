@@ -13,7 +13,10 @@ npx @podosoft/podokit add <module>
 - overlays its files into the project,
 - merges its dependencies into the target app's `package.json`,
 - appends any environment variables to `.env.example`,
-- wires itself into `app.module.ts` at marker comments, and
+- wires itself into `app.module.ts` at marker comments,
+- may declare `ownedGlobs` (paths it ships as user-owned — e.g. public pages you
+  restyle — merged into your project so `podo update` never touches them; see
+  [updating](updating.md#module-owned-paths)), and
 - prints follow-up steps.
 
 ## Available modules

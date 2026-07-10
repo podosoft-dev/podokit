@@ -239,12 +239,32 @@ export function initLockfile(projectRoot: string, options: InitLockOptions): voi
   writeFilesLock(projectRoot, computeFilesLock(projectRoot, ownedGlobs));
 }
 
+/** Union two glob lists, preserving order and dropping duplicates. Used to fold
+ *  module-declared and ejected owned paths into the project's `ownedGlobs`, which
+ *  is the durable source of truth `computeFilesLock` re-reads on every recompute. */
+export function mergeOwnedGlobs(existing: string[], add: string[]): string[] {
+  const seen = new Set(existing);
+  const out = [...existing];
+  for (const glob of add) {
+    if (seen.has(glob)) continue;
+    seen.add(glob);
+    out.push(glob);
+  }
+  return out;
+}
+
 /**
  * Record applied modules in the manifest and recompute the files.lock. Modules
  * already present are left in place (idempotent); the lock always reflects disk.
- * No-op on projects without a manifest (pre-lockfile projects; see `podo adopt`).
+ * `ownedGlobs` a module declares are merged into the manifest so its owned paths
+ * survive every future recompute. No-op on projects without a manifest.
  */
-export function recordModules(projectRoot: string, moduleNames: string[], version?: string): void {
+export function recordModules(
+  projectRoot: string,
+  moduleNames: string[],
+  version?: string,
+  ownedGlobs?: string[],
+): void {
   const manifest = readManifest(projectRoot);
   if (!manifest) return;
   const stampedWith = version ?? podokitVersion();
@@ -254,6 +274,7 @@ export function recordModules(projectRoot: string, moduleNames: string[], versio
     manifest.modules.push({ name, order: manifest.modules.length, addedWith: stampedWith });
     known.add(name);
   }
+  if (ownedGlobs?.length) manifest.ownedGlobs = mergeOwnedGlobs(manifest.ownedGlobs, ownedGlobs);
   writeManifest(projectRoot, manifest);
   writeFilesLock(projectRoot, computeFilesLock(projectRoot, manifest.ownedGlobs));
 }

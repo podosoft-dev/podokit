@@ -28,6 +28,11 @@ export interface ModuleManifest {
   env?: string[];
   inject?: Injection[];
   instructions?: string[];
+  /** App-relative globs this module's files should own (durably user-editable,
+   *  never touched by `podo update`). Merged into the project's ownedGlobs so
+   *  they survive lock recompute. Use for public presentation pages a consumer
+   *  restyles, while keeping the module's `$lib` logic managed. */
+  ownedGlobs?: string[];
 }
 
 export interface AddOptions {
@@ -43,6 +48,8 @@ export interface AddResult {
   instructions: string[];
   /** Required modules that were auto-added because they were missing. */
   added: string[];
+  /** ownedGlobs declared by this module and every module it pulled in. */
+  ownedGlobs: string[];
 }
 
 /** List modules available under `modulesDir` (each has a module.manifest.json). */
@@ -99,8 +106,14 @@ function isApplied(projectRoot: string, modulesDir: string, module: string): boo
  */
 export function addModule(options: AddOptions): AddResult {
   const result = applyModule(options.projectRoot, options.module, options.modulesDir, new Set());
-  // Record the module (and any auto-added requirements) and refresh the lock.
-  recordModules(options.projectRoot, [...result.added, result.module], options.podokitVersion);
+  // Record the module (and any auto-added requirements), fold in the modules'
+  // declared ownedGlobs, and refresh the lock.
+  recordModules(
+    options.projectRoot,
+    [...result.added, result.module],
+    options.podokitVersion,
+    result.ownedGlobs,
+  );
   return result;
 }
 
@@ -130,10 +143,12 @@ function applyModule(
 
   // 0) apply required modules first (auto-add if missing)
   const added: string[] = [];
+  const ownedGlobs: string[] = [...(manifest.ownedGlobs ?? [])];
   for (const required of manifest.requires ?? []) {
     if (applied.has(required) || isApplied(projectRoot, modulesDir, required)) continue;
     const result = applyModule(projectRoot, required, modulesDir, applied);
     added.push(required, ...result.added);
+    ownedGlobs.push(...result.ownedGlobs);
   }
 
   const appName = projectName(projectRoot);
@@ -173,5 +188,5 @@ function applyModule(
   }
 
   const instructions = (manifest.instructions ?? []).map((line) => line.replace(/<app>/g, appName));
-  return { module, instructions, added };
+  return { module, instructions, added, ownedGlobs };
 }
