@@ -31,6 +31,11 @@ export class ContentCollectionService {
     return this.items.find({ where: { collection }, order: { order: "ASC", createdAt: "DESC" } });
   }
 
+  /** Admin: every item across all collections (any status). */
+  listEvery(): Promise<CollectionItem[]> {
+    return this.items.find({ order: { collection: "ASC", order: "ASC", createdAt: "DESC" } });
+  }
+
   async create(dto: CreateCollectionItemDto): Promise<CollectionItem> {
     const item = this.items.create({
       ...dto,

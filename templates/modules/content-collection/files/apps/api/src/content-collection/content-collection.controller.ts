@@ -50,6 +50,12 @@ export class ContentCollectionController {
 export class ContentCollectionAdminController {
   constructor(private readonly service: ContentCollectionService) {}
 
+  @Get()
+  listEvery(@Session() session: UserSession): Promise<CollectionItem[]> {
+    requireAdmin(session);
+    return this.service.listEvery();
+  }
+
   @Get(":collection")
   listAll(
     @Session() session: UserSession,
