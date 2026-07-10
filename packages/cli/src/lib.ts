@@ -2,6 +2,10 @@
 // packages (e.g. @podosoft/podokit-mcp) to call without spawning the binary.
 import { join } from "node:path";
 
+export { create } from "./create";
+export type { CreateOptions, CreateResult } from "./create";
+export { TEMPLATES, DEFAULT_TEMPLATE, TEMPLATE_NAMES, isKnownTemplate } from "./templates";
+export type { TemplateInfo } from "./templates";
 export { listModules, addModule } from "./add";
 export type { ModuleManifest, AddOptions, AddResult } from "./add";
 export { status, diff, doctor, SUPPORTED_FRAMEWORKS } from "./inspect";
