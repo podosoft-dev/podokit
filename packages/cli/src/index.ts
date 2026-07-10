@@ -6,7 +6,7 @@ import { resolveCreateOptions, type Ask } from "./prompt";
 import { templateListText } from "./templates";
 import { addModule, listModules } from "./add";
 import { status, diff, doctor } from "./inspect";
-import { planUpdate, summarize } from "./update";
+import { planUpdate, applyUpdate, summarize } from "./update";
 
 const HELP = `podo — PodoKit project generator
 
@@ -40,12 +40,14 @@ interface ParsedArgs {
   template?: string;
   dir?: string;
   pm?: PackageManager;
+  from?: string;
+  apply: boolean;
   yes: boolean;
   help: boolean;
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
-  const parsed: ParsedArgs = { help: false, yes: false };
+  const parsed: ParsedArgs = { help: false, yes: false, apply: false };
   const positionals: string[] = [];
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -53,10 +55,14 @@ export function parseArgs(argv: string[]): ParsedArgs {
       parsed.help = true;
     } else if (arg === "-y" || arg === "--yes") {
       parsed.yes = true;
+    } else if (arg === "--apply") {
+      parsed.apply = true;
     } else if (arg === "--template") {
       parsed.template = argv[++i];
     } else if (arg === "--dir") {
       parsed.dir = argv[++i];
+    } else if (arg === "--from") {
+      parsed.from = argv[++i];
     } else if (arg === "--pm") {
       parsed.pm = argv[++i] as PackageManager;
     } else if (arg !== undefined && !arg.startsWith("-")) {
@@ -163,8 +169,24 @@ async function main(argv: string[]): Promise<void> {
   }
 
   if (args.command === "update") {
+    const templatesDir = join(__dirname, "templates");
     try {
-      const plan = planUpdate(process.cwd(), join(__dirname, "templates"));
+      if (args.apply) {
+        const result = applyUpdate(process.cwd(), templatesDir, { oldTemplatesDir: args.from });
+        process.stdout.write(
+          `Applied: ${result.written.length} written, ${result.removed.length} removed, ` +
+            `${result.merged.length} merged, ${result.conflicts.length} conflict.\n`,
+        );
+        if (result.conflicts.length) {
+          process.stdout.write(
+            "\nResolve the following, then commit:\n" +
+              result.conflicts.map((f) => `  ${f}`).join("\n") +
+              "\n",
+          );
+        }
+        return;
+      }
+      const plan = planUpdate(process.cwd(), templatesDir);
       const counts = summarize(plan);
       const shown = plan.changes.filter((c) => c.action !== "up-to-date" && c.action !== "skip");
       process.stdout.write(
@@ -177,7 +199,8 @@ async function main(argv: string[]): Promise<void> {
           process.stdout.write(`  ${c.action.padEnd(9)} ${c.path}  (${c.note})\n`);
         }
         process.stdout.write(
-          `\n${counts.update} update, ${counts.add} add, ${counts.remove} remove, ${counts.conflict} conflict. Dry-run — nothing was written.\n`,
+          `\n${counts.update} update, ${counts.add} add, ${counts.remove} remove, ${counts.conflict} conflict. ` +
+            `Dry-run — nothing was written. Re-run with --apply to write (use --from <dir> for a 3-way merge).\n`,
         );
       }
     } catch (err) {

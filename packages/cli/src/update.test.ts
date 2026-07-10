@@ -1,11 +1,11 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, cpSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { create } from "./create";
 import { addModule } from "./add";
 import { assembleProject } from "./assemble";
-import { planUpdate, summarize } from "./update";
+import { planUpdate, applyUpdate, summarize } from "./update";
 
 const REPO_TEMPLATES = resolve(process.cwd(), "..", "..", "templates");
 
@@ -69,5 +69,75 @@ describe("planUpdate (dry-run)", () => {
     const plan = planUpdate(dir, REPO_TEMPLATES);
     const change = plan.changes.find((c) => c.path === "apps/web/src/routes/+page.svelte");
     expect(change?.action).toBe("skip");
+  });
+});
+
+describe("applyUpdate", () => {
+  // Build an "old" template set (a copy) and mutate the live templates so there
+  // is a real version delta to apply.
+  function oldTemplatesCopy(): string {
+    const dir = join(tmp(), "old-templates");
+    mkdirSync(dir, { recursive: true });
+    cpSync(REPO_TEMPLATES, dir, { recursive: true });
+    return dir;
+  }
+
+  it("applies a clean update to an unedited managed file", () => {
+    const oldTemplates = oldTemplatesCopy();
+    const dir = join(tmp(), "app");
+    // generate from the OLD templates
+    create({ name: "app", template: "fullstack-nest-svelte", templatesDir: oldTemplates, targetDir: dir });
+    // NEW templates change a managed file
+    const tplMain = join(REPO_TEMPLATES, "fullstack-nest-svelte/apps/api/src/main.ts");
+    const original = readFileSync(tplMain, "utf8");
+    try {
+      writeFileSync(tplMain, original + "\n// new in this version\n");
+      const result = applyUpdate(dir, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+      expect(result.written).toContain("apps/api/src/main.ts");
+      expect(readFileSync(join(dir, "apps/api/src/main.ts"), "utf8")).toContain("// new in this version");
+      expect(result.conflicts).toEqual([]);
+    } finally {
+      writeFileSync(tplMain, original);
+    }
+  });
+
+  it("3-way merges a user edit with an upstream change without losing either", () => {
+    const oldTemplates = oldTemplatesCopy();
+    const dir = join(tmp(), "app");
+    create({ name: "app", template: "fullstack-nest-svelte", templatesDir: oldTemplates, targetDir: dir });
+    // user edits the FIRST line region; upstream edits the END — disjoint => clean 3-way
+    const appMain = join(dir, "apps/api/src/main.ts");
+    writeFileSync(appMain, "// my header\n" + readFileSync(appMain, "utf8"));
+    const tplMain = join(REPO_TEMPLATES, "fullstack-nest-svelte/apps/api/src/main.ts");
+    const original = readFileSync(tplMain, "utf8");
+    try {
+      writeFileSync(tplMain, original + "\n// upstream footer\n");
+      const result = applyUpdate(dir, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+      const merged = readFileSync(appMain, "utf8");
+      expect(merged).toContain("// my header"); // user edit preserved
+      expect(merged).toContain("// upstream footer"); // upstream change applied
+      expect(result.conflicts).toEqual([]);
+    } finally {
+      writeFileSync(tplMain, original);
+    }
+  });
+
+  it("leaves an edited file untouched and reports a conflict when no old version is given", () => {
+    const dir = join(tmp(), "app");
+    create({ name: "app", template: "fullstack-nest-svelte", templatesDir: REPO_TEMPLATES, targetDir: dir });
+    const appMain = join(dir, "apps/api/src/main.ts");
+    const edited = readFileSync(appMain, "utf8") + "\n// precious edit\n";
+    writeFileSync(appMain, edited);
+    const tplMain = join(REPO_TEMPLATES, "fullstack-nest-svelte/apps/api/src/main.ts");
+    const original = readFileSync(tplMain, "utf8");
+    try {
+      writeFileSync(tplMain, original + "\n// upstream\n");
+      const result = applyUpdate(dir, REPO_TEMPLATES); // no oldTemplatesDir
+      expect(result.conflicts).toContain("apps/api/src/main.ts");
+      expect(readFileSync(appMain, "utf8")).toBe(edited); // untouched
+    } finally {
+      writeFileSync(tplMain, original);
+    }
+    expect(existsSync(appMain)).toBe(true);
   });
 });
