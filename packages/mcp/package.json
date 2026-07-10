@@ -1,0 +1,42 @@
+{
+  "name": "@podosoft/podokit-mcp",
+  "version": "0.1.0",
+  "description": "Model Context Protocol server for PodoKit: lists/adds modules, reports project status, previews updates, and searches the docs \u2014 run locally via npx (no hosting).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/podosoft-dev/podokit.git",
+    "directory": "packages/mcp"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "podokit",
+    "claude",
+    "ai"
+  ],
+  "bin": {
+    "podokit-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/copy-docs.mjs",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "@podosoft/podokit": "^0.5.0",
+    "zod": "^4.0.0"
+  }
+}

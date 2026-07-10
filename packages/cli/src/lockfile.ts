@@ -80,6 +80,7 @@ export const DEFAULT_OWNED_GLOBS = [
   ".claude/**",
   ".cursor/**",
   ".github/copilot-instructions.md",
+  ".mcp.json",
   // Containerized dev-environment scaffolding: users tweak ports/services, so
   // updates never overwrite these.
   "compose.dev.yaml",

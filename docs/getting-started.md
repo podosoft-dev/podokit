@@ -61,6 +61,11 @@ open standard), a `CLAUDE.md` that imports it, `.cursor`/`.github` pointers, and
 Claude Code skills under `.claude/skills/`. As you `podo add` modules, they
 extend `AGENTS.md` with their own rules. Don't want them? `podo create --no-ai`.
 
+A `.mcp.json` also wires up the **PodoKit MCP server** (`@podosoft/podokit-mcp`,
+run locally via `npx` — no hosting): agents can list/add modules, check the
+project status, preview updates, and search the docs directly. See
+[`@podosoft/podokit-mcp`](https://www.npmjs.com/package/@podosoft/podokit-mcp).
+
 ## Keep your project up to date
 
 Your project records how it was assembled in a committed `.podokit/` directory,
