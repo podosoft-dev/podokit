@@ -1,0 +1,31 @@
+{
+  "manifestVersion": 1,
+  "name": "content-collection",
+  "description": "Config-driven content collections (services, solutions, portfolio, team, …) on one collection_item table. Public read API + admin CRUD; items carry a jsonb metadata field for project-specific fields. Managed card/detail components + owned pages ship with the web side.",
+  "requires": ["admin-dashboard", "file-upload"],
+  "targetApp": "api",
+  "inject": [
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:end:imports",
+      "text": "import { ContentCollectionModule } from \"./content-collection/content-collection.module\";"
+    },
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:end:module-imports",
+      "text": "ContentCollectionModule,"
+    },
+    {
+      "file": "AGENTS.md",
+      "marker": "<!-- podokit:end:agents-modules -->",
+      "optional": true,
+      "text": "### content-collection\n- One `collection_item` table backs any card-list content type, keyed by `collection` (e.g. \"services\", \"portfolio\"). Public API: `GET /collections/:collection`, `GET /collections/:collection/:slug` (published only). Admin CRUD under `/admin/collections`.\n- Extend an item with project-specific fields via its `metadata` (jsonb) — no migration. Render `body` with the `markdown` module's `<Markdown/>`.\n"
+    }
+  ],
+  "instructions": [
+    "Create the content_collection table:  npm run migration:run -w <app>-api",
+    "Public list:  curl localhost:5002/api/collections/services",
+    "Seed items via the admin UI (/admin/collections) or POST /admin/collections as an admin.",
+    "Add project-specific fields per item in its metadata (jsonb) — no schema change needed."
+  ]
+}
