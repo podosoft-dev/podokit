@@ -97,8 +97,9 @@
   }
 </script>
 
-<div class="flex max-w-2xl flex-col gap-6">
-  <Card.Root>
+<div class="flex flex-col gap-6">
+  <div class="grid items-start gap-6 lg:grid-cols-2">
+    <Card.Root>
     <Card.Header>
       <Card.Title>{t.brandingTitle}</Card.Title>
       <Card.Description>{t.brandingDesc}</Card.Description>
@@ -134,7 +135,7 @@
     </Card.Content>
   </Card.Root>
 
-  <Card.Root>
+  <Card.Root class="lg:row-span-2">
     <Card.Header>
       <Card.Title>{t.infoTitle}</Card.Title>
       <Card.Description>{t.infoDesc}</Card.Description>
@@ -194,6 +195,7 @@
       </div>
     </Card.Content>
   </Card.Root>
+  </div>
 
   <div>
     <Button onclick={save} disabled={saving}>{saving ? t.saving : t.save}</Button>
