@@ -7,12 +7,12 @@
   import * as Table from "$lib/components/ui/table";
   import * as Dialog from "$lib/components/ui/dialog";
   import * as Select from "$lib/components/ui/select";
-  import DataTable, { type DataTableColumn, type SortState } from "$lib/components/data-table.svelte";
+  import DataTable, { type DataTableColumn, type SortState, DEFAULT_PAGE_SIZE } from "$lib/components/data-table.svelte";
   import TableToolbar, { type ToolbarFilter, type ToolbarSearchField } from "$lib/components/table-toolbar.svelte";
   import PlusIcon from "@lucide/svelte/icons/plus";
   import { toast } from "svelte-sonner";
   import { api } from "$lib/api";
-  import { getI18n } from "$lib/i18n";
+  import { getI18n, fmt } from "$lib/i18n";
   import type { CollectionItem } from "$lib/content-collection";
 
   const i18n = getI18n();
@@ -156,7 +156,16 @@
     onSearch={applySearch}
   />
 
-  <DataTable {columns} rows={filtered} getKey={(r) => r.id} empty={loading ? t.loading : t.empty} bind:sort bind:page>
+  <DataTable
+    {columns}
+    rows={filtered}
+    getKey={(r) => r.id}
+    empty={loading ? t.loading : t.empty}
+    bind:sort
+    bind:page
+    perPage={DEFAULT_PAGE_SIZE}
+    label={fmt(t.total, { count: filtered.length })}
+  >
     {#snippet row(item)}
       <Table.Cell class="font-medium">{item.title}</Table.Cell>
       <Table.Cell class="text-muted-foreground">{item.collection}</Table.Cell>
