@@ -59,7 +59,7 @@ const en = {
     resendVerification: "Resend verification email",
     emailNotVerified: "Verify your email before signing in.",
   },
-  nav: { overview: "Overview", users: "Users", sessions: "Sessions", organizations: "Organizations", audit: "Audit log", account: "Account", settings: "Settings", signOut: "Sign out" },
+  nav: { overview: "Overview", users: "Users", sessions: "Sessions", organizations: "Organizations", audit: "Audit log", account: "Account", settings: "Settings", home: "Back to home", signOut: "Sign out" },
   passkeys: {
     title: "Passkeys", subtitle: "Passwordless sign-in with your device (Face ID, fingerprint, security key).",
     name: "Name", namePlaceholder: "e.g. MacBook", add: "Add passkey", remove: "Remove", untitled: "Passkey",
@@ -360,7 +360,7 @@ const ko: Messages = {
     emailNotVerified: "로그인 전에 이메일을 인증해 주세요.",
     resetFailed: "재설정에 실패했습니다",
   },
-  nav: { overview: "개요", users: "회원", sessions: "세션", organizations: "조직", audit: "감사 로그", account: "계정", settings: "설정", signOut: "로그아웃" },
+  nav: { overview: "개요", users: "회원", sessions: "세션", organizations: "조직", audit: "감사 로그", account: "계정", settings: "설정", home: "홈으로 돌아가기", signOut: "로그아웃" },
   passkeys: {
     title: "패스키", subtitle: "기기로 비밀번호 없이 로그인(Face ID, 지문, 보안 키).",
     name: "이름", namePlaceholder: "예: MacBook", add: "패스키 추가", remove: "삭제", untitled: "패스키",

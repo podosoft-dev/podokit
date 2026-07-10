@@ -44,6 +44,15 @@ test("settings lists the auth features under the Authentication tab @smoke", asy
   await expect(page.getByText("Enabled", { exact: true }).first()).toBeVisible();
 });
 
+test("sidebar: back-to-home link returns to the landing page @smoke", async ({ page }) => {
+  await ready(page, "/admin/settings");
+  // the home link lives in the sidebar footer, above the user menu
+  await page.getByRole("link", { name: "Back to home" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  // the landing page shows the "Open admin" entry point
+  await expect(page.getByRole("link", { name: "Open admin" })).toBeVisible();
+});
+
 test("settings is reachable from the sidebar @smoke", async ({ page }) => {
   await ready(page, "/admin");
   await page.getByRole("link", { name: "Settings" }).click();

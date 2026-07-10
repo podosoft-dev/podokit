@@ -8,6 +8,7 @@
   import ScrollTextIcon from "@lucide/svelte/icons/scroll-text";
   import Building2Icon from "@lucide/svelte/icons/building-2";
   import SettingsIcon from "@lucide/svelte/icons/settings";
+  import HouseIcon from "@lucide/svelte/icons/house";
   import { getI18n } from "$lib/i18n";
   import type { SessionUser } from "../../app.d.ts";
   import type { Messages } from "$lib/i18n/messages";
@@ -60,6 +61,18 @@
     </Sidebar.Group>
   </Sidebar.Content>
   <Sidebar.Footer>
+    <Sidebar.Menu>
+      <Sidebar.MenuItem>
+        <Sidebar.MenuButton tooltipContent={i18n.t.nav.home}>
+          {#snippet child({ props })}
+            <a href="/" {...props}>
+              <HouseIcon />
+              <span>{i18n.t.nav.home}</span>
+            </a>
+          {/snippet}
+        </Sidebar.MenuButton>
+      </Sidebar.MenuItem>
+    </Sidebar.Menu>
     <SidebarUserMenu {user} />
   </Sidebar.Footer>
 </Sidebar.Root>
