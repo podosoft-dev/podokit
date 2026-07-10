@@ -45,7 +45,34 @@ export function createFeatureGate(pool: Pool) {
     return cache;
   }
 
+  // Registration can be closed from the admin Settings ("Allow sign-up"). It is a
+  // site setting (`site.allowSignup`), so the row is absent until an admin turns
+  // it off — a missing/any-non-"false" value means open, matching the shipped
+  // default. Cached the same way as the feature flags.
+  let signupOpen = true;
+  let signupFetchedAt = 0;
+  async function isSignupOpen(): Promise<boolean> {
+    if (Date.now() - signupFetchedAt < CACHE_TTL_MS) return signupOpen;
+    try {
+      const res = await pool.query<{ value: string }>(
+        'SELECT "value" FROM "app_setting" WHERE "key" = $1',
+        ["site.allowSignup"],
+      );
+      signupOpen = res.rows[0]?.value !== "false";
+    } catch {
+      signupOpen = true;
+    }
+    signupFetchedAt = Date.now();
+    return signupOpen;
+  }
+
   return createAuthMiddleware(async (ctx) => {
+    // Block email/password registration when sign-up is closed. Social/invite
+    // flows are unaffected; admins create users from the dashboard.
+    if (ctx.path === "/sign-up/email" || ctx.path.startsWith("/sign-up/")) {
+      if (!(await isSignupOpen())) throw new APIError("FORBIDDEN", { message: "Sign-up is disabled." });
+      return;
+    }
     const feature = FEATURE_PATHS.find((f) =>
       f.prefixes.some((p) => ctx.path === p || ctx.path.startsWith(p)),
     );
