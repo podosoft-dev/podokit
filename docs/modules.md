@@ -471,6 +471,20 @@ Organizations (multi-tenant teams) come from better-auth, extended where it fall
 Add your own org fields/roles the same way: extend `additionalFields` and the
 `org-permissions.ts` roles, then re-run the better-auth migration.
 
+## Where modules come from
+
+`podo add <name>` resolves a module from either:
+
+1. the **bundled** modules that ship with the CLI (everything documented above), or
+2. an **installed npm package** `@podosoft/podokit-module-<name>` (or a
+   fully-qualified `@scope/pkg` name) in your project.
+
+This keeps the core lean and lets modules — including third-party ones — ship and
+version independently. A package module is just a `module.manifest.json` (with a
+`manifestVersion`) plus a `files/` overlay, resolved and applied exactly like a
+bundled one; the CLI rejects a manifest that needs a newer PodoKit. `podo add`
+with no argument lists both bundled and installed package modules.
+
 ## Keeping modules up to date
 
 Modules are wired into your project through `.podokit/` fenced regions, so a

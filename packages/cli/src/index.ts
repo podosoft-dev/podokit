@@ -97,7 +97,7 @@ async function main(argv: string[]): Promise<void> {
   if (args.command === "add") {
     const moduleName = args.name;
     if (!moduleName) {
-      const available = listModules(modulesDir);
+      const available = listModules(modulesDir, process.cwd());
       const list = available.length
         ? available.map((m) => `  ${m.name}  ${m.description}`).join("\n")
         : "  (none available)";

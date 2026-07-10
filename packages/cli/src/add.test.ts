@@ -61,6 +61,45 @@ describe("module-declared ownedGlobs", () => {
   });
 });
 
+describe("external-module resolution", () => {
+  function installPackageModule(project: string, pkg: string, manifest: object, fileRel?: string): void {
+    const pkgDir = join(project, "node_modules", pkg);
+    writeFile(join(pkgDir, "package.json"), JSON.stringify({ name: pkg, version: "1.0.0" }));
+    writeFile(join(pkgDir, "module.manifest.json"), JSON.stringify(manifest));
+    if (fileRel) writeFile(join(pkgDir, "files", fileRel), "pkg");
+  }
+
+  it("resolves and applies a module from an installed @podosoft/podokit-module-* package", () => {
+    const project = generate("fullstack-nest-svelte");
+    const fileRel = "apps/api/src/hello/hello.txt";
+    installPackageModule(
+      project,
+      "@podosoft/podokit-module-hello",
+      { manifestVersion: 1, name: "hello", description: "pkg module", targetApp: "api" },
+      fileRel,
+    );
+    // listed alongside the bundled modules
+    expect(listModules(MODULES, project).map((m) => m.name)).toContain("hello");
+    // applied exactly like a bundled module
+    const result = addModule({ projectRoot: project, module: "hello", modulesDir: MODULES });
+    expect(result.module).toBe("hello");
+    expect(existsSync(join(project, fileRel))).toBe(true);
+  });
+
+  it("rejects a module manifest from a newer CLI", () => {
+    const project = generate("fullstack-nest-svelte");
+    installPackageModule(project, "@podosoft/podokit-module-future", {
+      manifestVersion: 99,
+      name: "future",
+      description: "x",
+      targetApp: "api",
+    });
+    expect(() => addModule({ projectRoot: project, module: "future", modulesDir: MODULES })).toThrow(
+      /newer PodoKit/,
+    );
+  });
+});
+
 describe("mailer extraction", () => {
   it("auth pulls in the mailer module, which ships a decoupled mail library", () => {
     const project = generate("fullstack-nest-svelte");
