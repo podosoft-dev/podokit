@@ -47,9 +47,15 @@ Options:
                      - base                  : minimal npm workspace
   --dir <path>     Target directory (default: ./<name>)
   --pm <name>      Package manager: npm | pnpm | yarn (default: npm)
+  --no-ai          Skip AI agent guidance (AGENTS.md, CLAUDE.md, editor rules)
   -y, --yes        Skip prompts and accept defaults
   -h, --help       Show help
 ```
+
+Generated projects include agent guidance for AI coding tools — an
+[`AGENTS.md`](https://agents.md) (the open standard), a `CLAUDE.md` that imports
+it, `.cursor`/`.github` pointers, and Claude Code skills under `.claude/skills/`.
+Modules extend `AGENTS.md` as you add them. Use `--no-ai` to skip.
 
 Examples:
 

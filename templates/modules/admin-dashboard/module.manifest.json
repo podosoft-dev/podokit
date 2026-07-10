@@ -35,6 +35,12 @@
       "file": "apps/api/src/auth/auth.ts",
       "marker": "// podokit:end:auth-options",
       "text": "trustedOrigins: (process.env.CORS_ORIGIN ?? \"http://localhost:5001\").split(\",\").map((origin) => origin.trim()),\n  databaseHooks: {\n    user: {\n      create: {\n        before: async (user) => ({\n          data: {\n            ...user,\n            role: (process.env.ADMIN_EMAILS ?? \"\")\n              .split(\",\")\n              .map((email) => email.trim().toLowerCase())\n              .includes(user.email.toLowerCase())\n              ? \"admin\"\n              : \"user\",\n          },\n        }),\n      },\n    },\n  },"
+    },
+    {
+      "file": "AGENTS.md",
+      "marker": "<!-- podokit:end:agents-modules -->",
+      "optional": true,
+      "text": "### admin-dashboard\n- Admin console lives at `/admin/*` (users, sessions, organizations, audit, settings, account). Emails in `ADMIN_EMAILS` become admins on sign-up.\n- **Every list/table MUST use the shared `$lib/components/data-table.svelte` (`DataTable`)** \u2014 it gives sortable headers + a footer pagination. Add search/filters with `$lib/components/table-toolbar.svelte`. Never assemble `Table.Root`/`Table.Header`/`Table.Body` by hand.\n"
     }
   ],
   "instructions": [

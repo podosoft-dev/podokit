@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- **AI coding agent support in generated projects.** `podo create` now writes an
+  `AGENTS.md` (the open standard read by Codex, Cursor, Copilot, Gemini, …)
+  covering the stack, commands, code style, and `podo` tooling; a `CLAUDE.md` that
+  imports it (`@AGENTS.md`) for Claude Code; and thin `.cursor/rules` /
+  `.github/copilot-instructions.md` pointers. Claude Code **skills**
+  (`.claude/skills/`) add procedural guidance (NestJS endpoint, SvelteKit route,
+  DataTable, `podo add`/`podo update`). Modules extend `AGENTS.md` with their own
+  conventions when added (auth's secure-by-default rule, admin-dashboard's
+  DataTable requirement). The AI files are `owned`, so `podo update` never touches
+  them. Opt out with `podo create --no-ai`.
+- Module injections can be marked `optional`, so they skip (instead of failing)
+  when a target file is absent — used for the `AGENTS.md` guidance injections.
+
+### Fixed
+- **`file-upload` module build.** The generated app's API tsconfig restricts
+  `types` to `["node"]`, which suppressed `@types/multer`'s global augmentation and
+  broke the build on `Express.Multer.File`. The files controller now loads it
+  explicitly with a `/// <reference types="multer" />` directive.
+
 ## [0.5.1] - 2026-07-10
 
 ### Fixed

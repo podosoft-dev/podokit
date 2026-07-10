@@ -62,6 +62,19 @@ describe("addModule (auth / better-auth)", () => {
     expect(manifest.modules.map((m) => m.name)).toContain("auth");
   });
 
+  it("injects module guidance into AGENTS.md, and tolerates its absence", () => {
+    const project = generate("fullstack-nest-svelte");
+    addModule({ projectRoot: project, module: "auth", modulesDir: MODULES });
+    const agents = readFileSync(join(project, "AGENTS.md"), "utf8");
+    expect(agents).toContain("### auth (better-auth)");
+    expect(agents.match(/<!-- podokit:end:agents-modules -->/g)?.length).toBe(1);
+
+    // an app generated with --no-ai has no AGENTS.md; the optional inject must not throw
+    const noAi = join(tmp(), "no-ai");
+    create({ name: "app", template: "fullstack-nest-svelte", templatesDir: REPO_TEMPLATES, targetDir: noAi, ai: false });
+    expect(() => addModule({ projectRoot: noAi, module: "auth", modulesDir: MODULES })).not.toThrow();
+  });
+
   it("is idempotent for wiring when applied twice", () => {
     const project = generate("fullstack-nest-svelte");
     addModule({ projectRoot: project, module: "auth", modulesDir: MODULES });
@@ -129,6 +142,11 @@ describe("addModule (auth / better-auth)", () => {
     // both modules' files are present
     expect(existsSync(join(project, "apps/api/src/files/files.controller.ts"))).toBe(true);
     expect(existsSync(join(project, "apps/api/src/storage/storage.service.ts"))).toBe(true);
+    // the controller loads @types/multer's global augmentation explicitly, since the
+    // api tsconfig's `types: ["node"]` allowlist would otherwise suppress it and break
+    // the build on `Express.Multer.File`.
+    const filesController = readFileSync(join(project, "apps/api/src/files/files.controller.ts"), "utf8");
+    expect(filesController).toContain('/// <reference types="multer" />');
     // both are wired
     const appModule = readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8");
     expect(appModule).toContain("FilesModule,");

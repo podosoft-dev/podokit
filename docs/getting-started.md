@@ -53,6 +53,14 @@ npx @podosoft/podokit add admin-dashboard   # a full admin console (also adds au
 
 See [modules.md](modules.md) for the full list.
 
+## AI coding agents
+
+Your project ships with agent guidance so tools like Claude Code, Codex, and
+Cursor follow the conventions from the start: an `AGENTS.md` at the root (the
+open standard), a `CLAUDE.md` that imports it, `.cursor`/`.github` pointers, and
+Claude Code skills under `.claude/skills/`. As you `podo add` modules, they
+extend `AGENTS.md` with their own rules. Don't want them? `podo create --no-ai`.
+
 ## Keep your project up to date
 
 Your project records how it was assembled in a committed `.podokit/` directory,

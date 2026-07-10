@@ -1,3 +1,6 @@
+// The API tsconfig restricts `types` to ["node"], which suppresses @types/multer's
+// global augmentation of Express.Multer.File. Load it explicitly so the type resolves.
+/// <reference types="multer" />
 import { BadRequestException, Controller, Get, Param, Post, UploadedFile, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiConsumes, ApiTags } from "@nestjs/swagger";

@@ -1,8 +1,11 @@
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, rmSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { copyTemplate, type TemplateVars } from "@podosoft/podokit-template-engine";
 import { DEFAULT_TEMPLATE } from "./templates";
 import { initLockfile } from "./lockfile";
+
+/** AI agent guidance files, removed when scaffolding with `--no-ai`. */
+const AI_ARTIFACTS = ["AGENTS.md", "CLAUDE.md", ".claude", ".cursor", ".github/copilot-instructions.md"];
 
 export type PackageManager = "npm" | "pnpm" | "yarn";
 
@@ -21,6 +24,8 @@ export interface CreateOptions {
   packageManager?: PackageManager;
   /** PodoKit version stamped into the lockfile. Defaults to the CLI version. */
   podokitVersion?: string;
+  /** Include AI agent guidance (AGENTS.md, CLAUDE.md, editor rules). Defaults to true. */
+  ai?: boolean;
 }
 
 export interface CreateResult {
@@ -71,6 +76,10 @@ export function create(options: CreateOptions): CreateResult {
 
   const vars: TemplateVars = { projectName: name, packageManager };
   copyTemplate(templateDir, projectDir, vars);
+
+  if (options.ai === false) {
+    for (const artifact of AI_ARTIFACTS) rmSync(join(projectDir, artifact), { recursive: true, force: true });
+  }
 
   initLockfile(projectDir, {
     template,

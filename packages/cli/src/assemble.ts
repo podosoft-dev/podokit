@@ -68,7 +68,9 @@ function applyModuleToTree(tree: VfsTree, moduleDir: string, vars: TemplateVars)
   // 4) inject wiring at markers
   for (const injection of manifest.inject ?? []) {
     const target = injection.file;
-    setText(tree, target, insertAtMarker(textOf(tree, target), injection.marker, injection.text));
+    const content = textOf(tree, target);
+    if (injection.optional && !content.includes(injection.marker)) continue;
+    setText(tree, target, insertAtMarker(content, injection.marker, injection.text));
   }
 }
 
