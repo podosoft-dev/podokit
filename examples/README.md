@@ -27,8 +27,8 @@ npm run migration:run -w todo-app-api
 npm run dev
 ```
 
-- Web: http://localhost:5173
-- API: http://localhost:3000 — health at `/health`, docs at `/api-docs`
+- Web: http://localhost:5001
+- API: http://localhost:5002 — health at `/health`, docs at `/api-docs`
 
 Try it: add a todo in the UI, then open `/api-docs` and call `GET /todos`.
 
@@ -50,9 +50,9 @@ npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
 npm run dev
 
 # sign up (sets a session cookie), then call a protected route
-curl -c cookies.txt -XPOST localhost:3000/api/auth/sign-up/email \
+curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-up/email \
   -H 'content-type: application/json' -d '{"email":"a@example.com","password":"password123","name":"A"}'
-curl -b cookies.txt localhost:3000/account/me
+curl -b cookies.txt localhost:5002/account/me
 ```
 
 Enable OAuth by setting a provider's `*_CLIENT_ID`/`*_CLIENT_SECRET`, and 2FA with `AUTH_TWO_FACTOR=true`.
@@ -72,8 +72,8 @@ docker compose -f infra/docker/docker-compose.yml up -d
 npm run dev                       # terminal 1
 npm run dev:worker -w jobs-demo-api   # terminal 2
 
-curl -XPOST localhost:3000/jobs -H 'content-type: application/json' -d '{"text":"hello"}'
-curl localhost:3000/jobs/<id>     # waiting -> active -> completed
+curl -XPOST localhost:5002/jobs -H 'content-type: application/json' -d '{"text":"hello"}'
+curl localhost:5002/jobs/<id>     # waiting -> active -> completed
 ```
 
 Deploy the worker separately (k3s `worker-deployment.yaml` and a Compose worker example are added by the module).
@@ -91,7 +91,7 @@ npm install
 docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml up -d
 npm run dev
 
-curl -F 'file=@./photo.png' localhost:3000/files   # → { key, url }
+curl -F 'file=@./photo.png' localhost:5002/files   # → { key, url }
 ```
 
 ## 5. job dashboard — live progress (`podo add job-progress`)
@@ -110,14 +110,31 @@ docker compose -f infra/docker/docker-compose.yml up -d
 npm run dev                            # API
 npm run dev:worker -w jobs-dash-api    # worker (separate process)
 
-curl -N localhost:3000/events/stream   # watch
-curl -XPOST localhost:3000/progress -H 'content-type: application/json' -d '{"steps":5}'
+curl -N localhost:5002/events/stream   # watch
+curl -XPOST localhost:5002/progress -H 'content-type: application/json' -d '{"steps":5}'
 # stream: job-progress 20 -> 40 -> 60 -> 80 -> 100 (pushed from the worker via Redis)
 ```
 
 ## 6. admin dashboard (`podo add admin-dashboard`)
 
-A full admin starter — auth pages, a sidebar shell, and user/session management.
+A full admin console on top of `auth`: login/signup/password-reset pages and a
+shadcn-svelte sidebar shell, plus:
+
+- **User & session management** — list, filter, search, ban/unban, set role,
+  revoke sessions, create/delete users.
+- **Audit log** — security-relevant actions (sign-ups, admin changes) recorded
+  and browsable at `/admin/audit`.
+- **Organizations** — teams with members and invitations.
+- **Runtime Settings** — enable/disable sign-in methods and configure OAuth
+  providers, SMTP, and server toggles (email verification, breached-password
+  check, self-delete, audit log) from `/admin/settings`. These are stored
+  **encrypted in the DB and applied live — no restart**, with env vars as an
+  optional fallback.
+- **Account** self-service — password, 2FA, passkeys, API keys, sessions.
+
+| Users | Audit log | Settings — social login |
+| --- | --- | --- |
+| ![Admin users](../docs/images/admin-users.png) | ![Audit log](../docs/images/admin-audit.png) | ![Settings — social login](../docs/images/admin-settings-social.png) |
 
 ```bash
 npx @podosoft/podokit create my-admin
@@ -126,13 +143,14 @@ npx @podosoft/podokit add admin-dashboard    # also adds auth
 npm install
 docker compose -f infra/docker/docker-compose.yml up -d
 npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
+npm run migration:run -w my-admin-api        # creates auth_config + app_setting
 # set ADMIN_EMAILS=you@example.com in .env
 npm run dev
-# /signup that email → admin, then manage users at /dashboard/users
+# open /signup, register that email (→ admin), then manage users at /admin/users
 ```
 
-## Roadmap
+## Keeping examples up to date
 
-Further examples grow feature by feature (auth-guarded todos, file uploads,
-background jobs with a queue, streaming, …) as the corresponding `podo add`
-modules land. See the repository roadmap for status.
+These are generated apps, so they ship with the `.podokit/` lockfile and can
+receive template and module improvements via `podo update`. See
+[../docs/updating.md](../docs/updating.md).

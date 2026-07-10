@@ -16,8 +16,8 @@ cp .env.example .env
 npm run dev
 ```
 
-- API: http://localhost:3000 (health at `/health`)
-- Web: http://localhost:5173
+- API: http://localhost:5002 (health at `/health`)
+- Web: http://localhost:5001
 
 ## CLI
 
@@ -25,7 +25,7 @@ npm run dev
 podo create <name> [options]
 
 Options:
-  --template <t>   fullstack-nest-svelte (default) | base
+  --template <t>   fullstack-nest-svelte (default) | todo | base
   --dir <path>     Target directory (default: ./<name>)
   --pm <name>      npm (default) | pnpm | yarn
   -y, --yes        Skip prompts and accept defaults
@@ -33,6 +33,16 @@ Options:
 ```
 
 Run without flags in a terminal and PodoKit prompts for the template and package manager.
+
+| Command | What it does |
+|---|---|
+| `podo create <name>` | Scaffold a new project from a template |
+| `podo add <module>` | Add a feature module (auth, admin-dashboard, redis, …) |
+| `podo status` | Version, modules, file tiers, and local edits |
+| `podo diff` | Managed files you've edited since generation |
+| `podo doctor` | Framework versions vs. supported ranges |
+| `podo update [--apply]` | Preview or apply a version update (3-way merges your edits) |
+| `podo eject <path…>` | Take ownership of a managed file |
 
 ## Templates
 
@@ -78,10 +88,13 @@ my-app/
 
 ## Repository layout
 
-This repo is an npm workspace:
+This repo is an npm workspace. Published packages:
 
 - `packages/cli` — the `@podosoft/podokit` CLI (`podo`)
-- `packages/template-engine` — token rendering, template copy, `package.json` merge
+- `packages/template-engine` — `@podosoft/podokit-template-engine`: token rendering, in-memory assembly, fenced-region wiring, and 3-way merge
+- `packages/api-client` — `@podosoft/podokit-api-client`: typed API client the generated frontend uses (better-auth + error-envelope request layer)
+- `packages/contracts` — `@podosoft/podokit-contracts`: the `Capabilities`, error envelope, and `AppException` shared by backend and frontend
+- `packages/podokit-auth` — `@podosoft/podokit-auth`: the DB-backed auth configuration pipeline (encrypted secrets, config store)
 - `templates/` — project templates copied by the CLI
 - `examples/` — how to generate example apps
 
@@ -108,12 +121,36 @@ npx @podosoft/podokit add auth      # full auth (better-auth): email/password, s
 `podo add` overlays files, merges dependencies, appends env vars, and wires the
 module into the NestJS app. See [docs/modules.md](docs/modules.md).
 
+The **`admin-dashboard`** module adds a full admin console on top of `auth`:
+user & session management, an audit log, and a Settings page where OAuth
+providers, SMTP, and server toggles are configured at runtime (encrypted in the
+DB, applied without a restart):
+
+![PodoKit admin dashboard — Settings, social login](docs/images/admin-settings-social.png)
+
+## Keep your project up to date
+
+Every generated project records how it was assembled in a committed `.podokit/`
+directory (template, modules, and a per-file ownership tier), so it can receive
+template and module improvements later without losing your work:
+
+```bash
+podo status          # version, modules, and which managed files you've edited
+podo update          # preview what a newer PodoKit version would change
+podo update --apply  # apply it — clean updates written, your edits 3-way merged
+```
+
+Files you own (routes, your components, shadcn UI) are never touched. See
+[docs/updating.md](docs/updating.md).
+
 ## Documentation
 
 - [Getting Started](docs/getting-started.md)
 - [Templates](docs/templates.md)
 - [Modules (`podo add`)](docs/modules.md)
+- [Updating a project (`podo update`)](docs/updating.md)
 - [Examples](examples/README.md)
+- [Development](docs/development.md) · [Testing](docs/testing.md)
 - [Changelog](CHANGELOG.md)
 
 ## Contributing
