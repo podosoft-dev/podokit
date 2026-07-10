@@ -1,0 +1,8 @@
+node_modules
+**/node_modules
+dist
+**/dist
+.svelte-kit
+**/.svelte-kit
+.git
+*.log

@@ -80,6 +80,14 @@ export const DEFAULT_OWNED_GLOBS = [
   ".claude/**",
   ".cursor/**",
   ".github/copilot-instructions.md",
+  // Containerized dev-environment scaffolding: users tweak ports/services, so
+  // updates never overwrite these.
+  "compose.dev.yaml",
+  "Dockerfile.dev",
+  ".dockerignore",
+  ".devcontainer/**",
+  ".env.docker",
+  "infra/traefik/**",
 ];
 
 const TEXT_EXT = /\.(json|md|ts|tsx|js|mjs|cjs|css|html|yml|yaml|txt|env|svelte|gitignore|example)$/i;
