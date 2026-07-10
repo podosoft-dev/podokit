@@ -8,8 +8,8 @@
     "API_KEYS=dev-key-please-change"
   ],
   "inject": [
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:imports", "text": "import { ApiKeyModule } from \"./api-key/api-key.module\";" },
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:module-imports", "text": "ApiKeyModule," }
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:imports", "text": "import { ApiKeyModule } from \"./api-key/api-key.module\";" },
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:module-imports", "text": "ApiKeyModule," }
   ],
   "instructions": [
     "Set API_KEYS in .env (comma-separated).",

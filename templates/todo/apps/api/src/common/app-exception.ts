@@ -1,12 +1,4 @@
-// Stable, language-independent error codes. The frontend branches on `code`,
-// not on the human-readable message.
-export class AppException extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-    readonly statusCode = 400,
-  ) {
-    super(message);
-    this.name = "AppException";
-  }
-}
+// AppException is a shared contract (stable, language-independent error `code`
+// the frontend branches on). Re-exported from @podosoft/podokit-contracts so the
+// backend and any other layer reference one definition.
+export { AppException } from "@podosoft/podokit-contracts";

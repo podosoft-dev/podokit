@@ -5,12 +5,20 @@ import { create, assertValidName, type PackageManager } from "./create";
 import { resolveCreateOptions, type Ask } from "./prompt";
 import { templateListText } from "./templates";
 import { addModule, listModules } from "./add";
+import { status, diff, doctor } from "./inspect";
+import { planUpdate, applyUpdate, summarize } from "./update";
+import { eject } from "./eject";
 
 const HELP = `podo — PodoKit project generator
 
 Usage:
   podo create <name> [options]
   podo add <module>
+  podo status              Show version, modules, file tiers, and local edits
+  podo diff                List PodoKit-managed files you have edited
+  podo doctor              Check framework versions against supported ranges
+  podo update [--apply]    Preview (or apply) what a version update would change
+  podo eject <path...>     Take ownership of managed files (update skips them)
 
 Options:
   --template <t> Template to scaffold (see below)
@@ -34,12 +42,14 @@ interface ParsedArgs {
   template?: string;
   dir?: string;
   pm?: PackageManager;
+  from?: string;
+  apply: boolean;
   yes: boolean;
   help: boolean;
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
-  const parsed: ParsedArgs = { help: false, yes: false };
+  const parsed: ParsedArgs = { help: false, yes: false, apply: false };
   const positionals: string[] = [];
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -47,10 +57,14 @@ export function parseArgs(argv: string[]): ParsedArgs {
       parsed.help = true;
     } else if (arg === "-y" || arg === "--yes") {
       parsed.yes = true;
+    } else if (arg === "--apply") {
+      parsed.apply = true;
     } else if (arg === "--template") {
       parsed.template = argv[++i];
     } else if (arg === "--dir") {
       parsed.dir = argv[++i];
+    } else if (arg === "--from") {
+      parsed.from = argv[++i];
     } else if (arg === "--pm") {
       parsed.pm = argv[++i] as PackageManager;
     } else if (arg !== undefined && !arg.startsWith("-")) {
@@ -94,6 +108,124 @@ async function main(argv: string[]): Promise<void> {
       process.stdout.write(`\nAdded ${result.module}.\n`);
       if (result.instructions.length) {
         process.stdout.write(`\nNext steps:\n${result.instructions.map((i) => `  ${i}`).join("\n")}\n`);
+      }
+    } catch (err) {
+      fail((err as Error).message);
+    }
+    return;
+  }
+
+  if (args.command === "status") {
+    try {
+      const s = status(process.cwd());
+      const tiers = `managed ${s.tiers.managed}, assembled ${s.tiers.assembled}, owned ${s.tiers.owned}`;
+      process.stdout.write(
+        `PodoKit ${s.podokitVersion}  (template: ${s.template}, ${s.packageManager})\n` +
+          `Modules: ${s.modules.length ? s.modules.join(", ") : "(none)"}\n` +
+          `Files:   ${tiers}\n` +
+          `Edited:  ${s.drifted.length} managed file(s)${s.missing.length ? `, ${s.missing.length} missing` : ""}\n` +
+          (s.drifted.length ? s.drifted.map((f) => `  ~ ${f}`).join("\n") + "\n" : ""),
+      );
+    } catch (err) {
+      fail((err as Error).message);
+    }
+    return;
+  }
+
+  if (args.command === "diff") {
+    try {
+      const { drifted, missing } = diff(process.cwd());
+      if (!drifted.length && !missing.length) {
+        process.stdout.write("No local edits to PodoKit-managed files.\n");
+      } else {
+        process.stdout.write(
+          [...drifted.map((f) => `edited   ${f}`), ...missing.map((f) => `missing  ${f}`)].join("\n") + "\n",
+        );
+      }
+    } catch (err) {
+      fail((err as Error).message);
+    }
+    return;
+  }
+
+  if (args.command === "doctor") {
+    try {
+      const findings = doctor(process.cwd());
+      if (!findings.length) {
+        process.stdout.write("No known frameworks found to check.\n");
+      } else {
+        for (const f of findings) {
+          const mark = f.ok ? "ok  " : "WARN";
+          process.stdout.write(`${mark} ${f.package} ${f.installed} (supported: ${f.supported})\n`);
+        }
+      }
+      if (findings.some((f) => !f.ok)) {
+        process.stdout.write(
+          "\nSome frameworks are outside the supported range; @podosoft/* extensions may not match.\n",
+        );
+      }
+    } catch (err) {
+      fail((err as Error).message);
+    }
+    return;
+  }
+
+  if (args.command === "update") {
+    const templatesDir = join(__dirname, "templates");
+    try {
+      if (args.apply) {
+        const result = applyUpdate(process.cwd(), templatesDir, { oldTemplatesDir: args.from });
+        process.stdout.write(
+          `Applied: ${result.written.length} written, ${result.removed.length} removed, ` +
+            `${result.merged.length} merged, ${result.conflicts.length} conflict.\n`,
+        );
+        if (result.conflicts.length) {
+          process.stdout.write(
+            "\nResolve the following, then commit:\n" +
+              result.conflicts.map((f) => `  ${f}`).join("\n") +
+              "\n",
+          );
+        }
+        return;
+      }
+      const plan = planUpdate(process.cwd(), templatesDir);
+      const counts = summarize(plan);
+      const shown = plan.changes.filter((c) => c.action !== "up-to-date" && c.action !== "skip");
+      process.stdout.write(
+        `podo update ${plan.fromVersion} -> ${plan.toVersion}  (template: ${plan.template}; modules: ${plan.modules.join(", ") || "none"})\n\n`,
+      );
+      if (!shown.length) {
+        process.stdout.write("Everything is up to date.\n");
+      } else {
+        for (const c of shown) {
+          process.stdout.write(`  ${c.action.padEnd(9)} ${c.path}  (${c.note})\n`);
+        }
+        process.stdout.write(
+          `\n${counts.update} update, ${counts.add} add, ${counts.remove} remove, ${counts.conflict} conflict. ` +
+            `Dry-run — nothing was written. Re-run with --apply to write (use --from <dir> for a 3-way merge).\n`,
+        );
+      }
+    } catch (err) {
+      fail((err as Error).message);
+    }
+    return;
+  }
+
+  if (args.command === "eject") {
+    const targets = argv.filter((a) => !a.startsWith("-")).slice(1);
+    if (!targets.length) {
+      fail("Usage: podo eject <path...>");
+    }
+    try {
+      const result = eject(process.cwd(), targets);
+      if (result.ejected.length) {
+        process.stdout.write(`Ejected (now owned): ${result.ejected.join(", ")}\n`);
+      }
+      if (result.unknown.length) {
+        process.stdout.write(`Not tracked, skipped: ${result.unknown.join(", ")}\n`);
+      }
+      if (!result.ejected.length && !result.unknown.length) {
+        process.stdout.write("Nothing to eject (already owned).\n");
       }
     } catch (err) {
       fail((err as Error).message);

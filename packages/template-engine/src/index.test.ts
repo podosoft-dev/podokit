@@ -2,7 +2,20 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { renderTokens, resolveOutputName, mergePackageJson, copyTemplate, insertAtMarker } from "./index";
+import {
+  renderTokens,
+  resolveOutputName,
+  mergePackageJson,
+  copyTemplate,
+  insertAtMarker,
+  renderTemplate,
+  writeTree,
+  hashContent,
+  removeAtMarker,
+  extractRegion,
+  replaceRegion,
+  threeWayMerge,
+} from "./index";
 
 const created: string[] = [];
 function tmp(): string {
@@ -78,6 +91,80 @@ describe("insertAtMarker", () => {
   });
 });
 
+describe("removeAtMarker", () => {
+  const src = ["imports: [", "    AuthModule,", "    HealthModule,", "  ],"].join("\n");
+  it("removes the first matching line and is idempotent", () => {
+    const once = removeAtMarker(src, "AuthModule,");
+    expect(once).not.toContain("AuthModule,");
+    expect(removeAtMarker(once, "AuthModule,")).toBe(once);
+  });
+  it("inverts insertAtMarker", () => {
+    const withMarker = ["imports: [", "    // podokit:end:module-imports", "  ],"].join("\n");
+    const inserted = insertAtMarker(withMarker, "// podokit:end:module-imports", "AuthModule,");
+    expect(removeAtMarker(inserted, "AuthModule,")).toBe(withMarker);
+  });
+});
+
+describe("fenced regions", () => {
+  const src = [
+    "  imports: [",
+    "    HealthModule,",
+    "    // podokit:begin:module-imports",
+    "    AuthModule,",
+    "    // podokit:end:module-imports",
+    "  ],",
+  ].join("\n");
+
+  it("extractRegion returns the body between fences", () => {
+    const region = extractRegion(src, "module-imports");
+    expect(region?.lines).toEqual(["    AuthModule,"]);
+    expect(region?.indent).toBe("    ");
+  });
+
+  it("extractRegion returns null when a fence is missing", () => {
+    expect(extractRegion(src, "nope")).toBeNull();
+    expect(extractRegion("// podokit:begin:x", "x")).toBeNull();
+  });
+
+  it("replaceRegion rewrites the body and preserves fences with indentation", () => {
+    const out = replaceRegion(src, "module-imports", ["AuthModule,", "RedisModule,"]);
+    expect(out).toContain("    // podokit:begin:module-imports\n    AuthModule,\n    RedisModule,\n    // podokit:end:module-imports");
+    expect(extractRegion(out, "module-imports")?.lines).toEqual(["    AuthModule,", "    RedisModule,"]);
+  });
+
+  it("replaceRegion with an empty body clears the region", () => {
+    expect(extractRegion(replaceRegion(src, "module-imports", []), "module-imports")?.lines).toEqual([]);
+  });
+
+  it("replaceRegion throws when the region is missing", () => {
+    expect(() => replaceRegion(src, "nope", [])).toThrow(/Region not found/);
+  });
+});
+
+describe("threeWayMerge", () => {
+  it("returns next when only next changed", () => {
+    expect(threeWayMerge("a\nb", "a\nb", "a\nB").merged).toBe("a\nB");
+  });
+  it("returns current when only current changed", () => {
+    const r = threeWayMerge("a\nb", "a\nB", "a\nb");
+    expect(r.merged).toBe("a\nB");
+    expect(r.conflicts).toBe(0);
+  });
+  it("merges non-overlapping changes cleanly", () => {
+    // current edits the last line, next edits the first — disjoint
+    const r = threeWayMerge("a\nb\nc", "a\nb\nC", "A\nb\nc");
+    expect(r.conflicts).toBe(0);
+    expect(r.merged).toBe("A\nb\nC");
+  });
+  it("emits git-style markers on overlapping edits", () => {
+    const r = threeWayMerge("a\nb\nc", "a\nX\nc", "a\nY\nc");
+    expect(r.conflicts).toBe(1);
+    expect(r.merged).toContain("<<<<<<< current");
+    expect(r.merged).toContain("=======");
+    expect(r.merged).toContain(">>>>>>> podokit");
+  });
+});
+
 describe("copyTemplate", () => {
   it("renders text files, applies dot- convention, and recurses", () => {
     const src = tmp();
@@ -92,5 +179,48 @@ describe("copyTemplate", () => {
     expect(readFileSync(join(dest, "README.md"), "utf8")).toBe("# demo");
     expect(existsSync(join(dest, ".gitignore"))).toBe(true);
     expect(readFileSync(join(dest, "apps", "info.txt"), "utf8")).toBe("app demo");
+  });
+});
+
+describe("renderTemplate / writeTree", () => {
+  it("renders to an in-memory tree with POSIX paths and dot- convention", () => {
+    const src = tmp();
+    writeFileSync(join(src, "README.md"), "# {{projectName}}");
+    writeFileSync(join(src, "dot-gitignore"), "node_modules");
+    mkdirSync(join(src, "apps"));
+    writeFileSync(join(src, "apps", "info.txt"), "app {{projectName}}");
+
+    const tree = renderTemplate(src, { projectName: "demo" });
+
+    expect([...tree.keys()].sort()).toEqual([".gitignore", "README.md", "apps/info.txt"]);
+    expect(tree.get("README.md")).toEqual({ content: "# demo", text: true });
+    expect(tree.get("apps/info.txt")?.content).toBe("app demo");
+  });
+
+  it("writeTree(renderTemplate(...)) matches copyTemplate on disk", () => {
+    const src = tmp();
+    writeFileSync(join(src, "README.md"), "# {{projectName}}");
+    mkdirSync(join(src, "apps"));
+    writeFileSync(join(src, "apps", "info.txt"), "app {{projectName}}");
+    const viaCopy = join(tmp(), "copy");
+    const viaTree = join(tmp(), "tree");
+
+    copyTemplate(src, viaCopy, { projectName: "x" });
+    writeTree(renderTemplate(src, { projectName: "x" }), viaTree);
+
+    expect(readFileSync(join(viaTree, "apps", "info.txt"), "utf8")).toBe(
+      readFileSync(join(viaCopy, "apps", "info.txt"), "utf8"),
+    );
+  });
+});
+
+describe("hashContent", () => {
+  it("is stable and prefixed", () => {
+    expect(hashContent("hello")).toBe(hashContent("hello"));
+    expect(hashContent("hello")).toMatch(/^sha256:[0-9a-f]{64}$/);
+  });
+  it("differs for different content and matches string/Buffer", () => {
+    expect(hashContent("a")).not.toBe(hashContent("b"));
+    expect(hashContent("a")).toBe(hashContent(Buffer.from("a")));
   });
 });

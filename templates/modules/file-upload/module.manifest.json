@@ -8,8 +8,8 @@
   },
   "env": [],
   "inject": [
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:imports", "text": "import { FilesModule } from \"./files/files.module\";" },
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:module-imports", "text": "FilesModule," }
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:imports", "text": "import { FilesModule } from \"./files/files.module\";" },
+    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:module-imports", "text": "FilesModule," }
   ],
   "instructions": [
     "Start MinIO (or configure AWS S3):  docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml up -d",

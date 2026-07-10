@@ -18,22 +18,22 @@
   "inject": [
     {
       "file": "apps/api/src/auth/auth.ts",
-      "marker": "// podokit:auth-imports",
+      "marker": "// podokit:end:auth-imports",
       "text": "import { admin } from \"better-auth/plugins\";"
     },
     {
       "file": "apps/api/src/auth/auth.ts",
-      "marker": "// podokit:auth-imports",
+      "marker": "// podokit:end:auth-imports",
       "text": "import { ac, roles } from \"./permissions\";"
     },
     {
       "file": "apps/api/src/auth/auth.ts",
-      "marker": "// podokit:auth-plugins",
+      "marker": "// podokit:end:auth-plugins",
       "text": "plugins.push(admin({ defaultRole: \"user\", adminRoles: [\"admin\"], ac, roles }));"
     },
     {
       "file": "apps/api/src/auth/auth.ts",
-      "marker": "// podokit:auth-options",
+      "marker": "// podokit:end:auth-options",
       "text": "trustedOrigins: (process.env.CORS_ORIGIN ?? \"http://localhost:5001\").split(\",\").map((origin) => origin.trim()),\n  databaseHooks: {\n    user: {\n      create: {\n        before: async (user) => ({\n          data: {\n            ...user,\n            role: (process.env.ADMIN_EMAILS ?? \"\")\n              .split(\",\")\n              .map((email) => email.trim().toLowerCase())\n              .includes(user.email.toLowerCase())\n              ? \"admin\"\n              : \"user\",\n          },\n        }),\n      },\n    },\n  },"
     }
   ],

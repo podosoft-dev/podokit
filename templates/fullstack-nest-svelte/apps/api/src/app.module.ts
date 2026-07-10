@@ -4,17 +4,20 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { validateEnv } from "./config/env.validation";
 import { dataSourceOptions } from "./database/data-source";
 import { HealthModule } from "./health/health.module";
-// podokit:imports
+// podokit:begin:imports
+// podokit:end:imports
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     TypeOrmModule.forRoot(dataSourceOptions),
     HealthModule,
-    // podokit:module-imports
+    // podokit:begin:module-imports
+    // podokit:end:module-imports
   ],
   providers: [
-    // podokit:providers
+    // podokit:begin:providers
+    // podokit:end:providers
   ],
 })
 export class AppModule {}

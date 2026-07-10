@@ -1,33 +1,36 @@
 {
   "name": "audit-log",
-  "description": "Audit logging: records who did each mutating request (who/method/path/status) to an audit_logs table — a NestJS interceptor for your own API routes plus a better-auth hook for auth/admin actions (login, ban, role changes, ...). Requires auth.",
+  "description": "Audit logging: records who did each mutating request (who/method/path/status) to an audit_logs table \u2014 a NestJS interceptor for your own API routes plus a better-auth hook for auth/admin actions (login, ban, role changes, ...). Requires auth.",
   "requires": [
     "auth"
   ],
   "targetApp": "api",
   "env": [
-    "# audit-log: surfaces the admin Audit log page in the dashboard",
+    "# audit-log: on/off is managed on the admin Settings page (stored in the DB,",
+    "# applied live, no restart). This env var is the fallback default used until an",
+    "# admin sets it \u2014 leave it 'true' so the trail is on out of the box; the DB value",
+    "# (Settings page) overrides it once set.",
     "AUDIT_LOG_ENABLED=true"
   ],
   "inject": [
     {
       "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:imports",
+      "marker": "// podokit:end:imports",
       "text": "import { AuditModule } from \"./audit/audit.module\";"
     },
     {
       "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:module-imports",
+      "marker": "// podokit:end:module-imports",
       "text": "AuditModule,"
     },
     {
       "file": "apps/api/src/auth/auth.ts",
-      "marker": "// podokit:auth-imports",
+      "marker": "// podokit:end:auth-imports",
       "text": "import { auditAfterHook } from \"../audit/audit-hook\";"
     },
     {
       "file": "apps/api/src/auth/auth.ts",
-      "marker": "// podokit:auth-hooks",
+      "marker": "// podokit:end:auth-hooks",
       "text": "hooks.after = auditAfterHook;"
     }
   ],
@@ -35,5 +38,8 @@
     "Run migrations to create the audit_logs table:  npm run migration:run -w <app>-api",
     "Auth/admin actions (login, ban, role changes, session revocation, user CRUD) are recorded via a better-auth hook; your own mutating NestJS routes are recorded by the interceptor.",
     "List recent entries (admin session required):  curl -b cookies.txt localhost:5002/audit-logs"
-  ]
+  ],
+  "dependencies": {
+    "@podosoft/podokit-auth": "^0.1.0"
+  }
 }

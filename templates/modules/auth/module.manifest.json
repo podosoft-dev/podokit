@@ -1,9 +1,11 @@
 {
   "name": "auth",
-  "description": "Full authentication (better-auth): email/password, sessions, and — via config — OAuth and 2FA. Installs a global guard so the API is secure by default; health and /api/auth stay public.",
+  "description": "Full authentication (better-auth): email/password, sessions, and \u2014 via config \u2014 OAuth and 2FA. Installs a global guard so the API is secure by default; health and /api/auth stay public.",
   "requires": [],
   "targetApp": "api",
   "dependencies": {
+    "@podosoft/podokit-auth": "^0.1.0",
+    "@podosoft/podokit-contracts": "^0.1.0",
     "better-auth": "^1.6.23",
     "@thallesp/nestjs-better-auth": "^2.7.0",
     "pg": "^8.12.0",
@@ -17,25 +19,28 @@
     "@types/nodemailer": "^7.0.4"
   },
   "env": [
-    "# ── Auth (better-auth) — BETTER_AUTH_SECRET + URL are required ──",
+    "# \u2500\u2500 Auth (better-auth) \u2014 the only required secrets \u2500\u2500",
+    "# BETTER_AUTH_SECRET also derives the key that encrypts config secrets stored in the",
+    "# DB (OAuth client secrets, SMTP password). Keep it stable and secret; rotating it",
+    "# makes previously-saved DB secrets undecryptable.",
     "BETTER_AUTH_SECRET=change-me-in-production-min-32-characters",
     "BETTER_AUTH_URL=http://localhost:5002",
-    "# Auth features (2FA, magic link, email OTP, username, multi-session, phone number)",
-    "# are managed on the admin Settings page (stored in the DB; defaults seeded by migration).",
-    "# --- Optional / development ---",
-    "# Email (password reset + verification). Local dev targets Mailpit (docker compose",
-    "# --profile dev up), which captures mail at http://localhost:8025.",
-    "SMTP_HOST=localhost",
-    "SMTP_PORT=1025",
-    "MAIL_FROM=PodoKit <no-reply@example.com>",
-    "# Phone-number SMS. In production point this at your SMS provider's HTTP API; in",
-    "# local dev it targets the SMS sink (docker compose --profile dev up) on port 8095.",
+    "# Everything below is OPTIONAL. OAuth providers, SMTP, and the server-enforced",
+    "# toggles (email verification, breached-password check, self-delete) \u2014 plus the",
+    "# feature flags \u2014 are configured on the admin Settings page, stored encrypted in",
+    "# the DB and applied live (no restart). These env vars still work as a fallback/",
+    "# override (e.g. for secrets-manager injection in production); the DB takes",
+    "# precedence when set.",
+    "# --- Optional overrides / local development ---",
+    "# Email (Mailpit in local dev: docker compose --profile dev up \u2192 http://localhost:8025)",
+    "# SMTP_HOST=localhost",
+    "# SMTP_PORT=1025",
+    "# MAIL_FROM=PodoKit <no-reply@example.com>",
+    "# Phone-number SMS webhook (dev: SMS sink on port 8095)",
     "# SMS_WEBHOOK_URL=http://localhost:8095/sms",
-    "# Reject breached passwords via Have I Been Pwned (calls the public range API)",
-    "AUTH_HIBP=false",
-    "# Require new sign-ups to verify their email before signing in",
-    "AUTH_EMAIL_VERIFICATION=false",
-    "# OAuth (optional) — set a provider's id+secret to enable it",
+    "# AUTH_HIBP=false",
+    "# AUTH_EMAIL_VERIFICATION=false",
+    "# AUTH_ALLOW_DELETE=false",
     "# GOOGLE_CLIENT_ID=",
     "# GOOGLE_CLIENT_SECRET=",
     "# GITHUB_CLIENT_ID=",
@@ -44,45 +49,56 @@
   "inject": [
     {
       "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:imports",
+      "marker": "// podokit:end:imports",
       "text": "import { APP_GUARD } from \"@nestjs/core\";"
     },
     {
       "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:imports",
+      "marker": "// podokit:end:imports",
       "text": "import { AuthModule, AuthGuard } from \"@thallesp/nestjs-better-auth\";"
     },
     {
       "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:imports",
-      "text": "import { auth } from \"./auth/auth\";"
+      "marker": "// podokit:end:imports",
+      "text": "import { authRuntime } from \"./auth/auth-provider\";"
     },
     {
       "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:imports",
+      "marker": "// podokit:end:imports",
       "text": "import { AccountModule } from \"./account/account.module\";"
     },
     {
       "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:module-imports",
-      "text": "AuthModule.forRoot(auth),"
+      "marker": "// podokit:end:imports",
+      "text": "import { AuthConfigModule } from \"./auth-config/auth-config.module\";"
     },
     {
       "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:module-imports",
+      "marker": "// podokit:end:module-imports",
+      "text": "AuthModule.forRoot(authRuntime),"
+    },
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:end:module-imports",
       "text": "AccountModule,"
     },
     {
       "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:providers",
+      "marker": "// podokit:end:module-imports",
+      "text": "AuthConfigModule,"
+    },
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:end:providers",
       "text": "{ provide: APP_GUARD, useClass: AuthGuard },"
     }
   ],
   "instructions": [
-    "Set BETTER_AUTH_SECRET in .env (>= 32 chars).",
+    "Set BETTER_AUTH_SECRET in .env (>= 32 chars). This also derives the key that encrypts config secrets stored in the DB, so keep it stable and secret.",
     "Create the auth tables:  npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts",
+    "Create the app tables (auth_config, app_setting):  npm run migration:run",
     "Sign up:  curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-up/email -H 'content-type: application/json' -d '{\"email\":\"a@example.com\",\"password\":\"password123\",\"name\":\"A\"}'",
     "Call a protected route with the session:  curl -b cookies.txt localhost:5002/account/me",
-    "Everything is now protected by default; mark public routes with @Public(). Enable OAuth by setting a provider's env vars. Manage auth features (2FA, magic link, OTP, username, multi-session, phone number) on the admin Settings page."
+    "Everything is protected by default; mark public routes with @Public(). Configure OAuth (Google/GitHub), SMTP, and server-enforced toggles on the admin Settings page \u2014 stored encrypted in the DB and applied live (no restart). Environment variables (GOOGLE_CLIENT_*, SMTP_*, AUTH_*) still work as an optional fallback/override."
   ]
 }

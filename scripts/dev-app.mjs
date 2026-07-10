@@ -58,6 +58,20 @@ for (const mod of modules) {
   run("node", [join(repoRoot, "packages/cli/dist/index.js"), "add", mod], target);
 }
 
+// Pin the unpublished @podosoft packages to their local builds via root npm
+// overrides, so nested resolution (e.g. api-client's dependency on contracts)
+// also uses the local copy instead of hitting the registry.
+const rootPkgPath = join(target, "package.json");
+const rootPkg = JSON.parse(readFileSync(rootPkgPath, "utf8"));
+rootPkg.overrides = {
+  ...(rootPkg.overrides ?? {}),
+  "@podosoft/podokit-contracts": `file:${join(repoRoot, "packages/contracts")}`,
+  "@podosoft/podokit-auth": `file:${join(repoRoot, "packages/podokit-auth")}`,
+  "@podosoft/podokit-api-client": `file:${join(repoRoot, "packages/api-client")}`,
+};
+writeFileSync(rootPkgPath, `${JSON.stringify(rootPkg, null, 2)}\n`);
+console.log("• pinned local @podosoft/podokit-contracts + api-client via overrides");
+
 console.log("• npm install…");
 run("npm", ["install", "--no-audit", "--no-fund"], target);
 

@@ -24,35 +24,9 @@ export interface ApiClientOptions {
  * so UI never offers an endpoint the server didn't enable. Single source of truth
  * for the shape — the backend controller and every SvelteKit loader import it.
  */
-export interface Capabilities {
-  twoFactor: boolean;
-  providers: string[];
-  deleteAccount: boolean;
-  auditLog: boolean;
-  emailVerification: boolean;
-  /** Reject passwords found in known breaches (Have I Been Pwned) on sign-up/change. */
-  passwordBreachCheck: boolean;
-  /** Passwordless sign-in via an emailed magic link. */
-  magicLink: boolean;
-  /** Passwordless sign-in via an emailed one-time code. */
-  emailOtp: boolean;
-  /** Sign in with a username instead of an email. */
-  username: boolean;
-  /** Hold several signed-in accounts in one browser and switch between them. */
-  multiSession: boolean;
-  /** Register and verify a phone number (SMS OTP). */
-  phoneNumber: boolean;
-  /** Issue and manage personal API keys. */
-  apiKey: boolean;
-  /** Register passkeys (WebAuthn) for passwordless sign-in. */
-  passkey: boolean;
-  /** Organizations: multi-tenant teams with members and invitations. */
-  organization: boolean;
-  /** Act as an OIDC identity provider (issue tokens to registered clients). */
-  oidcProvider: boolean;
-  /** Assignable role names (access-control). */
-  roles: string[];
-}
+// Capabilities is a shared contract; re-exported so existing frontend imports
+// (`from "@podosoft/podokit-api-client"`) keep working.
+export type { Capabilities } from "@podosoft/podokit-contracts";
 
 /** Error thrown when the API returns the standard error envelope or a non-2xx status. */
 export class ApiError extends Error {

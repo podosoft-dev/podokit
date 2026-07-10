@@ -47,7 +47,7 @@ describe("addModule (auth / better-auth)", () => {
     expect(apiPkg.dependencies["@thallesp/nestjs-better-auth"]).toBeDefined();
     // secure-by-default: global guard wired
     const appModule = readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8");
-    expect(appModule).toContain("AuthModule.forRoot(auth),");
+    expect(appModule).toContain("AuthModule.forRoot(authRuntime),");
     expect(appModule).toContain("{ provide: APP_GUARD, useClass: AuthGuard },");
     // the demo /account controller is registered via its module
     expect(appModule).toContain("AccountModule,");
@@ -55,6 +55,11 @@ describe("addModule (auth / better-auth)", () => {
     expect(readFileSync(join(project, "apps/api/src/health/health.controller.ts"), "utf8")).toContain("@Public()");
     // env example appended
     expect(readFileSync(join(project, ".env.example"), "utf8")).toContain("BETTER_AUTH_SECRET");
+    // the module is recorded in the manifest for future `podo update`
+    const manifest = JSON.parse(readFileSync(join(project, ".podokit/manifest.json"), "utf8")) as {
+      modules: { name: string }[];
+    };
+    expect(manifest.modules.map((m) => m.name)).toContain("auth");
   });
 
   it("is idempotent for wiring when applied twice", () => {
@@ -62,7 +67,16 @@ describe("addModule (auth / better-auth)", () => {
     addModule({ projectRoot: project, module: "auth", modulesDir: MODULES });
     addModule({ projectRoot: project, module: "auth", modulesDir: MODULES });
     const appModule = readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8");
-    expect(appModule.match(/AuthModule\.forRoot\(auth\),/g)?.length).toBe(1);
+    // wiring stays singular
+    expect(appModule.match(/AuthModule\.forRoot\(authRuntime\),/g)?.length).toBe(1);
+    // fenced regions stay intact and singular (injection lands inside them)
+    expect(appModule.match(/\/\/ podokit:begin:module-imports/g)?.length).toBe(1);
+    expect(appModule.match(/\/\/ podokit:end:module-imports/g)?.length).toBe(1);
+    const region = appModule.slice(
+      appModule.indexOf("// podokit:begin:module-imports"),
+      appModule.indexOf("// podokit:end:module-imports"),
+    );
+    expect(region).toContain("AuthModule.forRoot(authRuntime),");
   });
 
   it("rejects an unknown module", () => {

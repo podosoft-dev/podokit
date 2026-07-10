@@ -57,3 +57,41 @@ test("sending a verification email is audited", async ({ playwright }) => {
   expect(entries.some((e) => e.action === "auth.verification_sent"), "verification send should be audited").toBeTruthy();
   await admin.dispose();
 });
+
+// Audit logging is a DB-backed on/off toggle (auth_config `server`, applied live).
+// Runs after the recording tests and restores the flag so nothing else is affected.
+test("audit logging honours the DB on/off toggle @smoke", async ({ playwright }) => {
+  const admin = await signedIn(playwright, ADMIN);
+  test.skip((await admin.get("/api/audit-logs")).status() === 404, "audit-log module not installed");
+  const auditLog = async () => (await (await admin.get("/api/account/capabilities")).json()).auditLog as boolean;
+  const recorded = async (label: string) =>
+    ((await (await admin.get("/api/audit-logs")).json()) as Array<{ action: string; targetLabel: string | null }>).some(
+      (e) => e.action === "user.create" && e.targetLabel === label,
+    );
+  const createUser = async (email: string) =>
+    (await (await admin.post("/api/auth/admin/create-user", { data: { email, password: "Podokit3e-Str0ng!pw", name: "T", role: "user" } })).json())?.user?.id as string;
+
+  try {
+    // OFF → the action is not recorded. Wait past the config-store cache TTL so the
+    // audit gate sees the new value (its cache is independent of the capabilities one).
+    await admin.put("/api/account/auth-config", { data: { server: { auditLog: false } } });
+    await expect.poll(auditLog, { timeout: 8000 }).toBe(false);
+    await new Promise((r) => setTimeout(r, 4000));
+    const offEmail = `audit-off-${Date.now()}@example.com`;
+    const offId = await createUser(offEmail);
+    expect(await recorded(offEmail), "no audit entry while disabled").toBe(false);
+    await admin.post("/api/auth/admin/remove-user", { data: { userId: offId } });
+
+    // ON → recording resumes.
+    await admin.put("/api/account/auth-config", { data: { server: { auditLog: true } } });
+    await expect.poll(auditLog, { timeout: 8000 }).toBe(true);
+    await new Promise((r) => setTimeout(r, 4000));
+    const onEmail = `audit-on-${Date.now()}@example.com`;
+    const onId = await createUser(onEmail);
+    expect(await recorded(onEmail), "audit entry recorded once re-enabled").toBe(true);
+    await admin.post("/api/auth/admin/remove-user", { data: { userId: onId } });
+  } finally {
+    await admin.put("/api/account/auth-config", { data: { server: { auditLog: true } } });
+    await admin.dispose();
+  }
+});

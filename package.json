@@ -15,7 +15,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w @podosoft/podokit-template-engine && npm run build -w @podosoft/podokit-api-client && npm run build -w @podosoft/podokit",
+    "build": "npm run build -w @podosoft/podokit-contracts && npm run build -w @podosoft/podokit-auth && npm run build -w @podosoft/podokit-template-engine && npm run build -w @podosoft/podokit-api-client && npm run build -w @podosoft/podokit",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "e2e": "node scripts/e2e-ci.mjs",

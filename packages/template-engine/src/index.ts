@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync, mkdirSync, writeFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { createHash } from "node:crypto";
 
 /** Variables available for token substitution in template files. */
 export type TemplateVars = Record<string, string>;
@@ -33,28 +34,65 @@ function isTextFile(name: string): boolean {
   return name.startsWith("dot-") || TEXT_FILE.test(name);
 }
 
+/** One rendered file in a virtual project tree. `text` files were token-rendered. */
+export interface VfsFile {
+  content: string | Buffer;
+  text: boolean;
+}
+
 /**
- * Recursively copy a template directory to `destDir`, rendering tokens in
- * text files and applying the `dot-` name convention. Directories are created
- * as needed. Binary files are copied verbatim.
+ * A rendered project as an in-memory map of POSIX-relative path → file. Used to
+ * assemble a project (or an old/new template version) without touching disk, so
+ * `podo update` can diff versions before writing anything.
+ */
+export type VfsTree = Map<string, VfsFile>;
+
+/**
+ * Render a template directory into an in-memory {@link VfsTree}: token-render
+ * text files, apply the `dot-` name convention to every path segment, and read
+ * binary files verbatim. Nothing is written to disk.
+ */
+export function renderTemplate(srcDir: string, vars: TemplateVars, prefix = ""): VfsTree {
+  const tree: VfsTree = new Map();
+  for (const entry of readdirSync(srcDir)) {
+    const srcPath = join(srcDir, entry);
+    const relPath = prefix ? `${prefix}/${resolveOutputName(entry)}` : resolveOutputName(entry);
+    if (statSync(srcPath).isDirectory()) {
+      for (const [key, file] of renderTemplate(srcPath, vars, relPath)) tree.set(key, file);
+    } else if (isTextFile(entry)) {
+      tree.set(relPath, { content: renderTokens(readFileSync(srcPath, "utf8"), vars), text: true });
+    } else {
+      tree.set(relPath, { content: readFileSync(srcPath), text: false });
+    }
+  }
+  return tree;
+}
+
+/** Write a {@link VfsTree} to `destDir`, creating parent directories as needed. */
+export function writeTree(tree: VfsTree, destDir: string): void {
+  for (const [relPath, file] of tree) {
+    const destPath = join(destDir, relPath);
+    mkdirSync(dirname(destPath), { recursive: true });
+    writeFileSync(destPath, file.content);
+  }
+}
+
+/**
+ * Recursively copy a template directory to `destDir`, rendering tokens in text
+ * files and applying the `dot-` name convention. Thin wrapper over
+ * {@link renderTemplate} + {@link writeTree}.
  */
 export function copyTemplate(srcDir: string, destDir: string, vars: TemplateVars): void {
   mkdirSync(destDir, { recursive: true });
-  for (const entry of readdirSync(srcDir)) {
-    const srcPath = join(srcDir, entry);
-    const outName = resolveOutputName(entry);
-    const destPath = join(destDir, outName);
-    if (statSync(srcPath).isDirectory()) {
-      copyTemplate(srcPath, destPath, vars);
-      continue;
-    }
-    if (isTextFile(entry)) {
-      const rendered = renderTokens(readFileSync(srcPath, "utf8"), vars);
-      writeFileSync(destPath, rendered);
-    } else {
-      writeFileSync(destPath, readFileSync(srcPath));
-    }
-  }
+  writeTree(renderTemplate(srcDir, vars), destDir);
+}
+
+/**
+ * Content hash used by the generation lockfile to detect user edits. Stable
+ * `sha256:<hex>` over the exact bytes PodoKit last wrote to a file.
+ */
+export function hashContent(content: string | Buffer): string {
+  return `sha256:${createHash("sha256").update(content).digest("hex")}`;
 }
 
 /**
@@ -75,6 +113,155 @@ export function insertAtMarker(content: string, marker: string, text: string): s
   const indent = lines[index]!.match(/^\s*/)?.[0] ?? "";
   lines.splice(index, 0, `${indent}${text}`);
   return lines.join("\n");
+}
+
+/**
+ * Remove the first line equal to `text` (trimmed), the inverse of
+ * {@link insertAtMarker}. No-op if the line is absent (idempotent). Used by
+ * `podo remove` and by update when recomputing a region from scratch.
+ */
+export function removeAtMarker(content: string, text: string): string {
+  const needle = text.trim();
+  const lines = content.split("\n");
+  const index = lines.findIndex((line) => line.trim() === needle);
+  if (index === -1) return content;
+  lines.splice(index, 1);
+  return lines.join("\n");
+}
+
+/** A fenced region located within a file. Line indices are 0-based, exclusive of the fences. */
+export interface Region {
+  /** Body lines between the fences (fence lines excluded). */
+  lines: string[];
+  /** Index of the `begin` fence line. */
+  beginLine: number;
+  /** Index of the `end` fence line. */
+  endLine: number;
+  /** Indentation of the `begin` fence, reused when rewriting the body. */
+  indent: string;
+}
+
+const beginFence = (name: string): string => `// podokit:begin:${name}`;
+const endFence = (name: string): string => `// podokit:end:${name}`;
+
+/**
+ * Locate the fenced region `// podokit:begin:<name>` … `// podokit:end:<name>`.
+ * Returns null if either fence is missing. The region body is everything
+ * between the fence lines, which update recomputes from the module set.
+ */
+export function extractRegion(content: string, name: string): Region | null {
+  const lines = content.split("\n");
+  const beginLine = lines.findIndex((line) => line.includes(beginFence(name)));
+  if (beginLine === -1) return null;
+  const endLine = lines.findIndex((line, i) => i > beginLine && line.includes(endFence(name)));
+  if (endLine === -1) return null;
+  return {
+    lines: lines.slice(beginLine + 1, endLine),
+    beginLine,
+    endLine,
+    indent: lines[beginLine]!.match(/^\s*/)?.[0] ?? "",
+  };
+}
+
+/**
+ * Replace the body of the fenced region `<name>` with `body`, preserving the
+ * fence lines and applying the begin fence's indentation to each body line.
+ * Throws if the region is not found.
+ */
+export function replaceRegion(content: string, name: string, body: string[]): string {
+  const region = extractRegion(content, name);
+  if (!region) {
+    throw new Error(`Region not found: ${name}`);
+  }
+  const indented = body.map((line) => (line.length ? `${region.indent}${line}` : line));
+  const lines = content.split("\n");
+  lines.splice(region.beginLine + 1, region.endLine - region.beginLine - 1, ...indented);
+  return lines.join("\n");
+}
+
+export interface MergeResult {
+  merged: string;
+  conflicts: number;
+}
+
+/** LCS match pairs [aIndex, bIndex] between two line arrays. */
+function lcsMatches(a: string[], b: string[]): Array<[number, number]> {
+  const m = a.length;
+  const n = b.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0));
+  for (let i = m - 1; i >= 0; i -= 1) {
+    for (let j = n - 1; j >= 0; j -= 1) {
+      dp[i]![j] = a[i] === b[j] ? dp[i + 1]![j + 1]! + 1 : Math.max(dp[i + 1]![j]!, dp[i]![j + 1]!);
+    }
+  }
+  const out: Array<[number, number]> = [];
+  let i = 0;
+  let j = 0;
+  while (i < m && j < n) {
+    if (a[i] === b[j]) {
+      out.push([i, j]);
+      i += 1;
+      j += 1;
+    } else if (dp[i + 1]![j]! >= dp[i]![j + 1]!) {
+      i += 1;
+    } else {
+      j += 1;
+    }
+  }
+  return out;
+}
+
+/**
+ * Three-way line merge (diff3). Non-conflicting changes from `next` are applied
+ * on top of `current`; regions changed on both sides against `base` are emitted
+ * as git-style conflict markers. Dependency-free — enough for the small managed
+ * files PodoKit updates.
+ */
+export function threeWayMerge(
+  base: string,
+  current: string,
+  next: string,
+  labels: { current?: string; next?: string } = {},
+): MergeResult {
+  if (current === next) return { merged: current, conflicts: 0 };
+  if (base === current) return { merged: next, conflicts: 0 };
+  if (base === next) return { merged: current, conflicts: 0 };
+
+  const O = base.split("\n");
+  const A = current.split("\n");
+  const B = next.split("\n");
+  const ma = new Map(lcsMatches(O, A));
+  const mb = new Map(lcsMatches(O, B));
+
+  const seq: Array<[number, number, number]> = [[-1, -1, -1]];
+  for (let o = 0; o < O.length; o += 1) {
+    if (ma.has(o) && mb.has(o)) seq.push([o, ma.get(o)!, mb.get(o)!]);
+  }
+  seq.push([O.length, A.length, B.length]);
+
+  const curLabel = labels.current ?? "current";
+  const nextLabel = labels.next ?? "podokit";
+  const out: string[] = [];
+  let conflicts = 0;
+  for (let k = 1; k < seq.length; k += 1) {
+    const [po, pa, pb] = seq[k - 1]!;
+    const [o, a, b] = seq[k]!;
+    const oh = O.slice(po + 1, o);
+    const ah = A.slice(pa + 1, a);
+    const bh = B.slice(pb + 1, b);
+    if (ah.join("\n") === oh.join("\n")) {
+      out.push(...bh);
+    } else if (bh.join("\n") === oh.join("\n")) {
+      out.push(...ah);
+    } else if (ah.join("\n") === bh.join("\n")) {
+      out.push(...ah);
+    } else {
+      conflicts += 1;
+      out.push(`<<<<<<< ${curLabel}`, ...ah, "=======", ...bh, `>>>>>>> ${nextLabel}`);
+    }
+    if (o < O.length) out.push(O[o]!);
+  }
+  return { merged: out.join("\n"), conflicts };
 }
 
 function isPlainObject(value: unknown): value is JsonObject {

@@ -42,6 +42,17 @@ describe("create (integration against templates)", () => {
     expect(existsSync(join(target, ".gitignore"))).toBe(true);
     expect(existsSync(join(target, ".env.example"))).toBe(true);
     expect(readFileSync(join(target, "README.md"), "utf8")).toContain("my-app");
+
+    // generation lockfile is written for future `podo update`
+    const manifest = JSON.parse(readFileSync(join(target, ".podokit", "manifest.json"), "utf8")) as {
+      template: string;
+      answers: Record<string, string>;
+      modules: unknown[];
+    };
+    expect(manifest.template).toBe("base");
+    expect(manifest.answers.projectName).toBe("my-app");
+    expect(manifest.modules).toEqual([]);
+    expect(existsSync(join(target, ".podokit", "files.lock"))).toBe(true);
   });
 
   it("scaffolds the clean fullstack template by default (no domain code)", () => {

@@ -37,7 +37,14 @@ const env = {
 const registry = `http://localhost:${env.REGISTRY_PORT}`;
 const webURL = `http://localhost:${env.WEB_PORT}`;
 const appDir = process.env.APP_DIR ? resolve(process.env.APP_DIR) : mkdtempSync(join(tmpdir(), "podokit-e2e-"));
-const PACKAGES = ["@podosoft/podokit-template-engine", "@podosoft/podokit-api-client", "@podosoft/podokit"];
+// Publish order: contracts first (api-client depends on it), then the rest.
+const PACKAGES = [
+  "@podosoft/podokit-contracts",
+  "@podosoft/podokit-auth",
+  "@podosoft/podokit-template-engine",
+  "@podosoft/podokit-api-client",
+  "@podosoft/podokit",
+];
 
 const children = [];
 function run(cmd, cmdArgs, opts = {}) {
