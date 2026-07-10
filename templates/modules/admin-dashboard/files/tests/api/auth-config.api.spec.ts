@@ -23,12 +23,12 @@ test("admin can enable Google OAuth from the DB and it applies without a restart
 
   // Paste credentials via the admin API.
   const put = await admin.put("/api/account/auth-config", {
-    data: { social: { google: { enabled: true, clientId: "test-id.apps.googleusercontent.com", clientSecret: "GOCSPX-test-secret" } } },
+    data: { social: { google: { enabled: true, clientId: "dummy-google-client-id", clientSecret: "dummy-google-client-secret" } } },
   });
   expect(put.ok()).toBeTruthy();
   const view = await put.json();
   expect(view.social.google.hasSecret).toBe(true);
-  expect(view.social.google.clientId).toBe("test-id.apps.googleusercontent.com");
+  expect(view.social.google.clientId).toBe("dummy-google-client-id");
   expect("clientSecret" in view.social.google).toBe(false); // secret is never returned
 
   // Applied live (no restart): social sign-in now redirects to Google.
@@ -56,7 +56,7 @@ test("admin can add and remove a social provider dynamically @smoke", async ({ p
   const github = () => anon.post("/api/auth/sign-in/social", { data: { provider: "github", callbackURL: `${base}/admin` } });
 
   // Add GitHub (a provider with no env fallback) → applies live, no restart.
-  await admin.put("/api/account/auth-config", { data: { social: { github: { enabled: true, clientId: "gh-test-id", clientSecret: "gh-test-secret" } } } });
+  await admin.put("/api/account/auth-config", { data: { social: { github: { enabled: true, clientId: "dummy-github-client-id", clientSecret: "dummy-github-client-secret" } } } });
   await expect
     .poll(async () => { const r = await github(); return r.ok() ? (((await r.json())?.url as string) ?? "") : ""; }, { timeout: 8000 })
     .toContain("github.com");
