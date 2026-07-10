@@ -126,6 +126,8 @@ Dark mode is handled by [`mode-watcher`](https://github.com/svecosystem/mode-wat
 
 Template files named `dot-<name>` are written as `.<name>` (for example `dot-gitignore` → `.gitignore`). This lets templates ship dotfiles that package managers would otherwise strip.
 
-## Roadmap
+## Add features with modules
 
-Optional, composable modules (`podo add <module>`) — for example PostgreSQL/ORM, Redis, queue+worker, auth, and object storage — are planned so you can grow a project feature by feature. See the repository roadmap for status.
+Grow a project feature by feature with composable modules (`podo add <module>`) —
+auth, admin-dashboard, redis, queue (BullMQ), object storage (S3), file upload,
+rate limiting, SSE, logging, and more. See [modules.md](modules.md).

@@ -23,6 +23,18 @@ The `todo` template (`--template todo`) generates a working todo app (SvelteKit 
 
 ![Generated todo app](https://raw.githubusercontent.com/podosoft-dev/podokit/main/docs/images/todo-app.png)
 
+## Commands
+
+| Command | What it does |
+|---|---|
+| `podo create <name>` | Scaffold a new project from a template |
+| `podo add <module>` | Add a feature module (auth, admin-dashboard, redis, …) to a project |
+| `podo status` | Show the PodoKit version, modules, file tiers, and local edits |
+| `podo diff` | List the PodoKit-managed files you've edited since generation |
+| `podo doctor` | Check framework versions against the supported ranges |
+| `podo update [--apply]` | Preview (or apply) what a version update would change |
+| `podo eject <path…>` | Take ownership of a managed file so updates skip it |
+
 ## Usage
 
 ```
@@ -60,6 +72,25 @@ npx @podosoft/podokit add auth      # full auth (better-auth): email/password, s
 ```
 
 `podo add <module>` overlays files, merges dependencies, appends env vars, and wires the module into the NestJS app. Run `podo add` with no argument to list available modules.
+
+The **`admin-dashboard`** module adds a ready-made admin console on top of `auth` — login/signup pages, user & session management, an audit log, and a Settings page where OAuth providers, SMTP, and server toggles are configured at runtime (stored encrypted in the DB, applied without a restart):
+
+![PodoKit admin dashboard — users](https://raw.githubusercontent.com/podosoft-dev/podokit/main/docs/images/admin-users.png)
+
+## Keep your project up to date
+
+Every generated project records how it was assembled in a committed `.podokit/`
+directory, so it can receive template and module improvements later without
+losing your work:
+
+```bash
+podo status          # version, modules, and which managed files you've edited
+podo update          # preview what a newer PodoKit version would change
+podo update --apply  # apply it: clean updates are written, your edits are 3-way merged
+```
+
+Files you own (routes, your components, shadcn UI) are never touched. See the
+[updating guide](https://github.com/podosoft-dev/podokit/blob/main/docs/updating.md).
 
 ## What you get (`fullstack-nest-svelte`)
 

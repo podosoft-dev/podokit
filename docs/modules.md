@@ -305,10 +305,19 @@ npm run dev
 # open /signup, register an ADMIN_EMAILS address (→ admin), then sign in at /login
 ```
 
-- **/dashboard** — overview.
-- **/dashboard/users** (admin only) — list & search users, ban/unban, set role, revoke sessions.
-- **/dashboard/sessions** — your active sessions (revoke).
-- **/dashboard/account** — profile + change password.
+- **/admin** — overview.
+- **/admin/users** (admin only) — list, filter & search users, ban/unban, set role, revoke sessions, create/delete.
+- **/admin/sessions** (admin only) — active sessions across all users (revoke).
+- **/admin/organizations** (admin only) — organizations, members, and invitations.
+- **/admin/audit** (admin only) — the audit log of security-relevant actions.
+- **/admin/settings** (admin only) — enable/disable sign-in methods and configure OAuth providers, SMTP, and server toggles at runtime (see below).
+- **/admin/account** — profile, password, 2FA, passkeys, API keys, and sessions.
+
+Users & the runtime Settings page:
+
+| Users | Settings — social login (runtime, no restart) |
+| --- | --- |
+| ![Admin users](images/admin-users.png) | ![Admin settings — social login](images/admin-settings-social.png) |
 - Password reset link is logged to the API console in dev; wire a real mailer via `emailAndPassword.sendResetPassword` for production.
 - **i18n**: all pages are localized (English default + Korean); a language switch sits on the login screen and in the dashboard header. Add locales/strings in `apps/web/src/lib/i18n/messages.ts`.
 
@@ -436,8 +445,8 @@ Organizations (multi-tenant teams) come from better-auth, extended where it fall
 Add your own org fields/roles the same way: extend `additionalFields` and the
 `org-permissions.ts` roles, then re-run the better-auth migration.
 
-## Roadmap
+## Keeping modules up to date
 
-More modules are planned — redis, queue (BullMQ), object storage (S3), file
-upload, rate limiting, SSE — so you can grow a project feature by feature. See
-the repository roadmap for status.
+Modules are wired into your project through `.podokit/` fenced regions, so a
+later `podo update` can bring their improvements into a project you've already
+customized. See [updating.md](updating.md).

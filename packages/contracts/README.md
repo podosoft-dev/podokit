@@ -9,6 +9,27 @@ SvelteKit frontend must agree on, in one place so they cannot drift:
 
 Pure types and small classes, zero runtime dependencies.
 
-```ts
-import { AppException, type Capabilities } from "@podosoft/podokit-contracts";
+## Install
+
+```sh
+npm install @podosoft/podokit-contracts
 ```
+
+## Usage
+
+```ts
+import { AppException, type Capabilities, type ErrorEnvelope } from "@podosoft/podokit-contracts";
+
+// backend: throw with a stable, language-independent code
+throw new AppException("EMAIL_TAKEN", "That email is already registered", 409);
+
+// frontend: branch on error.code, not the message
+```
+
+Most apps get these through the generated code and `@podosoft/podokit-api-client`
+rather than importing this package directly.
+
+## License
+
+Apache-2.0
+

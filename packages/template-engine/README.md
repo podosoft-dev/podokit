@@ -41,6 +41,21 @@ Deep-merge two `package.json`-shaped objects: objects merge recursively, arrays 
 
 Map a template file name to its output name (applies the `dot-` convention).
 
+### Assembly & update primitives
+
+These back `podo update` — assembling a project in memory and reconciling it
+with a working copy:
+
+- `renderTemplate(srcDir, vars)` / `writeTree(tree, destDir)` — render a template
+  to an in-memory tree (`VfsTree`) and write a tree to disk.
+- `hashContent(content)` — stable `sha256:` hash used by the generation lockfile.
+- `insertAtMarker` / `removeAtMarker` — idempotently add/remove a wiring line at a
+  `// podokit:` marker.
+- `extractRegion` / `replaceRegion` — read and rewrite the body of a
+  `// podokit:begin:<name>` … `// podokit:end:<name>` fenced region.
+- `threeWayMerge(base, current, next)` — diff3 line merge with git-style conflict
+  markers.
+
 ## License
 
 [Apache-2.0](https://github.com/podosoft-dev/podokit/blob/main/LICENSE)

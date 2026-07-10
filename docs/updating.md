@@ -27,6 +27,44 @@ Run these inside a generated project:
 - `podo doctor` — checks the framework versions your app declares against the
   ranges the matching PodoKit line supports.
 
+## Updating to a newer PodoKit
+
+`podo update` rebuilds the current PodoKit version of your project **in memory**
+(from the same template, modules, and answers recorded in `.podokit/`) and
+compares it to your working copy, so it can update the toolkit's files while
+keeping your changes.
+
+```bash
+podo update            # dry-run: report what would change (writes nothing)
+podo update --apply    # apply the changes
+```
+
+What each tier does on `--apply`:
+
+- **managed / assembled** files you have *not* edited are updated to the new
+  version. Assembled files are recomputed from the module set (the
+  `// podokit:begin…end` fences are re-derived, not line-merged).
+- files you *have* edited are **3-way merged**: pass the previous version's
+  templates with `--from <dir>` for a real merge; without a base, an edited file
+  is left untouched and reported as a conflict (never clobbered). Conflicts are
+  written with standard `<<<<<<< / ======= / >>>>>>>` markers for you to resolve.
+- **owned** files (your routes, components, shadcn UI) are never written.
+
+The dry-run prints a per-file plan (`update` / `add` / `remove` / `conflict`) so
+there are no surprises.
+
+## Taking ownership — `podo eject`
+
+If you want to fully own a managed file and stop updates from touching it:
+
+```bash
+podo eject apps/api/src/main.ts
+```
+
+This flips the file's tier to `owned` in `.podokit/files.lock`. It still shows
+up in `podo diff`, but `podo update` will skip it from then on. Unlike a
+one-way project eject, this is per-file and reversible.
+
 ## Framework compatibility
 
 PodoKit ships its reusable pieces as `@podosoft/*` packages that plug into the
