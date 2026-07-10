@@ -44,9 +44,12 @@ test("create an org with a non-ascii name, a parent, and a manager @smoke", asyn
   // child row shows the parent org name
   await expect(page.getByRole("row", { name: new RegExp(child) })).toContainText(parent);
 
-  // clean up both
-  for (const n of [child, parent]) {
-    await page.getByRole("row", { name: new RegExp(n) }).getByRole("button", { name: "Delete" }).click();
-    await expect(page.getByText("Organization deleted").first()).toBeVisible();
-  }
+  // Clean up. Delete the child first (its row also shows the parent name, so a
+  // parent-name match isn't unique until the child is gone), and wait for the
+  // child row to disappear before removing the parent.
+  await page.getByRole("row", { name: new RegExp(child) }).getByRole("button", { name: "Delete" }).click();
+  await expect(page.getByText("Organization deleted").first()).toBeVisible();
+  await expect(page.getByRole("cell", { name: child, exact: true })).toHaveCount(0);
+  await page.getByRole("row", { name: new RegExp(parent) }).getByRole("button", { name: "Delete" }).first().click();
+  await expect(page.getByText("Organization deleted").first()).toBeVisible();
 });

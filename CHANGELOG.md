@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [0.5.1] - 2026-07-10
 
+### Fixed
+- Organizations e2e: delete the child org before the parent (a child row also
+  shows the parent's name, so the parent-name row match wasn't unique), fixing a
+  flaky `strict mode violation` in the shipped Playwright spec.
+
 ### Changed
 - Documentation refresh for v0.5.0. The root and CLI READMEs now cover the
   `podo status`/`diff`/`doctor`/`update`/`eject` commands and the
