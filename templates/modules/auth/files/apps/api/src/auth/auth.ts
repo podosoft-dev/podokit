@@ -5,7 +5,7 @@ import { sendSms } from "../sms/sms";
 import { createFeatureGate } from "./feature-gate";
 import { orgAc, orgRoles } from "./org-permissions";
 import { pool } from "./db";
-import { type AuthConfig, envAuthConfig, SUPPORTED_PROVIDER_IDS } from "./auth-config";
+import { type AuthConfig, envAuthConfig, SUPPORTED_PROVIDER_IDS } from "@podosoft/podokit-auth";
 import { apiKey } from "@better-auth/api-key";
 import { passkey } from "@better-auth/passkey";
 import { oauthProvider } from "@better-auth/oauth-provider";

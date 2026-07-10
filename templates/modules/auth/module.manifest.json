@@ -1,9 +1,10 @@
 {
   "name": "auth",
-  "description": "Full authentication (better-auth): email/password, sessions, and — via config — OAuth and 2FA. Installs a global guard so the API is secure by default; health and /api/auth stay public.",
+  "description": "Full authentication (better-auth): email/password, sessions, and \u2014 via config \u2014 OAuth and 2FA. Installs a global guard so the API is secure by default; health and /api/auth stay public.",
   "requires": [],
   "targetApp": "api",
   "dependencies": {
+    "@podosoft/podokit-auth": "^0.1.0",
     "@podosoft/podokit-contracts": "^0.1.0",
     "better-auth": "^1.6.23",
     "@thallesp/nestjs-better-auth": "^2.7.0",
@@ -18,20 +19,20 @@
     "@types/nodemailer": "^7.0.4"
   },
   "env": [
-    "# ── Auth (better-auth) — the only required secrets ──",
+    "# \u2500\u2500 Auth (better-auth) \u2014 the only required secrets \u2500\u2500",
     "# BETTER_AUTH_SECRET also derives the key that encrypts config secrets stored in the",
     "# DB (OAuth client secrets, SMTP password). Keep it stable and secret; rotating it",
     "# makes previously-saved DB secrets undecryptable.",
     "BETTER_AUTH_SECRET=change-me-in-production-min-32-characters",
     "BETTER_AUTH_URL=http://localhost:5002",
     "# Everything below is OPTIONAL. OAuth providers, SMTP, and the server-enforced",
-    "# toggles (email verification, breached-password check, self-delete) — plus the",
-    "# feature flags — are configured on the admin Settings page, stored encrypted in",
+    "# toggles (email verification, breached-password check, self-delete) \u2014 plus the",
+    "# feature flags \u2014 are configured on the admin Settings page, stored encrypted in",
     "# the DB and applied live (no restart). These env vars still work as a fallback/",
     "# override (e.g. for secrets-manager injection in production); the DB takes",
     "# precedence when set.",
     "# --- Optional overrides / local development ---",
-    "# Email (Mailpit in local dev: docker compose --profile dev up → http://localhost:8025)",
+    "# Email (Mailpit in local dev: docker compose --profile dev up \u2192 http://localhost:8025)",
     "# SMTP_HOST=localhost",
     "# SMTP_PORT=1025",
     "# MAIL_FROM=PodoKit <no-reply@example.com>",
@@ -98,6 +99,6 @@
     "Create the app tables (auth_config, app_setting):  npm run migration:run",
     "Sign up:  curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-up/email -H 'content-type: application/json' -d '{\"email\":\"a@example.com\",\"password\":\"password123\",\"name\":\"A\"}'",
     "Call a protected route with the session:  curl -b cookies.txt localhost:5002/account/me",
-    "Everything is protected by default; mark public routes with @Public(). Configure OAuth (Google/GitHub), SMTP, and server-enforced toggles on the admin Settings page — stored encrypted in the DB and applied live (no restart). Environment variables (GOOGLE_CLIENT_*, SMTP_*, AUTH_*) still work as an optional fallback/override."
+    "Everything is protected by default; mark public routes with @Public(). Configure OAuth (Google/GitHub), SMTP, and server-enforced toggles on the admin Settings page \u2014 stored encrypted in the DB and applied live (no restart). Environment variables (GOOGLE_CLIENT_*, SMTP_*, AUTH_*) still work as an optional fallback/override."
   ]
 }

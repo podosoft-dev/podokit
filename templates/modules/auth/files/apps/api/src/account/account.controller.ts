@@ -7,7 +7,7 @@ import { FEATURE_FLAGS, SettingsService, type FeatureFlag } from "../settings/se
 import { ROLE_NAMES } from "../auth/permissions";
 import { auth } from "../auth/auth";
 import { pool } from "../auth/db";
-import { createConfigStore } from "../auth/config-store";
+import { createConfigStore } from "@podosoft/podokit-auth";
 import type { Capabilities } from "@podosoft/podokit-contracts";
 
 // Reads OAuth/server-toggle state (DB-first, env fallback) for capabilities.

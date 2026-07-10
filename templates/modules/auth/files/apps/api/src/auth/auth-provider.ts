@@ -1,6 +1,6 @@
 import { auth as bootstrapAuth, buildAuth } from "./auth";
 import { pool } from "./db";
-import { createConfigStore } from "./config-store";
+import { createConfigStore } from "@podosoft/podokit-auth";
 
 // Runtime auth instance that rebuilds when the DB config changes, so admin edits
 // (OAuth credentials, SMTP, server-enforced toggles) apply WITHOUT a restart.

@@ -2,8 +2,7 @@ import { BadRequestException, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { AuthConfigRow } from "./auth-config.entity";
-import { encryptSecret } from "../auth/secret";
-import { envAuthConfig, socialKey, SUPPORTED_PROVIDER_IDS, SUPPORTED_SOCIAL_PROVIDERS } from "../auth/auth-config";
+import { encryptSecret, envAuthConfig, socialKey, SUPPORTED_PROVIDER_IDS, SUPPORTED_SOCIAL_PROVIDERS } from "@podosoft/podokit-auth";
 
 /** One configured social provider as shown to the admin (no secret — just a
  *  `hasSecret` flag). */

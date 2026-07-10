@@ -66,6 +66,7 @@ const rootPkg = JSON.parse(readFileSync(rootPkgPath, "utf8"));
 rootPkg.overrides = {
   ...(rootPkg.overrides ?? {}),
   "@podosoft/podokit-contracts": `file:${join(repoRoot, "packages/contracts")}`,
+  "@podosoft/podokit-auth": `file:${join(repoRoot, "packages/podokit-auth")}`,
   "@podosoft/podokit-api-client": `file:${join(repoRoot, "packages/api-client")}`,
 };
 writeFileSync(rootPkgPath, `${JSON.stringify(rootPkg, null, 2)}\n`);

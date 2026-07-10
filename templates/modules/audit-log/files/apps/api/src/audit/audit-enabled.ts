@@ -1,5 +1,5 @@
 import { pool } from "../auth/db";
-import { createConfigStore } from "../auth/config-store";
+import { createConfigStore } from "@podosoft/podokit-auth";
 
 // Audit logging is an admin-managed, DB-backed server toggle (auth_config `server`
 // row, env fallback AUDIT_LOG_ENABLED), read through the shared config store's

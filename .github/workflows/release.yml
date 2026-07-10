@@ -37,6 +37,17 @@ jobs:
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish auth
+        run: |
+          PKG=@podosoft/podokit-auth
+          VER=$(node -p "require('./packages/podokit-auth/package.json').version")
+          if npm view "$PKG@$VER" version >/dev/null 2>&1; then
+            echo "$PKG@$VER already published — skipping"
+          else
+            npm publish -w "$PKG"
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Publish template-engine
         run: |
           PKG=@podosoft/podokit-template-engine

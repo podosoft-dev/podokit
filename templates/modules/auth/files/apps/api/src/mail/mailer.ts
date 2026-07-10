@@ -1,6 +1,6 @@
 import nodemailer, { type Transporter } from "nodemailer";
 import { pool } from "../auth/db";
-import { createConfigStore, type SmtpConfig } from "../auth/config-store";
+import { createConfigStore, type SmtpConfig } from "@podosoft/podokit-auth";
 
 // SMTP is admin-configurable in the DB (auth_config), falling back to SMTP_* env,
 // and applied live: the transport is rebuilt when the config changes (short TTL),
