@@ -508,6 +508,36 @@ npx @podosoft/podokit add markdown
   `{@html}` raw Markdown output.
 
 
+### `content-collection`
+
+Config-driven content collections (services, solutions, portfolio, team, …) on one
+`collection_item` table keyed by a collection name.
+
+```bash
+npx @podosoft/podokit add content-collection
+```
+
+- Public: `GET /collections/:collection`, `GET /collections/:collection/:slug`
+  (published only). Admin CRUD under `/admin/collections`.
+- Managed `$lib/content-collection` (card grid + detail) + owned public/admin pages;
+  registers a **Collections** admin nav entry. Renders `body` with the `markdown` module.
+- Extend an item with project-specific fields via its `metadata` (jsonb) — no migration.
+
+### `blog`
+
+Posts with a Markdown body, tags, cover image and draft/published status.
+
+```bash
+npx @podosoft/podokit add blog
+```
+
+- Public: `GET /blog` (`?tag=` filter), `GET /blog/:slug`, `GET /blog/rss.xml`. Admin
+  CRUD under `/admin/blog`.
+- Managed `$lib/blog` (list + detail) + owned public/admin pages; registers a **Blog**
+  admin nav entry. Renders `body` with the `markdown` module.
+- Extend a post via its `metadata` (jsonb) — no migration.
+
+
 ## Adding admin nav & settings (module registry)
 
 When `admin-dashboard` is installed, a module can add its own **sidebar nav entry**

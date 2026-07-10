@@ -1,0 +1,60 @@
+{
+  "manifestVersion": 1,
+  "name": "blog",
+  "description": "A blog: posts with Markdown body, tags, cover image and draft/published status. Public list (tag filter) + /blog/:slug + RSS feed, admin CRUD. Posts carry a jsonb metadata field for project-specific fields.",
+  "requires": [
+    "admin-dashboard",
+    "file-upload",
+    "markdown"
+  ],
+  "targetApp": "api",
+  "inject": [
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:end:imports",
+      "text": "import { BlogModule } from \"./blog/blog.module\";"
+    },
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:end:module-imports",
+      "text": "BlogModule,"
+    },
+    {
+      "file": "apps/web/src/routes/+layout.server.ts",
+      "marker": "// podokit:end:public-paths",
+      "text": "  \"/blog\","
+    },
+    {
+      "file": "apps/web/src/lib/admin/registry.svelte.ts",
+      "marker": "// podokit:end:admin-nav-imports",
+      "text": "import NewspaperIcon from \"@lucide/svelte/icons/newspaper\";"
+    },
+    {
+      "file": "apps/web/src/lib/admin/registry.svelte.ts",
+      "marker": "// podokit:end:admin-nav-entries",
+      "text": "  { href: \"/admin/blog\", label: (t) => t.blog.nav, icon: NewspaperIcon, adminOnly: true },"
+    },
+    {
+      "file": "apps/web/src/lib/i18n/messages.ts",
+      "marker": "// podokit:end:messages-en",
+      "text": "  blog: { nav: \"Blog\", title_: \"Blog\", subtitle: \"Write and publish posts.\", add: \"New post\", editTitle: \"Edit post\", title: \"Title\", slug: \"Slug\", excerpt: \"Excerpt\", body: \"Body (Markdown)\", author: \"Author\", tags: \"Tags (comma-separated)\", status: \"Status\", coverImage: \"Cover image URL\", edit: \"Edit\", delete: \"Delete\", cancel: \"Cancel\", save: \"Save\", saving: \"Saving…\", saved: \"Saved\", deleted: \"Deleted\", saveError: \"Failed to save\", loading: \"Loading…\", empty: \"No posts yet.\", published: \"Published\", total: \"{count} posts\" },"
+    },
+    {
+      "file": "apps/web/src/lib/i18n/messages.ts",
+      "marker": "// podokit:end:messages-ko",
+      "text": "  blog: { nav: \"블로그\", title_: \"블로그\", subtitle: \"글을 작성하고 발행합니다.\", add: \"새 글\", editTitle: \"글 편집\", title: \"제목\", slug: \"슬러그\", excerpt: \"요약\", body: \"본문(마크다운)\", author: \"작성자\", tags: \"태그(쉼표 구분)\", status: \"상태\", coverImage: \"커버 이미지 URL\", edit: \"편집\", delete: \"삭제\", cancel: \"취소\", save: \"저장\", saving: \"저장 중…\", saved: \"저장됨\", deleted: \"삭제됨\", saveError: \"저장 실패\", loading: \"불러오는 중…\", empty: \"글이 없습니다.\", published: \"발행일\", total: \"{count}개 글\" },"
+    },
+    {
+      "file": "AGENTS.md",
+      "marker": "<!-- podokit:end:agents-modules -->",
+      "optional": true,
+      "text": "### blog\n- Posts: public `GET /blog` (`?tag=` filter), `GET /blog/:slug`, `GET /blog/rss.xml`; admin CRUD under `/admin/blog`. Render `body` with the markdown module's `<Markdown/>`.\n- Extend a post with project-specific fields via its `metadata` (jsonb) — no migration.\n"
+    }
+  ],
+  "instructions": [
+    "Create the post table:  npm run migration:run -w <app>-api",
+    "Public list:  curl localhost:5002/api/blog   ·   RSS:  curl localhost:5002/api/blog/rss.xml",
+    "Write posts in the admin UI (/admin/blog).",
+    "Add project-specific fields per post in its metadata (jsonb) — no schema change needed."
+  ]
+}
