@@ -1,0 +1,41 @@
+{
+  "name": "@podosoft/podokit-auth",
+  "version": "0.1.0",
+  "description": "PodoKit's DB-backed auth configuration pipeline: envelope-encrypted secrets, the AuthConfig model, and a config store on top of better-auth.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/podosoft-dev/podokit.git",
+    "directory": "packages/podokit-auth"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "peerDependencies": {
+    "pg": "^8"
+  },
+  "devDependencies": {
+    "pg": "^8.12.0",
+    "@types/pg": "^8.11.10"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  }
+}
