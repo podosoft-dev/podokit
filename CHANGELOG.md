@@ -39,12 +39,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   watch` gives instant web HMR and restarts the api on change. A `devcontainer.json`
   lets editors and AI agents work inside the container. The host `npm run dev` loop
   still works unchanged. See the [development guide](docs/development.md).
+- **Site settings.** admin-dashboard's `/admin/settings` is now split into
+  **General** and **Authentication** tabs. The General tab manages the site name
+  (applied live to the browser tab title), a browser favicon uploaded to object
+  storage, and site metadata — description, support email, footer, brand color,
+  terms/privacy URLs, locale, timezone — plus maintenance-mode and signup toggles.
+  Values are stored server-side (`/site/settings`) and applied without a rebuild.
+  Requires the `object-storage-s3` module.
+- **Default site title and favicon.** New apps ship a real browser `<title>` and a
+  PodoKit SVG favicon instead of the framework defaults.
+- A **back-to-home** link in the admin sidebar footer returns to the landing page.
+
+### Changed
+- **Faster dev reload.** The generated API's `npm run dev` uses Nest's SWC builder
+  for near-instant recompiles; the production `nest build` still uses tsc.
 
 ### Fixed
 - **`file-upload` module build.** The generated app's API tsconfig restricts
   `types` to `["node"]`, which suppressed `@types/multer`'s global augmentation and
   broke the build on `Express.Multer.File`. The files controller now loads it
   explicitly with a `/// <reference types="multer" />` directive.
+- **shadcn-svelte tabs.** The vendored tabs primitive targeted a `data-active`
+  attribute that current bits-ui doesn't emit, so the active tab lost its
+  highlight; restored the official component (`data-[state=active]`).
+- **General settings layout** now fills the content width responsively instead of
+  being left-skewed on wide screens.
+- **Containerized dev builds.** `Dockerfile.dev` resolves dependencies inside the
+  container (no host lockfile copy) so platform-specific optional binaries like
+  `@swc/cli` install correctly on Linux.
 
 ## [0.5.1] - 2026-07-10
 
