@@ -20,6 +20,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Module injections can be marked `optional`, so they skip (instead of failing)
   when a target file is absent — used for the `AGENTS.md` guidance injections.
 
+### Fixed
+- **`file-upload` module build.** The generated app's API tsconfig restricts
+  `types` to `["node"]`, which suppressed `@types/multer`'s global augmentation and
+  broke the build on `Express.Multer.File`. The files controller now loads it
+  explicitly with a `/// <reference types="multer" />` directive.
+
 ## [0.5.1] - 2026-07-10
 
 ### Fixed

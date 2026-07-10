@@ -142,6 +142,11 @@ describe("addModule (auth / better-auth)", () => {
     // both modules' files are present
     expect(existsSync(join(project, "apps/api/src/files/files.controller.ts"))).toBe(true);
     expect(existsSync(join(project, "apps/api/src/storage/storage.service.ts"))).toBe(true);
+    // the controller loads @types/multer's global augmentation explicitly, since the
+    // api tsconfig's `types: ["node"]` allowlist would otherwise suppress it and break
+    // the build on `Express.Multer.File`.
+    const filesController = readFileSync(join(project, "apps/api/src/files/files.controller.ts"), "utf8");
+    expect(filesController).toContain('/// <reference types="multer" />');
     // both are wired
     const appModule = readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8");
     expect(appModule).toContain("FilesModule,");
