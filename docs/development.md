@@ -39,14 +39,30 @@ npm install                                     # picks up the new local build
 
 ## Running the generated app
 
+There are **two ways** to run a generated app while you develop. Both are supported;
+pick per situation.
+
+| | **A. Host process** (traditional) | **B. Containerized** (`compose.dev.yaml`) |
+|---|---|---|
+| App (web/api) | run on your host (`npm run dev`) | run in containers |
+| Databases | Docker, **host ports published** (5432, 6379, 9000) | Docker, **no host ports** (internal only) |
+| Reach the app | `localhost:5001` / `:5002` | `http://app.localhost` (one Traefik port) |
+| Multiple projects at once | ports collide — you remap by hand | never collide — only Traefik binds a port |
+| Editors / AI agents | on the host | on the host **or inside the container** (`.devcontainer/`) |
+| Best for | quick single-project work | many projects at once; dev/prod (k3s Traefik) parity |
+
+### A. Host process (traditional)
+
 ```bash
 cd /tmp/myapp
 docker compose -f infra/docker/docker-compose.yml up -d                   # runtime: postgres
 docker compose -f infra/docker/docker-compose.yml --profile dev up -d     # + dev tools (mailpit, sms-sink)
 # if the app uses the auth module, create the auth tables:
 npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
-npm run dev                    # API + web
+npm run dev                    # API + web on localhost:5001 / :5002
 ```
+
+Approach **B** is documented under [Containerized development environment](#containerized-development-environment) below.
 
 ### Which services run when (compose profiles)
 
