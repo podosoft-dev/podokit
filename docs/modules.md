@@ -485,6 +485,29 @@ version independently. A package module is just a `module.manifest.json` (with a
 bundled one; the CLI rejects a manifest that needs a newer PodoKit. `podo add`
 with no argument lists both bundled and installed package modules.
 
+### `markdown`
+
+Safe Markdown rendering for DB/user content. Content modules
+(`content-collection`, `blog`, `faq`) depend on it.
+
+```bash
+npx @podosoft/podokit add markdown
+```
+
+```svelte
+<script>
+  import { Markdown } from "$lib/markdown";
+</script>
+<Markdown source={post.body} class="prose" />
+```
+
+- `marked` + `highlight.js` render Markdown (code blocks get `hljs` classes; add a
+  highlight.js theme CSS for colors), then **`sanitize-html` strips scripts,
+  event handlers and unknown schemes** — so the output is safe for `{@html}`.
+- Always render untrusted Markdown through `<Markdown>` / `renderMarkdown()`; never
+  `{@html}` raw Markdown output.
+
+
 ## Adding admin nav & settings (module registry)
 
 When `admin-dashboard` is installed, a module can add its own **sidebar nav entry**
