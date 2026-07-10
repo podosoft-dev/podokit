@@ -19,6 +19,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   them. Opt out with `podo create --no-ai`.
 - Module injections can be marked `optional`, so they skip (instead of failing)
   when a target file is absent — used for the `AGENTS.md` guidance injections.
+- **Containerized development environment.** Generated projects now ship a
+  `compose.dev.yaml` (+ `Dockerfile.dev`, `.devcontainer/`, `.env.docker`,
+  `infra/traefik/`) that runs the whole stack in containers. Only Traefik binds a
+  host port (`app.localhost`); `postgres`/`redis`/`minio`/`api` have no published
+  ports and talk by service name, so multiple projects never collide. Module
+  services are behind Compose profiles (`cache`/`storage`/`queue`); `docker compose
+  watch` gives instant web HMR and restarts the api on change. A `devcontainer.json`
+  lets editors and AI agents work inside the container. The host `npm run dev` loop
+  still works unchanged. See the [development guide](docs/development.md).
 
 ### Fixed
 - **`file-upload` module build.** The generated app's API tsconfig restricts

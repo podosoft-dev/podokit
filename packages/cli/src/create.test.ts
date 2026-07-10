@@ -95,6 +95,45 @@ describe("create (integration against templates)", () => {
     expect(apiPkg.name).toBe("app-api");
   });
 
+  it("ships the containerized dev environment (Traefik + internal services + devcontainer)", () => {
+    const target = join(tmp(), "app");
+    create({ name: "app", templatesDir: REPO_TEMPLATES, targetDir: target });
+
+    // scaffolding files are generated (dot- prefixes resolved)
+    expect(existsSync(join(target, "compose.dev.yaml"))).toBe(true);
+    expect(existsSync(join(target, "Dockerfile.dev"))).toBe(true);
+    expect(existsSync(join(target, ".dockerignore"))).toBe(true);
+    expect(existsSync(join(target, ".env.docker"))).toBe(true);
+    expect(existsSync(join(target, ".devcontainer", "devcontainer.json"))).toBe(true);
+    expect(existsSync(join(target, "infra", "traefik", "dynamic.yml"))).toBe(true);
+
+    const compose = readFileSync(join(target, "compose.dev.yaml"), "utf8");
+    // project name is rendered into the workspace commands / stack name
+    expect(compose).toContain("name: app-dev");
+    expect(compose).toContain("npm run dev -w app-web");
+    expect(compose).toContain("npm run dev -w app-api");
+    // only Traefik binds a host port; the app/db services are internal-only
+    expect(compose).toContain('"80:80"');
+    expect(compose).not.toMatch(/\n\s+-\s+"5432:5432"/);
+    expect(compose).not.toMatch(/\n\s+-\s+"5001:5001"/);
+    // module-specific services are profile-gated so a minimal app never breaks
+    expect(compose).toMatch(/profiles: \[queue\]/);
+    expect(compose).toMatch(/profiles: \[cache\]/);
+    expect(compose).toMatch(/profiles: \[storage\]/);
+
+    // web proxies /api to the api container by service name (Traefik only routes web)
+    expect(readFileSync(join(target, ".env.docker"), "utf8")).toContain("BACKEND_INTERNAL_URL=http://api:5002");
+    expect(readFileSync(join(target, "infra", "traefik", "dynamic.yml"), "utf8")).toContain("http://web:5001");
+
+    // AI-free of tiers: the dev scaffolding is owned so updates never clobber it
+    const lock = readFileSync(join(target, ".podokit", "files.lock"), "utf8");
+    expect(lock).toContain("compose.dev.yaml");
+    for (const path of ["compose.dev.yaml", "Dockerfile.dev", ".devcontainer/devcontainer.json"]) {
+      const entry = new RegExp(`"${path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"[^}]*"tier"\\s*:\\s*"owned"`);
+      expect(lock).toMatch(entry);
+    }
+  });
+
   it("scaffolds the todo template with the CRUD example", () => {
     const target = join(tmp(), "app");
     const result = create({ name: "app", template: "todo", templatesDir: REPO_TEMPLATES, targetDir: target });

@@ -64,6 +64,51 @@ So `docker compose up` starts only what the app needs to **run**; `--profile dev
 tools you need to **develop and test** locally. In production you provide managed Postgres
 (and Redis if used) and real SMTP/SMS/S3 providers — the `dev` tools never ship.
 
+## Containerized development environment
+
+The two commands above run the app (`npm run dev`) on your host and the databases in
+Docker. If you juggle several projects at once, their databases fight over the same host
+ports (5432, 6379, 9000) and the web/api ports collide too. The generated project also
+ships a **fully containerized** dev environment that avoids this: everything runs in
+containers, only Traefik binds a host port, and you edit source on your host as usual.
+
+```bash
+cd /tmp/myapp
+docker compose -f compose.dev.yaml watch                         # core stack
+# with modules that need extra services, enable their profiles:
+docker compose -f compose.dev.yaml \
+  --profile cache --profile storage --profile queue watch
+# first run only — create the tables (in the api container):
+docker compose -f compose.dev.yaml exec api \
+  npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
+docker compose -f compose.dev.yaml exec api npm run migration:run -w myapp-api
+```
+
+Open **http://app.localhost** (browsers resolve `*.localhost` to 127.0.0.1 automatically).
+
+What you get:
+
+- **One host port.** Only Traefik publishes `:80` (dashboard on `127.0.0.1:8080`). `postgres`,
+  `redis`, `minio`, and even the `api` have **no published ports** — they talk to each other by
+  service name on an internal network, so this stack never collides with other projects.
+- **Single entry.** The browser only ever calls the web origin (`app.localhost`); SvelteKit
+  proxies `/api/*` to the api container internally. Traefik only routes `Host(app.localhost) → web`
+  (see `infra/traefik/dynamic.yml`).
+- **Live edits.** `docker compose watch` syncs your source into the containers. The web has
+  instant Vite HMR; an **API** source change restarts the api service (~5s) — the stable
+  approach for NestJS in a container (its in-process watcher doesn't reliably respawn).
+- **Profiles match modules** (same names as above): `cache` (redis), `storage` (minio),
+  `queue` (worker). A minimal app needs none; enable the ones your app uses.
+- **Editors & AI agents inside the container.** `.devcontainer/devcontainer.json` lets VS Code
+  ("Reopen in Container") and Dev-Container-aware agents attach *inside* the container, where
+  `node_modules`, TypeScript, and `git` all resolve. Install/upgrade packages in the container
+  (`docker compose exec api npm install …`) so native binaries match Linux.
+
+Prefer the host `npm run dev` loop for quick single-project work; reach for the containerized
+loop when you run several projects at once or want dev to mirror the k3s/Traefik production
+topology. These files (`compose.dev.yaml`, `Dockerfile.dev`, `.devcontainer/`, `.env.docker`,
+`infra/traefik/`) are yours to edit — `podo update` never touches them.
+
 ## Verifying template / module changes
 
 The fastest signal without running servers:
