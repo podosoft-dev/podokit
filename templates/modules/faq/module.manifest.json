@@ -1,0 +1,55 @@
+{
+  "manifestVersion": 1,
+  "name": "faq",
+  "description": "FAQ: questions with a Markdown answer, grouped by category, with an order and published flag. Public GET /faq + admin CRUD. Entries carry a jsonb metadata field for project-specific fields.",
+  "requires": ["admin-dashboard", "markdown"],
+  "targetApp": "api",
+  "inject": [
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:end:imports",
+      "text": "import { FaqModule } from \"./faq/faq.module\";"
+    },
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:end:module-imports",
+      "text": "FaqModule,"
+    },
+    {
+      "file": "apps/web/src/routes/+layout.server.ts",
+      "marker": "// podokit:end:public-paths",
+      "text": "  \"/faq\","
+    },
+    {
+      "file": "apps/web/src/lib/admin/registry.svelte.ts",
+      "marker": "// podokit:end:admin-nav-imports",
+      "text": "import CircleHelpIcon from \"@lucide/svelte/icons/circle-help\";"
+    },
+    {
+      "file": "apps/web/src/lib/admin/registry.svelte.ts",
+      "marker": "// podokit:end:admin-nav-entries",
+      "text": "  { href: \"/admin/faq\", label: (t) => t.faq.nav, icon: CircleHelpIcon, adminOnly: true },"
+    },
+    {
+      "file": "apps/web/src/lib/i18n/messages.ts",
+      "marker": "// podokit:end:messages-en",
+      "text": "  faq: { nav: \"FAQ\", title_: \"FAQ\", subtitle: \"Frequently asked questions.\", add: \"Add question\", editTitle: \"Edit question\", question: \"Question\", answer: \"Answer (Markdown)\", category: \"Category\", order: \"Order\", published: \"Published\", yes: \"Yes\", no: \"No\", edit: \"Edit\", delete: \"Delete\", cancel: \"Cancel\", save: \"Save\", saving: \"Saving…\", saved: \"Saved\", deleted: \"Deleted\", saveError: \"Failed to save\", loading: \"Loading…\", empty: \"No questions yet.\", total: \"{count} questions\" },"
+    },
+    {
+      "file": "apps/web/src/lib/i18n/messages.ts",
+      "marker": "// podokit:end:messages-ko",
+      "text": "  faq: { nav: \"FAQ\", title_: \"FAQ\", subtitle: \"자주 묻는 질문.\", add: \"질문 추가\", editTitle: \"질문 편집\", question: \"질문\", answer: \"답변(마크다운)\", category: \"분류\", order: \"순서\", published: \"공개\", yes: \"예\", no: \"아니오\", edit: \"편집\", delete: \"삭제\", cancel: \"취소\", save: \"저장\", saving: \"저장 중…\", saved: \"저장됨\", deleted: \"삭제됨\", saveError: \"저장 실패\", loading: \"불러오는 중…\", empty: \"질문이 없습니다.\", total: \"{count}개 질문\" },"
+    },
+    {
+      "file": "AGENTS.md",
+      "marker": "<!-- podokit:end:agents-modules -->",
+      "optional": true,
+      "text": "### faq\n- Public `GET /faq` (published, grouped by category); admin CRUD under `/admin/faq`. Answers are Markdown, rendered with the markdown module.\n- Extend an entry with project-specific fields via its `metadata` (jsonb) — no migration.\n"
+    }
+  ],
+  "instructions": [
+    "Create the faq_item table:  npm run migration:run -w <app>-api",
+    "Public list:  curl localhost:5002/api/faq",
+    "Manage questions in the admin UI (/admin/faq)."
+  ]
+}

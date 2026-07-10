@@ -538,6 +538,20 @@ npx @podosoft/podokit add blog
 - Extend a post via its `metadata` (jsonb) — no migration.
 
 
+### `faq`
+
+Questions with a Markdown answer, grouped by category, with an order and a
+published flag.
+
+```bash
+npx @podosoft/podokit add faq
+```
+
+- Public: `GET /faq` (published, grouped by category). Admin CRUD under `/admin/faq`.
+- Managed `$lib/faq` (accordion) + owned public/admin pages; registers a **FAQ** admin
+  nav entry. Answers render with the `markdown` module.
+
+
 ## Adding admin nav & settings (module registry)
 
 When `admin-dashboard` is installed, a module can add its own **sidebar nav entry**
