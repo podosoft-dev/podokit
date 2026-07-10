@@ -75,6 +75,29 @@ curl -b cookies.txt localhost:5002/account/me
 - Security/audit modules build on this (they require `auth`).
 
 
+### `mailer`
+
+Reusable email sending. `auth` (and later `contact-form`) depend on it, so it is
+usually added automatically.
+
+```bash
+npx @podosoft/podokit add mailer
+```
+
+```ts
+import { sendMail, actionEmail } from "../mail/mailer"; // path relative to your file
+await sendMail({ to: "a@example.com", subject: "Hi", text: "Hello", html: actionEmail(...) });
+```
+
+- **SMTP resolution** (applied live, ~3s TTL): admin Settings page (DB, when
+  `auth` is installed) → `SMTP_*` env → none, in which case messages are logged
+  to the console so dev links stay grabbable.
+- Depends on no other module (reads the DB SMTP config defensively), so `auth`
+  can require it without a cycle.
+- **Override the transport** (e.g. a provider SDK) from the owned DI slot
+  `apps/api/src/app.extensions.ts`: `import { setMailTransport } from "./mail/mailer"; setMailTransport(myTransport)`.
+
+
 ### `bullmq`
 
 Background jobs with [BullMQ](https://docs.bullmq.io): a demo queue, enqueue/

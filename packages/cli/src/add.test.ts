@@ -61,6 +61,30 @@ describe("module-declared ownedGlobs", () => {
   });
 });
 
+describe("mailer extraction", () => {
+  it("auth pulls in the mailer module, which ships a decoupled mail library", () => {
+    const project = generate("fullstack-nest-svelte");
+    const result = addModule({ projectRoot: project, module: "auth", modulesDir: MODULES });
+    // auth requires mailer -> auto-added
+    expect(result.added).toContain("mailer");
+    // mailer ships the mail library with its own pool (no dependency on auth)
+    expect(existsSync(join(project, "apps/api/src/mail/mailer.ts"))).toBe(true);
+    expect(existsSync(join(project, "apps/api/src/mail/db.ts"))).toBe(true);
+    expect(readFileSync(join(project, "apps/api/src/mail/mailer.ts"), "utf8")).toContain('from "./db"');
+    // auth's email flows go through the mailer module's file
+    expect(readFileSync(join(project, "apps/api/src/auth/auth.ts"), "utf8")).toContain('from "../mail/mailer"');
+    // nodemailer ships via the mailer module (merged into the api workspace)
+    const apiPkg = JSON.parse(readFileSync(join(project, "apps/api/package.json"), "utf8")) as {
+      dependencies: Record<string, string>;
+    };
+    expect(apiPkg.dependencies.nodemailer).toBeDefined();
+    const manifest = JSON.parse(readFileSync(join(project, ".podokit/manifest.json"), "utf8")) as {
+      modules: { name: string }[];
+    };
+    expect(manifest.modules.map((m) => m.name)).toContain("mailer");
+  });
+});
+
 describe("app.extensions DI slot", () => {
   it("ships an owned extensions file wired into app.module", () => {
     const project = generate("fullstack-nest-svelte");
