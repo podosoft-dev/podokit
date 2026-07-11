@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-11
+
+### Added
+- **Module-declared owned paths + durable eject.** A module manifest can list
+  `ownedGlobs` so the presentation files it ships are marked *owned* — never
+  overwritten by `podo update`. `podo eject` now persists the ownership change,
+  so an ejected file stays owned across later `add`/`update` recomputes.
+- **`app.extensions.ts` DI slot.** Generated apps get an owned
+  `apps/api/src/app.extensions.ts` exporting `extensionImports`/`extensionProviders`
+  that `app.module.ts` spreads in — a stable, update-safe seam for overriding or
+  replacing providers (mail transport, storage adapter, custom sinks).
+- **Standalone `mailer` module.** Mail sending is now its own reusable module
+  instead of living inside `auth`. `auth` depends on `mailer`; the mailer reads
+  SMTP defensively (config → `SMTP_*` env → json-transport) and its transport can
+  be swapped through the DI slot.
+- **npm-package modules.** `podo add <name>` resolves a module from the bundled
+  set *or* an installed npm package `@podosoft/podokit-module-<name>`, with a
+  versioned manifest as the cross-package contract. `list_modules` unions both.
+- **Module-driven admin nav & settings.** The admin sidebar and settings page
+  render from a registry each installed module contributes to, so menu entries
+  add and remove per installed module.
+
+### Fixed
+- Correct the admin-dashboard post-install hints: admin pages live under
+  `/admin/*` (not `/dashboard/*`), and password-reset email now routes through the
+  auto-installed mailer module.
+
 ## [0.6.0] - 2026-07-10
 
 ### Added
