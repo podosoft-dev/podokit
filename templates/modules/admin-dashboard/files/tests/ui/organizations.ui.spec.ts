@@ -62,7 +62,9 @@ test("organization manage: remove a member, invite one, and cancel the invite @s
   const name = `Mng ${Date.now()}`;
   await newBtn.click();
   await page.getByLabel("Name", { exact: true }).fill(name);
-  await page.getByRole("checkbox").first().click(); // seed a non-owner member (existing user)
+  // Seed a specific non-owner member (the admin is always the owner, so pick the
+  // seeded user — .first() is order-dependent and could hit the owner).
+  await page.locator("label", { hasText: "user@example.com" }).getByRole("checkbox").click();
   await page.getByRole("dialog").getByRole("button", { name: "Create", exact: true }).click();
   await expect(page.getByText("Organization created").first()).toBeVisible();
 
