@@ -162,7 +162,28 @@
     if (error) return void toast.error(error.message ?? i18n.t.account.changeFailed);
     twoFaOn = false;
     twoFaPassword = "";
+    regenCodes = null;
     toast.success(i18n.t.account.twoFactorDisabled);
+  }
+  // Backup codes: regenerate a fresh set (invalidating the old ones) and download.
+  let regenCodes = $state<string[] | null>(null);
+  async function regenerateBackupCodes(): Promise<void> {
+    twoFaBusy = true;
+    const { data: res, error } = await api.auth.twoFactor.generateBackupCodes({ password: twoFaPassword });
+    twoFaBusy = false;
+    if (error) return void toast.error(error.message ?? i18n.t.account.changeFailed);
+    regenCodes = (res?.backupCodes ?? []) as string[];
+    twoFaPassword = "";
+    toast.success(i18n.t.account.backupCodesRegenerated);
+  }
+  function downloadBackupCodes(codes: string[]): void {
+    const blob = new Blob([codes.join("\n") + "\n"], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "backup-codes.txt";
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   // Passkeys (WebAuthn) — passwordless credentials bound to this device/browser.
@@ -470,7 +491,21 @@
                     <Label for="tf-off-pw">{i18n.t.account.password}</Label>
                     <Input id="tf-off-pw" type="password" bind:value={twoFaPassword} autocomplete="current-password" />
                   </div>
-                  <Button variant="destructive" class="w-fit" disabled={twoFaBusy || !twoFaPassword} onclick={disable2fa}>{i18n.t.account.disable}</Button>
+                  <div class="flex flex-wrap gap-2">
+                    <Button disabled={twoFaBusy || !twoFaPassword} onclick={regenerateBackupCodes}>{i18n.t.account.regenerateBackupCodes}</Button>
+                    <Button variant="destructive" disabled={twoFaBusy || !twoFaPassword} onclick={disable2fa}>{i18n.t.account.disable}</Button>
+                  </div>
+                  <p class="text-muted-foreground text-xs">{i18n.t.account.regenerateBackupCodesHint}</p>
+                  {#if regenCodes}
+                    <div class="flex flex-col gap-1">
+                      <Label>{i18n.t.account.backupCodes}</Label>
+                      <p class="text-muted-foreground text-xs">{i18n.t.account.backupCodesHint}</p>
+                      <div class="bg-muted grid grid-cols-2 gap-1 rounded p-2 font-mono text-xs" data-testid="backup-codes">
+                        {#each regenCodes as c (c)}<span>{c}</span>{/each}
+                      </div>
+                      <Button variant="outline" size="sm" class="w-fit" onclick={() => downloadBackupCodes(regenCodes!)}>{i18n.t.account.downloadBackupCodes}</Button>
+                    </div>
+                  {/if}
                 {:else if setup}
                   <p class="text-muted-foreground text-sm">{i18n.t.account.scanHint}</p>
                   {#if qrDataUrl}
@@ -482,9 +517,11 @@
                   </div>
                   <div class="flex flex-col gap-1">
                     <Label>{i18n.t.account.backupCodes}</Label>
-                    <div class="bg-muted grid grid-cols-2 gap-1 rounded p-2 font-mono text-xs">
+                    <p class="text-muted-foreground text-xs">{i18n.t.account.backupCodesHint}</p>
+                    <div class="bg-muted grid grid-cols-2 gap-1 rounded p-2 font-mono text-xs" data-testid="backup-codes">
                       {#each setup.backupCodes as c (c)}<span>{c}</span>{/each}
                     </div>
+                    <Button variant="outline" size="sm" class="w-fit" onclick={() => downloadBackupCodes(setup!.backupCodes)}>{i18n.t.account.downloadBackupCodes}</Button>
                   </div>
                   <div class="flex flex-col gap-2">
                     <Label for="tf-code">{i18n.t.account.code}</Label>

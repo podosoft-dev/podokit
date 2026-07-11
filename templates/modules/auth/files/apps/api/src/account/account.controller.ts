@@ -29,6 +29,14 @@ export class AccountController {
     return session.user;
   }
 
+  // The "require two-factor" policy, for the web enrolment gate. Kept out of the
+  // typed Capabilities (that lives in a published package); allow-listed in
+  // TwoFactorRequiredGuard so a not-yet-enrolled user can still read it.
+  @Get("require-2fa")
+  requireTwoFactor(): { require2fa: boolean } {
+    return { require2fa: this.settings.getBool("require2fa") };
+  }
+
   // Which optional auth features are enabled, so the UI can show/hide sections.
   // Public so the login page (unauthenticated) can offer available sign-in methods.
   @Public()

@@ -6,7 +6,7 @@
  *
  *  Must match the rows seeded by the InitAppSettings migration. phoneNumber is
  *  off by default because real delivery needs an SMS provider. */
-export type FeatureFlag = "twoFactor" | "magicLink" | "emailOtp" | "username" | "multiSession" | "phoneNumber" | "apiKey" | "passkey" | "organization" | "oidcProvider";
+export type FeatureFlag = "twoFactor" | "magicLink" | "emailOtp" | "username" | "multiSession" | "phoneNumber" | "apiKey" | "passkey" | "organization" | "oidcProvider" | "require2fa";
 
 export const FLAG_DEFAULTS: Record<FeatureFlag, boolean> = {
   twoFactor: true,
@@ -20,6 +20,10 @@ export const FLAG_DEFAULTS: Record<FeatureFlag, boolean> = {
   organization: true,
   // Acting as an OIDC identity provider is an enterprise opt-in; off by default.
   oidcProvider: false,
+  // Policy (not a feature endpoint): when on, every signed-in user must enrol in
+  // two-factor before using the app. Enforced by TwoFactorRequiredGuard + the web
+  // enrolment gate — the feature gate ignores it (no endpoint prefix). Off by default.
+  require2fa: false,
 };
 
 export const FEATURE_FLAGS = Object.keys(FLAG_DEFAULTS) as FeatureFlag[];

@@ -72,6 +72,14 @@ curl -b cookies.txt localhost:5002/account/me
     | awk -F': ' 'tolower($1)=="set-auth-token"{print $2}' | tr -d '\r')
   curl -H "Authorization: Bearer $TOKEN" localhost:5002/account/me
   ```
+- **Two-factor with backup codes**: when 2FA is enabled, the login page shows a
+  second-factor step with a **"use a backup code"** option, so a user without
+  their authenticator can still sign in with a one-time code. The account page
+  lets them download the codes and regenerate a fresh set (invalidating the old).
+- **Require two-factor** (admin Settings toggle, off by default): forces every
+  user to enrol in 2FA before using the app — un-enrolled users are redirected to
+  `/setup-2fa`, and the API rejects their requests (`TWO_FACTOR_REQUIRED`, via a
+  global guard) until they do. Machine clients (api-key/bearer) are exempt.
 - Security/audit modules build on this (they require `auth`).
 
 

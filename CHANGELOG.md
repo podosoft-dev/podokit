@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-11
+
+### Added
+- **Two-factor backup codes are now usable end to end.** The login page gained a
+  second-factor step (missing before): a password/OTP sign-in with 2FA enabled
+  now prompts for an authenticator code, with a **"use a backup code"** toggle so
+  a locked-out user can sign in with a one-time backup code. The account page adds
+  **Download** for the codes shown on enable and **Regenerate backup codes**
+  (invalidating the previous set). Second-factor errors (wrong/expired code, too
+  many attempts) are localized — mapped from the backend `code` rather than shown
+  as the raw English message.
+- **Require two-factor (mandatory enrolment).** A new admin Settings toggle
+  ("Require two-factor") forces every signed-in user to enrol in 2FA before using
+  the app: an un-enrolled user is redirected to a `/setup-2fa` enrolment page, and
+  the API blocks their requests with `TWO_FACTOR_REQUIRED` (a global
+  `TwoFactorRequiredGuard`) until they enrol. Admins are included; the policy
+  toggle stays reachable so it is never a hard lock-out. Off by default; only
+  effective when 2FA itself is enabled.
+
+### Fixed
+- **`/verify-email` was unreachable when signed out.** It was missing from the
+  public-path allow-list, so a user sent there after sign-up (when email
+  verification is on) was bounced to `/login`. It is now public, as intended.
+
 ## [0.8.0] - 2026-07-11
 
 ### Added
