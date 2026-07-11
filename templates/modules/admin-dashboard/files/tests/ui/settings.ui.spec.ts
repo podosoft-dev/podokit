@@ -73,3 +73,12 @@ test("admin can toggle a feature flag and it applies live @smoke", async ({ page
   await toggle.click();
   await expect(toggle).toBeChecked();
 });
+
+test("settings: the require-two-factor toggle is available @smoke", async ({ page }) => {
+  await ready(page, "/admin/settings");
+  await page.getByRole("tab", { name: "Authentication" }).click();
+  // The policy toggle renders under Authentication; its enforcement is covered by
+  // the require-2fa api/ui specs. Not toggled here — turning it on would gate this
+  // admin session.
+  await expect(page.getByRole("switch", { name: "Require two-factor" })).toBeVisible();
+});
