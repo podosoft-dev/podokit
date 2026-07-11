@@ -10,6 +10,7 @@ const PUBLIC_PATHS = [
   "/signup",
   "/forgot-password",
   "/reset-password",
+  "/verify-email",
   "/maintenance",
   // Modules add their public (no-session) page prefixes here.
   // podokit:begin:public-paths

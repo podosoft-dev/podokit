@@ -23,6 +23,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   toggle stays reachable so it is never a hard lock-out. Off by default; only
   effective when 2FA itself is enabled.
 
+### Fixed
+- **`/verify-email` was unreachable when signed out.** It was missing from the
+  public-path allow-list, so a user sent there after sign-up (when email
+  verification is on) was bounced to `/login`. It is now public, as intended.
+
 ## [0.8.0] - 2026-07-11
 
 ### Added
