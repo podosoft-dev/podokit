@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-11
+
 ### Added
 - **Two-factor backup codes are now usable end to end.** The login page gained a
   second-factor step (missing before): a password/OTP sign-in with 2FA enabled
