@@ -496,6 +496,26 @@ edits to `app-sidebar.svelte` or the settings page. A nav entry is
 `{ href, key, icon, adminOnly? }` (with `key` an i18n `nav` key the module also
 adds); a settings tab is `{ value, label, component }`.
 
+## Removing a module
+
+`podo remove <module>` is the inverse of `podo add`: it un-wires the module's
+marker injections, deletes the files it added, prunes the `package.json`
+dependencies/scripts and `.env.example` lines it introduced, and drops it from
+`.podokit/manifest.json` (recomputing the lock).
+
+It is deliberately conservative:
+
+- **No cascade.** A module another installed module still requires is refused —
+  remove the dependent first. (Removing a module does *not* auto-remove the
+  modules it once pulled in; remove those explicitly if you no longer want them.)
+- **Your edits are kept.** A module file you have edited is left in place and
+  reported, rather than deleted — remove it by hand if you want it gone.
+- **Shared files are kept.** A file another installed module also ships (and the
+  deps/env another module still declares) is preserved.
+
+Database tables a module created are **not** dropped — removing the code leaves
+your data intact. Drop them yourself with a migration if you no longer need them.
+
 ## Keeping modules up to date
 
 Modules are wired into your project through `.podokit/` fenced regions, so a

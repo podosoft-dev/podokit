@@ -38,6 +38,7 @@ Run without flags in a terminal and PodoKit prompts for the template and package
 |---|---|
 | `podo create <name>` | Scaffold a new project from a template |
 | `podo add <module>` | Add a feature module (auth, admin-dashboard, redis, …) |
+| `podo remove <module>` | Un-apply a module (inverse of add; keeps your edits) |
 | `podo status` | Version, modules, file tiers, and local edits |
 | `podo diff` | Managed files you've edited since generation |
 | `podo doctor` | Framework versions vs. supported ranges |

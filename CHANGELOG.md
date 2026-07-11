@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- **`podo remove <module>`.** The inverse of `podo add`: un-wires a module's
+  marker injections, deletes the files it added, prunes the `package.json`
+  deps/scripts and `.env.example` lines it introduced, and drops it from the
+  manifest. Conservative by design — it refuses to remove a module another
+  installed module still requires, keeps files you have edited (reporting them
+  instead of deleting), preserves files/deps another module shares, and never
+  drops database tables.
+
 ## [0.7.0] - 2026-07-11
 
 ### Added

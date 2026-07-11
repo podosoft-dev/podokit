@@ -67,6 +67,7 @@ in `.podokit/files.lock` — respect it:
 Useful commands:
 
 - `podo add <module>` — add a feature (auth, admin-dashboard, redis, bullmq, …). It wires itself into the app; run `podo add` with no argument to list modules.
+- `podo remove <module>` — un-apply a module (inverse of add; refuses if another module needs it, keeps files you edited).
 - `podo status` / `podo diff` — see your local edits vs. what PodoKit generated.
 - `podo update` — pull in template/module improvements (3-way merges your edits; never touches owned files).
 
