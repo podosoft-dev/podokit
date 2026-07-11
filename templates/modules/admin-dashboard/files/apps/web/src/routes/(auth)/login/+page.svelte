@@ -36,6 +36,21 @@
     return Boolean(data && typeof data === "object" && (data as { twoFactorRedirect?: boolean }).twoFactorRedirect);
   }
 
+  // Map better-auth's (English) two-factor error codes to localized copy — the
+  // backend returns a stable `code`, never a translated message (see i18n policy).
+  function twoFactorError(code: string | undefined): string {
+    switch (code) {
+      case "INVALID_CODE":
+      case "INVALID_BACKUP_CODE":
+        return i18n.t.auth.twoFactorInvalidCode;
+      case "TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE":
+      case "ACCOUNT_TEMPORARILY_LOCKED":
+        return i18n.t.auth.twoFactorLocked;
+      default:
+        return i18n.t.auth.signInFailed;
+    }
+  }
+
   async function verifyTwoFactor(): Promise<void> {
     twoFaLoading = true;
     error = null;
@@ -44,7 +59,7 @@
       : await api.auth.twoFactor.verifyTotp({ code: twoFaCode.trim() });
     twoFaLoading = false;
     if (authError) {
-      error = authError.message ?? i18n.t.auth.signInFailed;
+      error = twoFactorError(authError.code);
       return;
     }
     await goto(redirectTo(), { invalidateAll: true });

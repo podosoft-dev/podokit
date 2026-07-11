@@ -31,10 +31,18 @@ test("two-factor: sign in with a backup code from the login page @smoke", async 
   const step = page.getByTestId("two-factor-step");
   await expect(step).toBeVisible();
 
-  // Switch to the backup-code input and complete the login.
+  // Switch to the backup-code input.
   await page.getByRole("button", { name: "Use a backup code instead" }).click();
+
+  // A wrong code surfaces a localized, mapped message — not better-auth's raw
+  // English string ("Invalid backup code").
+  await page.getByLabel("Backup code").fill("00000000");
+  await page.getByRole("button", { name: "Verify", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("isn't valid");
+  await expect(page.getByRole("alert")).not.toContainText("Invalid backup code");
+
+  // The real code completes the login.
   await page.getByLabel("Backup code").fill(backupCode);
   await page.getByRole("button", { name: "Verify", exact: true }).click();
-
   await expect(page).toHaveURL(/\/admin\/account/);
 });

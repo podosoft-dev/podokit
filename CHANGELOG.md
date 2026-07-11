@@ -12,7 +12,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   now prompts for an authenticator code, with a **"use a backup code"** toggle so
   a locked-out user can sign in with a one-time backup code. The account page adds
   **Download** for the codes shown on enable and **Regenerate backup codes**
-  (invalidating the previous set).
+  (invalidating the previous set). Second-factor errors (wrong/expired code, too
+  many attempts) are localized — mapped from the backend `code` rather than shown
+  as the raw English message.
 
 ## [0.8.0] - 2026-07-11
 
