@@ -142,6 +142,44 @@ test("two-factor: regenerating backup codes invalidates the old set @smoke", asy
   await ctxNew.dispose();
 });
 
+test("require-2fa: gates an un-enrolled user until they enrol @smoke", async ({ playwright }) => {
+  const admin = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  const caps = await (await admin.get("/api/account/capabilities")).json();
+  test.skip(!caps?.twoFactor, "two-factor not enabled");
+  await admin.post("/api/auth/sign-in/email", { data: { email: ADMIN.email, password: ADMIN.password } });
+
+  const user = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  const email = `rq-${Date.now()}@example.com`;
+  const pw = "Podokit3e-Str0ng!pw";
+  await user.post("/api/auth/sign-up/email", { data: { email, password: pw, name: "RQ" } });
+
+  try {
+    // Turn the policy on (admin; the toggle endpoint is allow-listed by the guard).
+    await admin.put("/api/account/settings", { data: { require2fa: true } });
+    // The guard caches for a few seconds — poll until the un-enrolled user is gated.
+    await expect(async () => {
+      expect((await user.get("/api/account/me")).status()).toBe(403);
+    }).toPass({ timeout: 8000 });
+
+    // Enrolling restores access.
+    const enable = await (await user.post("/api/auth/two-factor/enable", { data: { password: pw } })).json();
+    await user.post("/api/auth/two-factor/verify-totp", { data: { code: totpCode(enable.totpURI) } });
+    expect((await user.get("/api/account/me")).status()).toBe(200);
+  } finally {
+    // Always turn it back off so the shared (un-enrolled) sessions aren't gated.
+    await admin.put("/api/account/settings", { data: { require2fa: false } });
+    await expect(async () => {
+      const probe = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+      await probe.post("/api/auth/sign-in/email", { data: { email: USER.email, password: USER.password } });
+      const status = (await probe.get("/api/account/me")).status();
+      await probe.dispose();
+      expect(status).toBe(200);
+    }).toPass({ timeout: 8000 });
+    await admin.dispose();
+    await user.dispose();
+  }
+});
+
 test("multi-session holds several accounts and switches between them @smoke", async ({ playwright }) => {
   const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const caps = await (await ctx.get("/api/account/capabilities")).json();

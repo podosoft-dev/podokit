@@ -1,3 +1,4 @@
+import { redirect } from "@sveltejs/kit";
 import type { LayoutServerLoad } from "./$types";
 import type { Capabilities } from "@podosoft/podokit-api-client";
 
@@ -26,5 +27,21 @@ export const load: LayoutServerLoad = async ({ locals, fetch }) => {
   } catch {
     /* keep defaults */
   }
+
+  // Require-two-factor policy: a signed-in user who hasn't enrolled is sent to the
+  // enrolment page until they do (the API's TwoFactorRequiredGuard is the real
+  // boundary; this is the UX). /setup-2fa lives outside this layout, so no loop.
+  const user = locals.user as (App.Locals["user"] & { twoFactorEnabled?: boolean }) | null;
+  let mustEnrol = false;
+  if (user && !user.twoFactorEnabled) {
+    try {
+      const res = await fetch("/api/account/require-2fa");
+      mustEnrol = res.ok && ((await res.json()) as { require2fa?: boolean }).require2fa === true;
+    } catch {
+      /* don't block the app if the policy check fails */
+    }
+  }
+  if (mustEnrol) redirect(302, "/setup-2fa");
+
   return { user: locals.user, impersonating: !!locals.session?.impersonatedBy, capabilities };
 };

@@ -69,6 +69,11 @@
     },
     {
       "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:end:imports",
+      "text": "import { TwoFactorRequiredGuard } from \"./auth/two-factor-required.guard\";"
+    },
+    {
+      "file": "apps/api/src/app.module.ts",
       "marker": "// podokit:end:module-imports",
       "text": "AuthModule.forRoot(authRuntime),"
     },
@@ -86,6 +91,11 @@
       "file": "apps/api/src/app.module.ts",
       "marker": "// podokit:end:providers",
       "text": "{ provide: APP_GUARD, useClass: AuthGuard },"
+    },
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:end:providers",
+      "text": "{ provide: APP_GUARD, useClass: TwoFactorRequiredGuard },"
     },
     {
       "file": "AGENTS.md",

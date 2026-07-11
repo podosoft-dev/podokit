@@ -15,6 +15,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (invalidating the previous set). Second-factor errors (wrong/expired code, too
   many attempts) are localized — mapped from the backend `code` rather than shown
   as the raw English message.
+- **Require two-factor (mandatory enrolment).** A new admin Settings toggle
+  ("Require two-factor") forces every signed-in user to enrol in 2FA before using
+  the app: an un-enrolled user is redirected to a `/setup-2fa` enrolment page, and
+  the API blocks their requests with `TWO_FACTOR_REQUIRED` (a global
+  `TwoFactorRequiredGuard`) until they enrol. Admins are included; the policy
+  toggle stays reachable so it is never a hard lock-out. Off by default; only
+  effective when 2FA itself is enabled.
 
 ## [0.8.0] - 2026-07-11
 

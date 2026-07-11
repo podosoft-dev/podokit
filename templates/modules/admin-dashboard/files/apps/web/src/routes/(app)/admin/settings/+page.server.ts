@@ -22,5 +22,14 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
   } catch {
     /* leave null — the page shows the DB-config sections as unavailable */
   }
-  return { authConfig };
+  // The require-two-factor policy lives in the feature-flag store (not the typed
+  // Capabilities), so read it from its own endpoint for the Settings toggle.
+  let require2fa = false;
+  try {
+    const res = await fetch("/api/account/require-2fa");
+    if (res.ok) require2fa = ((await res.json()) as { require2fa?: boolean }).require2fa === true;
+  } catch {
+    /* default off */
+  }
+  return { authConfig, require2fa };
 };

@@ -46,3 +46,41 @@ test("two-factor: sign in with a backup code from the login page @smoke", async 
   await page.getByRole("button", { name: "Verify", exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/account/);
 });
+
+test("require-2fa: a new sign-up is sent to the enrolment page @smoke", async ({ page, playwright }) => {
+  const admin = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  const caps = await (await admin.get("/api/account/capabilities")).json();
+  test.skip(!caps?.twoFactor, "two-factor not enabled");
+  await admin.post("/api/auth/sign-in/email", { data: { email: "admin@example.com", password: "Podokit3e-Str0ng!pw" } });
+
+  const email = `rq-ui-${Date.now()}@example.com`;
+  const pw = "Podokit3e-Str0ng!pw";
+  try {
+    await admin.put("/api/account/settings", { data: { require2fa: true } });
+    // A fresh un-enrolled user; poll (via API) until the guard cache picks up the policy.
+    const probe = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+    await probe.post("/api/auth/sign-up/email", { data: { email, password: pw, name: "RQUI" } });
+    await expect(async () => {
+      expect((await probe.get("/api/account/me")).status()).toBe(403);
+    }).toPass({ timeout: 8000 });
+    await probe.dispose();
+
+    // Signing in through the UI lands on the mandatory enrolment page.
+    await page.goto("/login");
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill(pw);
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(page).toHaveURL(/\/setup-2fa/);
+    await expect(page.getByRole("button", { name: "Continue" })).toBeVisible();
+  } finally {
+    await admin.put("/api/account/settings", { data: { require2fa: false } });
+    await expect(async () => {
+      const probe = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+      await probe.post("/api/auth/sign-in/email", { data: { email: "user@example.com", password: "Podokit3e-Str0ng!pw" } });
+      const status = (await probe.get("/api/account/me")).status();
+      await probe.dispose();
+      expect(status).toBe(200);
+    }).toPass({ timeout: 8000 });
+    await admin.dispose();
+  }
+});

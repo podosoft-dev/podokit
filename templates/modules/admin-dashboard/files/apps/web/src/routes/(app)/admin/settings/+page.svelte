@@ -16,12 +16,15 @@
   import type { Capabilities } from "@podosoft/podokit-api-client";
   import type { AuthConfigView, SocialProviderView } from "./+page.server";
 
-  let { data }: { data: { capabilities: Capabilities; authConfig: AuthConfigView | null } } = $props();
+  let { data }: { data: { capabilities: Capabilities; authConfig: AuthConfigView | null; require2fa: boolean } } = $props();
   const i18n = getI18n();
   const caps = $derived(data.capabilities);
   const ac = $derived(data.authConfig);
 
   type EditableFlag = "twoFactor" | "magicLink" | "emailOtp" | "username" | "multiSession" | "phoneNumber" | "apiKey" | "passkey" | "organization" | "oidcProvider";
+  // require2fa is a policy flag stored alongside the feature flags but not part of
+  // the typed Capabilities, so it is toggled but never read from `caps`.
+  type ToggleFlag = EditableFlag | "require2fa";
   type ServerKey = "requireEmailVerification" | "hibp" | "allowDelete" | "auditLog";
 
   // Every card renders from this one shape, so they share size and structure: a
@@ -54,7 +57,7 @@
     return ok;
   }
   // Feature flags live in a separate store (app_setting) with their own endpoint.
-  async function toggleFlag(flag: EditableFlag, next: boolean): Promise<void> {
+  async function toggleFlag(flag: ToggleFlag, next: boolean): Promise<void> {
     saving = true;
     try {
       await api.put("/account/settings", { [flag]: next });
@@ -174,6 +177,14 @@
   ]);
   const security = $derived<Item[]>([
     flagCard("twoFactor", i18n.t.settings.twoFactor, i18n.t.settings.twoFactorDesc),
+    {
+      key: "flag-require2fa",
+      name: i18n.t.settings.require2fa,
+      desc: i18n.t.settings.require2faDesc,
+      status: { on: data.require2fa, label: data.require2fa ? i18n.t.settings.enabled : i18n.t.settings.disabled },
+      // Only meaningful when 2FA itself is on; disabled otherwise.
+      toggle: { checked: data.require2fa, disabled: saving || !caps.twoFactor, onChange: (v) => toggleFlag("require2fa", v) },
+    },
     serverCard("hibp", i18n.t.settings.breachCheck, i18n.t.settings.breachCheckDesc, caps.passwordBreachCheck),
     serverCard("allowDelete", i18n.t.settings.accountDeletion, i18n.t.settings.accountDeletionDesc, caps.deleteAccount),
     serverCard("auditLog", i18n.t.settings.auditLog, i18n.t.settings.auditLogDesc, caps.auditLog),
