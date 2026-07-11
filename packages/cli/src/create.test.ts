@@ -112,10 +112,20 @@ describe("create (integration against templates)", () => {
     expect(compose).toContain("name: app-dev");
     expect(compose).toContain("npm run dev -w app-web");
     expect(compose).toContain("npm run dev -w app-api");
-    // only Traefik binds a host port; the app/db services are internal-only
-    expect(compose).toContain('"80:80"');
+    // only Traefik binds a host port; the published port is a single env
+    // (default 80) so several stacks can coexist, and the web container gets the
+    // same value so Vite HMR targets the right port (no full-reload fallback).
+    expect(compose).toContain('"${TRAEFIK_PORT:-80}:80"');
+    expect(compose).toContain("VITE_HMR_CLIENT_PORT=${TRAEFIK_PORT:-80}");
     expect(compose).not.toMatch(/\n\s+-\s+"5432:5432"/);
     expect(compose).not.toMatch(/\n\s+-\s+"5001:5001"/);
+
+    // HMR client port is derived from the injected env, never hardcoded to :80
+    // (a hardcoded :80 breaks HMR on any non-80 Traefik stack — full reload that
+    // wipes in-progress form input; misdiagnosed as a signup/login form bug).
+    const viteConfig = readFileSync(join(target, "apps", "web", "vite.config.ts"), "utf8");
+    expect(viteConfig).not.toContain("clientPort: 80");
+    expect(viteConfig).toContain("Number(process.env.VITE_HMR_CLIENT_PORT)");
     // module-specific services are profile-gated so a minimal app never breaks
     expect(compose).toMatch(/profiles: \[queue\]/);
     expect(compose).toMatch(/profiles: \[cache\]/);

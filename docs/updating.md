@@ -53,6 +53,14 @@ What each tier does on `--apply`:
 The dry-run prints a per-file plan (`update` / `add` / `remove` / `conflict`) so
 there are no surprises.
 
+## Removing a module — `podo remove`
+
+`podo remove <module>` is the inverse of `podo add`: it un-wires the module's
+injections, deletes the files it added, prunes the deps/env it introduced, and
+drops it from the manifest. It won't cascade (a module another one still requires
+is refused), won't delete files you've edited, and never drops database tables.
+See [modules.md](modules.md#removing-a-module) for the details.
+
 ## Taking ownership — `podo eject`
 
 If you want to fully own a managed file and stop updates from touching it:

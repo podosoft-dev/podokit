@@ -5,6 +5,7 @@ import { create, assertValidName, type PackageManager } from "./create";
 import { resolveCreateOptions, type Ask } from "./prompt";
 import { templateListText } from "./templates";
 import { addModule, listModules } from "./add";
+import { removeModule } from "./remove";
 import { status, diff, doctor } from "./inspect";
 import { planUpdate, applyUpdate, summarize } from "./update";
 import { eject } from "./eject";
@@ -14,6 +15,7 @@ const HELP = `podo — PodoKit project generator
 Usage:
   podo create <name> [options]
   podo add <module>
+  podo remove <module>     Un-apply a module (inverse of add)
   podo status              Show version, modules, file tiers, and local edits
   podo diff                List PodoKit-managed files you have edited
   podo doctor              Check framework versions against supported ranges
@@ -112,6 +114,35 @@ async function main(argv: string[]): Promise<void> {
       process.stdout.write(`\nAdded ${result.module}.\n`);
       if (result.instructions.length) {
         process.stdout.write(`\nNext steps:\n${result.instructions.map((i) => `  ${i}`).join("\n")}\n`);
+      }
+    } catch (err) {
+      fail((err as Error).message);
+    }
+    return;
+  }
+
+  if (args.command === "remove") {
+    const moduleName = args.name;
+    if (!moduleName) {
+      fail("Usage: podo remove <module>");
+    }
+    try {
+      const result = removeModule({ projectRoot: process.cwd(), module: moduleName!, modulesDir });
+      process.stdout.write(
+        `\nRemoved ${result.module}: ${result.removed.length} file(s) deleted` +
+          `${result.unwired.length ? `, un-wired ${result.unwired.length} target(s)` : ""}.\n`,
+      );
+      if (result.keptShared.length) {
+        process.stdout.write(
+          `\nKept (shared with another module): ${result.keptShared.join(", ")}\n`,
+        );
+      }
+      if (result.keptEdited.length) {
+        process.stdout.write(
+          `\nKept (you edited these — delete manually if you want them gone):\n` +
+            result.keptEdited.map((f) => `  ${f}`).join("\n") +
+            "\n",
+        );
       }
     } catch (err) {
       fail((err as Error).message);

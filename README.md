@@ -38,6 +38,7 @@ Run without flags in a terminal and PodoKit prompts for the template and package
 |---|---|
 | `podo create <name>` | Scaffold a new project from a template |
 | `podo add <module>` | Add a feature module (auth, admin-dashboard, redis, …) |
+| `podo remove <module>` | Un-apply a module (inverse of add; keeps your edits) |
 | `podo status` | Version, modules, file tiers, and local edits |
 | `podo diff` | Managed files you've edited since generation |
 | `podo doctor` | Framework versions vs. supported ranges |
@@ -195,11 +196,15 @@ conventions already loaded from `AGENTS.md`.
 - [Updating a project (`podo update`)](docs/updating.md)
 - [Examples](examples/README.md)
 - [Development](docs/development.md) · [Testing](docs/testing.md)
+- [Reporting a bug](docs/reporting-bugs.md)
 - [Changelog](CHANGELOG.md)
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+
+**Found a bug?** See [how to report a bug](docs/reporting-bugs.md) — a person or an
+AI coding agent can file one straight from the terminal with `gh`.
 
 ## Security
 

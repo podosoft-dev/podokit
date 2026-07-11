@@ -106,7 +106,16 @@ What you get:
 
 - **One host port.** Only Traefik publishes `:80` (dashboard on `127.0.0.1:8080`). `postgres`,
   `redis`, `minio`, and even the `api` have **no published ports** — they talk to each other by
-  service name on an internal network, so this stack never collides with other projects.
+  service name on an internal network, so this stack never collides with other projects. To run
+  **several** containerized stacks at once (which would otherwise fight over `:80`), publish
+  Traefik on another port with `TRAEFIK_PORT` — HMR follows automatically (next bullet).
+- **Changing the published port.** `TRAEFIK_PORT` sets the host port Traefik binds (default 80):
+  `TRAEFIK_PORT=8001 docker compose -f compose.dev.yaml watch` serves the app at
+  **http://app.localhost:8001**. compose passes the same value to the web container as
+  `VITE_HMR_CLIENT_PORT`, so Vite's HMR WebSocket targets that port. Without it the HMR socket
+  connects to `:80`, fails, and Vite silently falls back to a **full page reload on every edit**
+  (which also wipes any in-progress form input). `TRAEFIK_DASHBOARD_PORT` (default 8080) does the
+  same for the dashboard. Set them inline as above or in the project `.env`.
 - **Single entry.** The browser only ever calls the web origin (`app.localhost`); SvelteKit
   proxies `/api/*` to the api container internally. Traefik only routes `Host(app.localhost) → web`
   (see `infra/traefik/dynamic.yml`).

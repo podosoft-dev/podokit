@@ -4,7 +4,10 @@
 #   docker compose -f compose.dev.yaml --profile cache \
 #     --profile storage --profile queue watch                     # with modules
 #
-# Only Traefik binds a host port (80). The app is at http://app.localhost.
+# Only Traefik binds a host port (default 80). The app is at http://app.localhost.
+# Set TRAEFIK_PORT to publish on another port (e.g. TRAEFIK_PORT=8001) so several
+# containerized stacks can run at once without colliding — the web container reads
+# the same value as VITE_HMR_CLIENT_PORT so Vite HMR follows automatically.
 # api/postgres/redis/minio have NO published ports — they talk by service name
 # on the internal network, so this stack never collides with other projects.
 #
@@ -29,8 +32,8 @@ services:
       - --api.dashboard=true
       - --api.insecure=true
     ports:
-      - "80:80"
-      - "127.0.0.1:8080:8080" # Traefik dashboard (dev only)
+      - "${TRAEFIK_PORT:-80}:80"
+      - "127.0.0.1:${TRAEFIK_DASHBOARD_PORT:-8080}:8080" # Traefik dashboard (dev only)
     volumes:
       - ./infra/traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
     networks: [podokit]
@@ -45,6 +48,10 @@ services:
     environment:
       - VITE_DOCKER=1
       - BACKEND_INTERNAL_URL=http://api:5002
+      # Match Traefik's published port so HMR's WebSocket targets the right port
+      # (default 80). Without this, HMR connects to :80 and a non-80 stack falls
+      # back to a full page reload on every edit.
+      - VITE_HMR_CLIENT_PORT=${TRAEFIK_PORT:-80}
     depends_on: [api]
     networks: [podokit]
     develop:
