@@ -2,7 +2,10 @@
   "manifestVersion": 1,
   "name": "faq",
   "description": "FAQ: questions with a Markdown answer, grouped by category, with an order and published flag. Public GET /faq + admin CRUD. Entries carry a jsonb metadata field for project-specific fields.",
-  "requires": ["admin-dashboard", "markdown"],
+  "requires": [
+    "admin-dashboard",
+    "markdown"
+  ],
   "targetApp": "api",
   "inject": [
     {
@@ -45,6 +48,11 @@
       "marker": "<!-- podokit:end:agents-modules -->",
       "optional": true,
       "text": "### faq\n- Public `GET /faq` (published, grouped by category); admin CRUD under `/admin/faq`. Answers are Markdown, rendered with the markdown module.\n- Extend an entry with project-specific fields via its `metadata` (jsonb) — no migration.\n"
+    },
+    {
+      "file": "apps/web/src/lib/content-nav.svelte.ts",
+      "marker": "// podokit:end:content-nav",
+      "text": "  { label: (t) => t.faq.nav, href: \"/faq\" },"
     }
   ],
   "instructions": [

@@ -29,6 +29,12 @@ export class ContentCollectionController {
   constructor(private readonly service: ContentCollectionService) {}
 
   @Public()
+  @Get()
+  collections(): Promise<string[]> {
+    return this.service.listCollections();
+  }
+
+  @Public()
   @Get(":collection")
   list(@Param("collection") collection: string): Promise<CollectionItem[]> {
     return this.service.listPublished(collection);

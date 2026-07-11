@@ -49,6 +49,11 @@
       "marker": "<!-- podokit:end:agents-modules -->",
       "optional": true,
       "text": "### blog\n- Posts: public `GET /blog` (`?tag=` filter), `GET /blog/:slug`, `GET /blog/rss.xml`; admin CRUD under `/admin/blog`. Render `body` with the markdown module's `<Markdown/>`.\n- Extend a post with project-specific fields via its `metadata` (jsonb) — no migration.\n"
+    },
+    {
+      "file": "apps/web/src/lib/content-nav.svelte.ts",
+      "marker": "// podokit:end:content-nav",
+      "text": "  { label: (t) => t.blog.nav, href: \"/blog\" },"
     }
   ],
   "instructions": [

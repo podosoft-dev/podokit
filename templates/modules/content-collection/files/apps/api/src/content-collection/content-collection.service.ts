@@ -11,6 +11,17 @@ export class ContentCollectionService {
     @InjectRepository(CollectionItem) private readonly items: Repository<CollectionItem>,
   ) {}
 
+  /** Public: distinct collection keys that have at least one published item. */
+  async listCollections(): Promise<string[]> {
+    const rows = await this.items
+      .createQueryBuilder("i")
+      .select("DISTINCT i.collection", "collection")
+      .where("i.status = :status", { status: "published" })
+      .orderBy("i.collection", "ASC")
+      .getRawMany<{ collection: string }>();
+    return rows.map((r) => r.collection);
+  }
+
   /** Public: published items of a collection, in display order. */
   listPublished(collection: string): Promise<CollectionItem[]> {
     return this.items.find({
