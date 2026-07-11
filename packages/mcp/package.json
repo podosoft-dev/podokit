@@ -1,6 +1,6 @@
 {
   "name": "@podosoft/podokit-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Model Context Protocol server for PodoKit: lists/adds modules, reports project status, previews updates, and searches the docs — run locally via npx (no hosting).",
   "license": "Apache-2.0",
   "type": "module",
@@ -36,7 +36,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
-    "@podosoft/podokit": "^0.6.0",
+    "@podosoft/podokit": "^0.7.0",
     "zod": "^4.0.0"
   }
 }
