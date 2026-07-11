@@ -61,9 +61,43 @@ If you want to fully own a managed file and stop updates from touching it:
 podo eject apps/api/src/main.ts
 ```
 
-This flips the file's tier to `owned` in `.podokit/files.lock`. It still shows
-up in `podo diff`, but `podo update` will skip it from then on. Unlike a
-one-way project eject, this is per-file and reversible.
+This flips the file's tier to `owned` and records the path in your project's
+`ownedGlobs` (in `.podokit/manifest.json`), so it **stays owned** even after a
+later `podo add` or `podo update` rebuilds the file tiers. It still shows up in
+`podo diff`, but `podo update` will skip it from then on. Unlike a one-way
+project eject, this is per-file and reversible.
+
+### Module-owned paths
+
+A module can declare paths it ships as **owned** up front, via `ownedGlobs` in
+its `module.manifest.json`. This is how a module keeps its **public presentation
+pages** freely customizable (owned) while its reusable logic under
+`apps/web/src/lib/<module>/` stays **managed** and keeps receiving updates. When
+you `podo add` such a module, its `ownedGlobs` are merged into your project's
+`ownedGlobs`, so those files are yours to restyle and `podo update` never
+touches them.
+
+## Overriding providers — `app.extensions.ts`
+
+To change how the backend behaves without editing managed code, use the owned
+slot `apps/api/src/app.extensions.ts`. Export extra modules/providers, or
+override a PodoKit-provided provider by its token:
+
+```ts
+// apps/api/src/app.extensions.ts
+import type { Provider } from "@nestjs/common";
+import { Mailer } from "./mailer/mailer";
+import { MyMailer } from "./my-mailer";
+
+export const extensionProviders: Provider[] = [
+  { provide: Mailer, useClass: MyMailer },
+];
+```
+
+`AppModule` spreads these in *after* the module-wired providers, so a same-token
+override here wins. The file is **owned** — `podo update` never touches it. This
+is the seam for swapping the mailer transport, the contact-form sink, a storage
+adapter, and so on, while still receiving updates to everything else.
 
 ## Framework compatibility
 

@@ -9,6 +9,7 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import * as Tabs from "$lib/components/ui/tabs";
   import GeneralSettings from "./general-settings.svelte";
+  import { moduleSettingsSections } from "$lib/admin/registry.svelte";
   import { toast } from "svelte-sonner";
   import { api } from "$lib/api";
   import { getI18n } from "$lib/i18n";
@@ -226,6 +227,9 @@
     <Tabs.List>
       <Tabs.Trigger value="general">{i18n.t.general.tab}</Tabs.Trigger>
       <Tabs.Trigger value="auth">{i18n.t.settings.tab}</Tabs.Trigger>
+      {#each moduleSettingsSections as s (s.value)}
+        <Tabs.Trigger value={s.value}>{s.label(i18n.t)}</Tabs.Trigger>
+      {/each}
     </Tabs.List>
 
     <Tabs.Content value="general" class="mt-6">
@@ -247,6 +251,12 @@
         </section>
       {/each}
     </Tabs.Content>
+
+    {#each moduleSettingsSections as s (s.value)}
+      <Tabs.Content value={s.value} class="mt-6">
+        <s.component />
+      </Tabs.Content>
+    {/each}
   </Tabs.Root>
 </div>
 

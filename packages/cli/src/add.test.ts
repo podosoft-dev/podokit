@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { create } from "./create";
 import { addModule, listModules } from "./add";
 
@@ -29,6 +29,120 @@ describe("listModules", () => {
     expect(listModules(MODULES).map((m) => m.name)).toContain("auth");
   });
 });
+
+describe("module-declared ownedGlobs", () => {
+  it("merges into the manifest so the module's public path stays owned", () => {
+    const project = generate("fullstack-nest-svelte");
+    // a throwaway fixture module that ships a $lib file and declares it owned
+    const modulesDir = join(tmp(), "modules");
+    const fileRel = "apps/web/src/lib/widget/Widget.svelte";
+    writeFile(join(modulesDir, "widget", "files", fileRel), "<p>widget</p>");
+    writeFile(
+      join(modulesDir, "widget", "module.manifest.json"),
+      JSON.stringify({
+        name: "widget",
+        description: "test",
+        targetApp: "web",
+        ownedGlobs: ["apps/web/src/lib/widget/**"],
+      }),
+    );
+
+    const result = addModule({ projectRoot: project, module: "widget", modulesDir });
+    expect(result.ownedGlobs).toContain("apps/web/src/lib/widget/**");
+
+    const manifest = JSON.parse(readFileSync(join(project, ".podokit/manifest.json"), "utf8")) as {
+      ownedGlobs: string[];
+    };
+    expect(manifest.ownedGlobs).toContain("apps/web/src/lib/widget/**");
+    const lock = JSON.parse(readFileSync(join(project, ".podokit/files.lock"), "utf8")) as {
+      files: Record<string, { tier: string }>;
+    };
+    expect(lock.files[fileRel].tier).toBe("owned");
+  });
+});
+
+describe("external-module resolution", () => {
+  function installPackageModule(project: string, pkg: string, manifest: object, fileRel?: string): void {
+    const pkgDir = join(project, "node_modules", pkg);
+    writeFile(join(pkgDir, "package.json"), JSON.stringify({ name: pkg, version: "1.0.0" }));
+    writeFile(join(pkgDir, "module.manifest.json"), JSON.stringify(manifest));
+    if (fileRel) writeFile(join(pkgDir, "files", fileRel), "pkg");
+  }
+
+  it("resolves and applies a module from an installed @podosoft/podokit-module-* package", () => {
+    const project = generate("fullstack-nest-svelte");
+    const fileRel = "apps/api/src/hello/hello.txt";
+    installPackageModule(
+      project,
+      "@podosoft/podokit-module-hello",
+      { manifestVersion: 1, name: "hello", description: "pkg module", targetApp: "api" },
+      fileRel,
+    );
+    // listed alongside the bundled modules
+    expect(listModules(MODULES, project).map((m) => m.name)).toContain("hello");
+    // applied exactly like a bundled module
+    const result = addModule({ projectRoot: project, module: "hello", modulesDir: MODULES });
+    expect(result.module).toBe("hello");
+    expect(existsSync(join(project, fileRel))).toBe(true);
+  });
+
+  it("rejects a module manifest from a newer CLI", () => {
+    const project = generate("fullstack-nest-svelte");
+    installPackageModule(project, "@podosoft/podokit-module-future", {
+      manifestVersion: 99,
+      name: "future",
+      description: "x",
+      targetApp: "api",
+    });
+    expect(() => addModule({ projectRoot: project, module: "future", modulesDir: MODULES })).toThrow(
+      /newer PodoKit/,
+    );
+  });
+});
+
+describe("mailer extraction", () => {
+  it("auth pulls in the mailer module, which ships a decoupled mail library", () => {
+    const project = generate("fullstack-nest-svelte");
+    const result = addModule({ projectRoot: project, module: "auth", modulesDir: MODULES });
+    // auth requires mailer -> auto-added
+    expect(result.added).toContain("mailer");
+    // mailer ships the mail library with its own pool (no dependency on auth)
+    expect(existsSync(join(project, "apps/api/src/mail/mailer.ts"))).toBe(true);
+    expect(existsSync(join(project, "apps/api/src/mail/db.ts"))).toBe(true);
+    expect(readFileSync(join(project, "apps/api/src/mail/mailer.ts"), "utf8")).toContain('from "./db"');
+    // auth's email flows go through the mailer module's file
+    expect(readFileSync(join(project, "apps/api/src/auth/auth.ts"), "utf8")).toContain('from "../mail/mailer"');
+    // nodemailer ships via the mailer module (merged into the api workspace)
+    const apiPkg = JSON.parse(readFileSync(join(project, "apps/api/package.json"), "utf8")) as {
+      dependencies: Record<string, string>;
+    };
+    expect(apiPkg.dependencies.nodemailer).toBeDefined();
+    const manifest = JSON.parse(readFileSync(join(project, ".podokit/manifest.json"), "utf8")) as {
+      modules: { name: string }[];
+    };
+    expect(manifest.modules.map((m) => m.name)).toContain("mailer");
+  });
+});
+
+describe("app.extensions DI slot", () => {
+  it("ships an owned extensions file wired into app.module", () => {
+    const project = generate("fullstack-nest-svelte");
+    expect(existsSync(join(project, "apps/api/src/app.extensions.ts"))).toBe(true);
+    const appModule = readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8");
+    expect(appModule).toContain("import { extensionImports, extensionProviders }");
+    expect(appModule).toContain("...extensionImports");
+    expect(appModule).toContain("...extensionProviders");
+    const lock = JSON.parse(readFileSync(join(project, ".podokit/files.lock"), "utf8")) as {
+      files: Record<string, { tier: string }>;
+    };
+    expect(lock.files["apps/api/src/app.extensions.ts"].tier).toBe("owned");
+  });
+});
+
+function writeFile(path: string, content: string): void {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, content);
+}
 
 describe("addModule (auth / better-auth)", () => {
   it("overlays files, merges deps, appends env, and wires a global guard", () => {

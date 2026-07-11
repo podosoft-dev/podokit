@@ -13,7 +13,10 @@ npx @podosoft/podokit add <module>
 - overlays its files into the project,
 - merges its dependencies into the target app's `package.json`,
 - appends any environment variables to `.env.example`,
-- wires itself into `app.module.ts` at marker comments, and
+- wires itself into `app.module.ts` at marker comments,
+- may declare `ownedGlobs` (paths it ships as user-owned — e.g. public pages you
+  restyle — merged into your project so `podo update` never touches them; see
+  [updating](updating.md#module-owned-paths)), and
 - prints follow-up steps.
 
 ## Available modules
@@ -70,6 +73,29 @@ curl -b cookies.txt localhost:5002/account/me
   curl -H "Authorization: Bearer $TOKEN" localhost:5002/account/me
   ```
 - Security/audit modules build on this (they require `auth`).
+
+
+### `mailer`
+
+Reusable email sending. `auth` (and later `contact-form`) depend on it, so it is
+usually added automatically.
+
+```bash
+npx @podosoft/podokit add mailer
+```
+
+```ts
+import { sendMail, actionEmail } from "../mail/mailer"; // path relative to your file
+await sendMail({ to: "a@example.com", subject: "Hi", text: "Hello", html: actionEmail(...) });
+```
+
+- **SMTP resolution** (applied live, ~3s TTL): admin Settings page (DB, when
+  `auth` is installed) → `SMTP_*` env → none, in which case messages are logged
+  to the console so dev links stay grabbable.
+- Depends on no other module (reads the DB SMTP config defensively), so `auth`
+  can require it without a cycle.
+- **Override the transport** (e.g. a provider SDK) from the owned DI slot
+  `apps/api/src/app.extensions.ts`: `import { setMailTransport } from "./mail/mailer"; setMailTransport(myTransport)`.
 
 
 ### `bullmq`
@@ -444,6 +470,31 @@ Organizations (multi-tenant teams) come from better-auth, extended where it fall
 
 Add your own org fields/roles the same way: extend `additionalFields` and the
 `org-permissions.ts` roles, then re-run the better-auth migration.
+
+## Where modules come from
+
+`podo add <name>` resolves a module from either:
+
+1. the **bundled** modules that ship with the CLI (everything documented above), or
+2. an **installed npm package** `@podosoft/podokit-module-<name>` (or a
+   fully-qualified `@scope/pkg` name) in your project.
+
+This keeps the core lean and lets modules — including third-party ones — ship and
+version independently. A package module is just a `module.manifest.json` (with a
+`manifestVersion`) plus a `files/` overlay, resolved and applied exactly like a
+bundled one; the CLI rejects a manifest that needs a newer PodoKit. `podo add`
+with no argument lists both bundled and installed package modules.
+
+## Adding admin nav & settings (module registry)
+
+When `admin-dashboard` is installed, a module can add its own **sidebar nav entry**
+and **settings tab** by injecting into the registry
+`apps/web/src/lib/admin/registry.svelte.ts` at its `// podokit:begin/end:admin-nav`
+and `:admin-settings` markers. The sidebar and the settings page render from these
+arrays, so the admin menu grows and shrinks with the installed module set — no
+edits to `app-sidebar.svelte` or the settings page. A nav entry is
+`{ href, key, icon, adminOnly? }` (with `key` an i18n `nav` key the module also
+adds); a settings tab is `{ value, label, component }`.
 
 ## Keeping modules up to date
 

@@ -5,6 +5,7 @@ import { validateEnv } from "./config/env.validation";
 import { dataSourceOptions } from "./database/data-source";
 import { HealthModule } from "./health/health.module";
 import { TodosModule } from "./todos/todos.module";
+import { extensionImports, extensionProviders } from "./app.extensions";
 // podokit:begin:imports
 // podokit:end:imports
 
@@ -16,10 +17,12 @@ import { TodosModule } from "./todos/todos.module";
     TodosModule,
     // podokit:begin:module-imports
     // podokit:end:module-imports
+    ...extensionImports,
   ],
   providers: [
     // podokit:begin:providers
     // podokit:end:providers
+    ...extensionProviders,
   ],
 })
 export class AppModule {}

@@ -1,0 +1,38 @@
+{
+  "name": "mailer",
+  "description": "Reusable email sending (nodemailer). Resolves SMTP from the admin-configured DB settings when auth is installed, else SMTP_* env, else logs to the console. Used by auth and contact-form; the transport is overridable from app.extensions.ts.",
+  "requires": [],
+  "targetApp": "api",
+  "dependencies": {
+    "nodemailer": "^7.0.9",
+    "@podosoft/podokit-auth": "^0.1.0",
+    "pg": "^8.12.0"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "^7.0.4",
+    "@types/pg": "^8.11.10"
+  },
+  "env": [
+    "# ── Mailer (SMTP) — optional ──",
+    "# With auth installed, configure SMTP on the admin Settings page (stored",
+    "# encrypted in the DB, applied live). These env vars are a fallback/override;",
+    "# with no SMTP configured at all the mailer logs messages to the console.",
+    "# Local dev uses Mailpit: docker compose --profile dev up → http://localhost:8025",
+    "# SMTP_HOST=localhost",
+    "# SMTP_PORT=1025",
+    "# MAIL_FROM=PodoKit <no-reply@example.com>"
+  ],
+  "inject": [
+    {
+      "file": "AGENTS.md",
+      "marker": "<!-- podokit:end:agents-modules -->",
+      "optional": true,
+      "text": "### mailer\n- Send email with `import { sendMail, actionEmail } from \"../mail/mailer\"` (path relative to your file). `sendMail({ to, subject, text, html? })`.\n- SMTP comes from the admin Settings page (when auth is installed) or `SMTP_*` env; with neither, messages are logged to the console (dev links are grabbable from logs).\n- To use a provider SDK instead of SMTP, call `setMailTransport(...)` from `apps/api/src/app.extensions.ts`.\n"
+    }
+  ],
+  "instructions": [
+    "Send mail from anywhere in the API:  import { sendMail } from \"../mail/mailer\"  then  await sendMail({ to, subject, text }).",
+    "SMTP is optional: with auth installed, configure it on the admin Settings page (DB, applied live); otherwise set SMTP_HOST/SMTP_PORT/MAIL_FROM in .env. With none set, messages are logged to the console.",
+    "To send through a provider SDK, override the transport in apps/api/src/app.extensions.ts:  import { setMailTransport } from \"./mail/mailer\";  setMailTransport(myTransport)."
+  ]
+}

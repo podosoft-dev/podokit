@@ -1,7 +1,7 @@
 {
   "name": "auth",
   "description": "Full authentication (better-auth): email/password, sessions, and \u2014 via config \u2014 OAuth and 2FA. Installs a global guard so the API is secure by default; health and /api/auth stay public.",
-  "requires": [],
+  "requires": ["mailer"],
   "targetApp": "api",
   "dependencies": {
     "@podosoft/podokit-auth": "^0.1.0",
@@ -9,14 +9,12 @@
     "better-auth": "^1.6.23",
     "@thallesp/nestjs-better-auth": "^2.7.0",
     "pg": "^8.12.0",
-    "nodemailer": "^7.0.9",
     "@better-auth/api-key": "^1.6.23",
     "@better-auth/passkey": "^1.6.23",
     "@better-auth/oauth-provider": "^1.6.23"
   },
   "devDependencies": {
-    "@types/pg": "^8.11.10",
-    "@types/nodemailer": "^7.0.4"
+    "@types/pg": "^8.11.10"
   },
   "env": [
     "# \u2500\u2500 Auth (better-auth) \u2014 the only required secrets \u2500\u2500",
@@ -32,10 +30,7 @@
     "# override (e.g. for secrets-manager injection in production); the DB takes",
     "# precedence when set.",
     "# --- Optional overrides / local development ---",
-    "# Email (Mailpit in local dev: docker compose --profile dev up \u2192 http://localhost:8025)",
-    "# SMTP_HOST=localhost",
-    "# SMTP_PORT=1025",
-    "# MAIL_FROM=PodoKit <no-reply@example.com>",
+    "# Email/SMTP is provided by the mailer module (see its .env block).",
     "# Phone-number SMS webhook (dev: SMS sink on port 8095)",
     "# SMS_WEBHOOK_URL=http://localhost:8095/sms",
     "# AUTH_HIBP=false",

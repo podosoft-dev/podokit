@@ -60,7 +60,7 @@ changes need an e2e/unit test.
 This project is managed by the `podo` CLI. Files have an ownership tier recorded
 in `.podokit/files.lock` — respect it:
 
-- **owned** (your code: `apps/web/src/routes/**`, your components/services, and this `AGENTS.md`) — edit freely.
+- **owned** (your code: `apps/web/src/routes/**`, your components/services, `apps/api/src/app.extensions.ts`, and this `AGENTS.md`) — edit freely. To add or override Nest providers/modules, use `app.extensions.ts` (spread into `AppModule` after the module-wired providers, so a same-token override wins) rather than editing `app.module.ts`.
 - **assembled** (e.g. `apps/api/src/app.module.ts`, `auth.ts`) — contain `// podokit:begin:… / …:end` fenced regions that the toolkit recomputes. Edit outside the fences only; **never hand-edit inside the fences**.
 - **managed** (bootstrap/config like `main.ts`) — the toolkit may update these; avoid gratuitous edits.
 

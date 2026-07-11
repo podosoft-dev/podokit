@@ -9,7 +9,9 @@ import {
   computeFilesLock,
   initLockfile,
   recordModules,
+  mergeOwnedGlobs,
   readManifest,
+  readFilesLock,
   DEFAULT_OWNED_GLOBS,
   type FilesLock,
 } from "./lockfile";
@@ -118,5 +120,32 @@ describe("recordModules", () => {
     write(root, "apps/api/src/main.ts", "x");
     recordModules(root, ["auth"], "1.0.0");
     expect(existsSync(join(root, ".podokit/manifest.json"))).toBe(false);
+  });
+
+  it("merges module ownedGlobs into the manifest and keeps them owned across recompute", () => {
+    const root = tmp();
+    write(root, "apps/api/src/main.ts", "x");
+    write(root, "apps/web/src/lib/blog/PostCard.svelte", "<p/>");
+    initLockfile(root, { template: "base", packageManager: "npm", answers: {}, version: "1.0.0" });
+    // by default a $lib file is managed
+    expect(readFilesLock(root)?.files["apps/web/src/lib/blog/PostCard.svelte"].tier).toBe("managed");
+
+    // a module declares a public path owned
+    recordModules(root, ["blog"], "1.0.0", ["apps/web/src/lib/blog/**"]);
+    expect(readManifest(root)?.ownedGlobs).toContain("apps/web/src/lib/blog/**");
+    expect(readFilesLock(root)?.files["apps/web/src/lib/blog/PostCard.svelte"].tier).toBe("owned");
+
+    // a later add/update (recompute without re-passing globs) keeps it owned
+    recordModules(root, ["faq"], "1.0.0");
+    expect(readFilesLock(root)?.files["apps/web/src/lib/blog/PostCard.svelte"].tier).toBe("owned");
+  });
+});
+
+describe("mergeOwnedGlobs", () => {
+  it("unions without duplicates, preserving order", () => {
+    expect(mergeOwnedGlobs(["a", "b"], ["b", "c", "a", "d"])).toEqual(["a", "b", "c", "d"]);
+  });
+  it("returns the original when nothing new is added", () => {
+    expect(mergeOwnedGlobs(["a", "b"], [])).toEqual(["a", "b"]);
   });
 });

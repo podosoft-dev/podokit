@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { createRequire } from "node:module";
 import {
   copyTemplate,
   insertAtMarker,
@@ -17,7 +18,13 @@ interface Injection {
   optional?: boolean;
 }
 
+/** Highest `module.manifest.json` schema version this CLI understands. A package
+ *  module declaring a higher version is rejected rather than mis-applied. */
+export const SUPPORTED_MANIFEST_VERSION = 1;
+
 export interface ModuleManifest {
+  /** Manifest schema version. Absent (bundled modules) means "same as the CLI". */
+  manifestVersion?: number;
   name: string;
   description: string;
   requires?: string[];
@@ -28,6 +35,11 @@ export interface ModuleManifest {
   env?: string[];
   inject?: Injection[];
   instructions?: string[];
+  /** App-relative globs this module's files should own (durably user-editable,
+   *  never touched by `podo update`). Merged into the project's ownedGlobs so
+   *  they survive lock recompute. Use for public presentation pages a consumer
+   *  restyles, while keeping the module's `$lib` logic managed. */
+  ownedGlobs?: string[];
 }
 
 export interface AddOptions {
@@ -43,17 +55,65 @@ export interface AddResult {
   instructions: string[];
   /** Required modules that were auto-added because they were missing. */
   added: string[];
+  /** ownedGlobs declared by this module and every module it pulled in. */
+  ownedGlobs: string[];
 }
 
-/** List modules available under `modulesDir` (each has a module.manifest.json). */
-export function listModules(modulesDir: string): { name: string; description: string }[] {
-  if (!existsSync(modulesDir)) return [];
-  return readdirSync(modulesDir)
-    .filter((name) => existsSync(join(modulesDir, name, "module.manifest.json")))
-    .map((name) => {
-      const manifest = readManifest(join(modulesDir, name));
-      return { name, description: manifest.description };
-    });
+const PACKAGE_PREFIX = "@podosoft/podokit-module-";
+
+/**
+ * Resolve a module's directory by name: first the bundled `modulesDir`, then a
+ * node-resolvable npm package `@podosoft/podokit-module-<name>` installed in the
+ * project (or a fully-qualified `@scope/pkg` name). Returns null if not found.
+ */
+export function resolveModuleDir(name: string, modulesDir: string, projectRoot: string): string | null {
+  const bundled = join(modulesDir, name);
+  if (existsSync(join(bundled, "module.manifest.json"))) return bundled;
+  const pkg = name.includes("/") ? name : `${PACKAGE_PREFIX}${name}`;
+  try {
+    const req = createRequire(join(projectRoot, "package.json"));
+    return dirname(req.resolve(`${pkg}/module.manifest.json`));
+  } catch {
+    return null;
+  }
+}
+
+function assertManifestVersion(name: string, manifest: ModuleManifest): void {
+  if ((manifest.manifestVersion ?? SUPPORTED_MANIFEST_VERSION) > SUPPORTED_MANIFEST_VERSION) {
+    throw new Error(
+      `Module "${name}" needs a newer PodoKit (manifest v${manifest.manifestVersion}, this CLI supports v${SUPPORTED_MANIFEST_VERSION}). Update @podosoft/podokit.`,
+    );
+  }
+}
+
+/** List modules available to a project: the bundled ones under `modulesDir` plus,
+ *  when `projectRoot` is given, any `@podosoft/podokit-module-*` packages installed
+ *  in it. Bundled names take precedence on a clash. */
+export function listModules(
+  modulesDir: string,
+  projectRoot?: string,
+): { name: string; description: string }[] {
+  const out = new Map<string, string>();
+  if (existsSync(modulesDir)) {
+    for (const name of readdirSync(modulesDir)) {
+      if (existsSync(join(modulesDir, name, "module.manifest.json"))) {
+        out.set(name, readManifest(join(modulesDir, name)).description);
+      }
+    }
+  }
+  if (projectRoot) {
+    const scope = join(projectRoot, "node_modules", "@podosoft");
+    if (existsSync(scope)) {
+      for (const dir of readdirSync(scope)) {
+        if (!dir.startsWith("podokit-module-")) continue;
+        const manifestPath = join(scope, dir, "module.manifest.json");
+        if (!existsSync(manifestPath)) continue;
+        const manifest = readManifest(join(scope, dir));
+        if (!out.has(manifest.name)) out.set(manifest.name, manifest.description);
+      }
+    }
+  }
+  return [...out].map(([name, description]) => ({ name, description }));
 }
 
 function readManifest(moduleDir: string): ModuleManifest {
@@ -81,9 +141,9 @@ function appendEnv(projectRoot: string, lines: string[]): void {
 
 /** Heuristic: is `module` already applied to the project? */
 function isApplied(projectRoot: string, modulesDir: string, module: string): boolean {
-  const manifestPath = join(modulesDir, module, "module.manifest.json");
-  if (!existsSync(manifestPath)) return false;
-  const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as ModuleManifest;
+  const moduleDir = resolveModuleDir(module, modulesDir, projectRoot);
+  if (!moduleDir) return false;
+  const manifest = readManifest(moduleDir);
   const firstInject = manifest.inject?.[0];
   if (firstInject) {
     const target = join(projectRoot, firstInject.file);
@@ -99,8 +159,14 @@ function isApplied(projectRoot: string, modulesDir: string, module: string): boo
  */
 export function addModule(options: AddOptions): AddResult {
   const result = applyModule(options.projectRoot, options.module, options.modulesDir, new Set());
-  // Record the module (and any auto-added requirements) and refresh the lock.
-  recordModules(options.projectRoot, [...result.added, result.module], options.podokitVersion);
+  // Record the module (and any auto-added requirements), fold in the modules'
+  // declared ownedGlobs, and refresh the lock.
+  recordModules(
+    options.projectRoot,
+    [...result.added, result.module],
+    options.podokitVersion,
+    result.ownedGlobs,
+  );
   return result;
 }
 
@@ -110,14 +176,15 @@ function applyModule(
   modulesDir: string,
   applied: Set<string>,
 ): AddResult {
-  const moduleDir = join(modulesDir, module);
-  if (!existsSync(join(moduleDir, "module.manifest.json"))) {
-    const available = listModules(modulesDir).map((m) => m.name);
+  const moduleDir = resolveModuleDir(module, modulesDir, projectRoot);
+  if (!moduleDir) {
+    const available = listModules(modulesDir, projectRoot).map((m) => m.name);
     throw new Error(
       `Unknown module "${module}".${available.length ? ` Available: ${available.join(", ")}.` : ""}`,
     );
   }
   const manifest = readManifest(moduleDir);
+  assertManifestVersion(module, manifest);
 
   const appPkgPath = join(projectRoot, "apps", manifest.targetApp, "package.json");
   if (!existsSync(appPkgPath)) {
@@ -130,10 +197,12 @@ function applyModule(
 
   // 0) apply required modules first (auto-add if missing)
   const added: string[] = [];
+  const ownedGlobs: string[] = [...(manifest.ownedGlobs ?? [])];
   for (const required of manifest.requires ?? []) {
     if (applied.has(required) || isApplied(projectRoot, modulesDir, required)) continue;
     const result = applyModule(projectRoot, required, modulesDir, applied);
     added.push(required, ...result.added);
+    ownedGlobs.push(...result.ownedGlobs);
   }
 
   const appName = projectName(projectRoot);
@@ -173,5 +242,5 @@ function applyModule(
   }
 
   const instructions = (manifest.instructions ?? []).map((line) => line.replace(/<app>/g, appName));
-  return { module, instructions, added };
+  return { module, instructions, added, ownedGlobs };
 }

@@ -4,7 +4,17 @@ import { redirect } from "@sveltejs/kit";
 // "/" is a public landing page. Auth pages send signed-in users to /admin, and
 // the admin area requires a session. /maintenance is public so it renders while
 // the rest of the site is held back.
-const PUBLIC_PATHS = ["/", "/login", "/signup", "/forgot-password", "/reset-password", "/maintenance"];
+const PUBLIC_PATHS = [
+  "/",
+  "/login",
+  "/signup",
+  "/forgot-password",
+  "/reset-password",
+  "/maintenance",
+  // Modules add their public (no-session) page prefixes here.
+  // podokit:begin:public-paths
+  // podokit:end:public-paths
+];
 const AUTH_PATHS = ["/login", "/signup", "/forgot-password", "/reset-password"];
 
 function isPublic(pathname: string): boolean {
