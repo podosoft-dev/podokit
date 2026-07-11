@@ -26,14 +26,18 @@ test("OIDC provider: discovery, JWKS, client registration, authorize handoff @sm
     const jwks = await (await page.request.get(disc.jwks_uri)).json();
     expect(Array.isArray(jwks.keys) && jwks.keys.length).toBeTruthy();
 
-    // Dynamic client registration returns usable credentials.
-    const reg = await (
-      await page.request.post("/api/auth/oauth2/create-client", {
-        data: { client_name: "E2E RP", redirect_uris: [REDIRECT] },
-        headers,
-      })
-    ).json();
-    expect(reg.client_id).toBeTruthy();
+    // Dynamic client registration returns usable credentials. Retry: right after
+    // the provider is enabled the auth instance may still be rebuilding.
+    let reg: { client_id?: string; client_secret?: string } = {};
+    await expect(async () => {
+      reg = await (
+        await page.request.post("/api/auth/oauth2/create-client", {
+          data: { client_name: "E2E RP", redirect_uris: [REDIRECT] },
+          headers,
+        })
+      ).json();
+      expect(reg.client_id).toBeTruthy();
+    }).toPass({ timeout: 8000 });
     expect(reg.client_secret).toBeTruthy();
 
     // Authorize validates the client + PKCE and hands off to the consent page with

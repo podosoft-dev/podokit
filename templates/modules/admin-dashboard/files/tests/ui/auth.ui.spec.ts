@@ -43,3 +43,14 @@ test("reset-password without a token is disabled", async ({ page }) => {
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page.getByRole("button", { name: "Update password" })).toBeDisabled();
 });
+
+test("signup creates an account and enters the app @smoke", async ({ page }) => {
+  await ready(page, "/signup");
+  const email = `signup-${Date.now()}@example.com`;
+  await page.getByLabel("Name").fill("New User");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill("Podokit3e-Str0ng!pw");
+  await page.getByRole("button", { name: "Create account" }).click();
+  // Verification off → straight into the app; on → the verify-email page.
+  await expect(page).toHaveURL(/\/admin|\/verify-email/);
+});

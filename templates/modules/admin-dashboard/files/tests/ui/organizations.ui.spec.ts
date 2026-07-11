@@ -53,3 +53,36 @@ test("create an org with a non-ascii name, a parent, and a manager @smoke", asyn
   await page.getByRole("row", { name: new RegExp(parent) }).getByRole("button", { name: "Delete" }).first().click();
   await expect(page.getByText("Organization deleted").first()).toBeVisible();
 });
+
+test("organization manage: remove a member, invite one, and cancel the invite @smoke", async ({ page }) => {
+  await ready(page, "/admin/organizations");
+  const newBtn = page.getByRole("button", { name: "New organization" });
+  test.skip((await newBtn.count()) === 0, "organizations not enabled");
+
+  const name = `Mng ${Date.now()}`;
+  await newBtn.click();
+  await page.getByLabel("Name", { exact: true }).fill(name);
+  await page.getByRole("checkbox").first().click(); // seed a non-owner member (existing user)
+  await page.getByRole("dialog").getByRole("button", { name: "Create", exact: true }).click();
+  await expect(page.getByText("Organization created").first()).toBeVisible();
+
+  try {
+    await page.getByRole("row", { name: new RegExp(name) }).getByRole("button", { name: "Manage" }).click();
+    const dialog = page.getByRole("dialog");
+
+    // The seeded non-owner member is removable.
+    const remove = dialog.getByRole("button", { name: "Remove" }).first();
+    await expect(remove).toBeVisible();
+    await remove.click();
+
+    // Invite a member by email → pending invitation appears → cancel it.
+    await dialog.locator("#invite-email").fill(`invitee-${Date.now()}@example.com`);
+    await dialog.getByRole("button", { name: "Invite", exact: true }).click();
+    await expect(page.getByText("Invitation sent").first()).toBeVisible();
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).first().click();
+  } finally {
+    await page.keyboard.press("Escape").catch(() => undefined);
+    await page.getByRole("row", { name: new RegExp(name) }).getByRole("button", { name: "Delete" }).first().click();
+    await expect(page.getByText("Organization deleted").first()).toBeVisible();
+  }
+});
