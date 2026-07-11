@@ -35,3 +35,16 @@ export function renderMarkdown(source: string): string {
   const html = marked.parse(source ?? "", { async: false });
   return sanitizeHtml(html, SANITIZE_OPTIONS);
 }
+
+/** Body content formats. `text` is rendered as-is (escaped, whitespace kept) by
+ *  the <ContentBody> component; the HTML-producing formats are sanitized here. */
+export type ContentFormat = "text" | "markdown" | "html";
+
+/** Render body content of a given format to sanitized HTML (for markdown/html).
+ *  For `text`, prefer the <ContentBody> component, which escapes and preserves
+ *  whitespace without producing HTML. */
+export function renderContent(source: string, format: ContentFormat = "markdown"): string {
+  if (format === "html") return sanitizeHtml(source ?? "", SANITIZE_OPTIONS);
+  if (format === "text") return sanitizeHtml(source ?? "", { allowedTags: [], allowedAttributes: {} });
+  return renderMarkdown(source);
+}

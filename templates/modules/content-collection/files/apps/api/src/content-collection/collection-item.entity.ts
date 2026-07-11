@@ -32,6 +32,10 @@ export class CollectionItem {
   @Column({ type: "text", default: "" })
   body!: string;
 
+  // How `body` is authored/rendered: plain text, Markdown, or (sanitized) HTML.
+  @Column({ type: "varchar", length: 16, default: "markdown" })
+  bodyFormat!: "text" | "markdown" | "html";
+
   @Column({ type: "varchar", length: 100, nullable: true })
   icon!: string | null;
 

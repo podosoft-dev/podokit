@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Markdown } from "$lib/markdown";
+  import { ContentBody } from "$lib/markdown";
   import type { CollectionItem } from "./types";
 
   // Reusable detail view: title, optional hero image, and the Markdown body
@@ -17,5 +17,5 @@
   {#if item.image}
     <img src={item.image} alt={item.title} class="w-full rounded-xl object-cover" />
   {/if}
-  <Markdown source={item.body} class="prose dark:prose-invert max-w-none" />
+  <ContentBody source={item.body} format={item.bodyFormat} class="prose dark:prose-invert max-w-none" />
 </article>

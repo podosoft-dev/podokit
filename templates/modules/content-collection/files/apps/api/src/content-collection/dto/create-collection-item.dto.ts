@@ -36,6 +36,11 @@ export class CreateCollectionItemDto {
   @IsString()
   body?: string;
 
+  @ApiPropertyOptional({ enum: ["text", "markdown", "html"], example: "markdown" })
+  @IsOptional()
+  @IsIn(["text", "markdown", "html"])
+  bodyFormat?: "text" | "markdown" | "html";
+
   @ApiPropertyOptional({ example: "code" })
   @IsOptional()
   @IsString()

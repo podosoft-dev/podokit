@@ -8,6 +8,7 @@ export type CollectionItem = {
   slug: string;
   summary: string | null;
   body: string;
+  bodyFormat: "text" | "markdown" | "html";
   icon: string | null;
   image: string | null;
   color: string | null;

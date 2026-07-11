@@ -97,23 +97,41 @@
   // ── Create / edit dialog ──
   let open = $state(false);
   let editing = $state<CollectionItem | null>(null);
-  let form = $state({ collection: "services", title: "", slug: "", summary: "", body: "", order: 0, status: "draft" as "draft" | "published" });
+  let form = $state({
+    collection: "services",
+    title: "",
+    slug: "",
+    summary: "",
+    body: "",
+    bodyFormat: "markdown" as "text" | "markdown" | "html",
+    order: 0,
+    status: "draft" as "draft" | "published",
+  });
+  // Custom fields (A1): edit the item's jsonb `metadata` as key/value rows.
+  let metaPairs = $state<{ key: string; value: string }[]>([]);
   let saving = $state(false);
+
+  function toPairs(meta: Record<string, unknown>): { key: string; value: string }[] {
+    return Object.entries(meta ?? {}).map(([key, value]) => ({ key, value: String(value ?? "") }));
+  }
 
   function openCreate(): void {
     editing = null;
-    form = { collection: applied.collection || "services", title: "", slug: "", summary: "", body: "", order: rows.length, status: "draft" };
+    form = { collection: applied.collection || "services", title: "", slug: "", summary: "", body: "", bodyFormat: "markdown", order: rows.length, status: "draft" };
+    metaPairs = [];
     open = true;
   }
   function openEdit(item: CollectionItem): void {
     editing = item;
-    form = { collection: item.collection, title: item.title, slug: item.slug, summary: item.summary ?? "", body: item.body, order: item.order, status: item.status };
+    form = { collection: item.collection, title: item.title, slug: item.slug, summary: item.summary ?? "", body: item.body, bodyFormat: item.bodyFormat, order: item.order, status: item.status };
+    metaPairs = toPairs(item.metadata);
     open = true;
   }
   async function save(): Promise<void> {
     saving = true;
     try {
-      const body = { ...form, order: Number(form.order) };
+      const metadata = Object.fromEntries(metaPairs.filter((p) => p.key.trim()).map((p) => [p.key.trim(), p.value]));
+      const body = { ...form, order: Number(form.order), metadata };
       if (editing) await api.put(`/admin/collections/${editing.id}`, body);
       else await api.post("/admin/collections", body);
       toast.success(t.saved);
@@ -194,7 +212,33 @@
       </div>
       <div class="flex flex-col gap-1.5"><Label for="f-title">{t.title}</Label><Input id="f-title" bind:value={form.title} /></div>
       <div class="flex flex-col gap-1.5"><Label for="f-summary">{t.summary}</Label><Input id="f-summary" bind:value={form.summary} /></div>
-      <div class="flex flex-col gap-1.5"><Label for="f-body">{t.body}</Label><Textarea id="f-body" bind:value={form.body} rows={8} /></div>
+      <div class="flex flex-col gap-1.5">
+        <div class="flex items-center justify-between">
+          <Label for="f-body">{t.body}</Label>
+          <Select.Root type="single" bind:value={form.bodyFormat}>
+            <Select.Trigger class="h-8 w-32 text-xs">{form.bodyFormat}</Select.Trigger>
+            <Select.Content>
+              <Select.Item value="markdown">Markdown</Select.Item>
+              <Select.Item value="html">HTML</Select.Item>
+              <Select.Item value="text">Text</Select.Item>
+            </Select.Content>
+          </Select.Root>
+        </div>
+        <Textarea id="f-body" bind:value={form.body} rows={8} class="font-mono text-sm" />
+      </div>
+
+      <div class="flex flex-col gap-2 rounded-md border p-3">
+        <span class="text-sm font-medium">{t.customFields}</span>
+        {#each metaPairs as pair, i (i)}
+          <div class="flex items-center gap-2">
+            <Input placeholder={t.fieldKey} bind:value={pair.key} class="w-40" />
+            <Input placeholder={t.fieldValue} bind:value={pair.value} class="flex-1" />
+            <Button variant="ghost" size="sm" onclick={() => (metaPairs = metaPairs.filter((_, j) => j !== i))}>{t.delete}</Button>
+          </div>
+        {/each}
+        <Button variant="outline" size="sm" class="w-fit" onclick={() => (metaPairs = [...metaPairs, { key: "", value: "" }])}>{t.addField}</Button>
+      </div>
+
       <div class="grid grid-cols-2 gap-4">
         <div class="flex flex-col gap-1.5"><Label for="f-order">{t.order}</Label><Input id="f-order" type="number" bind:value={form.order} /></div>
         <div class="flex flex-col gap-1.5">
