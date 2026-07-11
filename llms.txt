@@ -21,6 +21,7 @@ user-facing strings go through i18n, and the backend returns stable error
 - [Development](https://github.com/podosoft-dev/podokit/blob/main/docs/development.md): the host-process loop and the containerized dev environment (Traefik + `compose.dev.yaml`), plus DataTable/TableToolbar conventions.
 - [Updating](https://github.com/podosoft-dev/podokit/blob/main/docs/updating.md): `podo status`/`diff`/`doctor`/`update` (3-way merge) and `eject`; file ownership tiers.
 - [Testing](https://github.com/podosoft-dev/podokit/blob/main/docs/testing.md): Playwright e2e/ui shipped inside generated apps; faithful verification via Verdaccio.
+- [Reporting a bug](https://github.com/podosoft-dev/podokit/blob/main/docs/reporting-bugs.md): issue-form link, a copy-paste report template, and a `gh` recipe for a person or an AI agent to file from the terminal.
 
 ## Packages
 

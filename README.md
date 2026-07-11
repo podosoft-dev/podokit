@@ -195,11 +195,15 @@ conventions already loaded from `AGENTS.md`.
 - [Updating a project (`podo update`)](docs/updating.md)
 - [Examples](examples/README.md)
 - [Development](docs/development.md) · [Testing](docs/testing.md)
+- [Reporting a bug](docs/reporting-bugs.md)
 - [Changelog](CHANGELOG.md)
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+
+**Found a bug?** See [how to report a bug](docs/reporting-bugs.md) — a person or an
+AI coding agent can file one straight from the terminal with `gh`.
 
 ## Security
 
