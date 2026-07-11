@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- **Two-factor backup codes are now usable end to end.** The login page gained a
+  second-factor step (missing before): a password/OTP sign-in with 2FA enabled
+  now prompts for an authenticator code, with a **"use a backup code"** toggle so
+  a locked-out user can sign in with a one-time backup code. The account page adds
+  **Download** for the codes shown on enable and **Regenerate backup codes**
+  (invalidating the previous set).
+
 ## [0.8.0] - 2026-07-11
 
 ### Added

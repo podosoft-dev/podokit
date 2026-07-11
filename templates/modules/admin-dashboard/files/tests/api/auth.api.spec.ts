@@ -74,6 +74,74 @@ test("two-factor: enable with a real TOTP code and require it at sign-in @smoke"
   await ctx2.dispose();
 });
 
+test("two-factor: a backup code completes sign-in and is single-use @smoke", async ({ playwright }) => {
+  const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  const caps = await (await ctx.get("/api/account/capabilities")).json();
+  test.skip(!caps?.twoFactor, "two-factor not enabled");
+  const email = `tf-bc-${Date.now()}@example.com`;
+  const pw = "Podokit3e-Str0ng!pw";
+  await ctx.post("/api/auth/sign-up/email", { data: { email, password: pw, name: "BC" } });
+
+  // Enable 2FA; the enable response includes the one-time backup codes.
+  const enable = await (await ctx.post("/api/auth/two-factor/enable", { data: { password: pw } })).json();
+  await ctx.post("/api/auth/two-factor/verify-totp", { data: { code: totpCode(enable.totpURI) } });
+  const backupCodes = enable.backupCodes as string[];
+  expect(Array.isArray(backupCodes)).toBe(true);
+  expect(backupCodes.length).toBeGreaterThan(0);
+  const code = backupCodes[0]!;
+
+  // A backup code completes a challenged sign-in (no authenticator needed).
+  const ctx2 = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  const signin = await (await ctx2.post("/api/auth/sign-in/email", { data: { email, password: pw } })).json();
+  expect(signin.twoFactorRedirect).toBe(true);
+  const used = await ctx2.post("/api/auth/two-factor/verify-backup-code", { data: { code } });
+  expect(used.ok()).toBeTruthy();
+  const session = await (await ctx2.get("/api/auth/get-session")).json();
+  expect(session?.user?.email).toBe(email);
+
+  // The same code is single-use: a new challenge cannot reuse it.
+  const ctx3 = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  await ctx3.post("/api/auth/sign-in/email", { data: { email, password: pw } });
+  const reuse = await ctx3.post("/api/auth/two-factor/verify-backup-code", { data: { code } });
+  expect(reuse.ok()).toBeFalsy();
+
+  await ctx.dispose();
+  await ctx2.dispose();
+  await ctx3.dispose();
+});
+
+test("two-factor: regenerating backup codes invalidates the old set @smoke", async ({ playwright }) => {
+  const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  const caps = await (await ctx.get("/api/account/capabilities")).json();
+  test.skip(!caps?.twoFactor, "two-factor not enabled");
+  const email = `tf-rg-${Date.now()}@example.com`;
+  const pw = "Podokit3e-Str0ng!pw";
+  await ctx.post("/api/auth/sign-up/email", { data: { email, password: pw, name: "RG" } });
+  const enable = await (await ctx.post("/api/auth/two-factor/enable", { data: { password: pw } })).json();
+  await ctx.post("/api/auth/two-factor/verify-totp", { data: { code: totpCode(enable.totpURI) } });
+  const oldCode = (enable.backupCodes as string[])[0]!;
+
+  // Regenerating returns a fresh set; the previous codes are replaced.
+  const regen = await (await ctx.post("/api/auth/two-factor/generate-backup-codes", { data: { password: pw } })).json();
+  const newCodes = regen.backupCodes as string[];
+  expect(Array.isArray(newCodes)).toBe(true);
+  expect(newCodes.length).toBeGreaterThan(0);
+  expect(newCodes).not.toContain(oldCode);
+
+  // An old code no longer completes a challenge; a new one does.
+  const ctxOld = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  await ctxOld.post("/api/auth/sign-in/email", { data: { email, password: pw } });
+  expect((await ctxOld.post("/api/auth/two-factor/verify-backup-code", { data: { code: oldCode } })).ok()).toBeFalsy();
+
+  const ctxNew = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  await ctxNew.post("/api/auth/sign-in/email", { data: { email, password: pw } });
+  expect((await ctxNew.post("/api/auth/two-factor/verify-backup-code", { data: { code: newCodes[0]! } })).ok()).toBeTruthy();
+
+  await ctx.dispose();
+  await ctxOld.dispose();
+  await ctxNew.dispose();
+});
+
 test("multi-session holds several accounts and switches between them @smoke", async ({ playwright }) => {
   const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const caps = await (await ctx.get("/api/account/capabilities")).json();

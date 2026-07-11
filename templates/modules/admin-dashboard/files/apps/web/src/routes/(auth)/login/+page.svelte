@@ -22,6 +22,34 @@
   let unverified = $state(false);
   let loading = $state(false);
 
+  // Second-factor step: a password/OTP sign-in with 2FA enabled returns
+  // `twoFactorRedirect` and no session; the user then verifies with an
+  // authenticator code or a backup code to complete the login.
+  let twoFaRequired = $state(false);
+  let twoFaCode = $state("");
+  let useBackupCode = $state(false);
+  let twoFaLoading = $state(false);
+  const redirectTo = (): string => page.url.searchParams.get("redirect") ?? "/admin";
+
+  // Returns true when 2FA is still owed (caller shows the step instead of leaving).
+  function needsTwoFactor(data: unknown): boolean {
+    return Boolean(data && typeof data === "object" && (data as { twoFactorRedirect?: boolean }).twoFactorRedirect);
+  }
+
+  async function verifyTwoFactor(): Promise<void> {
+    twoFaLoading = true;
+    error = null;
+    const { error: authError } = useBackupCode
+      ? await api.auth.twoFactor.verifyBackupCode({ code: twoFaCode.trim() })
+      : await api.auth.twoFactor.verifyTotp({ code: twoFaCode.trim() });
+    twoFaLoading = false;
+    if (authError) {
+      error = authError.message ?? i18n.t.auth.signInFailed;
+      return;
+    }
+    await goto(redirectTo(), { invalidateAll: true });
+  }
+
   // Passwordless sign-in, shown only when the server enabled the magic-link plugin.
   const magicLinkEnabled = $derived(data.capabilities?.magicLink ?? false);
   let magicLoading = $state(false);
@@ -69,13 +97,17 @@
   async function verifyOtp(): Promise<void> {
     otpLoading = true;
     error = null;
-    const { error: authError } = await api.auth.signIn.emailOtp({ email, otp: otpCode });
+    const { data, error: authError } = await api.auth.signIn.emailOtp({ email, otp: otpCode });
     otpLoading = false;
     if (authError) {
       error = authError.message ?? i18n.t.auth.signInFailed;
       return;
     }
-    await goto(page.url.searchParams.get("redirect") ?? "/admin", { invalidateAll: true });
+    if (needsTwoFactor(data)) {
+      twoFaRequired = true;
+      return;
+    }
+    await goto(redirectTo(), { invalidateAll: true });
   }
 
   // Passwordless sign-in with a registered passkey (WebAuthn), shown when enabled.
@@ -100,7 +132,7 @@
     unverified = false;
     // With the username plugin on, an identifier without "@" is treated as a username.
     const asUsername = usernameEnabled && !email.includes("@");
-    const { error: authError } = asUsername
+    const { data, error: authError } = asUsername
       ? await api.auth.signIn.username({ username: email, password })
       : await api.auth.signIn.email({ email, password });
     loading = false;
@@ -110,7 +142,11 @@
       error = unverified ? i18n.t.auth.emailNotVerified : (authError.message ?? i18n.t.auth.signInFailed);
       return;
     }
-    await goto(page.url.searchParams.get("redirect") ?? "/admin", { invalidateAll: true });
+    if (needsTwoFactor(data)) {
+      twoFaRequired = true;
+      return;
+    }
+    await goto(redirectTo(), { invalidateAll: true });
   }
 </script>
 
@@ -120,17 +156,47 @@
     <Card.Description>{i18n.t.auth.signInDesc}</Card.Description>
   </Card.Header>
   <Card.Content>
+    {#if error}
+      <Alert.Root variant="destructive" class="mb-4">
+        <Alert.Description>
+          {error}
+          {#if unverified}
+            <a href="/verify-email?email={encodeURIComponent(email)}" class="font-medium underline">{i18n.t.auth.resendVerification}</a>
+          {/if}
+        </Alert.Description>
+      </Alert.Root>
+    {/if}
+    {#if twoFaRequired}
+      <div class="flex flex-col gap-4" data-testid="two-factor-step">
+        <p class="text-muted-foreground text-sm">{useBackupCode ? i18n.t.auth.twoFactorBackupPrompt : i18n.t.auth.twoFactorPrompt}</p>
+        <div class="flex flex-col gap-2">
+          <Label for="twofa">{useBackupCode ? i18n.t.auth.backupCodeLabel : i18n.t.auth.twoFactorCodeLabel}</Label>
+          <Input
+            id="twofa"
+            bind:value={twoFaCode}
+            inputmode={useBackupCode ? "text" : "numeric"}
+            autocomplete="one-time-code"
+            autofocus
+          />
+        </div>
+        <Button type="button" disabled={twoFaLoading || !twoFaCode} onclick={verifyTwoFactor}>
+          {twoFaLoading ? i18n.t.auth.signingIn : i18n.t.auth.verify}
+        </Button>
+        <Button
+          type="button"
+          variant="link"
+          class="h-auto justify-start p-0 text-xs"
+          onclick={() => {
+            useBackupCode = !useBackupCode;
+            twoFaCode = "";
+            error = null;
+          }}
+        >
+          {useBackupCode ? i18n.t.auth.twoFactorUseAuthenticator : i18n.t.auth.twoFactorUseBackup}
+        </Button>
+      </div>
+    {:else}
     <form class="flex flex-col gap-4" onsubmit={submit}>
-      {#if error}
-        <Alert.Root variant="destructive">
-          <Alert.Description>
-            {error}
-            {#if unverified}
-              <a href="/verify-email?email={encodeURIComponent(email)}" class="font-medium underline">{i18n.t.auth.resendVerification}</a>
-            {/if}
-          </Alert.Description>
-        </Alert.Root>
-      {/if}
       <div class="flex flex-col gap-2">
         <Label for="email">{usernameEnabled ? i18n.t.auth.emailOrUsername : i18n.t.auth.email}</Label>
         <Input id="email" type={usernameEnabled ? "text" : "email"} bind:value={email} required autocomplete="username" />
@@ -176,6 +242,7 @@
           {/if}
         {/if}
       </div>
+    {/if}
     {/if}
   </Card.Content>
   {#if signupOpen}
