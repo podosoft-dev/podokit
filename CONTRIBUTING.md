@@ -33,12 +33,32 @@ npm test
 - Keep the subject line imperative and under ~50 characters.
 - One logical change per commit.
 
+## Changesets
+
+This is a multi-package monorepo, and releases are managed with
+[Changesets](https://github.com/changesets/changesets). If your change affects a
+**published package** (anything under `packages/*` — the `podo` CLI, the
+templates it ships, `@podosoft/podokit-api-client`, etc.), add a changeset in the
+same PR:
+
+```bash
+npm run changeset
+```
+
+Pick the affected package(s), choose the bump (`patch` for fixes, `minor` for
+features, `major` for breaking changes — pre-1.0, use `minor`/`patch`), and write
+a short user-facing summary. This creates a small file under `.changeset/` —
+commit it. Skip the changeset for changes that do not affect a published package
+(repo tooling, internal docs, CI). Releases are cut later by accumulating these;
+see [docs/development.md](docs/development.md#releasing).
+
 ## Pull requests
 
 1. Fork and create a feature branch (`feat/...`, `fix/...`).
 2. Add or update tests for behavior changes.
 3. Ensure `build`, `lint`, and `test` pass.
-4. Open a PR using the template and describe the change and rationale.
+4. Add a changeset if a published package changed (see above).
+5. Open a PR using the template and describe the change and rationale.
 
 ## AI-assisted contributions
 
