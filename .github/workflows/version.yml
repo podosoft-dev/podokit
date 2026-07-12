@@ -1,0 +1,48 @@
+name: Version
+
+# Accumulate releases with Changesets. Every push to main that carries pending
+# changesets keeps an open "Version Packages" PR up to date (bumping versions,
+# writing per-package CHANGELOGs, and updating internal dependency ranges). No
+# package is published here — merging that PR only lands the version bumps on
+# main. Publishing stays a separate, deliberate act: pushing a vX.Y.Z tag runs
+# release.yml. See docs/development.md ("Releasing").
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: version-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      # Opens the "Version Packages" PR with the default GITHUB_TOKEN. This
+      # requires the setting "Allow GitHub Actions to create and approve pull
+      # requests" to be ON (org Settings -> Actions -> General -> Workflow
+      # permissions; repos inherit it). Caveat: that setting also lets the Actions
+      # token *approve* PRs org-wide, which can count toward required reviews and
+      # bypass human review — so keep branch protection on main strict (require a
+      # review, "Dismiss stale approvals when new commits are pushed", ideally
+      # CODEOWNERS). This workflow only *creates* the PR; it never approves, and it
+      # never publishes (publishing is release.yml on a vX.Y.Z tag).
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Open or update the Version Packages PR
+        uses: changesets/action@v1
+        with:
+          version: npm run version
+          title: "chore: version packages"
+          commit: "chore: version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
