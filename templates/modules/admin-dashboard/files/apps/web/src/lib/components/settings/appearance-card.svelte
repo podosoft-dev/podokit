@@ -119,7 +119,7 @@
 
 <Card.Root>
   <Card.Header>
-    <Card.Title>{t.appearanceTitle}</Card.Title>
+    <Card.Title role="heading" aria-level={2}>{t.appearanceTitle}</Card.Title>
     <Card.Description>{t.appearanceDesc}</Card.Description>
   </Card.Header>
   <Card.Content class="flex flex-col gap-5">

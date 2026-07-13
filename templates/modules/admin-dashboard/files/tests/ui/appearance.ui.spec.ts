@@ -13,9 +13,9 @@ test("appearance: has its own tab with theme controls @smoke", async ({ page }) 
   await expect(page.getByRole("tab", { name: "Appearance" })).toBeVisible();
   await page.getByRole("tab", { name: "Appearance" }).click();
   await expect(page.getByRole("heading", { name: "Appearance" })).toBeVisible();
-  await expect(page.getByText("Theme preset")).toBeVisible();
+  await expect(page.getByText("Theme preset", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Theme preset")).toBeVisible();
-  await expect(page.getByText("Accent color")).toBeVisible();
+  await expect(page.getByText("Accent color", { exact: true })).toBeVisible();
   await expect(page.getByText("Preview", { exact: true })).toBeVisible();
 });
 
