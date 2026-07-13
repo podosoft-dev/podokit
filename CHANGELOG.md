@@ -7,6 +7,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- **Private route search protection (admin-dashboard).** Admin, account,
+  authentication, maintenance, and API responses now include
+  `X-Robots-Tag: noindex, nofollow`, while the public landing page remains
+  indexable. Application-specific canonical URLs, sitemaps, robots rules, and
+  structured data remain owned by each generated application.
 - **User account page (admin-dashboard).** Every signed-in user can manage their
   profile and security at `/account`, while `/admin/account` remains available.
   A reusable avatar menu shows sign-in for guests, account controls for users,

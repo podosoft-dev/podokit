@@ -1,6 +1,7 @@
 import type { Handle } from "@sveltejs/kit";
 import { serverApiClient } from "$lib/server/api";
 import { resolveLocale } from "$lib/i18n/messages";
+import { applySearchIndexingHeaders } from "$lib/server/search-indexing";
 import type { SiteSettings } from "$lib/site.svelte";
 
 export const handle: Handle = async ({ event, resolve }) => {
@@ -25,7 +26,8 @@ export const handle: Handle = async ({ event, resolve }) => {
     event.locals.user = null;
     event.locals.session = null;
   }
-  return resolve(event, {
+  const response = await resolve(event, {
     transformPageChunk: ({ html }) => html.replace('lang="en"', `lang="${event.locals.locale}"`),
   });
+  return applySearchIndexingHeaders(response, event.url.pathname);
 };
