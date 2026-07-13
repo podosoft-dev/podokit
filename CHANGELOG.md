@@ -23,6 +23,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (ui + api) tests included. No DB migration (uses the existing `app_setting` store).
 
 ### Fixed
+- **Clean 3-way update merges no longer become replaceable generated output.**
+  `podo update --apply --from …` used to hash the merged working file into
+  `.podokit/files.lock`; a repeated update could then treat user dependencies or
+  registry entries as clean and overwrite them. The lock now retains the newly
+  assembled PodoKit content as the managed baseline, and unrelated application
+  files are no longer adopted into the managed set during update.
 - **Sidebar design tokens were missing from the base theme.** The admin-dashboard
   sidebar (shadcn-svelte) consumes `--sidebar*` CSS variables, but the
   `fullstack-nest-svelte` `app.css` never defined them nor mapped them under

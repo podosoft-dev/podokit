@@ -48,6 +48,10 @@ What each tier does on `--apply`:
   templates with `--from <dir>` for a real merge; without a base, an edited file
   is left untouched and reported as a conflict (never clobbered). Conflicts are
   written with standard `<<<<<<< / ======= / >>>>>>>` markers for you to resolve.
+- After a clean merge, the lock keeps PodoKit's assembled file as the baseline
+  rather than absorbing your merged lines. Later updates therefore continue to
+  3-way merge those edits instead of treating them as replaceable generated
+  output. Unrelated application files are not implicitly adopted as managed.
 - **owned** files (your routes, components, shadcn UI) are never written.
 
 The dry-run prints a per-file plan (`update` / `add` / `remove` / `conflict`) so

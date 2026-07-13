@@ -6,6 +6,7 @@ import { create } from "./create";
 import { addModule } from "./add";
 import { assembleProject } from "./assemble";
 import { planUpdate, applyUpdate, summarize } from "./update";
+import { readFilesLock } from "./lockfile";
 
 const REPO_TEMPLATES = resolve(process.cwd(), "..", "..", "templates");
 
@@ -117,9 +118,32 @@ describe("applyUpdate", () => {
       expect(merged).toContain("// my header"); // user edit preserved
       expect(merged).toContain("// upstream footer"); // upstream change applied
       expect(result.conflicts).toEqual([]);
+
+      // The lock keeps PodoKit's assembled output as the baseline. A repeated
+      // update must still recognise the merged user header as an edit instead
+      // of replacing the whole file with the template.
+      const repeated = planUpdate(dir, REPO_TEMPLATES);
+      expect(repeated.changes.find((change) => change.path === "apps/api/src/main.ts")?.action).toBe("conflict");
+      const withoutBase = applyUpdate(dir, REPO_TEMPLATES);
+      expect(withoutBase.conflicts).toContain("apps/api/src/main.ts");
+      expect(readFileSync(appMain, "utf8")).toBe(merged);
     } finally {
       writeFileSync(tplMain, original);
     }
+  });
+
+  it("does not adopt unrelated application files as managed during update", () => {
+    const oldTemplates = oldTemplatesCopy();
+    const dir = join(tmp(), "app");
+    create({ name: "app", template: "fullstack-nest-svelte", templatesDir: oldTemplates, targetDir: dir });
+    const custom = join(dir, "apps/api/src/customer-domain.ts");
+    writeFileSync(custom, "export const customerDomain = true;\n");
+
+    applyUpdate(dir, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+
+    expect(existsSync(custom)).toBe(true);
+    expect(readFilesLock(dir)?.files["apps/api/src/customer-domain.ts"]).toBeUndefined();
+    expect(planUpdate(dir, REPO_TEMPLATES).changes.some((change) => change.path === "apps/api/src/customer-domain.ts")).toBe(false);
   });
 
   it("leaves an edited file untouched and reports a conflict when no old version is given", () => {
