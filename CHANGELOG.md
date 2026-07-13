@@ -7,6 +7,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- **User account page (admin-dashboard).** Every signed-in user can manage their
+  profile and security at `/account`, while `/admin/account` remains available.
+  A reusable avatar menu shows sign-in for guests, account controls for users,
+  and the admin entry only for administrators.
 - **Theme / Appearance settings (admin-dashboard).** A dedicated **Appearance**
   tab in admin Settings replaces the single "Brand color" field with a full theme:
   six frequently useful presets are shown as visual choices, while the complete
@@ -28,6 +32,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   Playwright click could perform a native form reload and make otherwise valid
   2FA flows fail intermittently. The shared login helper now waits for the page
   network to settle before submitting.
+- **Account UI test sessions no longer accumulate.** The Playwright session
+  setup revokes stale sessions before saving its authenticated state, keeping
+  the current session visible across repeated local runs.
 - **Clean 3-way update merges no longer become replaceable generated output.**
   `podo update --apply --from …` used to hash the merged working file into
   `.podokit/files.lock`; a repeated update could then treat user dependencies or

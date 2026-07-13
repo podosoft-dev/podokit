@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { ready } from "../helpers/hydration";
+import { ADMIN } from "../helpers/accounts";
 
 // admin storageState (project default)
 test("account opens on the profile section @smoke", async ({ page }) => {
@@ -9,7 +10,7 @@ test("account opens on the profile section @smoke", async ({ page }) => {
   await expect(page.getByLabel("Email")).toHaveValue("admin@example.com");
   // save is enabled only once the name changes
   await expect(page.getByRole("button", { name: "Save changes" })).toBeDisabled();
-  await page.getByLabel("Name", { exact: true }).fill("Admin Renamed");
+  await page.getByLabel("Name", { exact: true }).fill(`Admin Preview ${Date.now()}`);
   await expect(page.getByRole("button", { name: "Save changes" })).toBeEnabled();
 });
 
@@ -82,7 +83,13 @@ test("account shows a phone field when enabled @smoke", async ({ page }) => {
 
 test("admin can update their profile name", async ({ page }) => {
   await ready(page, "/admin/account");
-  await page.getByLabel("Name", { exact: true }).fill("Admin Renamed");
+  const name = page.getByLabel("Name", { exact: true });
+  await name.fill(`Admin Updated ${Date.now()}`);
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Profile updated")).toBeVisible();
+  await ready(page, "/admin/account");
+  const refreshedName = page.getByLabel("Name", { exact: true });
+  await refreshedName.fill(ADMIN.name);
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText("Profile updated")).toBeVisible();
 });

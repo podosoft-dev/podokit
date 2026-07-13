@@ -4,8 +4,10 @@ import { anonState, userState } from "../helpers/accounts";
 test.describe("unauthenticated", () => {
   test.use({ storageState: anonState });
   test("protected route redirects to login @smoke", async ({ page }) => {
-    await page.goto("/admin");
-    await expect(page).toHaveURL(/\/login\?redirect=/);
+    for (const route of ["/admin", "/account"]) {
+      await page.goto(route);
+      await expect(page).toHaveURL(/\/login\?redirect=/);
+    }
   });
 });
 
@@ -18,5 +20,12 @@ test.describe("normal user (non-admin)", () => {
     expect((await page.goto("/admin/users"))?.status()).toBe(403);
     expect((await page.goto("/admin/sessions"))?.status()).toBe(403);
     expect((await page.goto("/admin/settings"))?.status()).toBe(403);
+  });
+
+  test("account is available without the admin shell @smoke", async ({ page }) => {
+    await page.goto("/account");
+    await expect(page.getByRole("heading", { name: "Account" })).toBeVisible();
+    await expect(page.getByLabel("Name", { exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Overview" })).toHaveCount(0);
   });
 });

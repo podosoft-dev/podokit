@@ -345,7 +345,12 @@ npm run dev
 - **/admin/organizations** (admin only) — organizations, members, and invitations.
 - **/admin/audit** (admin only) — the audit log of security-relevant actions.
 - **/admin/settings** (admin only) — enable/disable sign-in methods and configure OAuth providers, SMTP, and server toggles at runtime (see below), plus the **Appearance** tab for the runtime theme (see "Appearance").
-- **/admin/account** — profile, password, 2FA, passkeys, API keys, and sessions.
+- **/account** — the signed-in user's profile, password, 2FA, passkeys, API keys, and sessions without the admin shell.
+- **/admin/account** — the same account controls inside the admin shell, retained for existing links and applications.
+
+Use the managed `$lib/components/account-menu.svelte` in a public header to show
+a sign-in action to guests and an avatar menu to signed-in users. The avatar menu
+links to `/account` and adds the admin dashboard entry only for administrators.
 
 Users & the runtime Settings page:
 
