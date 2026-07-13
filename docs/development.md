@@ -118,7 +118,8 @@ What you get:
   same for the dashboard. Set them inline as above or in the project `.env`.
 - **Single entry.** The browser only ever calls the web origin (`app.localhost`); SvelteKit
   proxies `/api/*` to the api container internally. Traefik only routes `Host(app.localhost) → web`
-  (see `infra/traefik/dynamic.yml`).
+  and compresses eligible HTML, JSON, CSS, and JavaScript responses according to the browser's
+  `Accept-Encoding` header (see `infra/traefik/dynamic.yml`).
 - **Live edits.** `docker compose watch` syncs your source into the containers. The web has
   instant Vite HMR; an **API** source change restarts the api service (~5s) — the stable
   approach for NestJS in a container (its in-process watcher doesn't reliably respawn).
@@ -132,7 +133,9 @@ What you get:
 Prefer the host `npm run dev` loop for quick single-project work; reach for the containerized
 loop when you run several projects at once or want dev to mirror the k3s/Traefik production
 topology. These files (`compose.dev.yaml`, `Dockerfile.dev`, `.devcontainer/`, `.env.docker`,
-`infra/traefik/`) are yours to edit — `podo update` never touches them.
+`infra/traefik/`) are yours to edit — `podo update` never touches them. New projects include the
+compression middleware by default; existing projects can adopt the corresponding
+`infra/traefik/dynamic.yml` template change manually because this directory is owned.
 
 ## Verifying template / module changes
 

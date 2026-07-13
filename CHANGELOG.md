@@ -7,6 +7,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- **Proxy response compression.** New fullstack and todo projects attach Traefik's
+  compression middleware to the containerized development router and the k3s
+  Ingress, reducing dynamic HTML and other compressible response payloads. The
+  owned local Traefik file remains safe from update overwrites; existing apps can
+  adopt that small template change explicitly.
 - **Private route search protection (admin-dashboard).** Admin, account,
   authentication, maintenance, and API responses now include
   `X-Robots-Tag: noindex, nofollow`, while the public landing page remains

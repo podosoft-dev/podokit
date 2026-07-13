@@ -132,7 +132,8 @@ npm test        # run tests
 ## Deployment
 
 - **Docker Compose** — `infra/docker/`
-- **k3s** — `infra/k3s/` (standard `Ingress`; copy `secret.example.yaml` to a real Secret created out-of-band)
+- **k3s** — `infra/k3s/` (standard `Ingress` with Traefik response compression; copy
+  `secret.example.yaml` to a real Secret created out-of-band)
 
 ## Next steps
 

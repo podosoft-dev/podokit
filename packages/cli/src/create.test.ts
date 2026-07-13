@@ -133,7 +133,16 @@ describe("create (integration against templates)", () => {
 
     // web proxies /api to the api container by service name (Traefik only routes web)
     expect(readFileSync(join(target, ".env.docker"), "utf8")).toContain("BACKEND_INTERNAL_URL=http://api:5002");
-    expect(readFileSync(join(target, "infra", "traefik", "dynamic.yml"), "utf8")).toContain("http://web:5001");
+    const traefikConfig = readFileSync(join(target, "infra", "traefik", "dynamic.yml"), "utf8");
+    expect(traefikConfig).toContain("http://web:5001");
+    expect(traefikConfig).toContain("middlewares: [compression]");
+    expect(traefikConfig).toContain("compress: {}");
+
+    // compress dynamic HTML/JSON at the edge in both local Traefik and k3s.
+    const ingress = readFileSync(join(target, "infra", "k3s", "ingress.yaml"), "utf8");
+    expect(ingress).toContain("kind: Middleware");
+    expect(ingress).toContain("name: compression");
+    expect(ingress).toContain("podokit-compression@kubernetescrd");
 
     // AI-free of tiers: the dev scaffolding is owned so updates never clobber it
     const lock = readFileSync(join(target, ".podokit", "files.lock"), "utf8");
@@ -159,6 +168,12 @@ describe("create (integration against templates)", () => {
     expect(existsSync(join(target, "apps", "web", "src", "lib", "utils.ts"))).toBe(true);
     // e2e tests workspace ships with the app
     expect(existsSync(join(target, "tests", "playwright.config.ts"))).toBe(true);
+    expect(readFileSync(join(target, "infra", "traefik", "dynamic.yml"), "utf8")).toContain(
+      "middlewares: [compression]",
+    );
+    expect(readFileSync(join(target, "infra", "k3s", "ingress.yaml"), "utf8")).toContain(
+      "podokit-compression@kubernetescrd",
+    );
   });
 
   it("refuses a non-empty target directory", () => {
