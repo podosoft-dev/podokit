@@ -23,6 +23,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (ui + api) tests included. No DB migration (uses the existing `app_setting` store).
 
 ### Fixed
+- **Two-factor UI tests now wait for login hydration.** The login form is
+  server-rendered before Svelte attaches its submit handler, so an immediate
+  Playwright click could perform a native form reload and make otherwise valid
+  2FA flows fail intermittently. The shared login helper now waits for the page
+  network to settle before submitting.
 - **Clean 3-way update merges no longer become replaceable generated output.**
   `podo update --apply --from …` used to hash the merged working file into
   `.podokit/files.lock`; a repeated update could then treat user dependencies or
