@@ -344,7 +344,7 @@ npm run dev
 - **/admin/sessions** (admin only) — active sessions across all users (revoke).
 - **/admin/organizations** (admin only) — organizations, members, and invitations.
 - **/admin/audit** (admin only) — the audit log of security-relevant actions.
-- **/admin/settings** (admin only) — enable/disable sign-in methods and configure OAuth providers, SMTP, and server toggles at runtime (see below).
+- **/admin/settings** (admin only) — enable/disable sign-in methods and configure OAuth providers, SMTP, and server toggles at runtime (see below), plus the **Appearance** tab for the runtime theme (see "Appearance").
 - **/admin/account** — profile, password, 2FA, passkeys, API keys, and sessions.
 
 Users & the runtime Settings page:
@@ -354,6 +354,38 @@ Users & the runtime Settings page:
 | ![Admin users](images/admin-users.png) | ![Admin settings — social login](images/admin-settings-social.png) |
 - Password reset link is logged to the API console in dev; wire a real mailer via `emailAndPassword.sendResetPassword` for production.
 - **i18n**: all pages are localized (English default + Korean); a language switch sits on the login screen and in the dashboard header. Add locales/strings in `apps/web/src/lib/i18n/messages.ts`.
+
+#### Appearance (runtime theme)
+
+The **Settings → Appearance** tab themes the whole app (public site + admin) at
+runtime — no rebuild, no DB migration (settings live in the existing
+`app_setting` store):
+
+- **Preset** — 21 built-ins in `apps/web/src/lib/site/themes.ts`: `Default`
+  (emits nothing, so the template's `app.css` tokens show through), shadcn
+  neutrals (Zinc/Slate/Stone/Gray/Neutral), shadcn accents
+  (Blue/Green/Violet/Rose), and code-editor palettes (Dracula, Nord, Solarized,
+  Gruvbox, Catppuccin, Tokyo Night, Rosé Pine, One Dark, Everforest, Monokai,
+  GitHub). Every preset defines full light **and** dark token sets.
+- **Accent color** (`brandColor` → `--primary`/`--ring`), **corner radius**
+  (`--radius`), and (Advanced) **per-token overrides** for light/dark
+  independently, with a live light/dark preview and one-click restore.
+- **How it applies** — `apps/web/src/lib/site/apply-theme.ts` merges
+  `preset ⊕ overrides ⊕ brandColor ⊕ radius`, expands the 9 editable tokens
+  (`background card foreground mutedForeground border secondary accent primary
+  primaryForeground`) into ~25 CSS variables (including the `--sidebar*` set),
+  and injects a mode-scoped `<style id="podokit-theme">`
+  (`:root:not(.dark)` / `:root.dark`) from the root layout `$effect`. Clearing
+  the theme removes the stylesheet so `app.css` defaults win.
+- **Validation** — the site-settings controller whitelists `themePreset`
+  (name regex), `themeRadius` (0–4 rem) and `themeOverrides` (known token keys +
+  hex values only) to prevent CSS injection.
+- **App-owned tokens** — only the 9 base tokens are themeable. Tokens an app
+  defines on top of the template (e.g. a custom accent like a `--technical`
+  green) are untouched by presets; keep UI that uses them legible under any
+  preset, or restyle them in the app's own `app.css`.
+- Ships with Playwright coverage: `tests/ui/appearance.ui.spec.ts` +
+  `tests/api/site-settings.api.spec.ts`.
 
 #### Roles and permissions (access control)
 

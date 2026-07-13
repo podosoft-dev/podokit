@@ -9,8 +9,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 - **Theme / Appearance settings (admin-dashboard).** A dedicated **Appearance**
   tab in admin Settings replaces the single "Brand color" field with a full theme:
-  pick a built-in **preset** (Default + shadcn base colors Zinc/Slate/Stone/Gray/
-  Neutral + accents Blue/Green/Violet/Rose), an **accent color**, a **corner
+  pick a built-in **preset** (21 total: Default + shadcn base colors Zinc/Slate/
+  Stone/Gray/Neutral + accents Blue/Green/Violet/Rose + code-editor palettes
+  Dracula/Nord/Solarized/Gruvbox/Catppuccin/Tokyo Night/Rosé Pine/One Dark/
+  Everforest/Monokai/GitHub), an **accent color**, a **corner
   radius**, and (Advanced) **per-token color overrides** — with a live preview that
   **toggles between light and dark**, plus a one-click **Restore defaults**. Saving applies the theme across the whole app instantly
   via a mode-scoped stylesheet (`:root:not(.dark)` / `:root.dark`), so light and dark
