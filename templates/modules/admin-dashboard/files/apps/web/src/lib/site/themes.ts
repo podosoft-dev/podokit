@@ -59,6 +59,11 @@ export const themePresets: ThemePreset[] = [
   { key: "github", label: "GitHub", light: { background: "#ffffff", card: "#ffffff", foreground: "#1f2328", mutedForeground: "#656d76", border: "#d0d7de", secondary: "#f6f8fa", accent: "#eaeef2", primary: "#1f66d0", primaryForeground: "#ffffff" }, dark: { background: "#0d1117", card: "#161b22", foreground: "#e6edf3", mutedForeground: "#8b949e", border: "#30363d", secondary: "#161b22", accent: "#21262d", primary: "#2f81f7", primaryForeground: "#ffffff" } },
 ];
 
+// Keep the first choice focused without removing any of the long-lived preset
+// keys. The Appearance screen shows these up front and puts the rest behind a
+// disclosure so a new user is not greeted by a 21-item wall of options.
+export const FEATURED_THEME_PRESET_KEYS = ["default", "neutral", "slate", "blue", "green", "violet"] as const;
+
 export const THEME_TOKEN_KEYS: readonly (keyof ThemeTokens)[] = [
   "background",
   "card",

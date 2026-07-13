@@ -361,15 +361,15 @@ The **Settings → Appearance** tab themes the whole app (public site + admin) a
 runtime — no rebuild, no DB migration (settings live in the existing
 `app_setting` store):
 
-- **Preset** — 21 built-ins in `apps/web/src/lib/site/themes.ts`: `Default`
-  (emits nothing, so the template's `app.css` tokens show through), shadcn
-  neutrals (Zinc/Slate/Stone/Gray/Neutral), shadcn accents
-  (Blue/Green/Violet/Rose), and code-editor palettes (Dracula, Nord, Solarized,
-  Gruvbox, Catppuccin, Tokyo Night, Rosé Pine, One Dark, Everforest, Monokai,
-  GitHub). Every preset defines full light **and** dark token sets.
-- **Accent color** (`brandColor` → `--primary`/`--ring`), **corner radius**
-  (`--radius`), and (Advanced) **per-token overrides** for light/dark
-  independently, with a live light/dark preview and one-click restore.
+- **Preset** — six visual choices (Default, Neutral, Slate, Blue, Green, Violet)
+  stay visible; **Show more themes** reveals the complete 21-preset catalog in
+  `apps/web/src/lib/site/themes.ts`. Existing preset keys remain stable. `Default`
+  emits nothing, so the app's own `app.css` tokens show through.
+- **Quick settings** — brand color (`brandColor` → `--primary`/`--ring`) and five
+  practical corner styles (`--radius`).
+- **Fine-tune colors** — optional per-token overrides for light/dark independently.
+  The larger app-shell preview shows pending changes without changing the app;
+  **Save changes** applies them globally and **Restore defaults** clears them.
 - **How it applies** — `apps/web/src/lib/site/apply-theme.ts` merges
   `preset ⊕ overrides ⊕ brandColor ⊕ radius`, expands the 9 editable tokens
   (`background card foreground mutedForeground border secondary accent primary
