@@ -37,6 +37,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (ui + api) tests included. No DB migration (uses the existing `app_setting` store).
 
 ### Fixed
+- **Generated Git ignores cover both Playwright execution locations.** The
+  configured suite writes artifacts below `tests`, while invoking Playwright
+  without that config can write authentication state and reports at the project
+  root. Both locations, along with local `output/lighthouse` reports, no longer
+  appear as untracked files.
 - **Two-factor UI tests now wait for login hydration.** The login form is
   server-rendered before Svelte attaches its submit handler, so an immediate
   Playwright click could perform a native form reload and make otherwise valid

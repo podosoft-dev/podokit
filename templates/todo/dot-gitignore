@@ -12,3 +12,9 @@ build/
 tests/playwright/
 tests/playwright-report/
 tests/test-results/
+playwright/.auth/
+playwright-report/
+test-results/
+
+# local performance reports
+output/lighthouse/

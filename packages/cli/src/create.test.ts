@@ -88,6 +88,14 @@ describe("create (integration against templates)", () => {
     expect(existsSync(join(target, "apps", "api", "src", "database", "data-source.ts"))).toBe(true);
     expect(existsSync(join(target, "apps", "web", "svelte.config.js"))).toBe(true);
     expect(existsSync(join(target, "infra", "k3s", "ingress.yaml"))).toBe(true);
+    const gitignore = readFileSync(join(target, ".gitignore"), "utf8");
+    expect(gitignore).toContain("playwright/.auth/");
+    expect(gitignore).toContain("playwright-report/");
+    expect(gitignore).toContain("test-results/");
+    expect(gitignore).toContain("tests/playwright/");
+    expect(gitignore).toContain("tests/playwright-report/");
+    expect(gitignore).toContain("tests/test-results/");
+    expect(gitignore).toContain("output/lighthouse/");
     // The clean starter ships no todo domain code.
     expect(existsSync(join(target, "apps", "api", "src", "todos"))).toBe(false);
     expect(existsSync(join(target, "apps", "web", "src", "routes", "api", "todos"))).toBe(false);
@@ -168,6 +176,11 @@ describe("create (integration against templates)", () => {
     expect(existsSync(join(target, "apps", "web", "src", "lib", "utils.ts"))).toBe(true);
     // e2e tests workspace ships with the app
     expect(existsSync(join(target, "tests", "playwright.config.ts"))).toBe(true);
+    const gitignore = readFileSync(join(target, ".gitignore"), "utf8");
+    expect(gitignore).toContain("playwright/.auth/");
+    expect(gitignore).toContain("test-results/");
+    expect(gitignore).toContain("tests/playwright/");
+    expect(gitignore).toContain("tests/test-results/");
     expect(readFileSync(join(target, "infra", "traefik", "dynamic.yml"), "utf8")).toContain(
       "middlewares: [compression]",
     );
