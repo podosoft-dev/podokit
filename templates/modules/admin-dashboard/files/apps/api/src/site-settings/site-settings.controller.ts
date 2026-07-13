@@ -26,6 +26,65 @@ const ALLOWED = new Set<string>(PUBLIC_SITE_KEYS);
 const MAX_ICON_BYTES = 1024 * 1024; // 1 MB
 const ICON_TYPES = new Set(["image/svg+xml", "image/png", "image/x-icon", "image/vnd.microsoft.icon"]);
 
+// Theme values are injected into a client-side <style>, so validate them to
+// prevent CSS injection. Colors must be hex, radius a bounded rem number,
+// preset a slug, and overrides a JSON map of hex colors under known token keys.
+const HEX = /^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+const PRESET = /^[a-z0-9-]{1,32}$/;
+const THEME_TOKEN_KEYS = new Set([
+  "background",
+  "card",
+  "foreground",
+  "mutedForeground",
+  "border",
+  "secondary",
+  "accent",
+  "primary",
+  "primaryForeground",
+]);
+
+/** Validate/normalize a single theme setting value. Empty string clears it. */
+function validateThemeValue(key: string, value: string): string {
+  if (value === "") return "";
+  if (key === "brandColor") {
+    if (!HEX.test(value)) throw new BadRequestException("brandColor must be a hex color");
+    return value;
+  }
+  if (key === "themePreset") {
+    if (!PRESET.test(value)) throw new BadRequestException("Invalid themePreset");
+    return value;
+  }
+  if (key === "themeRadius") {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 0 || n > 4) throw new BadRequestException("themeRadius must be 0–4");
+    return String(n);
+  }
+  if (key === "themeOverrides") {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      throw new BadRequestException("themeOverrides must be valid JSON");
+    }
+    if (!parsed || typeof parsed !== "object") throw new BadRequestException("themeOverrides must be an object");
+    const out: Record<string, Record<string, string>> = {};
+    for (const mode of ["light", "dark"] as const) {
+      const block = (parsed as Record<string, unknown>)[mode];
+      if (block === undefined) continue;
+      if (!block || typeof block !== "object") throw new BadRequestException(`themeOverrides.${mode} must be an object`);
+      const clean: Record<string, string> = {};
+      for (const [k, v] of Object.entries(block as Record<string, unknown>)) {
+        if (!THEME_TOKEN_KEYS.has(k)) throw new BadRequestException(`Unknown theme token: ${k}`);
+        if (typeof v !== "string" || !HEX.test(v)) throw new BadRequestException(`themeOverrides.${mode}.${k} must be a hex color`);
+        clean[k] = v;
+      }
+      if (Object.keys(clean).length) out[mode] = clean;
+    }
+    return JSON.stringify(out);
+  }
+  return value;
+}
+
 @ApiTags("site")
 @Controller("site")
 export class SiteSettingsController {
@@ -53,7 +112,7 @@ export class SiteSettingsController {
     const update: Record<string, string> = {};
     for (const [key, value] of Object.entries(body ?? {})) {
       if (!ALLOWED.has(key)) throw new BadRequestException(`Unknown setting: ${key}`);
-      update[key] = String(value ?? "");
+      update[key] = validateThemeValue(key, String(value ?? ""));
     }
     return this.site.setMany(update);
   }

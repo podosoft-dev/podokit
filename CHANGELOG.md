@@ -6,7 +6,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.9.0] - 2026-07-11
+### Added
+- **Theme / Appearance settings (admin-dashboard).** A dedicated **Appearance**
+  tab in admin Settings replaces the single "Brand color" field with a full theme:
+  pick a built-in **preset** (Default + shadcn base colors Zinc/Slate/Stone/Gray/
+  Neutral + accents Blue/Green/Violet/Rose), an **accent color**, a **corner
+  radius**, and (Advanced) **per-token color overrides** — with a live preview that
+  **toggles between light and dark**, plus a one-click **Restore defaults**. Saving applies the theme across the whole app instantly
+  via a mode-scoped stylesheet (`:root:not(.dark)` / `:root.dark`), so light and dark
+  are tuned independently and dark is never disturbed by a light edit. New public
+  site settings keys `themePreset`, `themeRadius`, `themeOverrides` (validated to
+  prevent CSS injection); reuses the existing `brandColor`. New reusable modules
+  `$lib/site/themes.ts` and `$lib/site/apply-theme.ts`. i18n (en/ko) and Playwright
+  (ui + api) tests included. No DB migration (uses the existing `app_setting` store).
+
+### Fixed
+- **Sidebar design tokens were missing from the base theme.** The admin-dashboard
+  sidebar (shadcn-svelte) consumes `--sidebar*` CSS variables, but the
+  `fullstack-nest-svelte` `app.css` never defined them nor mapped them under
+  `@theme inline`, so `bg-sidebar`/`text-sidebar-foreground`/… were not generated
+  and the sidebar rendered unstyled (and did not re-theme). Added the full shadcn
+  sidebar token set (`--sidebar`, `--sidebar-foreground`, `--sidebar-primary`,
+  `--sidebar-accent`, `--sidebar-border`, `--sidebar-ring`, …) for light and dark
+  plus their `--color-sidebar*` `@theme` mappings. The Appearance theme now
+  re-themes the sidebar together with the rest of the app.
+- **Every sidebar item looked selected (active-state highlight leaked to all
+  items).** The shadcn-svelte sidebar components (as shipped by shadcn-svelte's
+  own registry) style the active item with the `data-active:` Tailwind variant,
+  which matches attribute **presence** (`[data-active]`); since the buttons always
+  render `data-active="true|false"`, the accent background/foreground applied to
+  **every** item, not just the active one. It was nearly invisible in the default
+  palette (accent ≈ sidebar) but glaring once a theme raised the contrast. This is
+  an upstream shadcn-svelte bug (canonical shadcn/ui uses value-matching
+  `data-[active=true]:`). Rather than diverge the vendored `ui/sidebar/*` files —
+  which are kept as a **pristine mirror of the shadcn-svelte registry so
+  `shadcn-svelte` updates apply cleanly** — the correction lives in the base
+  `app.css`: it neutralizes the resting state of non-active menu buttons while
+  leaving hover/press feedback intact. Remove once shadcn-svelte adopts
+  `data-[active=true]:`.
 
 ### Added
 - **Two-factor backup codes are now usable end to end.** The login page gained a

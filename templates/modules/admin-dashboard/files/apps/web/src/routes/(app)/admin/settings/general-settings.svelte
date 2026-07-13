@@ -19,7 +19,6 @@
     description: "",
     supportEmail: "",
     footerText: "",
-    brandColor: "",
     termsUrl: "",
     privacyUrl: "",
     locale: "",
@@ -35,7 +34,6 @@
       description: s.description ?? "",
       supportEmail: s.supportEmail ?? "",
       footerText: s.footerText ?? "",
-      brandColor: s.brandColor ?? "",
       termsUrl: s.termsUrl ?? "",
       privacyUrl: s.privacyUrl ?? "",
       locale: s.locale ?? "",
@@ -126,11 +124,6 @@
             <p class="text-muted-foreground text-xs">{t.faviconHint}</p>
           </div>
         </div>
-      </div>
-
-      <div class="flex flex-col gap-1.5">
-        <Label for="brand-color">{t.brandColor}</Label>
-        <Input id="brand-color" bind:value={form.brandColor} placeholder="#6d28d9" />
       </div>
     </Card.Content>
   </Card.Root>

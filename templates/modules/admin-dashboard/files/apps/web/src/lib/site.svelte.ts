@@ -7,6 +7,9 @@ export interface SiteSettings {
   supportEmail: string | null;
   footerText: string | null;
   brandColor: string | null;
+  themePreset: string | null;
+  themeRadius: string | null;
+  themeOverrides: string | null;
   termsUrl: string | null;
   privacyUrl: string | null;
   locale: string | null;
@@ -23,6 +26,9 @@ const empty: SiteSettings = {
   supportEmail: null,
   footerText: null,
   brandColor: null,
+  themePreset: null,
+  themeRadius: null,
+  themeOverrides: null,
   termsUrl: null,
   privacyUrl: null,
   locale: null,

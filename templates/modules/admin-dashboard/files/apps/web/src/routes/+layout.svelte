@@ -4,6 +4,7 @@
   import { setI18nContext } from "$lib/i18n";
   import { messages, resolveLocale } from "$lib/i18n/messages";
   import { site } from "$lib/site.svelte";
+  import { applyTheme, themeConfigFromSettings } from "$lib/site/apply-theme";
 
   let { children, data } = $props();
   const locale = $derived(resolveLocale(data.locale));
@@ -23,7 +24,6 @@
   const branding = $derived({
     name: site.value.name ?? data.site?.name ?? "",
     description: site.value.description ?? data.site?.description ?? "",
-    brandColor: site.value.brandColor ?? data.site?.brandColor ?? "",
     hasFavicon: site.value.hasFavicon || Boolean(data.site?.hasFavicon),
     faviconVersion: site.value.faviconVersion ?? data.site?.faviconVersion ?? "",
   });
@@ -32,19 +32,10 @@
   $effect(() => {
     if (branding.name) document.title = branding.name;
   });
-  // Apply the brand color as the theme's primary accent live. Clearing it in
-  // Settings restores the stylesheet default (remove the inline override).
+  // Apply the configured theme (preset + accent + radius + overrides) live, scoped
+  // to light/dark. Clearing everything removes the override so app.css defaults win.
   $effect(() => {
-    const root = document.documentElement;
-    if (branding.brandColor) {
-      root.style.setProperty("--primary", branding.brandColor);
-      root.style.setProperty("--sidebar-primary", branding.brandColor);
-      root.style.setProperty("--ring", branding.brandColor);
-    } else {
-      root.style.removeProperty("--primary");
-      root.style.removeProperty("--sidebar-primary");
-      root.style.removeProperty("--ring");
-    }
+    applyTheme(themeConfigFromSettings(site.value));
   });
 </script>
 
