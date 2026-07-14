@@ -1,5 +1,11 @@
 # @podosoft/podokit-module-blog
 
+## 0.2.1
+
+### Patch Changes
+
+- [#85](https://github.com/podosoft-dev/podokit/pull/85) [`1b951ca`](https://github.com/podosoft-dev/podokit/commit/1b951ca439c7bd4b8ca5d467d79298dad91c3420) Thanks [@korone00](https://github.com/korone00)! - Stabilize the publishing UI test and require the exact created post URL before validating rendered Markdown.
+
 ## 0.2.0
 
 ### Minor Changes
