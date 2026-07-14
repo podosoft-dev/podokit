@@ -1,17 +1,22 @@
-import { getContext, setContext } from "svelte";
+import { page } from "$app/state";
 import { site } from "$lib/site.svelte";
-import type { Locale, Messages } from "./messages";
-
-const KEY = Symbol.for("podokit.i18n");
+import { messages, resolveLocale, type Locale, type Messages } from "./messages";
 
 export type I18nContext = { readonly t: Messages; readonly locale: Locale };
 
-export function setI18nContext(ctx: I18nContext): void {
-  setContext(KEY, ctx);
+function currentLocale(): Locale {
+  return resolveLocale((page.data as { locale?: string }).locale);
 }
 
 export function getI18n(): I18nContext {
-  return getContext(KEY) as I18nContext;
+  return {
+    get t() {
+      return messages[currentLocale()];
+    },
+    get locale() {
+      return currentLocale();
+    },
+  };
 }
 
 // Fill {name}-style placeholders in a message.

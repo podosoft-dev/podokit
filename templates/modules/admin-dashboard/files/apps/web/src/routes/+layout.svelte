@@ -1,21 +1,10 @@
 <script lang="ts">
   import "../app.css";
   import { ModeWatcher } from "mode-watcher";
-  import { setI18nContext } from "$lib/i18n";
-  import { messages, resolveLocale } from "$lib/i18n/messages";
   import { site } from "$lib/site.svelte";
   import { applyTheme, themeConfigFromSettings } from "$lib/site/apply-theme";
 
   let { children, data } = $props();
-  const locale = $derived(resolveLocale(data.locale));
-  setI18nContext({
-    get t() {
-      return messages[locale];
-    },
-    get locale() {
-      return locale;
-    },
-  });
 
   // Seed the reactive site branding; the general-settings form patches it live.
   $effect.pre(() => site.init(data.site));
