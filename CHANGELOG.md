@@ -52,6 +52,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   including blockquotes, ordered lists, tables, and duplicate-title handling.
   Application-owned article routes can use the same managed component without
   giving up their surrounding visual design.
+- **Blog reads are public after installation.** The external blog module now
+  registers `/blog` in the generated layout's public path list, so anonymous
+  visitors can read the list and published articles while write actions remain
+  session-protected.
 - **Adding a module no longer adopts the whole working tree.** Pre-existing
   managed-file edits retain their old lock baseline and unrelated application
   files remain outside `files.lock`, preventing later updates from overwriting or
