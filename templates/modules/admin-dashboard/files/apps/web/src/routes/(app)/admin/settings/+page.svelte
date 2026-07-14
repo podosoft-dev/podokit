@@ -7,8 +7,10 @@
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import * as Dialog from "$lib/components/ui/dialog";
+  import * as Select from "$lib/components/ui/select";
   import * as Tabs from "$lib/components/ui/tabs";
   import GeneralSettings from "./general-settings.svelte";
+  import AppearanceCard from "$lib/components/settings/appearance-card.svelte";
   import { moduleSettingsSections } from "$lib/admin/registry.svelte";
   import { toast } from "svelte-sonner";
   import { api } from "$lib/api";
@@ -237,6 +239,7 @@
   <Tabs.Root value="general">
     <Tabs.List>
       <Tabs.Trigger value="general">{i18n.t.general.tab}</Tabs.Trigger>
+      <Tabs.Trigger value="appearance">{i18n.t.general.appearanceTitle}</Tabs.Trigger>
       <Tabs.Trigger value="auth">{i18n.t.settings.tab}</Tabs.Trigger>
       {#each moduleSettingsSections as s (s.value)}
         <Tabs.Trigger value={s.value}>{s.label(i18n.t)}</Tabs.Trigger>
@@ -245,6 +248,10 @@
 
     <Tabs.Content value="general" class="mt-6">
       <GeneralSettings />
+    </Tabs.Content>
+
+    <Tabs.Content value="appearance" class="mt-6">
+      <AppearanceCard />
     </Tabs.Content>
 
     <Tabs.Content value="auth" class="mt-6 flex flex-col gap-6">
@@ -306,15 +313,16 @@
         {#if socialForm.adding}
           <div class="flex flex-col gap-1">
             <Label for="social-provider">{i18n.t.settings.provider}</Label>
-            <select
-              id="social-provider"
-              bind:value={socialForm.id}
-              class="border-input bg-background ring-offset-background focus-visible:ring-ring h-9 rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:outline-none"
-            >
-              {#each addable as p (p.id)}
-                <option value={p.id}>{p.label}</option>
-              {/each}
-            </select>
+            <Select.Root type="single" bind:value={socialForm.id}>
+              <Select.Trigger id="social-provider" class="w-full">
+                {addable.find((p) => p.id === socialForm.id)?.label ?? i18n.t.settings.provider}
+              </Select.Trigger>
+              <Select.Content>
+                {#each addable as p (p.id)}
+                  <Select.Item value={p.id} label={p.label}>{p.label}</Select.Item>
+                {/each}
+              </Select.Content>
+            </Select.Root>
           </div>
         {/if}
         <label class="flex items-center justify-between gap-3 text-sm font-medium">{i18n.t.settings.smtpEnabled}<Switch aria-label={i18n.t.settings.smtpEnabled} bind:checked={socialForm.enabled} /></label>

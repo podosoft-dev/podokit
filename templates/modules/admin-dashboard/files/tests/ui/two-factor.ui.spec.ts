@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { anonState } from "../helpers/accounts";
 import { totpCode } from "../helpers/totp";
 
@@ -6,6 +6,14 @@ test.use({ storageState: anonState });
 
 const base = process.env.E2E_BASE_URL ?? "http://localhost:5001";
 const origin = { origin: base };
+
+async function openHydratedLogin(page: Page, redirect?: string): Promise<void> {
+  const query = redirect ? `?redirect=${encodeURIComponent(redirect)}` : "";
+  await page.goto(`/login${query}`);
+  // The form is server-rendered before Svelte attaches its submit handler. Wait
+  // for the client bundle so a fast test click cannot trigger a native reload.
+  await page.waitForLoadState("networkidle");
+}
 
 // A disposable account (never the shared admin/user) so enabling 2FA here can't
 // invalidate the seeded sessions the other auth specs rely on.
@@ -23,7 +31,7 @@ test("two-factor: sign in with a backup code from the login page @smoke", async 
   await api.dispose();
 
   // Password sign-in hands off to the second-factor step (no session yet).
-  await page.goto(`/login?redirect=${encodeURIComponent("/admin/account")}`);
+  await openHydratedLogin(page, "/admin/account");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(pw);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
@@ -66,7 +74,7 @@ test("require-2fa: a new sign-up is forced through the enrolment page @smoke", a
     await probe.dispose();
 
     // Signing in through the UI lands on the mandatory enrolment page.
-    await page.goto("/login");
+    await openHydratedLogin(page);
     await page.getByLabel("Email").fill(email);
     await page.getByLabel("Password").fill(pw);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
@@ -111,7 +119,7 @@ test("account: regenerate backup codes shows a fresh set @smoke", async ({ page,
   await api.dispose();
 
   // Sign in (backup-code path) straight to the account page.
-  await page.goto(`/login?redirect=${encodeURIComponent("/admin/account")}`);
+  await openHydratedLogin(page, "/admin/account");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(pw);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();

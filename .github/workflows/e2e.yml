@@ -43,12 +43,40 @@ jobs:
         ports:
           - 1025:1025
           - 8025:8025
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: npm
+      - name: Start MinIO
+        run: |
+          docker run --detach --name podokit-e2e-minio \
+            --publish 9000:9000 \
+            --env MINIO_ROOT_USER=podokit \
+            --env MINIO_ROOT_PASSWORD=podokitsecret \
+            quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
+          for attempt in $(seq 1 30); do
+            if docker exec podokit-e2e-minio mc ready local; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              docker logs podokit-e2e-minio
+              exit 1
+            fi
+            sleep 1
+          done
+          docker exec podokit-e2e-minio mc alias set local http://localhost:9000 podokit podokitsecret
+          docker exec podokit-e2e-minio mc mb --ignore-existing local/podokit
       - run: npm ci
       - name: Cache Playwright browsers
         uses: actions/cache@v6
@@ -66,6 +94,15 @@ jobs:
           SMTP_HOST: localhost
           SMTP_PORT: "1025"
           MAILPIT_URL: http://localhost:8025
+          # Backing services for the redis/bullmq/sse/storage/file-upload module
+          # specs — their presence flips those tests from self-skip to running.
+          REDIS_HOST: localhost
+          REDIS_PORT: "6379"
+          S3_ENDPOINT: http://localhost:9000
+          S3_REGION: us-east-1
+          S3_BUCKET: podokit
+          S3_ACCESS_KEY_ID: podokit
+          S3_SECRET_ACCESS_KEY: podokitsecret
           KEEP: "1" # keep the generated app so the report survives for upload
       - name: Upload Playwright report
         if: always()
@@ -77,3 +114,6 @@ jobs:
             /tmp/podokit-e2e-*/app/tests/test-results/
           if-no-files-found: ignore
           retention-days: 7
+      - name: Stop MinIO
+        if: always()
+        run: docker rm --force podokit-e2e-minio || true

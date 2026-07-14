@@ -29,6 +29,7 @@ user-facing strings go through i18n, and the backend returns stable error
 - [@podosoft/podokit-mcp](https://github.com/podosoft-dev/podokit/blob/main/packages/mcp/README.md): a local MCP server (run via `npx`, no hosting) so AI tools can list/add modules, inspect the project, preview updates, and search the docs.
 - [@podosoft/podokit-api-client](https://github.com/podosoft-dev/podokit/blob/main/packages/api-client/README.md): the typed client the frontend uses instead of raw `fetch` (better-auth + REST envelope).
 - [@podosoft/podokit-auth](https://github.com/podosoft-dev/podokit/blob/main/packages/podokit-auth/README.md): the DB-backed auth-config pipeline (envelope-encrypted secrets, applied without a restart).
+- [@podosoft/podokit-module-blog](https://github.com/podosoft-dev/podokit/blob/main/packages/podokit-module-blog/README.md): an external module for authenticated Markdown posts, pagination, comments, author ownership, and admin management.
 - [@podosoft/podokit-contracts](https://github.com/podosoft-dev/podokit/blob/main/packages/contracts/README.md): zero-dependency shared contracts (Capabilities, error envelope, AppException).
 
 ## Optional

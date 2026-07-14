@@ -35,7 +35,7 @@
         {/snippet}
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" side="top" class="w-56">
-        <DropdownMenu.Item onSelect={() => goto("/admin/account")}><UserIcon class="mr-2 size-4" /> {i18n.t.nav.account}</DropdownMenu.Item>
+        <DropdownMenu.Item onSelect={() => goto("/account")}><UserIcon class="mr-2 size-4" /> {i18n.t.nav.account}</DropdownMenu.Item>
         <DropdownMenu.Separator />
         <DropdownMenu.Item onSelect={signOut}><LogOutIcon class="mr-2 size-4" /> {i18n.t.nav.signOut}</DropdownMenu.Item>
       </DropdownMenu.Content>

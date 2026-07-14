@@ -22,10 +22,9 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm run build
       - run: npm test
-      # Publish contracts first (api-client depends on it), then the engine
-      # (the CLI depends on it), then api-client, then the CLI. Skip a package
-      # whose version is already on the registry so re-runs of the same tag are
-      # idempotent instead of failing with 403.
+      # Publish dependencies before their consumers, then standalone packages.
+      # Skip a package whose version is already on the registry so re-runs of
+      # the same tag are idempotent instead of failing with 403.
       - name: Publish contracts
         run: |
           PKG=@podosoft/podokit-contracts
@@ -85,6 +84,17 @@ jobs:
         run: |
           PKG=@podosoft/podokit-mcp
           VER=$(node -p "require('./packages/mcp/package.json').version")
+          if npm view "$PKG@$VER" version >/dev/null 2>&1; then
+            echo "$PKG@$VER already published — skipping"
+          else
+            npm publish -w "$PKG"
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish blog module
+        run: |
+          PKG=@podosoft/podokit-module-blog
+          VER=$(node -p "require('./packages/podokit-module-blog/package.json').version")
           if npm view "$PKG@$VER" version >/dev/null 2>&1; then
             echo "$PKG@$VER already published — skipping"
           else

@@ -21,6 +21,59 @@ npx @podosoft/podokit add <module>
 
 ## Available modules
 
+### External package modules
+
+PodoKit can load a module from an installed package named
+`@podosoft/podokit-module-<name>`. Install the package in the generated project's
+root, then add it by its short name:
+
+```bash
+npm install --save-dev @podosoft/podokit-module-blog
+podo add blog
+```
+
+The project manifest records the package name and applied version. After
+upgrading the package, `podo update` resolves it from the generated project's
+`node_modules` and previews its managed-file changes. Public presentation routes
+can remain app-owned while reusable API and `$lib` paths continue to update.
+
+If an application already has the same feature and the package declares explicit
+`managedGlobs`, use `--adopt` to hand only those paths back to the module. Existing
+owned presentation paths are preserved:
+
+```bash
+podo add blog --adopt
+```
+
+### `blog` (external package)
+
+Authenticated Markdown publishing with image attachments, paginated public posts,
+flat comments, author ownership, and admin management. Regular users publish immediately and can
+edit or delete only their own posts and comments; admins can manage all content.
+
+```bash
+npm install --save-dev @podosoft/podokit-module-blog
+podo add blog
+npm install
+npm run migration:run -w <app>-api
+```
+
+The module keeps `apps/api/src/blog/**`, reusable `$lib/blog/**`, and its tests
+managed. Public `/blog` route wrappers and `/admin/blog` presentation files are
+owned so applications can implement their own design and SEO. The additive
+migration preserves an existing `blog_posts` table, adds author snapshots and
+ownership, and creates comments with post-cascade deletion.
+
+Use the managed `BlogProse` component in an application-owned article route. It
+shares a safe GFM renderer with `BlogEditor`, keeping preview and published body
+markup and typography consistent while the surrounding article layout stays
+application-owned.
+
+`BlogEditor` uploads PNG, JPEG, GIF, WebP, and AVIF files up to 5 MB to object
+storage, then inserts a Markdown image at the current cursor. The resulting
+`/api/blog/images/:id` URL is public, stable, and cacheable, unlike a presigned
+file-upload URL. SVG is excluded from inline blog uploads.
+
 ### `auth` (better-auth)
 
 Full authentication built on [better-auth](https://better-auth.com): email/password
@@ -344,8 +397,20 @@ npm run dev
 - **/admin/sessions** (admin only) — active sessions across all users (revoke).
 - **/admin/organizations** (admin only) — organizations, members, and invitations.
 - **/admin/audit** (admin only) — the audit log of security-relevant actions.
-- **/admin/settings** (admin only) — enable/disable sign-in methods and configure OAuth providers, SMTP, and server toggles at runtime (see below).
-- **/admin/account** — profile, password, 2FA, passkeys, API keys, and sessions.
+- **/admin/settings** (admin only) — enable/disable sign-in methods and configure OAuth providers, SMTP, and server toggles at runtime (see below), plus the **Appearance** tab for the runtime theme (see "Appearance").
+- **/account** — the signed-in user's profile, password, 2FA, passkeys, API keys, and sessions without the admin shell.
+- **/admin/account** — the same account controls inside the admin shell, retained for existing links and applications.
+
+Admin, account, authentication, maintenance, and API routes send
+`X-Robots-Tag: noindex, nofollow` by default. This keeps generated applications'
+private and transitional screens out of search results without relying on
+`robots.txt`. Public-site canonical URLs, sitemaps, robots rules, social metadata,
+and structured data remain application-owned because their content and production
+domain are specific to each application.
+
+Use the managed `$lib/components/account-menu.svelte` in a public header to show
+a sign-in action to guests and an avatar menu to signed-in users. The avatar menu
+links to `/account` and adds the admin dashboard entry only for administrators.
 
 Users & the runtime Settings page:
 
@@ -354,6 +419,40 @@ Users & the runtime Settings page:
 | ![Admin users](images/admin-users.png) | ![Admin settings — social login](images/admin-settings-social.png) |
 - Password reset link is logged to the API console in dev; wire a real mailer via `emailAndPassword.sendResetPassword` for production.
 - **i18n**: all pages are localized (English default + Korean); a language switch sits on the login screen and in the dashboard header. Add locales/strings in `apps/web/src/lib/i18n/messages.ts`.
+
+#### Appearance (runtime theme)
+
+The **Settings → Appearance** tab themes the whole app (public site + admin) at
+runtime — no rebuild, no DB migration (settings live in the existing
+`app_setting` store):
+
+- **Preset** — six visual choices (Default, Neutral, Slate, Blue, Green, Violet)
+  stay visible; **Show more themes** reveals the complete 21-preset catalog in
+  `apps/web/src/lib/site/themes.ts`. Existing preset keys remain stable. `Default`
+  emits nothing, so the app's own `app.css` tokens show through.
+- **Quick settings** — brand color (`brandColor` → `--primary`/`--ring`) and five
+  practical corner styles (`--radius`).
+- **Fine-tune colors** — optional per-token overrides for light/dark independently.
+  The larger app-shell preview shows pending changes without changing the app;
+  **Save changes** applies them globally and **Restore defaults** clears them.
+- **How it applies** — `apps/web/src/lib/site/apply-theme.ts` merges
+  `preset ⊕ overrides ⊕ brandColor ⊕ radius`, expands the 9 editable tokens
+  (`background card foreground mutedForeground border secondary accent primary
+  primaryForeground`) into ~25 CSS variables (including the `--sidebar*` set),
+  and injects a mode-scoped `<style id="podokit-theme">`
+  (`:root:not(.dark)` / `:root.dark`) from the managed
+  `$lib/components/site-runtime.svelte`. The application-owned root layout keeps
+  this stable runtime slot while public route content remains untouched. Clearing
+  the theme removes the stylesheet so `app.css` defaults win.
+- **Validation** — the site-settings controller whitelists `themePreset`
+  (name regex), `themeRadius` (0–4 rem) and `themeOverrides` (known token keys +
+  hex values only) to prevent CSS injection.
+- **App-owned tokens** — only the 9 base tokens are themeable. Tokens an app
+  defines on top of the template (e.g. a custom accent like a `--technical`
+  green) are untouched by presets; keep UI that uses them legible under any
+  preset, or restyle them in the app's own `app.css`.
+- Ships with Playwright coverage: `tests/ui/appearance.ui.spec.ts` +
+  `tests/api/site-settings.api.spec.ts`.
 
 #### Roles and permissions (access control)
 

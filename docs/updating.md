@@ -48,10 +48,42 @@ What each tier does on `--apply`:
   templates with `--from <dir>` for a real merge; without a base, an edited file
   is left untouched and reported as a conflict (never clobbered). Conflicts are
   written with standard `<<<<<<< / ======= / >>>>>>>` markers for you to resolve.
+- After a clean merge, the lock keeps PodoKit's assembled file as the baseline
+  rather than absorbing your merged lines. Later updates therefore continue to
+  3-way merge those edits instead of treating them as replaceable generated
+  output. Unrelated application files are not implicitly adopted as managed.
 - **owned** files (your routes, components, shadcn UI) are never written.
+
+Starter root layouts render the managed
+`apps/web/src/lib/components/site-runtime.svelte` slot. Modules can add global
+behavior such as branding and runtime themes through that component without
+replacing application-owned route layouts or public pages.
 
 The dry-run prints a per-file plan (`update` / `add` / `remove` / `conflict`) so
 there are no surprises.
+
+### Updating external package modules
+
+External module records include `packageName` and `moduleVersion`. Upgrade the
+package first, then use the same dry-run/apply flow:
+
+```bash
+npm update @podosoft/podokit-module-blog
+podo update
+podo update --apply
+```
+
+The update assembler resolves the package from the generated project's
+`node_modules` and retains its root dependency declaration. If the package is
+missing, update stops with a resolution error instead of silently dropping the
+module.
+
+Adding a module does not re-baseline the entire working tree. Existing managed
+file drift keeps its previous hash, and unrelated application files stay outside
+`files.lock`. Only module overlays, package/env merges, injection targets, and
+explicitly adopted paths are added to the module baseline. This keeps a later
+update from overwriting or deleting application work that happened before the
+module was installed.
 
 ## Removing a module — `podo remove`
 

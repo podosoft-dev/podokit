@@ -76,7 +76,8 @@ export function removeModule(options: RemoveOptions): RemoveResult {
     throw new Error(`Module "${module}" is not installed. Installed: ${installed}.`);
   }
 
-  const moduleDir = resolveModuleDir(module, modulesDir, projectRoot);
+  const installedModule = manifest.modules.find((entry) => entry.name === module);
+  const moduleDir = resolveModuleDir(installedModule?.packageName ?? module, modulesDir, projectRoot);
   if (!moduleDir) {
     throw new Error(`Cannot resolve module "${module}" to un-apply it. Is it still installed/bundled?`);
   }
@@ -87,7 +88,7 @@ export function removeModule(options: RemoveOptions): RemoveResult {
   const others = manifest.modules
     .filter((m) => m.name !== module)
     .map((m) => {
-      const dir = resolveModuleDir(m.name, modulesDir, projectRoot);
+      const dir = resolveModuleDir(m.packageName ?? m.name, modulesDir, projectRoot);
       return dir ? { name: m.name, dir, manifest: readModuleManifest(dir) } : null;
     })
     .filter((m): m is { name: string; dir: string; manifest: ModuleManifest } => m !== null);

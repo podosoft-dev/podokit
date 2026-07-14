@@ -1,9 +1,9 @@
 <script lang="ts">
   import "../app.css";
-  import { ModeWatcher } from "mode-watcher";
+  import SiteRuntime from "$lib/components/site-runtime.svelte";
 
   let { children } = $props();
 </script>
 
-<ModeWatcher />
+<SiteRuntime />
 {@render children()}

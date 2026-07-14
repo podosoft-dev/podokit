@@ -9,12 +9,17 @@ import { ready } from "../helpers/hydration";
 // `finally` so a mid-test failure still leaves the shared site settings clean.
 
 async function saveGeneral(page: Page): Promise<void> {
+  const saved = page.waitForResponse(
+    (response) => response.url().endsWith("/api/site/settings") && response.request().method() === "PUT",
+  );
   await page.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.getByText("General settings saved.")).toBeVisible();
+  expect((await saved).ok()).toBeTruthy();
+  await expect(page.getByText("General settings saved.").last()).toBeVisible();
 }
 
-test("general: footer text and links render on public pages @smoke", async ({ page }) => {
+test("general: footer text and links render on public pages @smoke", async ({ page, browser }) => {
   await ready(page, "/admin/settings");
+  const origin = new URL(page.url()).origin;
   const footer = page.getByLabel("Footer text");
   const support = page.getByLabel("Support email");
   const origFooter = await footer.inputValue();
@@ -23,9 +28,12 @@ test("general: footer text and links render on public pages @smoke", async ({ pa
   await support.fill("help@example.com");
   await saveGeneral(page);
   try {
-    await page.goto("/");
-    await expect(page.getByText("© 2026 PodoKit Test")).toBeVisible();
-    await expect(page.getByRole("link", { name: "Support" })).toHaveAttribute("href", "mailto:help@example.com");
+    const ctx = await browser.newContext({ storageState: anonState });
+    const anon = await ctx.newPage();
+    await anon.goto(`${origin}/login`);
+    await expect(anon.getByText("© 2026 PodoKit Test")).toBeVisible();
+    await expect(anon.getByRole("link", { name: "Support" })).toHaveAttribute("href", "mailto:help@example.com");
+    await ctx.close();
   } finally {
     await ready(page, "/admin/settings");
     await page.getByLabel("Footer text").fill(origFooter);

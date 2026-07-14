@@ -5,7 +5,11 @@ http:
     web:
       rule: "PathPrefix(`/`)"  # any host on this dedicated proxy -> web
       entryPoints: [web]
+      middlewares: [compression]
       service: web
+  middlewares:
+    compression:
+      compress: {}
   services:
     web:
       loadBalancer:

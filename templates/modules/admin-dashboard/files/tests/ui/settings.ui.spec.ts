@@ -1,7 +1,16 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { ready } from "../helpers/hydration";
 
 // admin storageState (project default)
+
+async function saveGeneral(page: Page): Promise<void> {
+  const saved = page.waitForResponse(
+    (response) => response.url().endsWith("/api/site/settings") && response.request().method() === "PUT",
+  );
+  await page.getByRole("button", { name: "Save changes" }).click();
+  expect((await saved).ok()).toBeTruthy();
+  await expect(page.getByText("General settings saved.").last()).toBeVisible();
+}
 
 test("settings has General and Authentication tabs @smoke", async ({ page }) => {
   await ready(page, "/admin/settings");
@@ -23,14 +32,12 @@ test("general settings: edit the site name, save, and apply live @smoke", async 
   const name = page.getByLabel("Site name");
   const original = await name.inputValue();
   await name.fill("PodoKit Test Site");
-  await page.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.getByText("General settings saved.")).toBeVisible();
+  await saveGeneral(page);
   // the browser tab title reflects the new name live (no reload)
   await expect(page).toHaveTitle("PodoKit Test Site");
   // restore so other specs start clean
   await name.fill(original);
-  await page.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.getByText("General settings saved.")).toBeVisible();
+  await saveGeneral(page);
 });
 
 test("settings lists the auth features under the Authentication tab @smoke", async ({ page }) => {
@@ -49,8 +56,8 @@ test("sidebar: back-to-home link returns to the landing page @smoke", async ({ p
   // the home link lives in the sidebar footer, above the user menu
   await page.getByRole("link", { name: "Back to home" }).click();
   await expect(page).toHaveURL(/\/$/);
-  // the landing page shows the "Open admin" entry point
-  await expect(page.getByRole("link", { name: "Open admin" })).toBeVisible();
+  // The starter landing route is app-owned and remains intact when the module is added.
+  await expect(page.getByRole("heading", { name: "app" })).toBeVisible();
 });
 
 test("settings is reachable from the sidebar @smoke", async ({ page }) => {

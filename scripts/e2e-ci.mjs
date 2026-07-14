@@ -122,6 +122,13 @@ async function main() {
   const npmEnv = { ...process.env, npm_config_registry: registry, npm_config_userconfig: npmrc };
   run("npx", ["--yes", "@podosoft/podokit", "create", "app", "--dir", target, "--template", "fullstack-nest-svelte", "--yes"], { cwd: appDir, env: npmEnv });
   run("npx", ["--yes", "@podosoft/podokit", "add", "admin-dashboard"], { cwd: target, env: npmEnv });
+  // Backend modules whose shipped api specs need Redis / MinIO — added so their
+  // tests run in the Outer loop (they self-skip when a backing service is absent).
+  // rate-limit is intentionally omitted: its global throttler guard would rate-limit
+  // every other spec in the shared app.
+  for (const mod of ["redis", "bullmq", "sse", "file-upload", "api-key-auth", "job-progress"]) {
+    run("npx", ["--yes", "@podosoft/podokit", "add", mod], { cwd: target, env: npmEnv });
+  }
 
   step("install (resolving @podosoft/* from the registry)");
   writeFileSync(join(target, ".npmrc"), `registry=${registry}\n//localhost:${env.REGISTRY_PORT}/:_authToken=e2e\n`);
@@ -156,6 +163,14 @@ async function main() {
       // Route phone-number OTPs to the SMS sink when present so its spec can read
       // the code back; otherwise the app logs it and the spec skips.
       ...(process.env.SMS_WEBHOOK_URL ? [`SMS_WEBHOOK_URL=${process.env.SMS_WEBHOOK_URL}`] : []),
+      // Redis (redis/bullmq/job-progress specs) and S3/MinIO (storage/file-upload
+      // specs) are wired only when the CI service is present; otherwise those specs
+      // self-skip. The api-key spec always has its static key.
+      ...(process.env.REDIS_HOST ? [`REDIS_HOST=${process.env.REDIS_HOST}`, `REDIS_PORT=${process.env.REDIS_PORT ?? "6379"}`] : []),
+      ...(process.env.S3_ENDPOINT
+        ? ["STORAGE_PROVIDER=minio", `S3_ENDPOINT=${process.env.S3_ENDPOINT}`, `S3_REGION=${process.env.S3_REGION ?? "us-east-1"}`, `S3_BUCKET=${process.env.S3_BUCKET ?? "podokit"}`, `S3_ACCESS_KEY_ID=${process.env.S3_ACCESS_KEY_ID ?? "podokit"}`, `S3_SECRET_ACCESS_KEY=${process.env.S3_SECRET_ACCESS_KEY ?? "podokitsecret"}`, "S3_FORCE_PATH_STYLE=true"]
+        : []),
+      "API_KEYS=dev-key-please-change",
     ].join("\n") + "\n",
   );
 
@@ -178,6 +193,12 @@ async function main() {
     AUTH_HIBP: "true",
     // Route phone-number OTPs to the local SMS sink so the phone spec can read them.
     SMS_WEBHOOK_URL: `${smsSinkURL}/sms`,
+    // Backend-module runtime config (present only when the CI service is up).
+    ...(process.env.REDIS_HOST ? { REDIS_HOST: process.env.REDIS_HOST, REDIS_PORT: process.env.REDIS_PORT ?? "6379" } : {}),
+    ...(process.env.S3_ENDPOINT
+      ? { STORAGE_PROVIDER: "minio", S3_ENDPOINT: process.env.S3_ENDPOINT, S3_REGION: process.env.S3_REGION ?? "us-east-1", S3_BUCKET: process.env.S3_BUCKET ?? "podokit", S3_ACCESS_KEY_ID: process.env.S3_ACCESS_KEY_ID ?? "podokit", S3_SECRET_ACCESS_KEY: process.env.S3_SECRET_ACCESS_KEY ?? "podokitsecret", S3_FORCE_PATH_STYLE: "true" }
+      : {}),
+    API_KEYS: "dev-key-please-change",
   };
 
   step("migrate the auth tables");
@@ -198,6 +219,8 @@ async function main() {
     env: { ...pgEnv, PORT: env.API_PORT, BETTER_AUTH_URL: `http://localhost:${env.API_PORT}`, CORS_ORIGIN: webURL },
   });
   await waitFor(`http://localhost:${env.API_PORT}/health`, "api");
+  // BullMQ worker (bullmq/job-progress) — separate process; harmless (idle) if Redis is absent.
+  bg("node", ["dist/main-worker"], { cwd: join(target, "apps/api"), env: pgEnv });
   bg("node", ["build"], {
     cwd: join(target, "apps/web"),
     env: { ...process.env, PORT: env.WEB_PORT, ORIGIN: webURL, BACKEND_INTERNAL_URL: `http://localhost:${env.API_PORT}` },
@@ -209,7 +232,7 @@ async function main() {
   // --grep wins when given (run just one feature's specs); otherwise --smoke runs
   // the @smoke subset, and the default runs everything.
   const testArgs = ["playwright", "test", ...(grep ? ["--grep", grep] : smoke ? ["--grep", "@smoke"] : [])];
-  run("npx", testArgs, { cwd: join(target, "tests"), env: { ...process.env, E2E_BASE_URL: webURL, SMS_SINK_URL: smsSinkURL } });
+  run("npx", testArgs, { cwd: join(target, "tests"), env: { ...process.env, E2E_BASE_URL: webURL, E2E_API_URL: `http://localhost:${env.API_PORT}`, SMS_SINK_URL: smsSinkURL } });
 
   console.log("\n✓ faithful e2e passed");
 }

@@ -59,7 +59,7 @@
     "Set ADMIN_EMAILS in .env (comma-separated). Those emails become admins on sign-up.",
     "Re-run the auth migration to add the admin columns:  npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts",
     "Start the app (npm run dev), open /signup, register an ADMIN_EMAILS address, then sign in.",
-    "Admin pages: /admin/users (list, ban, set role, revoke sessions). Everyone: /admin/sessions, /admin/account.",
+    "Admin pages: /admin/users (list, ban, set role, revoke sessions). Signed-in users manage their profile and security at /account; /admin/account remains available in the admin shell. Admin, account, authentication, maintenance, and API responses include X-Robots-Tag: noindex, nofollow by default.",
     "Password reset emails go through the mailer module (installed automatically with auth); in dev without SMTP they are logged to the API console. Configure SMTP in admin settings or via SMTP_* env for production."
   ]
 }

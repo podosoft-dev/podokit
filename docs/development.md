@@ -118,7 +118,8 @@ What you get:
   same for the dashboard. Set them inline as above or in the project `.env`.
 - **Single entry.** The browser only ever calls the web origin (`app.localhost`); SvelteKit
   proxies `/api/*` to the api container internally. Traefik only routes `Host(app.localhost) → web`
-  (see `infra/traefik/dynamic.yml`).
+  and compresses eligible HTML, JSON, CSS, and JavaScript responses according to the browser's
+  `Accept-Encoding` header (see `infra/traefik/dynamic.yml`).
 - **Live edits.** `docker compose watch` syncs your source into the containers. The web has
   instant Vite HMR; an **API** source change restarts the api service (~5s) — the stable
   approach for NestJS in a container (its in-process watcher doesn't reliably respawn).
@@ -132,7 +133,9 @@ What you get:
 Prefer the host `npm run dev` loop for quick single-project work; reach for the containerized
 loop when you run several projects at once or want dev to mirror the k3s/Traefik production
 topology. These files (`compose.dev.yaml`, `Dockerfile.dev`, `.devcontainer/`, `.env.docker`,
-`infra/traefik/`) are yours to edit — `podo update` never touches them.
+`infra/traefik/`) are yours to edit — `podo update` never touches them. New projects include the
+compression middleware by default; existing projects can adopt the corresponding
+`infra/traefik/dynamic.yml` template change manually because this directory is owned.
 
 ## Verifying template / module changes
 
@@ -254,3 +257,53 @@ Apply the results client-side (filter the rows you pass to `DataTable`) for
 bounded lists — the users, sessions, and audit-log pages all load a bounded set
 and filter/search/sort/paginate in the browser. For very large server-side
 lists, drive `onSearch`/`onFilter` to refetch and use the DataTable's manual mode.
+
+## Releasing
+
+Releases are managed with [Changesets](https://github.com/changesets/changesets).
+The model separates **landing code** from **publishing**: merging to `main` never
+publishes anything, and versions climb only when a release is deliberately cut.
+This lets work accumulate on `main` and ship as one release when enough has piled
+up, instead of a version bump per merge.
+
+**1. Changes accumulate.** Each PR that touches a published package adds a
+changeset (`npm run changeset`; see [CONTRIBUTING.md](../CONTRIBUTING.md)). The
+changeset files sit in `.changeset/` and pile up as PRs merge.
+
+**2. The Version Packages PR.** Every push to `main` runs
+[`.github/workflows/version.yml`](../.github/workflows/version.yml), which keeps a
+single **"Version Packages"** PR up to date. It runs `npm run version`
+(`changeset version` + a lockfile sync) to bump each affected package, write its
+per-package `CHANGELOG.md`, and update internal dependency ranges — so a
+range-crossing bump (e.g. a dependency going `0.1.x` → `0.2.0`, outside `^0.1.0`)
+updates dependents automatically. This PR just sits there, growing, publishing
+nothing.
+
+> The workflow opens that PR with the default `GITHUB_TOKEN`, which needs the
+> setting **"Allow GitHub Actions to create and approve pull requests"** ON (org
+> Settings → Actions → General → Workflow permissions; repos inherit it). That
+> setting also grants Actions the ability to *approve* PRs org-wide, which can
+> satisfy required reviews — so keep branch protection on `main` strict (require a
+> human review, enable *"Dismiss stale approvals when new commits are pushed"*,
+> ideally CODEOWNERS). The Version workflow only **creates** the PR; it never
+> approves, and it never publishes. (To keep the org policy locked down instead,
+> swap the default token for a scoped `CHANGESETS_TOKEN` secret — a fine-grained
+> PAT or GitHub App token with Contents + Pull requests write.)
+
+**3. Cut the release.** When enough has accumulated, a maintainer:
+1. Merges the **Version Packages** PR → the version bumps and CHANGELOGs land on
+   `main`. Still nothing is published.
+2. Optionally updates the curated top-level [`CHANGELOG.md`](../CHANGELOG.md) with
+   a human-readable summary of the release (the per-package changelogs hold the
+   mechanical detail).
+3. Pushes a `vX.Y.Z` tag (conventionally the `@podosoft/podokit` CLI version).
+   This triggers [`.github/workflows/release.yml`](../.github/workflows/release.yml),
+   which publishes each package at its current `package.json` version to npm
+   (skipping any version already on the registry, so it is idempotent).
+
+The tag push is the single, explicit publish gate — merging PRs, even the Version
+Packages PR, never publishes on its own.
+
+> **Running `npm run version` locally** (rarely needed — CI maintains the PR): the
+> GitHub changelog formatter queries the GitHub API, so set `GITHUB_TOKEN` (e.g.
+> `GITHUB_TOKEN=$(gh auth token) npm run version`).

@@ -6,7 +6,110 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.9.0] - 2026-07-11
+### Added
+- **Markdown image attachments for blogs.** Signed-in authors can upload PNG,
+  JPEG, GIF, WebP, or AVIF images up to 5 MB directly from `BlogEditor`; the
+  editor inserts Markdown at the current cursor. Images are served from a stable,
+  immutable public blog path instead of an expiring object-storage URL, with API
+  and UI coverage for upload, validation, preview, and published rendering.
+- **External blog module.** New `@podosoft/podokit-module-blog` package provides
+  authenticated Markdown publishing, paginated posts and comments, author-owned
+  edit/delete flows, admin management, an additive legacy-compatible migration,
+  reusable web helpers, and Playwright API/UI coverage. Public and admin route
+  wrappers stay application-owned for design and SEO customization.
+- **External modules now participate in updates.** Project manifests record the
+  backing package and applied version; `podo update` resolves installed package
+  modules from the consumer project, retains their root dependency, and refreshes
+  the recorded module version after apply. `podo add --adopt` explicitly hands
+  only module-declared managed paths back while preserving owned presentation.
+- **Proxy response compression.** New fullstack and todo projects attach Traefik's
+  compression middleware to the containerized development router and the k3s
+  Ingress, reducing dynamic HTML and other compressible response payloads. The
+  owned local Traefik file remains safe from update overwrites; existing apps can
+  adopt that small template change explicitly.
+- **Private route search protection (admin-dashboard).** Admin, account,
+  authentication, maintenance, and API responses now include
+  `X-Robots-Tag: noindex, nofollow`, while the public landing page remains
+  indexable. Application-specific canonical URLs, sitemaps, robots rules, and
+  structured data remain owned by each generated application.
+- **User account page (admin-dashboard).** Every signed-in user can manage their
+  profile and security at `/account`, while `/admin/account` remains available.
+  A reusable avatar menu shows sign-in for guests, account controls for users,
+  and the admin entry only for administrators.
+- **Theme / Appearance settings (admin-dashboard).** A dedicated **Appearance**
+  tab in admin Settings replaces the single "Brand color" field with a full theme:
+  six frequently useful presets are shown as visual choices, while the complete
+  21-preset catalog remains available under **Show more themes**. Quick settings
+  cover the brand color and five practical corner styles; **Fine-tune colors**
+  keeps independent light/dark token editing available without crowding the main
+  form. A larger app-shell preview toggles between light and dark, and
+  **Restore defaults** remains one click. Saving applies the theme across the whole app instantly
+  via a mode-scoped stylesheet (`:root:not(.dark)` / `:root.dark`), so light and dark
+  are tuned independently and dark is never disturbed by a light edit. New public
+  site settings keys `themePreset`, `themeRadius`, `themeOverrides` (validated to
+  prevent CSS injection); reuses the existing `brandColor`. New reusable modules
+  `$lib/site/themes.ts` and `$lib/site/apply-theme.ts`. i18n (en/ko) and Playwright
+  (ui + api) tests included. No DB migration (uses the existing `app_setting` store).
+
+### Fixed
+- **API proxy preserves binary request bodies.** Generated SvelteKit proxies now
+  forward request bodies as bytes, preventing multipart uploads and other binary
+  payloads from being corrupted by UTF-8 text decoding.
+- **Blog previews now match published article bodies.** `BlogEditor` and the new
+  reusable `BlogProse` component share one safe GFM renderer and one prose style,
+  including blockquotes, ordered lists, tables, and duplicate-title handling.
+  Application-owned article routes can use the same managed component without
+  giving up their surrounding visual design.
+- **Blog reads are public after installation.** The external blog module now
+  registers `/blog` in the generated layout's public path list, so anonymous
+  visitors can read the list and published articles while write actions remain
+  session-protected.
+- **Adding a module no longer adopts the whole working tree.** Pre-existing
+  managed-file edits retain their old lock baseline and unrelated application
+  files remain outside `files.lock`, preventing later updates from overwriting or
+  removing application-owned work.
+- **Generated Git ignores cover both Playwright execution locations.** The
+  configured suite writes artifacts below `tests`, while invoking Playwright
+  without that config can write authentication state and reports at the project
+  root. Both locations, along with local `output/lighthouse` reports, no longer
+  appear as untracked files.
+- **Two-factor UI tests now wait for login hydration.** The login form is
+  server-rendered before Svelte attaches its submit handler, so an immediate
+  Playwright click could perform a native form reload and make otherwise valid
+  2FA flows fail intermittently. The shared login helper now waits for the page
+  network to settle before submitting.
+- **Account UI test sessions no longer accumulate.** The Playwright session
+  setup revokes stale sessions before saving its authenticated state, keeping
+  the current session visible across repeated local runs.
+- **Clean 3-way update merges no longer become replaceable generated output.**
+  `podo update --apply --from …` used to hash the merged working file into
+  `.podokit/files.lock`; a repeated update could then treat user dependencies or
+  registry entries as clean and overwrite them. The lock now retains the newly
+  assembled PodoKit content as the managed baseline, and unrelated application
+  files are no longer adopted into the managed set during update.
+- **Sidebar design tokens were missing from the base theme.** The admin-dashboard
+  sidebar (shadcn-svelte) consumes `--sidebar*` CSS variables, but the
+  `fullstack-nest-svelte` `app.css` never defined them nor mapped them under
+  `@theme inline`, so `bg-sidebar`/`text-sidebar-foreground`/… were not generated
+  and the sidebar rendered unstyled (and did not re-theme). Added the full shadcn
+  sidebar token set (`--sidebar`, `--sidebar-foreground`, `--sidebar-primary`,
+  `--sidebar-accent`, `--sidebar-border`, `--sidebar-ring`, …) for light and dark
+  plus their `--color-sidebar*` `@theme` mappings. The Appearance theme now
+  re-themes the sidebar together with the rest of the app.
+- **Every sidebar item looked selected (active-state highlight leaked to all
+  items).** The shadcn-svelte sidebar components (as shipped by shadcn-svelte's
+  own registry) style the active item with the `data-active:` Tailwind variant,
+  which matches attribute **presence** (`[data-active]`); since the buttons always
+  render `data-active="true|false"`, the accent background/foreground applied to
+  **every** item, not just the active one. It was nearly invisible in the default
+  palette (accent ≈ sidebar) but glaring once a theme raised the contrast. This is
+  an upstream shadcn-svelte bug (canonical shadcn/ui uses value-matching
+  `data-[active=true]:`). Rather than diverge the vendored `ui/sidebar/*` files —
+  which are kept as a **pristine mirror of the shadcn-svelte registry so
+  `shadcn-svelte` updates apply cleanly** — the correction lives in the base
+  `app.css`: it neutralizes the resting state of non-active menu buttons while
+  leaving hover/press feedback intact. Remove once shadcn-svelte adopts
+  `data-[active=true]:`.
 
 ### Added
 - **Two-factor backup codes are now usable end to end.** The login page gained a
