@@ -26,6 +26,16 @@ export interface ManifestModule {
   order: number;
   /** PodoKit version that applied the module. */
   addedWith: string;
+  /** npm package backing an external module. Absent for bundled modules. */
+  packageName?: string;
+  /** Installed external-module version last applied to this project. */
+  moduleVersion?: string;
+}
+
+export interface ManifestModuleInput {
+  name: string;
+  packageName?: string;
+  moduleVersion?: string;
 }
 
 export interface PodokitManifest {
@@ -49,6 +59,17 @@ export interface FileEntry {
 export interface FilesLock {
   schemaVersion: number;
   files: Record<string, FileEntry>;
+}
+
+export interface RecordModulesLockSnapshot {
+  /** Lock state captured before module files are written. */
+  previous: FilesLock;
+  /** Previously locked paths whose working bytes still matched their baseline. */
+  cleanPaths: string[];
+  /** Files shipped, merged, or injected by the module application. */
+  modulePaths: string[];
+  /** Owned paths explicitly handed back with `podo add --adopt`. */
+  adoptedPaths: string[];
 }
 
 const PODOKIT_DIR = ".podokit";
@@ -263,20 +284,66 @@ export function mergeOwnedGlobs(existing: string[], add: string[]): string[] {
  */
 export function recordModules(
   projectRoot: string,
-  moduleNames: string[],
+  moduleInputs: (string | ManifestModuleInput)[],
   version?: string,
   ownedGlobs?: string[],
+  lockSnapshot?: RecordModulesLockSnapshot,
 ): void {
   const manifest = readManifest(projectRoot);
   if (!manifest) return;
   const stampedWith = version ?? podokitVersion();
   const known = new Set(manifest.modules.map((m) => m.name));
-  for (const name of moduleNames) {
-    if (known.has(name)) continue;
-    manifest.modules.push({ name, order: manifest.modules.length, addedWith: stampedWith });
-    known.add(name);
+  for (const input of moduleInputs) {
+    const module = typeof input === "string" ? { name: input } : input;
+    const existing = manifest.modules.find((entry) => entry.name === module.name);
+    if (existing) {
+      existing.packageName = module.packageName ?? existing.packageName;
+      existing.moduleVersion = module.moduleVersion ?? existing.moduleVersion;
+      continue;
+    }
+    manifest.modules.push({
+      name: module.name,
+      order: manifest.modules.length,
+      addedWith: stampedWith,
+      packageName: module.packageName,
+      moduleVersion: module.moduleVersion,
+    });
+    known.add(module.name);
   }
   if (ownedGlobs?.length) manifest.ownedGlobs = mergeOwnedGlobs(manifest.ownedGlobs, ownedGlobs);
   writeManifest(projectRoot, manifest);
-  writeFilesLock(projectRoot, computeFilesLock(projectRoot, manifest.ownedGlobs));
+  const computed = computeFilesLock(projectRoot, manifest.ownedGlobs);
+  if (!lockSnapshot) {
+    writeFilesLock(projectRoot, computed);
+    return;
+  }
+
+  const clean = new Set(lockSnapshot.cleanPaths);
+  const modulePaths = new Set(lockSnapshot.modulePaths);
+  const adopted = new Set(lockSnapshot.adoptedPaths);
+  const files: Record<string, FileEntry> = {};
+
+  for (const [path, previous] of Object.entries(lockSnapshot.previous.files)) {
+    const current = computed.files[path];
+    if (!current) {
+      // Preserve missing-file drift that existed before the add operation.
+      files[path] = previous;
+      continue;
+    }
+    if (current.tier === "owned" || adopted.has(path) || clean.has(path)) {
+      files[path] = current;
+    } else {
+      // Adding a module must not teach the lock that pre-existing local edits
+      // are generated output. Keep the old baseline so update stays safe.
+      files[path] = previous;
+    }
+  }
+
+  for (const path of modulePaths) {
+    const current = computed.files[path];
+    if (!current || files[path]) continue;
+    files[path] = current;
+  }
+
+  writeFilesLock(projectRoot, { schemaVersion: LOCK_SCHEMA_VERSION, files });
 }

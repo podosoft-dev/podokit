@@ -14,7 +14,7 @@ const HELP = `podo — PodoKit project generator
 
 Usage:
   podo create <name> [options]
-  podo add <module>
+  podo add <module> [--adopt]
   podo remove <module>     Un-apply a module (inverse of add)
   podo status              Show version, modules, file tiers, and local edits
   podo diff                List PodoKit-managed files you have edited
@@ -26,6 +26,7 @@ Options:
   --template <t> Template to scaffold (see below)
   --dir <path>   Target directory (default: ./<name>)
   --pm <name>    Package manager: npm | pnpm | yarn (default: npm)
+  --adopt        Adopt colliding paths explicitly declared managed by a module
   --no-ai        Skip AI agent guidance (AGENTS.md, CLAUDE.md, editor rules)
   -y, --yes      Skip prompts and accept defaults
   -h, --help     Show this help
@@ -47,13 +48,14 @@ interface ParsedArgs {
   pm?: PackageManager;
   from?: string;
   apply: boolean;
+  adopt: boolean;
   yes: boolean;
   help: boolean;
   ai: boolean;
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
-  const parsed: ParsedArgs = { help: false, yes: false, apply: false, ai: true };
+  const parsed: ParsedArgs = { help: false, yes: false, apply: false, adopt: false, ai: true };
   const positionals: string[] = [];
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -65,6 +67,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
       parsed.ai = false;
     } else if (arg === "--apply") {
       parsed.apply = true;
+    } else if (arg === "--adopt") {
+      parsed.adopt = true;
     } else if (arg === "--template") {
       parsed.template = argv[++i];
     } else if (arg === "--dir") {
@@ -107,11 +111,26 @@ async function main(argv: string[]): Promise<void> {
       return;
     }
     try {
-      const result = addModule({ projectRoot: process.cwd(), module: moduleName, modulesDir });
+      const result = addModule({
+        projectRoot: process.cwd(),
+        module: moduleName,
+        modulesDir,
+        adopt: args.adopt,
+      });
       if (result.added.length) {
         process.stdout.write(`\nAlso added required module(s): ${result.added.join(", ")}\n`);
       }
       process.stdout.write(`\nAdded ${result.module}.\n`);
+      if (result.preserved.length) {
+        process.stdout.write(
+          `\nPreserved app-owned presentation file(s):\n${result.preserved.map((file) => `  ${file}`).join("\n")}\n`,
+        );
+      }
+      if (result.adopted.length) {
+        process.stdout.write(
+          `\nAdopted as module-managed file(s):\n${result.adopted.map((file) => `  ${file}`).join("\n")}\n`,
+        );
+      }
       if (result.instructions.length) {
         process.stdout.write(`\nNext steps:\n${result.instructions.map((i) => `  ${i}`).join("\n")}\n`);
       }
@@ -154,9 +173,12 @@ async function main(argv: string[]): Promise<void> {
     try {
       const s = status(process.cwd());
       const tiers = `managed ${s.tiers.managed}, assembled ${s.tiers.assembled}, owned ${s.tiers.owned}`;
+      const modules = s.moduleDetails.map((module) =>
+        module.version ? `${module.name}@${module.version}` : module.name,
+      );
       process.stdout.write(
         `PodoKit ${s.podokitVersion}  (template: ${s.template}, ${s.packageManager})\n` +
-          `Modules: ${s.modules.length ? s.modules.join(", ") : "(none)"}\n` +
+          `Modules: ${modules.length ? modules.join(", ") : "(none)"}\n` +
           `Files:   ${tiers}\n` +
           `Edited:  ${s.drifted.length} managed file(s)${s.missing.length ? `, ${s.missing.length} missing` : ""}\n` +
           (s.drifted.length ? s.drifted.map((f) => `  ~ ${f}`).join("\n") + "\n" : ""),

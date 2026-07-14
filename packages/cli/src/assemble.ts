@@ -8,7 +8,8 @@ import {
   type TemplateVars,
   type VfsTree,
 } from "@podosoft/podokit-template-engine";
-import type { ModuleManifest } from "./add";
+import { resolveModule, type ModuleManifest } from "./add";
+import type { ManifestModule } from "./lockfile";
 
 /**
  * Reconstruct a generated project in memory (no disk writes) from a template
@@ -19,7 +20,9 @@ export interface AssembleOptions {
   templatesDir: string;
   template: string;
   answers: TemplateVars;
-  modules: string[];
+  modules: (string | ManifestModule)[];
+  /** Generated project whose node_modules may contain external modules. */
+  projectRoot?: string;
 }
 
 function readManifest(moduleDir: string): ModuleManifest {
@@ -74,11 +77,52 @@ function applyModuleToTree(tree: VfsTree, moduleDir: string, vars: TemplateVars)
   }
 }
 
+function preserveExternalPackageDependency(
+  tree: VfsTree,
+  projectRoot: string,
+  packageName: string,
+): void {
+  const diskPackagePath = join(projectRoot, "package.json");
+  if (!existsSync(diskPackagePath)) return;
+  const diskPackage = JSON.parse(readFileSync(diskPackagePath, "utf8")) as Record<string, unknown>;
+  const rootPackage = JSON.parse(textOf(tree, "package.json") || "{}") as Record<string, unknown>;
+  for (const section of ["dependencies", "devDependencies", "optionalDependencies"] as const) {
+    const diskSection = diskPackage[section];
+    if (!diskSection || typeof diskSection !== "object" || Array.isArray(diskSection)) continue;
+    const version = (diskSection as Record<string, unknown>)[packageName];
+    if (typeof version !== "string") continue;
+    const current = rootPackage[section];
+    const dependencies = current && typeof current === "object" && !Array.isArray(current)
+      ? { ...(current as Record<string, unknown>) }
+      : {};
+    dependencies[packageName] = version;
+    rootPackage[section] = dependencies;
+    setText(tree, "package.json", `${JSON.stringify(rootPackage, null, 2)}\n`);
+    return;
+  }
+}
+
 /** Assemble the project tree for a template + ordered modules, in memory. */
 export function assembleProject(options: AssembleOptions): VfsTree {
   const tree = renderTemplate(join(options.templatesDir, options.template), options.answers);
   for (const mod of options.modules) {
-    applyModuleToTree(tree, join(options.templatesDir, "modules", mod), options.answers);
+    const name = typeof mod === "string" ? mod : (mod.packageName ?? mod.name);
+    const resolved = resolveModule(
+      name,
+      join(options.templatesDir, "modules"),
+      options.projectRoot ?? options.templatesDir,
+    );
+    if (!resolved) {
+      const label = typeof mod === "string" ? mod : mod.name;
+      throw new Error(
+        `Cannot resolve module "${label}" while assembling the project. ` +
+          "Install its package before running podo update.",
+      );
+    }
+    applyModuleToTree(tree, resolved.dir, options.answers);
+    if (typeof mod !== "string" && mod.packageName && options.projectRoot) {
+      preserveExternalPackageDependency(tree, options.projectRoot, mod.packageName);
+    }
   }
   return tree;
 }

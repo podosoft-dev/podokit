@@ -14,6 +14,7 @@ import {
   type FilesLock,
 } from "./lockfile";
 import { NotAProjectError } from "./inspect";
+import { resolveModule } from "./add";
 
 /**
  * `podo update` planner. For now it produces a dry-run plan only: it assembles
@@ -64,7 +65,8 @@ export function planUpdate(projectRoot: string, templatesDir: string): UpdatePla
     templatesDir,
     template: manifest.template,
     answers: manifest.answers,
-    modules: manifest.modules.map((m) => m.name),
+    modules: manifest.modules,
+    projectRoot,
   });
 
   const changes: FileChange[] = [];
@@ -208,10 +210,22 @@ export function applyUpdate(
   const previousLock = readFilesLock(projectRoot);
   if (!manifest || !previousLock) throw new NotAProjectError();
   const plan = planUpdate(projectRoot, templatesDir);
-  const modules = manifest.modules.map((m) => m.name);
-  const newTree = assembleProject({ templatesDir, template: manifest.template, answers: manifest.answers, modules });
+  const modules = manifest.modules;
+  const newTree = assembleProject({
+    templatesDir,
+    template: manifest.template,
+    answers: manifest.answers,
+    modules,
+    projectRoot,
+  });
   const oldTree = options.oldTemplatesDir
-    ? assembleProject({ templatesDir: options.oldTemplatesDir, template: manifest.template, answers: manifest.answers, modules })
+    ? assembleProject({
+        templatesDir: options.oldTemplatesDir,
+        template: manifest.template,
+        answers: manifest.answers,
+        modules,
+        projectRoot,
+      })
     : null;
 
   const result: ApplyResult = { written: [], removed: [], merged: [], conflicts: [] };
@@ -243,7 +257,22 @@ export function applyUpdate(
   // intentionally remains drifted so a future update performs another 3-way
   // merge instead of treating the user's lines as clean generated output.
   writeFilesLock(projectRoot, updatedFilesLock(projectRoot, newTree, previousLock, manifest.ownedGlobs));
-  writeManifest(projectRoot, { ...manifest, podokitVersion: podokitVersion() });
+  const modulesDir = join(templatesDir, "modules");
+  const refreshedModules = manifest.modules.map((module) => {
+    const resolved = resolveModule(module.packageName ?? module.name, modulesDir, projectRoot);
+    return resolved?.packageName
+      ? {
+          ...module,
+          packageName: resolved.packageName,
+          moduleVersion: resolved.moduleVersion,
+        }
+      : module;
+  });
+  writeManifest(projectRoot, {
+    ...manifest,
+    modules: refreshedModules,
+    podokitVersion: podokitVersion(),
+  });
   return result;
 }
 

@@ -1,14 +1,22 @@
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createRequire } from "node:module";
 import {
-  copyTemplate,
+  hashContent,
   insertAtMarker,
   mergePackageJson,
+  renderTemplate,
   type JsonObject,
   type TemplateVars,
 } from "@podosoft/podokit-template-engine";
-import { recordModules } from "./lockfile";
+import {
+  matchGlob,
+  readFilesLock,
+  readManifest as readProjectManifest,
+  recordModules,
+  writeManifest,
+  type ManifestModuleInput,
+} from "./lockfile";
 
 interface Injection {
   file: string;
@@ -40,6 +48,9 @@ export interface ModuleManifest {
    *  they survive lock recompute. Use for public presentation pages a consumer
    *  restyles, while keeping the module's `$lib` logic managed. */
   ownedGlobs?: string[];
+  /** Paths that an existing app may explicitly hand back to this module with
+   *  `podo add --adopt`. Broad app-owned route globs are never removed. */
+  managedGlobs?: string[];
 }
 
 export interface AddOptions {
@@ -48,6 +59,8 @@ export interface AddOptions {
   modulesDir: string;
   /** PodoKit version stamped into the lockfile. Defaults to the CLI version. */
   podokitVersion?: string;
+  /** Adopt colliding files covered by the module's managedGlobs. */
+  adopt?: boolean;
 }
 
 export interface AddResult {
@@ -57,6 +70,19 @@ export interface AddResult {
   added: string[];
   /** ownedGlobs declared by this module and every module it pulled in. */
   ownedGlobs: string[];
+  /** Existing owned presentation files intentionally left untouched. */
+  preserved: string[];
+  /** Paths explicitly adopted as module-managed files. */
+  adopted: string[];
+  /** Files shipped, merged, or injected while applying the module. */
+  touched: string[];
+}
+
+export interface ResolvedModule {
+  dir: string;
+  name: string;
+  packageName?: string;
+  moduleVersion?: string;
 }
 
 const PACKAGE_PREFIX = "@podosoft/podokit-module-";
@@ -76,6 +102,25 @@ export function resolveModuleDir(name: string, modulesDir: string, projectRoot: 
   } catch {
     return null;
   }
+}
+
+/** Resolve a module and capture the package identity needed to replay external
+ * modules during `podo update`. */
+export function resolveModule(name: string, modulesDir: string, projectRoot: string): ResolvedModule | null {
+  const dir = resolveModuleDir(name, modulesDir, projectRoot);
+  if (!dir) return null;
+  const manifest = readManifest(dir);
+  const bundled = join(modulesDir, manifest.name);
+  if (dir === bundled) return { dir, name: manifest.name };
+  const packageFile = join(dir, "package.json");
+  if (!existsSync(packageFile)) return { dir, name: manifest.name };
+  const pkg = readJson(packageFile);
+  return {
+    dir,
+    name: manifest.name,
+    packageName: typeof pkg.name === "string" ? pkg.name : undefined,
+    moduleVersion: typeof pkg.version === "string" ? pkg.version : undefined,
+  };
 }
 
 function assertManifestVersion(name: string, manifest: ModuleManifest): void {
@@ -158,14 +203,44 @@ function isApplied(projectRoot: string, modulesDir: string, module: string): boo
  * and inject wiring at markers. Missing required modules are added first.
  */
 export function addModule(options: AddOptions): AddResult {
-  const result = applyModule(options.projectRoot, options.module, options.modulesDir, new Set());
+  const previousLock = readFilesLock(options.projectRoot);
+  const cleanPaths = previousLock
+    ? Object.entries(previousLock.files)
+        .filter(([path, entry]) => {
+          const target = join(options.projectRoot, path);
+          return existsSync(target) && hashContent(readFileSync(target)) === entry.outHash;
+        })
+        .map(([path]) => path)
+    : [];
+  const result = applyModule(
+    options.projectRoot,
+    options.module,
+    options.modulesDir,
+    new Set(),
+    options.adopt ?? false,
+  );
+  if (options.adopt && result.adopted.length) {
+    releaseOwnedPaths(options.projectRoot, result.adopted);
+  }
   // Record the module (and any auto-added requirements), fold in the modules'
   // declared ownedGlobs, and refresh the lock.
+  const records = [...result.added, result.module]
+    .map((name) => resolveModule(name, options.modulesDir, options.projectRoot))
+    .filter((module): module is ResolvedModule => module !== null)
+    .map(moduleRecord);
   recordModules(
     options.projectRoot,
-    [...result.added, result.module],
+    records,
     options.podokitVersion,
     result.ownedGlobs,
+    previousLock
+      ? {
+          previous: previousLock,
+          cleanPaths,
+          modulePaths: [...new Set(result.touched)],
+          adoptedPaths: result.adopted,
+        }
+      : undefined,
   );
   return result;
 }
@@ -175,14 +250,16 @@ function applyModule(
   module: string,
   modulesDir: string,
   applied: Set<string>,
+  adopt: boolean,
 ): AddResult {
-  const moduleDir = resolveModuleDir(module, modulesDir, projectRoot);
-  if (!moduleDir) {
+  const resolved = resolveModule(module, modulesDir, projectRoot);
+  if (!resolved) {
     const available = listModules(modulesDir, projectRoot).map((m) => m.name);
     throw new Error(
       `Unknown module "${module}".${available.length ? ` Available: ${available.join(", ")}.` : ""}`,
     );
   }
+  const moduleDir = resolved.dir;
   const manifest = readManifest(moduleDir);
   assertManifestVersion(module, manifest);
 
@@ -198,11 +275,17 @@ function applyModule(
   // 0) apply required modules first (auto-add if missing)
   const added: string[] = [];
   const ownedGlobs: string[] = [...(manifest.ownedGlobs ?? [])];
+  const preserved: string[] = [];
+  const adopted: string[] = [];
+  const touched: string[] = [];
   for (const required of manifest.requires ?? []) {
     if (applied.has(required) || isApplied(projectRoot, modulesDir, required)) continue;
-    const result = applyModule(projectRoot, required, modulesDir, applied);
+    const result = applyModule(projectRoot, required, modulesDir, applied, adopt);
     added.push(required, ...result.added);
     ownedGlobs.push(...result.ownedGlobs);
+    preserved.push(...result.preserved);
+    adopted.push(...result.adopted);
+    touched.push(...result.touched);
   }
 
   const appName = projectName(projectRoot);
@@ -211,7 +294,16 @@ function applyModule(
   // 1) overlay files
   const filesDir = join(moduleDir, "files");
   if (existsSync(filesDir)) {
-    copyTemplate(filesDir, projectRoot, vars);
+    const copied = copyModuleFiles({
+      filesDir,
+      projectRoot,
+      vars,
+      managedGlobs: manifest.managedGlobs ?? [],
+      adopt,
+    });
+    preserved.push(...copied.preserved);
+    adopted.push(...copied.adopted);
+    touched.push(...copied.touched);
   }
 
   // 2) merge dependencies and scripts into the target app
@@ -222,11 +314,13 @@ function applyModule(
     if (manifest.scripts) overlay.scripts = manifest.scripts;
     const merged = mergePackageJson(readJson(appPkgPath), overlay);
     writeFileSync(appPkgPath, `${JSON.stringify(merged, null, 2)}\n`);
+    touched.push(`apps/${manifest.targetApp}/package.json`);
   }
 
   // 3) append env example lines
   if (manifest.env?.length) {
     appendEnv(projectRoot, manifest.env);
+    touched.push(".env.example");
   }
 
   // 4) inject wiring at markers
@@ -239,8 +333,72 @@ function applyModule(
     const content = readFileSync(target, "utf8");
     if (injection.optional && !content.includes(injection.marker)) continue;
     writeFileSync(target, insertAtMarker(content, injection.marker, injection.text));
+    touched.push(injection.file);
   }
 
   const instructions = (manifest.instructions ?? []).map((line) => line.replace(/<app>/g, appName));
-  return { module, instructions, added, ownedGlobs };
+  return { module: manifest.name, instructions, added, ownedGlobs, preserved, adopted, touched };
+}
+
+function moduleRecord(module: ResolvedModule): ManifestModuleInput {
+  return {
+    name: module.name,
+    packageName: module.packageName,
+    moduleVersion: module.moduleVersion,
+  };
+}
+
+interface CopyModuleFilesOptions {
+  filesDir: string;
+  projectRoot: string;
+  vars: TemplateVars;
+  managedGlobs: string[];
+  adopt: boolean;
+}
+
+/** Copy a module overlay without clobbering app-owned presentation files. */
+function copyModuleFiles(options: CopyModuleFilesOptions): { preserved: string[]; adopted: string[]; touched: string[] } {
+  const tree = renderTemplate(options.filesDir, options.vars);
+  const lock = readFilesLock(options.projectRoot);
+  const preserved: string[] = [];
+  const adopted: string[] = [];
+  const touched: string[] = [];
+
+  for (const [rel, file] of tree) {
+    touched.push(rel);
+    const target = join(options.projectRoot, rel);
+    const existed = existsSync(target);
+    const entry = lock?.files[rel];
+    const canAdopt = options.managedGlobs.some((glob) => matchGlob(rel, glob));
+    if (existed && entry?.tier === "owned" && !(options.adopt && canAdopt)) {
+      preserved.push(rel);
+      continue;
+    }
+    if (existed && !entry && !(options.adopt && canAdopt)) {
+      const current = readFileSync(target);
+      const next = Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content);
+      if (!current.equals(next)) {
+        throw new Error(
+          `Cannot add module: ${rel} already exists outside PodoKit ownership. ` +
+            "Move it, or re-run with --adopt when the module declares the path managed.",
+        );
+      }
+    }
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, file.content);
+    if (existed && options.adopt && canAdopt) adopted.push(rel);
+  }
+  return { preserved, adopted, touched };
+}
+
+/** Remove only exact owned paths that an explicit adoption handed back. Broad
+ * ownership rules such as `apps/web/src/routes/**` remain intact. */
+function releaseOwnedPaths(projectRoot: string, adopted: string[]): void {
+  const manifest = readProjectManifest(projectRoot);
+  if (!manifest) return;
+  const adoptedSet = new Set(adopted);
+  manifest.ownedGlobs = manifest.ownedGlobs.filter(
+    (glob) => glob.includes("*") || !adoptedSet.has(glob),
+  );
+  writeManifest(projectRoot, manifest);
 }

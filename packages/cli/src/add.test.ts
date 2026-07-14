@@ -4,6 +4,14 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { create } from "./create";
 import { addModule, listModules } from "./add";
+import {
+  computeFilesLock,
+  computeDrift,
+  readFilesLock,
+  readManifest,
+  writeFilesLock,
+  writeManifest,
+} from "./lockfile";
 
 const REPO_TEMPLATES = resolve(process.cwd(), "..", "..", "templates");
 const MODULES = join(REPO_TEMPLATES, "modules");
@@ -58,6 +66,80 @@ describe("module-declared ownedGlobs", () => {
       files: Record<string, { tier: string }>;
     };
     expect(lock.files[fileRel].tier).toBe("owned");
+  });
+});
+
+describe("adopting an existing owned feature", () => {
+  it("preserves owned files by default and adopts only declared managed paths", () => {
+    const project = generate("fullstack-nest-svelte");
+    const modulesDir = join(tmp(), "modules");
+    const fileRel = "apps/api/src/blog/legacy.ts";
+    writeFile(join(project, fileRel), "legacy\n");
+    const projectManifest = readManifest(project)!;
+    projectManifest.ownedGlobs.push(fileRel);
+    writeManifest(project, projectManifest);
+    writeFilesLock(project, computeFilesLock(project, projectManifest.ownedGlobs));
+
+    writeFile(join(modulesDir, "blog", "files", fileRel), "managed\n");
+    writeFile(
+      join(modulesDir, "blog", "module.manifest.json"),
+      JSON.stringify({
+        name: "blog",
+        description: "test",
+        targetApp: "api",
+        managedGlobs: ["apps/api/src/blog/**"],
+      }),
+    );
+
+    const preserved = addModule({ projectRoot: project, module: "blog", modulesDir });
+    expect(preserved.preserved).toContain(fileRel);
+    expect(readFileSync(join(project, fileRel), "utf8")).toBe("legacy\n");
+
+    const adopted = addModule({ projectRoot: project, module: "blog", modulesDir, adopt: true });
+    expect(adopted.adopted).toContain(fileRel);
+    expect(readFileSync(join(project, fileRel), "utf8")).toBe("managed\n");
+    expect(readManifest(project)?.ownedGlobs).not.toContain(fileRel);
+    expect(readFilesLock(project)?.files[fileRel].tier).toBe("managed");
+  });
+});
+
+describe("lock safety while adding modules", () => {
+  it("keeps pre-existing drift and unrelated app files outside the generated baseline", () => {
+    const project = generate("fullstack-nest-svelte");
+    const appModule = "apps/api/src/app.module.ts";
+    const previousEntry = readFilesLock(project)!.files[appModule];
+    writeFileSync(join(project, appModule), `${readFileSync(join(project, appModule), "utf8")}\n// app edit\n`);
+    const appFile = "apps/api/src/customer-domain.ts";
+    writeFile(join(project, appFile), "export const customerDomain = true;\n");
+
+    const modulesDir = join(tmp(), "modules");
+    writeFile(
+      join(modulesDir, "widget", "module.manifest.json"),
+      JSON.stringify({
+        name: "widget",
+        description: "test",
+        targetApp: "api",
+        inject: [
+          {
+            file: appModule,
+            marker: "// podokit:end:imports",
+            text: 'import { WidgetModule } from "./widget/widget.module";',
+          },
+        ],
+      }),
+    );
+    writeFile(
+      join(modulesDir, "widget", "files/apps/api/src/widget/widget.module.ts"),
+      "export class WidgetModule {}\n",
+    );
+
+    addModule({ projectRoot: project, module: "widget", modulesDir });
+
+    const lock = readFilesLock(project)!;
+    expect(lock.files[appModule].outHash).toBe(previousEntry.outHash);
+    expect(lock.files[appFile]).toBeUndefined();
+    expect(lock.files["apps/api/src/widget/widget.module.ts"]?.tier).toBe("managed");
+    expect(computeDrift(project).drifted).toContain(appModule);
   });
 });
 

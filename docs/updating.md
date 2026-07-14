@@ -57,6 +57,29 @@ What each tier does on `--apply`:
 The dry-run prints a per-file plan (`update` / `add` / `remove` / `conflict`) so
 there are no surprises.
 
+### Updating external package modules
+
+External module records include `packageName` and `moduleVersion`. Upgrade the
+package first, then use the same dry-run/apply flow:
+
+```bash
+npm update @podosoft/podokit-module-blog
+podo update
+podo update --apply
+```
+
+The update assembler resolves the package from the generated project's
+`node_modules` and retains its root dependency declaration. If the package is
+missing, update stops with a resolution error instead of silently dropping the
+module.
+
+Adding a module does not re-baseline the entire working tree. Existing managed
+file drift keeps its previous hash, and unrelated application files stay outside
+`files.lock`. Only module overlays, package/env merges, injection targets, and
+explicitly adopted paths are added to the module baseline. This keeps a later
+update from overwriting or deleting application work that happened before the
+module was installed.
+
 ## Removing a module — `podo remove`
 
 `podo remove <module>` is the inverse of `podo add`: it un-wires the module's

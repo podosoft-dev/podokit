@@ -12,6 +12,7 @@ export interface StatusReport {
   template: string;
   packageManager: string;
   modules: string[];
+  moduleDetails: { name: string; packageName?: string; version?: string }[];
   tiers: Record<Tier, number>;
   drifted: string[];
   missing: string[];
@@ -36,6 +37,11 @@ export function status(projectRoot: string): StatusReport {
     template: manifest.template,
     packageManager: manifest.packageManager,
     modules: manifest.modules.map((m) => m.name),
+    moduleDetails: manifest.modules.map((m) => ({
+      name: m.name,
+      packageName: m.packageName,
+      version: m.moduleVersion,
+    })),
     tiers,
     drifted,
     missing,

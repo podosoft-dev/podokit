@@ -73,6 +73,59 @@ describe("planUpdate (dry-run)", () => {
   });
 });
 
+describe("external module updates", () => {
+  it("replays an installed package module and records its applied version", () => {
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack-nest-svelte", templatesDir: REPO_TEMPLATES, targetDir: project });
+    const packageDir = join(project, "node_modules/@podosoft/podokit-module-blog");
+    const rootPackagePath = join(project, "package.json");
+    const rootPackage = JSON.parse(readFileSync(rootPackagePath, "utf8")) as {
+      devDependencies?: Record<string, string>;
+    };
+    rootPackage.devDependencies = {
+      ...rootPackage.devDependencies,
+      "@podosoft/podokit-module-blog": "^0.1.0",
+    };
+    writeFileSync(rootPackagePath, `${JSON.stringify(rootPackage, null, 2)}\n`);
+    const fileRel = "apps/api/src/blog/external.ts";
+    mkdirSync(join(packageDir, "files/apps/api/src/blog"), { recursive: true });
+    writeFileSync(
+      join(packageDir, "package.json"),
+      JSON.stringify({ name: "@podosoft/podokit-module-blog", version: "0.1.0" }),
+    );
+    writeFileSync(
+      join(packageDir, "module.manifest.json"),
+      JSON.stringify({ manifestVersion: 1, name: "blog", description: "test", targetApp: "api" }),
+    );
+    writeFileSync(join(packageDir, "files", fileRel), "export const version = 1;\n");
+
+    addModule({ projectRoot: project, module: "blog", modulesDir: join(REPO_TEMPLATES, "modules") });
+    const before = JSON.parse(readFileSync(join(project, ".podokit/manifest.json"), "utf8")) as {
+      modules: { name: string; packageName?: string; moduleVersion?: string }[];
+    };
+    expect(before.modules.find((module) => module.name === "blog")).toMatchObject({
+      packageName: "@podosoft/podokit-module-blog",
+      moduleVersion: "0.1.0",
+    });
+
+    writeFileSync(
+      join(packageDir, "package.json"),
+      JSON.stringify({ name: "@podosoft/podokit-module-blog", version: "0.2.0" }),
+    );
+    writeFileSync(join(packageDir, "files", fileRel), "export const version = 2;\n");
+
+    const plan = planUpdate(project, REPO_TEMPLATES);
+    expect(plan.changes.find((change) => change.path === fileRel)?.action).toBe("update");
+    expect(plan.changes.find((change) => change.path === "package.json")?.action).toBe("up-to-date");
+    applyUpdate(project, REPO_TEMPLATES);
+    expect(readFileSync(join(project, fileRel), "utf8")).toContain("version = 2");
+    const after = JSON.parse(readFileSync(join(project, ".podokit/manifest.json"), "utf8")) as {
+      modules: { name: string; moduleVersion?: string }[];
+    };
+    expect(after.modules.find((module) => module.name === "blog")?.moduleVersion).toBe("0.2.0");
+  });
+});
+
 describe("applyUpdate", () => {
   // Build an "old" template set (a copy) and mutate the live templates so there
   // is a real version delta to apply.
