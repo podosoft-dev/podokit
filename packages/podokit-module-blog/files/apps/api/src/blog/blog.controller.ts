@@ -1,26 +1,40 @@
+/// <reference types="multer" />
 import {
   Body,
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   Param,
   Patch,
   Post,
   Query,
+  StreamableFile,
+  UploadedFile,
+  UseInterceptors,
 } from "@nestjs/common";
-import { ApiTags } from "@nestjs/swagger";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { ApiConsumes, ApiTags } from "@nestjs/swagger";
 import { Throttle, type ThrottlerGetTrackerFunction } from "@nestjs/throttler";
-import { Public, Session, type UserSession } from "@thallesp/nestjs-better-auth";
+import {
+  Public,
+  Session,
+  type UserSession,
+} from "@thallesp/nestjs-better-auth";
 import { fromNodeHeaders } from "better-auth/node";
 import type { Request } from "express";
 import { AppException } from "../common/app-exception";
 import { auth } from "../auth/auth";
 import { Audit } from "../audit/audit.decorator";
+import { BlogImageService } from "./blog-image.service";
 import { BlogService, type BlogActor, type Paginated } from "./blog.service";
 import { BlogComment } from "./blog-comment.entity";
 import { BlogPost } from "./blog-post.entity";
-import { AdminCreateBlogPostDto, AdminUpdateBlogPostDto } from "./dto/admin-blog-post.dto";
+import {
+  AdminCreateBlogPostDto,
+  AdminUpdateBlogPostDto,
+} from "./dto/admin-blog-post.dto";
 import { BlogCommentDto } from "./dto/blog-comment.dto";
 import { BlogPageDto, CommentPageDto } from "./dto/blog-page.dto";
 import { CreateBlogPostDto } from "./dto/create-blog-post.dto";
@@ -34,10 +48,14 @@ interface SessionUser {
   role?: string | string[] | null;
 }
 
-const authenticatedUserTracker: ThrottlerGetTrackerFunction = async (request): Promise<string> => {
+const authenticatedUserTracker: ThrottlerGetTrackerFunction = async (
+  request,
+): Promise<string> => {
   const httpRequest = request as Request;
   try {
-    const session = await auth.api.getSession({ headers: fromNodeHeaders(httpRequest.headers) });
+    const session = await auth.api.getSession({
+      headers: fromNodeHeaders(httpRequest.headers),
+    });
     if (session?.user.id) return `user:${session.user.id}`;
   } catch {
     // The route guard still enforces authentication; the IP is only a safe fallback tracker.
@@ -45,9 +63,12 @@ const authenticatedUserTracker: ThrottlerGetTrackerFunction = async (request): P
   return `ip:${httpRequest.ip || httpRequest.socket.remoteAddress || "unknown"}`;
 };
 
+const MAX_BLOG_IMAGE_BYTES = 5 * 1024 * 1024;
+
 function actorFrom(session: UserSession): BlogActor {
   const user = session.user as unknown as SessionUser | undefined;
-  if (!user?.id) throw new AppException("AUTH_REQUIRED", "Authentication is required.", 401);
+  if (!user?.id)
+    throw new AppException("AUTH_REQUIRED", "Authentication is required.", 401);
   const roles = Array.isArray(user.role)
     ? user.role
     : (user.role ?? "").split(",").map((role) => role.trim());
@@ -61,19 +82,64 @@ function actorFrom(session: UserSession): BlogActor {
 
 function adminFrom(session: UserSession): BlogActor {
   const actor = actorFrom(session);
-  if (!actor.admin) throw new AppException("BLOG_ADMIN_REQUIRED", "Admin role required.", 403);
+  if (!actor.admin)
+    throw new AppException("BLOG_ADMIN_REQUIRED", "Admin role required.", 403);
   return actor;
 }
 
 @ApiTags("blog")
 @Controller()
 export class BlogController {
-  constructor(private readonly blog: BlogService) {}
+  constructor(
+    private readonly blog: BlogService,
+    private readonly images: BlogImageService,
+  ) {}
 
   @Public()
   @Get("blog")
   list(@Query() query: BlogPageDto): Promise<Paginated<BlogPost>> {
     return this.blog.listPublished(query);
+  }
+
+  @Post("blog/images")
+  @ApiConsumes("multipart/form-data")
+  @UseInterceptors(
+    FileInterceptor("file", { limits: { fileSize: MAX_BLOG_IMAGE_BYTES + 1 } }),
+  )
+  @Throttle({
+    default: {
+      limit: 20,
+      ttl: 60 * 60 * 1000,
+      getTracker: authenticatedUserTracker,
+    },
+  })
+  @Audit("blog.image.upload")
+  async uploadImage(
+    @UploadedFile() file?: Express.Multer.File,
+  ): Promise<{ id: string; url: string }> {
+    if (!file) {
+      throw new AppException(
+        "BLOG_IMAGE_REQUIRED",
+        "An image file is required.",
+        400,
+      );
+    }
+    if (file.size > MAX_BLOG_IMAGE_BYTES) {
+      throw new AppException(
+        "BLOG_IMAGE_TOO_LARGE",
+        "Blog images must be 5 MB or smaller.",
+        413,
+      );
+    }
+    return this.images.upload(file.buffer);
+  }
+
+  @Public()
+  @Get("blog/images/:id")
+  @Header("Cache-Control", "public, max-age=31536000, immutable")
+  async image(@Param("id") id: string): Promise<StreamableFile> {
+    const image = await this.images.get(id);
+    return new StreamableFile(image.body, { type: image.contentType });
   }
 
   @Public()
@@ -92,9 +158,18 @@ export class BlogController {
   }
 
   @Post("blog")
-  @Throttle({ default: { limit: 3, ttl: 60 * 60 * 1000, getTracker: authenticatedUserTracker } })
+  @Throttle({
+    default: {
+      limit: 3,
+      ttl: 60 * 60 * 1000,
+      getTracker: authenticatedUserTracker,
+    },
+  })
   @Audit("blog.post.create")
-  create(@Session() session: UserSession, @Body() dto: CreateBlogPostDto): Promise<BlogPost> {
+  create(
+    @Session() session: UserSession,
+    @Body() dto: CreateBlogPostDto,
+  ): Promise<BlogPost> {
     return this.blog.create(dto, actorFrom(session));
   }
 
@@ -111,12 +186,21 @@ export class BlogController {
   @Delete("blog/:id")
   @HttpCode(204)
   @Audit("blog.post.delete")
-  remove(@Session() session: UserSession, @Param("id") id: string): Promise<void> {
+  remove(
+    @Session() session: UserSession,
+    @Param("id") id: string,
+  ): Promise<void> {
     return this.blog.remove(id, actorFrom(session));
   }
 
   @Post("blog/:slug/comments")
-  @Throttle({ default: { limit: 10, ttl: 60 * 1000, getTracker: authenticatedUserTracker } })
+  @Throttle({
+    default: {
+      limit: 10,
+      ttl: 60 * 1000,
+      getTracker: authenticatedUserTracker,
+    },
+  })
   @Audit("blog.comment.create")
   addComment(
     @Session() session: UserSession,
@@ -139,7 +223,10 @@ export class BlogController {
   @Delete("blog/comments/:id")
   @HttpCode(204)
   @Audit("blog.comment.delete")
-  removeComment(@Session() session: UserSession, @Param("id") id: string): Promise<void> {
+  removeComment(
+    @Session() session: UserSession,
+    @Param("id") id: string,
+  ): Promise<void> {
     return this.blog.removeComment(id, actorFrom(session));
   }
 
@@ -153,7 +240,10 @@ export class BlogController {
   }
 
   @Get("admin/blog/:id")
-  adminGet(@Session() session: UserSession, @Param("id") id: string): Promise<BlogPost> {
+  adminGet(
+    @Session() session: UserSession,
+    @Param("id") id: string,
+  ): Promise<BlogPost> {
     adminFrom(session);
     return this.blog.getById(id);
   }
@@ -181,7 +271,10 @@ export class BlogController {
   @Delete("admin/blog/:id")
   @HttpCode(204)
   @Audit("blog.admin.delete")
-  adminRemove(@Session() session: UserSession, @Param("id") id: string): Promise<void> {
+  adminRemove(
+    @Session() session: UserSession,
+    @Param("id") id: string,
+  ): Promise<void> {
     adminFrom(session);
     return this.blog.adminRemove(id);
   }

@@ -61,10 +61,26 @@ export interface BlogEditorLabels {
   preview: string;
   save: string;
   cancel: string;
+  addImage: string;
+  uploadingImage: string;
+  imageHelp: string;
+  imageUploadFailed: string;
+}
+
+export interface BlogImageUpload {
+  id: string;
+  url: string;
 }
 
 export function emptyBlogDraft(): BlogDraft {
-  return { title: "", slug: "", excerpt: "", body: "", coverImage: "", tags: [] };
+  return {
+    title: "",
+    slug: "",
+    excerpt: "",
+    body: "",
+    coverImage: "",
+    tags: [],
+  };
 }
 
 export function draftFromPost(post: BlogPost): BlogDraft {
@@ -84,5 +100,9 @@ export function formatBlogDate(value: string | null, locale = "en"): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
     ? ""
-    : date.toLocaleDateString(locale, { year: "numeric", month: "long", day: "numeric" });
+    : date.toLocaleDateString(locale, {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
 }

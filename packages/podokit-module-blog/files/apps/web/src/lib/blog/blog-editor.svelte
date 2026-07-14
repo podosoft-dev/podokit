@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ImagePlus from "@lucide/svelte/icons/image-plus";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
@@ -6,7 +7,9 @@
   import * as Tabs from "$lib/components/ui/tabs";
   import { Textarea } from "$lib/components/ui/textarea";
   import BlogProse from "./blog-prose.svelte";
+  import * as blogClient from "./blog-client";
   import type { BlogDraft, BlogEditorLabels } from "./types";
+  import { tick } from "svelte";
 
   interface Props {
     value: BlogDraft;
@@ -26,6 +29,10 @@
     oncancel,
   }: Props = $props();
   let editorTab = $state("write");
+  let bodyRef = $state<HTMLTextAreaElement | null>(null);
+  let imageInputRef = $state<HTMLInputElement | null>(null);
+  let uploadingImage = $state(false);
+  let imageError = $state("");
 
   function updateTags(event: Event): void {
     const input = event.currentTarget as HTMLInputElement;
@@ -35,6 +42,52 @@
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     await onsubmit(value);
+  }
+
+  function imageAlt(file: File): string {
+    return file.name
+      .replace(/\.[^.]+$/, "")
+      .replaceAll("\\", " ")
+      .replaceAll("[", " ")
+      .replaceAll("]", " ")
+      .replace(/\s+/g, " ")
+      .trim() || "Image";
+  }
+
+  async function insertImage(file: File, url: string): Promise<void> {
+    const start = bodyRef?.selectionStart ?? value.body.length;
+    const end = bodyRef?.selectionEnd ?? start;
+    const before = value.body.slice(0, start);
+    const after = value.body.slice(end);
+    const leading = before.length === 0 || before.endsWith("\n\n")
+      ? ""
+      : before.endsWith("\n") ? "\n" : "\n\n";
+    const trailing = after.length === 0 || after.startsWith("\n\n")
+      ? ""
+      : after.startsWith("\n") ? "\n" : "\n\n";
+    const markdown = `![${imageAlt(file)}](${url})`;
+    value.body = `${before}${leading}${markdown}${trailing}${after}`;
+    const cursor = before.length + leading.length + markdown.length;
+    await tick();
+    bodyRef?.focus();
+    bodyRef?.setSelectionRange(cursor, cursor);
+  }
+
+  async function uploadImage(event: Event): Promise<void> {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    uploadingImage = true;
+    imageError = "";
+    try {
+      const uploaded = await blogClient.uploadImage(file);
+      await insertImage(file, uploaded.url);
+    } catch {
+      imageError = labels.imageUploadFailed;
+    } finally {
+      uploadingImage = false;
+      input.value = "";
+    }
   }
 </script>
 
@@ -84,7 +137,38 @@
         <Tabs.Trigger value="preview">{labels.preview}</Tabs.Trigger>
       </Tabs.List>
       <Tabs.Content value="write" class="mt-3">
-        <Textarea id="blog-body" bind:value={value.body} required maxlength={200000} class="min-h-96 font-mono" />
+        <div class="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <Input
+            id="blog-image"
+            type="file"
+            accept="image/png,image/jpeg,image/gif,image/webp,image/avif"
+            class="sr-only"
+            bind:ref={imageInputRef}
+            onchange={uploadImage}
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={uploadingImage}
+            onclick={() => imageInputRef?.click()}
+          >
+            <ImagePlus class="size-4" aria-hidden="true" />
+            {uploadingImage ? labels.uploadingImage : labels.addImage}
+          </Button>
+          <p class="text-muted-foreground text-xs">{labels.imageHelp}</p>
+        </div>
+        {#if imageError}
+          <p class="text-destructive mb-2 text-sm" role="alert">{imageError}</p>
+        {/if}
+        <Textarea
+          id="blog-body"
+          bind:ref={bodyRef}
+          bind:value={value.body}
+          required
+          maxlength={200000}
+          class="min-h-96 font-mono"
+        />
       </Tabs.Content>
       <Tabs.Content value="preview" data-blog-preview class="mt-3 min-h-96 rounded-lg border p-5">
         <BlogProse markdown={value.body} title={value.title} />

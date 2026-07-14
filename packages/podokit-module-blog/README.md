@@ -1,7 +1,7 @@
 # @podosoft/podokit-module-blog
 
-Authenticated publishing, flat comments, pagination, and admin management for a
-PodoKit application. Backend and reusable web logic remain PodoKit-managed;
+Authenticated publishing, Markdown image uploads, flat comments, pagination,
+and admin management for a PodoKit application. Backend and reusable web logic remain PodoKit-managed;
 route wrappers are app-owned so each site can supply its own visual design and
 SEO policy.
 
@@ -34,3 +34,8 @@ deletes its comments.
 ordered lists, tables, and other supported Markdown have the same markup and
 presentation before and after publishing. Application-owned article routes should
 render the body with `BlogProse`, passing both `markdown` and the post `title`.
+
+Signed-in authors can select **Add image** in `BlogEditor`. PNG, JPEG, GIF, WebP,
+and AVIF files up to 5 MB are stored in object storage and inserted at the current
+cursor as Markdown. Blog images use the stable public path `/api/blog/images/:id`;
+they do not use expiring presigned URLs. SVG uploads are intentionally unsupported.

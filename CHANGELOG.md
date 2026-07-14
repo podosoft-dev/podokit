@@ -7,6 +7,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- **Markdown image attachments for blogs.** Signed-in authors can upload PNG,
+  JPEG, GIF, WebP, or AVIF images up to 5 MB directly from `BlogEditor`; the
+  editor inserts Markdown at the current cursor. Images are served from a stable,
+  immutable public blog path instead of an expiring object-storage URL, with API
+  and UI coverage for upload, validation, preview, and published rendering.
 - **External blog module.** New `@podosoft/podokit-module-blog` package provides
   authenticated Markdown publishing, paginated posts and comments, author-owned
   edit/delete flows, admin management, an additive legacy-compatible migration,

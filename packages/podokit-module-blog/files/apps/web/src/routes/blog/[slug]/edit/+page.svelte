@@ -15,7 +15,9 @@
     body: i18n.t.blog.body, coverImage: i18n.t.blog.coverImage, tags: i18n.t.blog.tags,
     status: i18n.t.blog.status, published: i18n.t.blog.published, draft: i18n.t.blog.draft,
     write: i18n.t.blog.write, preview: i18n.t.blog.preview, save: i18n.t.blog.save,
-    cancel: i18n.t.blog.cancel,
+    cancel: i18n.t.blog.cancel, addImage: i18n.t.blog.addImage,
+    uploadingImage: i18n.t.blog.uploadingImage, imageHelp: i18n.t.blog.imageHelp,
+    imageUploadFailed: i18n.t.blog.imageUploadFailed,
   };
 
   async function save(value: BlogDraft): Promise<void> {

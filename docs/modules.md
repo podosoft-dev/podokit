@@ -47,8 +47,8 @@ podo add blog --adopt
 
 ### `blog` (external package)
 
-Authenticated Markdown publishing with paginated public posts, flat comments,
-author ownership, and admin management. Regular users publish immediately and can
+Authenticated Markdown publishing with image attachments, paginated public posts,
+flat comments, author ownership, and admin management. Regular users publish immediately and can
 edit or delete only their own posts and comments; admins can manage all content.
 
 ```bash
@@ -68,6 +68,11 @@ Use the managed `BlogProse` component in an application-owned article route. It
 shares a safe GFM renderer with `BlogEditor`, keeping preview and published body
 markup and typography consistent while the surrounding article layout stays
 application-owned.
+
+`BlogEditor` uploads PNG, JPEG, GIF, WebP, and AVIF files up to 5 MB to object
+storage, then inserts a Markdown image at the current cursor. The resulting
+`/api/blog/images/:id` URL is public, stable, and cacheable, unlike a presigned
+file-upload URL. SVG is excluded from inline blog uploads.
 
 ### `auth` (better-auth)
 

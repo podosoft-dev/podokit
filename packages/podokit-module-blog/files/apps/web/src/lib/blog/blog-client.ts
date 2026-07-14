@@ -1,4 +1,10 @@
-import type { BlogComment, BlogDraft, BlogPost, Paginated } from "./types";
+import type {
+  BlogComment,
+  BlogDraft,
+  BlogImageUpload,
+  BlogPost,
+  Paginated,
+} from "./types";
 
 interface ErrorEnvelope {
   error?: { code?: string; message?: string };
@@ -16,9 +22,13 @@ export class BlogApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  if (!(init?.body instanceof FormData) && !headers.has("content-type")) {
+    headers.set("content-type", "application/json");
+  }
   const response = await fetch(`/api${path}`, {
     ...init,
-    headers: { "content-type": "application/json", ...init?.headers },
+    headers,
   });
   if (!response.ok) {
     const body = (await response.json().catch(() => ({}))) as ErrorEnvelope;
@@ -30,6 +40,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
+}
+
+export function uploadImage(file: File): Promise<BlogImageUpload> {
+  const body = new FormData();
+  body.append("file", file);
+  return request<BlogImageUpload>("/blog/images", { method: "POST", body });
 }
 
 function payload(draft: BlogDraft): string {
@@ -49,7 +65,10 @@ export function createPost(draft: BlogDraft): Promise<BlogPost> {
 }
 
 export function updatePost(id: string, draft: BlogDraft): Promise<BlogPost> {
-  return request<BlogPost>(`/blog/${id}`, { method: "PATCH", body: payload(draft) });
+  return request<BlogPost>(`/blog/${id}`, {
+    method: "PATCH",
+    body: payload(draft),
+  });
 }
 
 export function deletePost(id: string): Promise<void> {
@@ -57,22 +76,39 @@ export function deletePost(id: string): Promise<void> {
 }
 
 export function adminCreatePost(draft: BlogDraft): Promise<BlogPost> {
-  return request<BlogPost>("/admin/blog", { method: "POST", body: payload(draft) });
+  return request<BlogPost>("/admin/blog", {
+    method: "POST",
+    body: payload(draft),
+  });
 }
 
-export function adminUpdatePost(id: string, draft: BlogDraft): Promise<BlogPost> {
-  return request<BlogPost>(`/admin/blog/${id}`, { method: "PATCH", body: payload(draft) });
+export function adminUpdatePost(
+  id: string,
+  draft: BlogDraft,
+): Promise<BlogPost> {
+  return request<BlogPost>(`/admin/blog/${id}`, {
+    method: "PATCH",
+    body: payload(draft),
+  });
 }
 
 export function adminDeletePost(id: string): Promise<void> {
   return request<void>(`/admin/blog/${id}`, { method: "DELETE" });
 }
 
-export function loadComments(slug: string, page: number): Promise<Paginated<BlogComment>> {
-  return request<Paginated<BlogComment>>(`/blog/${encodeURIComponent(slug)}/comments?page=${page}`);
+export function loadComments(
+  slug: string,
+  page: number,
+): Promise<Paginated<BlogComment>> {
+  return request<Paginated<BlogComment>>(
+    `/blog/${encodeURIComponent(slug)}/comments?page=${page}`,
+  );
 }
 
-export function createComment(slug: string, body: string): Promise<BlogComment> {
+export function createComment(
+  slug: string,
+  body: string,
+): Promise<BlogComment> {
   return request<BlogComment>(`/blog/${encodeURIComponent(slug)}/comments`, {
     method: "POST",
     body: JSON.stringify({ body }),
