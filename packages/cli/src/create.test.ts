@@ -114,6 +114,10 @@ describe("create (integration against templates)", () => {
       engines: { node: string };
     };
     expect(rootPkg.engines.node).toBe(">=22.22.1");
+
+    const healthController = readFileSync(join(target, "apps", "api", "src", "health", "health.controller.ts"), "utf8");
+    expect(healthController).toContain("ServiceUnavailableException");
+    expect(healthController).toContain('throw new ServiceUnavailableException({ status: "degraded", db: "down" })');
   });
 
   it("ships the containerized dev environment (Traefik + internal services + devcontainer)", () => {

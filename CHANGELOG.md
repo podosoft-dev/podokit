@@ -56,6 +56,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (ui + api) tests included. No DB migration (uses the existing `app_setting` store).
 
 ### Fixed
+- **Readiness fails when PostgreSQL is unavailable.** Generated APIs now return
+  HTTP 503 from `/health/ready` when the database probe fails, preventing
+  Kubernetes and load balancers from routing traffic to an unready API pod.
 - **Production images use the workspace lockfile.** Generated API and web
   Dockerfiles now use Node 22 and build from the repository root with `npm ci`,
   preserving the resolved workspace dependency graph and avoiding
