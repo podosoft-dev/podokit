@@ -55,8 +55,21 @@ test.describe("signed-in blog author", () => {
     await expect(preview.locator("script")).toHaveCount(0);
     const previewHtml = await preview.innerHTML();
 
-    await page.getByRole("button", { name: /save|저장/i }).click();
-    await expect(page).toHaveURL(/\/blog\//);
+    const save = page.getByRole("button", { name: /save|저장/i });
+    let publishedSlug = "";
+    await expect(async () => {
+      const created = page.waitForResponse(
+        (response) => new URL(response.url()).pathname === "/api/blog" && response.request().method() === "POST",
+        { timeout: 3_000 },
+      );
+      await save.click();
+      const response = await created;
+      expect(response.ok()).toBeTruthy();
+      const payload = (await response.json()) as { slug?: unknown };
+      expect(typeof payload.slug).toBe("string");
+      publishedSlug = String(payload.slug);
+    }).toPass({ timeout: 10_000 });
+    await expect(page).toHaveURL(new RegExp(`/blog/${publishedSlug}$`));
     const published = page.locator("article [data-blog-prose]");
     await expect(published).toBeVisible();
     expect(await published.innerHTML()).toBe(previewHtml);
