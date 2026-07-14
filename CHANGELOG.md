@@ -47,6 +47,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (ui + api) tests included. No DB migration (uses the existing `app_setting` store).
 
 ### Fixed
+- **API proxy preserves binary request bodies.** Generated SvelteKit proxies now
+  forward request bodies as bytes, preventing multipart uploads and other binary
+  payloads from being corrupted by UTF-8 text decoding.
 - **Blog previews now match published article bodies.** `BlogEditor` and the new
   reusable `BlogProse` component share one safe GFM renderer and one prose style,
   including blockquotes, ordered lists, tables, and duplicate-title handling.

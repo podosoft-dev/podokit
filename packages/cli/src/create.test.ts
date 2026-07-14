@@ -141,6 +141,12 @@ describe("create (integration against templates)", () => {
 
     // web proxies /api to the api container by service name (Traefik only routes web)
     expect(readFileSync(join(target, ".env.docker"), "utf8")).toContain("BACKEND_INTERNAL_URL=http://api:5002");
+    const backendProxy = readFileSync(
+      join(target, "apps", "web", "src", "lib", "server", "backend-proxy.ts"),
+      "utf8",
+    );
+    expect(backendProxy).toContain("request.arrayBuffer()");
+    expect(backendProxy).not.toContain("request.text()");
     const traefikConfig = readFileSync(join(target, "infra", "traefik", "dynamic.yml"), "utf8");
     expect(traefikConfig).toContain("http://web:5001");
     expect(traefikConfig).toContain("middlewares: [compression]");

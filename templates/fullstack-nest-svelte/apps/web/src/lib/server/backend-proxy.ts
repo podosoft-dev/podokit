@@ -37,7 +37,9 @@ export async function proxyRequest(
   const upstream = await fetch(targetUrl, {
     method: request.method,
     headers,
-    body: hasBody ? await request.text() : undefined,
+    // Preserve multipart uploads and other binary bodies byte-for-byte. Reading
+    // them as text corrupts bytes that are not valid UTF-8 before forwarding.
+    body: hasBody ? await request.arrayBuffer() : undefined,
     redirect: "manual",
   });
 
