@@ -52,26 +52,31 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      # bitnami/minio starts the server by default and auto-creates the bucket
-      # named in MINIO_DEFAULT_BUCKETS — a plain `minio/minio` service can't, since
-      # GitHub service containers can't override the image command. No health check:
-      # MinIO is ready within seconds and the app doesn't touch S3 until after the
-      # multi-minute publish/build, so a fragile alias-dependent probe would only
-      # risk hanging the job for no benefit.
-      minio:
-        image: bitnami/minio:latest
-        env:
-          MINIO_ROOT_USER: podokit
-          MINIO_ROOT_PASSWORD: podokitsecret
-          MINIO_DEFAULT_BUCKETS: podokit
-        ports:
-          - 9000:9000
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: npm
+      - name: Start MinIO
+        run: |
+          docker run --detach --name podokit-e2e-minio \
+            --publish 9000:9000 \
+            --env MINIO_ROOT_USER=podokit \
+            --env MINIO_ROOT_PASSWORD=podokitsecret \
+            quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
+          for attempt in $(seq 1 30); do
+            if docker exec podokit-e2e-minio mc ready local; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              docker logs podokit-e2e-minio
+              exit 1
+            fi
+            sleep 1
+          done
+          docker exec podokit-e2e-minio mc alias set local http://localhost:9000 podokit podokitsecret
+          docker exec podokit-e2e-minio mc mb --ignore-existing local/podokit
       - run: npm ci
       - name: Cache Playwright browsers
         uses: actions/cache@v6
@@ -109,3 +114,6 @@ jobs:
             /tmp/podokit-e2e-*/app/tests/test-results/
           if-no-files-found: ignore
           retention-days: 7
+      - name: Stop MinIO
+        if: always()
+        run: docker rm --force podokit-e2e-minio || true
