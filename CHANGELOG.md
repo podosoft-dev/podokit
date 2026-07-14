@@ -7,6 +7,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- **Compiled production database migration command.** Auth-enabled generated APIs
+  include `npm run migrate:all`, which applies Better Auth and TypeORM migrations
+  from `dist` for container and Kubernetes migration jobs without a runtime CLI
+  download or TypeScript source tree.
 - **Markdown image attachments for blogs.** Signed-in authors can upload PNG,
   JPEG, GIF, WebP, or AVIF images up to 5 MB directly from `BlogEditor`; the
   editor inserts Markdown at the current cursor. Images are served from a stable,
@@ -52,6 +56,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (ui + api) tests included. No DB migration (uses the existing `app_setting` store).
 
 ### Fixed
+- **Local Outer tests ignore unrelated Mailpit instances.** Email specs are
+  exposed to Mailpit only when the generated API has SMTP configured for the same
+  run, preventing false failures against a stale local sink.
 - **Rate limits track the original visitor behind the generated web proxy.**
   Server-side API calls now forward SvelteKit's resolved client address, and the
   Redis-backed throttler uses it instead of assigning every visitor to the web

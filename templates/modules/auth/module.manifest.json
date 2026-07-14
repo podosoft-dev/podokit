@@ -16,6 +16,9 @@
   "devDependencies": {
     "@types/pg": "^8.11.10"
   },
+  "scripts": {
+    "migrate:all": "node dist/migrate"
+  },
   "env": [
     "# \u2500\u2500 Auth (better-auth) \u2014 the only required secrets \u2500\u2500",
     "# BETTER_AUTH_SECRET also derives the key that encrypts config secrets stored in the",
@@ -101,13 +104,14 @@
       "file": "AGENTS.md",
       "marker": "<!-- podokit:end:agents-modules -->",
       "optional": true,
-      "text": "### auth (better-auth)\n- The API is **secure by default**: every route needs a session except `/health` and `/api/auth/*`. Opt a route out with `@Public()`; read the user with `@Session()`.\n- Configure OAuth providers, SMTP, and the server toggles on the admin **Settings** page (DB-backed, applied live \u2014 not via env). Only `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are required env vars.\n- Create the auth tables: `npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts`.\n"
+      "text": "### auth (better-auth)\n- The API is **secure by default**: every route needs a session except `/health` and `/api/auth/*`. Opt a route out with `@Public()`; read the user with `@Session()`.\n- Configure OAuth providers, SMTP, and the server toggles on the admin **Settings** page (DB-backed, applied live \u2014 not via env). Only `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are required env vars.\n- Development setup: create auth tables with `npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts`, then run TypeORM migrations. Production images can run both from compiled output with `npm run migrate:all`.\n"
     }
   ],
   "instructions": [
     "Set BETTER_AUTH_SECRET in .env (>= 32 chars). This also derives the key that encrypts config secrets stored in the DB, so keep it stable and secret.",
     "Create the auth tables:  npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts",
     "Create the app tables (auth_config, app_setting):  npm run migration:run",
+    "After building a production image, run all Better Auth and TypeORM migrations:  npm run migrate:all",
     "Sign up:  curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-up/email -H 'content-type: application/json' -d '{\"email\":\"a@example.com\",\"password\":\"password123\",\"name\":\"A\"}'",
     "Call a protected route with the session:  curl -b cookies.txt localhost:5002/account/me",
     "Everything is protected by default; mark public routes with @Public(). Configure OAuth (Google/GitHub), SMTP, and server-enforced toggles on the admin Settings page \u2014 stored encrypted in the DB and applied live (no restart). Environment variables (GOOGLE_CLIENT_*, SMTP_*, AUTH_*) still work as an optional fallback/override."

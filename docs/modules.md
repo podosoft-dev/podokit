@@ -95,6 +95,17 @@ curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-up/email \
 curl -b cookies.txt localhost:5002/account/me
 ```
 
+For a built production image, run both the Better Auth schema migration and all
+TypeORM migrations without downloading a CLI or copying TypeScript source into
+the image:
+
+```bash
+npm run migrate:all -w <app>-api
+```
+
+The command uses `dist/migrate.js`, exits non-zero on failure, and is suitable
+for a Kubernetes migration Job before a rolling deployment.
+
 - **Secure by default**: all module endpoints (jobs, storage, files, cache, …) are protected once `auth` is added.
 - **Configure it in the admin Settings page, not env.** Social OAuth providers, SMTP, the
   server-enforced toggles (email verification, breached-password check, account deletion, and —
