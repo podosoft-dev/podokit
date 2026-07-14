@@ -106,6 +106,11 @@ node scripts/e2e-ci.mjs --smoke                 # @smoke subset (what PRs run)
 node scripts/e2e-ci.mjs --grep "magic link"     # only matching specs (fast feedback on one feature)
 ```
 
+Optional service-backed specs run only when their corresponding runtime is
+explicitly configured. In particular, an unrelated Mailpit already listening on
+port 8025 is ignored unless `SMTP_HOST` is also set, so local Outer runs cannot
+read mail from a sink the generated API is not using.
+
 ### Three-tier verification — how maintainers iterate fast
 
 The Outer run is dominated by **publish → `npx create` → `npm install` → build API + web**

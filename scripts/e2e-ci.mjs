@@ -201,14 +201,13 @@ async function main() {
     API_KEYS: "dev-key-please-change",
   };
 
-  step("migrate the auth tables");
-  run("npx", ["--yes", "@better-auth/cli@latest", "migrate", "-y", "--config", "apps/api/src/auth/auth.ts"], { cwd: target, env: pgEnv });
-
-  step("migrate the app tables (TypeORM: app_setting, audit_logs, ...)");
-  run("npm", ["run", "migration:run", "-w", "app-api"], { cwd: target, env: pgEnv });
-
-  step("build api + web");
+  step("build api");
   run("npm", ["run", "build", "-w", "app-api"], { cwd: target });
+
+  step("migrate auth and app tables from compiled output");
+  run("npm", ["run", "migrate:all", "-w", "app-api"], { cwd: target, env: pgEnv });
+
+  step("build web");
   run("npm", ["run", "build", "-w", "app-web"], { cwd: target });
 
   step("start api + web");
@@ -232,7 +231,22 @@ async function main() {
   // --grep wins when given (run just one feature's specs); otherwise --smoke runs
   // the @smoke subset, and the default runs everything.
   const testArgs = ["playwright", "test", ...(grep ? ["--grep", grep] : smoke ? ["--grep", "@smoke"] : [])];
-  run("npx", testArgs, { cwd: join(target, "tests"), env: { ...process.env, E2E_BASE_URL: webURL, E2E_API_URL: `http://localhost:${env.API_PORT}`, SMS_SINK_URL: smsSinkURL } });
+  // A developer may already have an unrelated Mailpit bound to the default
+  // port. Only expose Mailpit to the generated tests when SMTP is also wired to
+  // it; otherwise email specs must skip instead of reading from the wrong sink.
+  const mailpitURL = process.env.SMTP_HOST
+    ? (process.env.MAILPIT_URL ?? "http://localhost:8025")
+    : "http://127.0.0.1:1";
+  run("npx", testArgs, {
+    cwd: join(target, "tests"),
+    env: {
+      ...process.env,
+      E2E_BASE_URL: webURL,
+      E2E_API_URL: `http://localhost:${env.API_PORT}`,
+      MAILPIT_URL: mailpitURL,
+      SMS_SINK_URL: smsSinkURL,
+    },
+  });
 
   console.log("\n✓ faithful e2e passed");
 }

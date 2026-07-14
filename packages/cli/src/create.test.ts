@@ -101,6 +101,23 @@ describe("create (integration against templates)", () => {
     expect(existsSync(join(target, "apps", "web", "src", "routes", "api", "todos"))).toBe(false);
     const apiPkg = JSON.parse(readFileSync(join(target, "apps", "api", "package.json"), "utf8")) as { name: string };
     expect(apiPkg.name).toBe("app-api");
+
+    for (const workspace of ["api", "web"]) {
+      const dockerfile = readFileSync(join(target, "apps", workspace, "Dockerfile"), "utf8");
+      expect(dockerfile).toContain("FROM node:22-alpine AS deps");
+      expect(dockerfile).toContain("COPY package.json package-lock.json ./");
+      expect(dockerfile).toContain("RUN npm ci --no-audit --no-fund");
+      expect(dockerfile).toContain(`RUN npm run build --workspace=apps/${workspace}`);
+      expect(dockerfile).not.toContain("npm install --omit=dev=false");
+    }
+    const rootPkg = JSON.parse(readFileSync(join(target, "package.json"), "utf8")) as {
+      engines: { node: string };
+    };
+    expect(rootPkg.engines.node).toBe(">=22.22.1");
+
+    const healthController = readFileSync(join(target, "apps", "api", "src", "health", "health.controller.ts"), "utf8");
+    expect(healthController).toContain("ServiceUnavailableException");
+    expect(healthController).toContain('throw new ServiceUnavailableException({ status: "degraded", db: "down" })');
   });
 
   it("ships the containerized dev environment (Traefik + internal services + devcontainer)", () => {
@@ -125,6 +142,8 @@ describe("create (integration against templates)", () => {
     // same value so Vite HMR targets the right port (no full-reload fallback).
     expect(compose).toContain('"${TRAEFIK_PORT:-80}:80"');
     expect(compose).toContain("VITE_HMR_CLIENT_PORT=${TRAEFIK_PORT:-80}");
+    expect(compose).toContain("ADDRESS_HEADER=x-forwarded-for");
+    expect(compose).toContain("XFF_DEPTH=1");
     expect(compose).not.toMatch(/\n\s+-\s+"5432:5432"/);
     expect(compose).not.toMatch(/\n\s+-\s+"5001:5001"/);
 
@@ -147,6 +166,8 @@ describe("create (integration against templates)", () => {
     );
     expect(backendProxy).toContain("request.arrayBuffer()");
     expect(backendProxy).not.toContain("request.text()");
+    const serverApi = readFileSync(join(target, "apps", "web", "src", "lib", "server", "api.ts"), "utf8");
+    expect(serverApi).toContain('headers.set("x-forwarded-for", clientIp)');
     const traefikConfig = readFileSync(join(target, "infra", "traefik", "dynamic.yml"), "utf8");
     expect(traefikConfig).toContain("http://web:5001");
     expect(traefikConfig).toContain("middlewares: [compression]");
@@ -157,6 +178,9 @@ describe("create (integration against templates)", () => {
     expect(ingress).toContain("kind: Middleware");
     expect(ingress).toContain("name: compression");
     expect(ingress).toContain("podokit-compression@kubernetescrd");
+    const k3sConfig = readFileSync(join(target, "infra", "k3s", "configmap.yaml"), "utf8");
+    expect(k3sConfig).toContain('ADDRESS_HEADER: "x-forwarded-for"');
+    expect(k3sConfig).toContain('XFF_DEPTH: "1"');
 
     // AI-free of tiers: the dev scaffolding is owned so updates never clobber it
     const lock = readFileSync(join(target, ".podokit", "files.lock"), "utf8");

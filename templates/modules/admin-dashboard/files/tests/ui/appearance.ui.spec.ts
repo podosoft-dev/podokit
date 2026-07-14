@@ -5,14 +5,15 @@ import { ready } from "../helpers/hydration";
 // own "Appearance" settings tab.
 async function openAppearance(page: import("@playwright/test").Page): Promise<void> {
   await ready(page, "/admin/settings");
-  await page.getByRole("tab", { name: "Appearance" }).click();
+  const tab = page.getByRole("tab", { name: "Appearance" });
+  await expect(async () => {
+    await tab.click();
+    await expect(tab).toHaveAttribute("data-state", "active");
+  }).toPass();
 }
 
 test("appearance: has its own tab with theme controls @smoke", async ({ page }) => {
-  await ready(page, "/admin/settings");
-  await expect(page.getByRole("tab", { name: "Appearance" })).toBeVisible();
-  await page.getByRole("tab", { name: "Appearance" }).click();
-  await expect(page.getByRole("heading", { name: "Appearance" })).toBeVisible();
+  await openAppearance(page);
   await expect(page.getByRole("heading", { name: "Featured themes" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Default", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Violet" })).toBeVisible();

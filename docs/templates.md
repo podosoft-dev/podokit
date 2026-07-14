@@ -43,6 +43,7 @@ Conventions baked in:
 - **Backend** returns a stable error envelope `{ success: false, error: { code, message, statusCode, path, timestamp } }`; clients branch on `code`, not the message.
 - **Frontend** talks to the API only through the typed **`@podosoft/podokit-api-client`** (`$lib/api.ts`), which calls SvelteKit proxy routes (`routes/api/**`) that forward to the backend — the browser never hits the API directly, and tokens/cookies stay server-side. Use `client.get/post(...)` for REST and `client.auth.*` for auth.
 - **Env** uses `SCREAMING_SNAKE` names grouped by service; the API validates them before listening.
+- **Production images** are built from the repository root (`docker build -f apps/api/Dockerfile .` and `docker build -f apps/web/Dockerfile .`) so `npm ci` uses the workspace lockfile reproducibly.
 
 ## `todo`
 

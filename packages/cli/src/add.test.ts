@@ -426,8 +426,14 @@ describe("addModule (auth / better-auth)", () => {
       dependencies: Record<string, string>;
     };
     expect(apiPkg.dependencies["@nestjs/throttler"]).toBeDefined();
-    expect(readFileSync(join(project, ".env.example"), "utf8")).toContain("RATE_LIMIT_MAX");
+    const envExample = readFileSync(join(project, ".env.example"), "utf8");
+    expect(envExample).toContain("RATE_LIMIT_MAX");
+    expect(envExample).toContain("RATE_LIMIT_RUNTIME_MAX");
     expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).toContain("RateLimitModule,");
+    const rateLimitModule = readFileSync(join(project, "apps/api/src/rate-limit/rate-limit.module.ts"), "utf8");
+    expect(rateLimitModule).toContain("ProxyAwareThrottlerGuard");
+    expect(rateLimitModule).toContain('request.headers');
+    expect(rateLimitModule).toContain('path === "/site/settings"');
   });
 
   it("api-key-auth composes auth and wires a machine controller", () => {
@@ -456,6 +462,7 @@ describe("addModule (auth / better-auth)", () => {
     expect(result.preserved).toEqual(expect.arrayContaining(["apps/web/src/routes/+page.svelte"]));
     expect(readFileSync(join(project, "apps/web/src/routes/+page.svelte"), "utf8")).toContain("API health");
     expect(readFileSync(join(project, "apps/web/src/lib/components/site-runtime.svelte"), "utf8")).toContain("applyTheme");
+    expect(readFileSync(join(project, "apps/web/src/hooks.server.ts"), "utf8")).toContain("event.route.id === null");
     // i18n: message catalog + language switch
     expect(existsSync(join(project, "apps/web/src/lib/i18n/messages.ts"))).toBe(true);
     expect(existsSync(join(project, "apps/web/src/lib/components/language-switch.svelte"))).toBe(true);

@@ -1,4 +1,4 @@
-import { Controller, Get } from "@nestjs/common";
+import { Controller, Get, ServiceUnavailableException } from "@nestjs/common";
 import { InjectDataSource } from "@nestjs/typeorm";
 import { DataSource } from "typeorm";
 import { Public } from "@thallesp/nestjs-better-auth";
@@ -20,7 +20,7 @@ export class HealthController {
       await this.dataSource.query("SELECT 1");
       return { status: "ready", db: "up" };
     } catch {
-      return { status: "degraded", db: "down" };
+      throw new ServiceUnavailableException({ status: "degraded", db: "down" });
     }
   }
 }

@@ -8,12 +8,23 @@ import { ready } from "../helpers/hydration";
 // toggle-then-restore pattern safe for the rest of the suite; restores run in a
 // `finally` so a mid-test failure still leaves the shared site settings clean.
 
-async function saveGeneral(page: Page): Promise<void> {
-  const saved = page.waitForResponse(
-    (response) => response.url().endsWith("/api/site/settings") && response.request().method() === "PUT",
-  );
-  await page.getByRole("button", { name: "Save changes" }).click();
-  expect((await saved).ok()).toBeTruthy();
+async function saveGeneral(
+  page: Page,
+  prepare?: () => Promise<void>,
+  expected?: Record<string, string>,
+): Promise<void> {
+  const button = page.getByRole("button", { name: "Save changes" });
+  await expect(async () => {
+    await prepare?.();
+    const saved = page.waitForResponse(
+      (response) => response.url().endsWith("/api/site/settings") && response.request().method() === "PUT",
+      { timeout: 3_000 },
+    );
+    await button.click();
+    const response = await saved;
+    expect(response.ok()).toBeTruthy();
+    if (expected) expect(await response.json()).toMatchObject(expected);
+  }).toPass({ timeout: 10_000 });
   await expect(page.getByText("General settings saved.").last()).toBeVisible();
 }
 
@@ -24,9 +35,14 @@ test("general: footer text and links render on public pages @smoke", async ({ pa
   const support = page.getByLabel("Support email");
   const origFooter = await footer.inputValue();
   const origSupport = await support.inputValue();
-  await footer.fill("© 2026 PodoKit Test");
-  await support.fill("help@example.com");
-  await saveGeneral(page);
+  await saveGeneral(
+    page,
+    async () => {
+      await footer.fill("© 2026 PodoKit Test");
+      await support.fill("help@example.com");
+    },
+    { footerText: "© 2026 PodoKit Test", supportEmail: "help@example.com" },
+  );
   try {
     const ctx = await browser.newContext({ storageState: anonState });
     const anon = await ctx.newPage();
@@ -36,9 +52,14 @@ test("general: footer text and links render on public pages @smoke", async ({ pa
     await ctx.close();
   } finally {
     await ready(page, "/admin/settings");
-    await page.getByLabel("Footer text").fill(origFooter);
-    await page.getByLabel("Support email").fill(origSupport);
-    await saveGeneral(page);
+    await saveGeneral(
+      page,
+      async () => {
+        await page.getByLabel("Footer text").fill(origFooter);
+        await page.getByLabel("Support email").fill(origSupport);
+      },
+      { footerText: origFooter, supportEmail: origSupport },
+    );
   }
 });
 

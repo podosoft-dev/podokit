@@ -4,7 +4,7 @@
 
 ## Prerequisites
 
-- Node.js >= 20
+- Node.js >= 22.22.1
 - npm (or pnpm / yarn)
 - Docker (optional, for local PostgreSQL and Redis)
 
@@ -134,6 +134,14 @@ npm test        # run tests
 - **Docker Compose** — `infra/docker/`
 - **k3s** — `infra/k3s/` (standard `Ingress` with Traefik response compression; copy
   `secret.example.yaml` to a real Secret created out-of-band)
+
+Production Dockerfiles use the root npm workspace lockfile. Build both images
+with the repository root as the context:
+
+```bash
+docker build -f apps/api/Dockerfile -t my-app-api .
+docker build -f apps/web/Dockerfile -t my-app-web .
+```
 
 ## Next steps
 

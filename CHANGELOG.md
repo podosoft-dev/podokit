@@ -7,6 +7,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- **Compiled production database migration command.** Auth-enabled generated APIs
+  include `npm run migrate:all`, which applies Better Auth and TypeORM migrations
+  from `dist` for container and Kubernetes migration jobs without a runtime CLI
+  download or TypeScript source tree.
 - **Markdown image attachments for blogs.** Signed-in authors can upload PNG,
   JPEG, GIF, WebP, or AVIF images up to 5 MB directly from `BlogEditor`; the
   editor inserts Markdown at the current cursor. Images are served from a stable,
@@ -52,6 +56,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (ui + api) tests included. No DB migration (uses the existing `app_setting` store).
 
 ### Fixed
+- **Readiness fails when PostgreSQL is unavailable.** Generated APIs now return
+  HTTP 503 from `/health/ready` when the database probe fails, preventing
+  Kubernetes and load balancers from routing traffic to an unready API pod.
+- **Production images use the workspace lockfile.** Generated API and web
+  Dockerfiles now use Node 22 and build from the repository root with `npm ci`,
+  preserving the resolved workspace dependency graph and avoiding
+  non-deterministic app-local installs. Generated fullstack workspaces declare
+  the current authentication stack's Node.js `>=22.22.1` runtime requirement,
+  and the BullMQ worker Compose example follows the same build contract.
+- **Local Outer tests ignore unrelated Mailpit instances.** Email specs are
+  exposed to Mailpit only when the generated API has SMTP configured for the same
+  run, preventing false failures against a stale local sink.
+- **Rate limits track the original visitor behind the generated web proxy.**
+  Server-side API calls now forward SvelteKit's resolved client address, and the
+  Redis-backed throttler uses it instead of assigning every visitor to the web
+  container's shared counter. Docker and k3s configure their single trusted
+  Traefik hop, while server hooks avoid redundant settings and session lookups
+  for static assets and API proxy requests. Critical SSR site-settings reads use
+  a separate configurable ceiling so maintenance and sign-up policy do not fail
+  open under normal page traffic.
+- **Generated admin smoke tests tolerate application-owned landing pages and
+  hydration.** Appearance and settings-effect tests retry their first hydrated
+  interaction, and the back-to-home check no longer assumes starter copy that
+  applications are expected to replace.
 - **API proxy preserves binary request bodies.** Generated SvelteKit proxies now
   forward request bodies as bytes, preventing multipart uploads and other binary
   payloads from being corrupted by UTF-8 text decoding.
@@ -60,6 +88,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   including blockquotes, ordered lists, tables, and duplicate-title handling.
   Application-owned article routes can use the same managed component without
   giving up their surrounding visual design.
+- **Blog publishing UI tests no longer accept the editor URL as a successful
+  publish.** The generated test waits for the create response, retries an
+  unhydrated first click, and verifies the exact published slug before comparing
+  rendered Markdown.
 - **Blog reads are public after installation.** The external blog module now
   registers `/blog` in the generated layout's public path list, so anonymous
   visitors can read the list and published articles while write actions remain

@@ -56,8 +56,8 @@ test("sidebar: back-to-home link returns to the landing page @smoke", async ({ p
   // the home link lives in the sidebar footer, above the user menu
   await page.getByRole("link", { name: "Back to home" }).click();
   await expect(page).toHaveURL(/\/$/);
-  // The starter landing route is app-owned and remains intact when the module is added.
-  await expect(page.getByRole("heading", { name: "app" })).toBeVisible();
+  // Landing routes are app-owned, so only verify the shared page shell.
+  await expect(page.locator("main").first()).toBeVisible();
 });
 
 test("settings is reachable from the sidebar @smoke", async ({ page }) => {

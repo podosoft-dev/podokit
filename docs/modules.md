@@ -95,6 +95,17 @@ curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-up/email \
 curl -b cookies.txt localhost:5002/account/me
 ```
 
+For a built production image, run both the Better Auth schema migration and all
+TypeORM migrations without downloading a CLI or copying TypeScript source into
+the image:
+
+```bash
+npm run migrate:all -w <app>-api
+```
+
+The command uses `dist/migrate.js`, exits non-zero on failure, and is suitable
+for a Kubernetes migration Job before a rolling deployment.
+
 - **Secure by default**: all module endpoints (jobs, storage, files, cache, …) are protected once `auth` is added.
 - **Configure it in the admin Settings page, not env.** Social OAuth providers, SMTP, the
   server-enforced toggles (email verification, breached-password check, account deletion, and —
@@ -341,8 +352,18 @@ npm run dev
 # with RATE_LIMIT_MAX low, repeated requests return 429 once the window is exceeded
 ```
 
-Tune `RATE_LIMIT_TTL` (window seconds) and `RATE_LIMIT_MAX` (requests/window) in `.env`.
-Skip a route with `@SkipThrottle()` or override it with `@Throttle()`.
+Tune `RATE_LIMIT_TTL` (window seconds), `RATE_LIMIT_MAX` (requests/window), and
+`RATE_LIMIT_RUNTIME_MAX` in `.env`. The runtime limit defaults to 1000 for the
+public site-settings read used by every SSR page. This keeps maintenance and
+sign-up policy available under normal page traffic while retaining a bounded,
+Redis-backed limit.
+The generated web proxy forwards its resolved client address, and the API uses
+that trusted value as the Redis counter key so visitors do not share the web
+container's counter. The generated Docker and k3s layouts configure SvelteKit
+for their single trusted Traefik hop (`ADDRESS_HEADER=x-forwarded-for`,
+`XFF_DEPTH=1`); adjust the depth if you add another trusted proxy. Keep the API
+behind this proxy. Skip a route with `@SkipThrottle()` or override it with
+`@Throttle()`.
 
 ### `api-key-auth`
 

@@ -39,3 +39,11 @@ Want a worked example? Generate the `todo` template instead:
 
 Docker Compose in `infra/docker`; example k3s manifests in `infra/k3s`
 (use `secret.example.yaml` as a template — never commit real secrets).
+
+Build production images from the workspace root so Docker can use the committed
+lockfile and all workspace package manifests:
+
+```bash
+docker build -f apps/api/Dockerfile -t {{projectName}}-api .
+docker build -f apps/web/Dockerfile -t {{projectName}}-web .
+```
