@@ -1,0 +1,20 @@
+{
+  "name": "@podosoft/podokit-module-blog",
+  "version": "0.1.0",
+  "description": "PodoKit blog module with authenticated publishing, comments, pagination, and admin management.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/podosoft-dev/podokit.git",
+    "directory": "packages/podokit-module-blog"
+  },
+  "files": [
+    "files",
+    "module.manifest.json",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

@@ -7,6 +7,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- **External blog module.** New `@podosoft/podokit-module-blog` package provides
+  authenticated Markdown publishing, paginated posts and comments, author-owned
+  edit/delete flows, admin management, an additive legacy-compatible migration,
+  reusable web helpers, and Playwright API/UI coverage. Public and admin route
+  wrappers stay application-owned for design and SEO customization.
+- **External modules now participate in updates.** Project manifests record the
+  backing package and applied version; `podo update` resolves installed package
+  modules from the consumer project, retains their root dependency, and refreshes
+  the recorded module version after apply. `podo add --adopt` explicitly hands
+  only module-declared managed paths back while preserving owned presentation.
 - **Proxy response compression.** New fullstack and todo projects attach Traefik's
   compression middleware to the containerized development router and the k3s
   Ingress, reducing dynamic HTML and other compressible response payloads. The
@@ -37,6 +47,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (ui + api) tests included. No DB migration (uses the existing `app_setting` store).
 
 ### Fixed
+- **Adding a module no longer adopts the whole working tree.** Pre-existing
+  managed-file edits retain their old lock baseline and unrelated application
+  files remain outside `files.lock`, preventing later updates from overwriting or
+  removing application-owned work.
 - **Generated Git ignores cover both Playwright execution locations.** The
   configured suite writes artifacts below `tests`, while invoking Playwright
   without that config can write authentication state and reports at the project

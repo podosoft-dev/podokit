@@ -96,6 +96,7 @@ This repo is an npm workspace. Published packages:
 - `packages/api-client` — `@podosoft/podokit-api-client`: typed API client the generated frontend uses (better-auth + error-envelope request layer)
 - `packages/contracts` — `@podosoft/podokit-contracts`: the `Capabilities`, error envelope, and `AppException` shared by backend and frontend
 - `packages/podokit-auth` — `@podosoft/podokit-auth`: the DB-backed auth configuration pipeline (encrypted secrets, config store)
+- `packages/podokit-module-blog` — `@podosoft/podokit-module-blog`: authenticated publishing, comments, ownership, and admin management as an external updateable module
 - `templates/` — project templates copied by the CLI
 - `examples/` — how to generate example apps
 
@@ -121,6 +122,13 @@ npx @podosoft/podokit add auth      # full auth (better-auth): email/password, s
 
 `podo add` overlays files, merges dependencies, appends env vars, and wires the
 module into the NestJS app. See [docs/modules.md](docs/modules.md).
+
+External package modules use the same workflow after installation. For example:
+
+```bash
+npm install --save-dev @podosoft/podokit-module-blog
+podo add blog
+```
 
 The **`admin-dashboard`** module adds a full admin console on top of `auth`:
 user & session management, an audit log, and a Settings page where OAuth

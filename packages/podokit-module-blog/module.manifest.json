@@ -1,0 +1,66 @@
+{
+  "manifestVersion": 1,
+  "name": "blog",
+  "description": "Authenticated blog publishing with Markdown preview, pagination, comments, author ownership, and admin management.",
+  "requires": [
+    "admin-dashboard",
+    "rate-limit",
+    "audit-log"
+  ],
+  "targetApp": "api",
+  "managedGlobs": [
+    "apps/api/src/blog/**",
+    "apps/web/src/lib/blog.ts",
+    "apps/web/src/lib/blog/**",
+    "tests/api/blog.api.spec.ts",
+    "tests/ui/blog.ui.spec.ts"
+  ],
+  "ownedGlobs": [
+    "apps/web/src/routes/blog/**",
+    "apps/web/src/routes/(app)/admin/blog/**"
+  ],
+  "inject": [
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:end:imports",
+      "text": "import { BlogModule } from \"./blog/blog.module\";"
+    },
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:end:module-imports",
+      "text": "BlogModule,"
+    },
+    {
+      "file": "apps/web/src/lib/admin/registry.svelte.ts",
+      "marker": "// podokit:end:admin-nav-imports",
+      "text": "import NewspaperIcon from \"@lucide/svelte/icons/newspaper\";"
+    },
+    {
+      "file": "apps/web/src/lib/admin/registry.svelte.ts",
+      "marker": "// podokit:end:admin-nav-entries",
+      "text": "  { href: \"/admin/blog\", label: (t) => t.blog.nav, icon: NewspaperIcon, adminOnly: true },"
+    },
+    {
+      "file": "apps/web/src/lib/i18n/messages.ts",
+      "marker": "// podokit:end:messages-en",
+      "text": "  blog: { nav: \"Blog\", title: \"Blog\", adminSubtitle: \"Manage published posts and drafts.\", newPost: \"New post\", editPost: \"Edit post\", postTitle: \"Title\", slug: \"Slug\", excerpt: \"Excerpt\", body: \"Body\", tags: \"Tags\", coverImage: \"Cover image URL\", status: \"Status\", published: \"Published\", draft: \"Draft\", author: \"Author\", comments: \"Comments\", commentPlaceholder: \"Write a comment\", preview: \"Preview\", write: \"Write\", edit: \"Edit\", delete: \"Delete\", save: \"Save\", cancel: \"Cancel\", previous: \"Previous\", next: \"Next\", empty: \"No posts yet.\", noComments: \"No comments yet.\", signInToWrite: \"Sign in to write or comment.\", deletePostTitle: \"Delete this post?\", deleteCommentTitle: \"Delete this comment?\", deleteDescription: \"This action cannot be undone.\", loadFailed: \"Failed to load blog content.\", saveFailed: \"Failed to save.\", saved: \"Saved.\", deleted: \"Deleted.\", total: \"{count} posts\" },"
+    },
+    {
+      "file": "apps/web/src/lib/i18n/messages.ts",
+      "marker": "// podokit:end:messages-ko",
+      "text": "  blog: { nav: \"블로그\", title: \"블로그\", adminSubtitle: \"발행 글과 초안을 관리합니다.\", newPost: \"새 글\", editPost: \"글 수정\", postTitle: \"제목\", slug: \"주소\", excerpt: \"요약\", body: \"본문\", tags: \"태그\", coverImage: \"대표 이미지 주소\", status: \"상태\", published: \"발행\", draft: \"초안\", author: \"작성자\", comments: \"댓글\", commentPlaceholder: \"댓글을 입력하세요\", preview: \"미리보기\", write: \"작성\", edit: \"수정\", delete: \"삭제\", save: \"저장\", cancel: \"취소\", previous: \"이전\", next: \"다음\", empty: \"아직 작성된 글이 없습니다.\", noComments: \"첫 댓글을 남겨보세요.\", signInToWrite: \"로그인하면 글과 댓글을 작성할 수 있습니다.\", deletePostTitle: \"이 글을 삭제할까요?\", deleteCommentTitle: \"이 댓글을 삭제할까요?\", deleteDescription: \"삭제한 내용은 복구할 수 없습니다.\", loadFailed: \"블로그 내용을 불러오지 못했습니다.\", saveFailed: \"저장하지 못했습니다.\", saved: \"저장했습니다.\", deleted: \"삭제했습니다.\", total: \"글 {count}개\" },"
+    },
+    {
+      "file": "AGENTS.md",
+      "marker": "<!-- podokit:end:agents-modules -->",
+      "optional": true,
+      "text": "### blog\n- Public reads are paginated under `/blog`; authenticated users publish immediately and can manage their own posts and comments. Admins can manage all content under `/admin/blog`.\n- Keep public route wrappers app-owned for visual design and SEO. Reusable types, loaders, editor, and API behavior live under managed `$lib/blog/` and `apps/api/src/blog/`.\n"
+    }
+  ],
+  "instructions": [
+    "Install dependencies: npm install",
+    "Run migrations: npm run migration:run -w <app>-api",
+    "Open /blog to read and write posts, or /admin/blog to manage all content.",
+    "After upgrading this package, run podo update and then podo update --apply."
+  ]
+}

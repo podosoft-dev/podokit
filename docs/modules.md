@@ -21,6 +21,49 @@ npx @podosoft/podokit add <module>
 
 ## Available modules
 
+### External package modules
+
+PodoKit can load a module from an installed package named
+`@podosoft/podokit-module-<name>`. Install the package in the generated project's
+root, then add it by its short name:
+
+```bash
+npm install --save-dev @podosoft/podokit-module-blog
+podo add blog
+```
+
+The project manifest records the package name and applied version. After
+upgrading the package, `podo update` resolves it from the generated project's
+`node_modules` and previews its managed-file changes. Public presentation routes
+can remain app-owned while reusable API and `$lib` paths continue to update.
+
+If an application already has the same feature and the package declares explicit
+`managedGlobs`, use `--adopt` to hand only those paths back to the module. Existing
+owned presentation paths are preserved:
+
+```bash
+podo add blog --adopt
+```
+
+### `blog` (external package)
+
+Authenticated Markdown publishing with paginated public posts, flat comments,
+author ownership, and admin management. Regular users publish immediately and can
+edit or delete only their own posts and comments; admins can manage all content.
+
+```bash
+npm install --save-dev @podosoft/podokit-module-blog
+podo add blog
+npm install
+npm run migration:run -w <app>-api
+```
+
+The module keeps `apps/api/src/blog/**`, reusable `$lib/blog/**`, and its tests
+managed. Public `/blog` route wrappers and `/admin/blog` presentation files are
+owned so applications can implement their own design and SEO. The additive
+migration preserves an existing `blog_posts` table, adds author snapshots and
+ownership, and creates comments with post-cascade deletion.
+
 ### `auth` (better-auth)
 
 Full authentication built on [better-auth](https://better-auth.com): email/password
