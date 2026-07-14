@@ -440,7 +440,9 @@ runtime — no rebuild, no DB migration (settings live in the existing
   (`background card foreground mutedForeground border secondary accent primary
   primaryForeground`) into ~25 CSS variables (including the `--sidebar*` set),
   and injects a mode-scoped `<style id="podokit-theme">`
-  (`:root:not(.dark)` / `:root.dark`) from the root layout `$effect`. Clearing
+  (`:root:not(.dark)` / `:root.dark`) from the managed
+  `$lib/components/site-runtime.svelte`. The application-owned root layout keeps
+  this stable runtime slot while public route content remains untouched. Clearing
   the theme removes the stylesheet so `app.css` defaults win.
 - **Validation** — the site-settings controller whitelists `themePreset`
   (name regex), `themeRadius` (0–4 rem) and `themeOverrides` (known token keys +

@@ -22,9 +22,11 @@ test("settings: add and remove a social login provider @smoke", async ({ page })
   }).toPass({ timeout: 25000 });
 
   await addBtn.click();
-  const select = dialog.locator("#social-provider");
-  await expect(select.locator("option").first()).toBeAttached();
-  const providerId = await select.inputValue(); // first addable provider (not hard-coded)
+  const provider = dialog.locator("#social-provider");
+  await expect(provider).toBeVisible();
+  const callback = await dialog.locator("code").textContent();
+  const providerId = callback?.trim().split("/").pop() ?? ""; // first addable provider (not hard-coded)
+  expect(providerId).not.toBe("");
   try {
     await dialog.locator("#social-id").fill("test-client-id");
     await dialog.locator("#social-secret").fill("test-secret");

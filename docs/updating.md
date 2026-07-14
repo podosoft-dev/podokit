@@ -54,6 +54,11 @@ What each tier does on `--apply`:
   output. Unrelated application files are not implicitly adopted as managed.
 - **owned** files (your routes, components, shadcn UI) are never written.
 
+Starter root layouts render the managed
+`apps/web/src/lib/components/site-runtime.svelte` slot. Modules can add global
+behavior such as branding and runtime themes through that component without
+replacing application-owned route layouts or public pages.
+
 The dry-run prints a per-file plan (`update` / `add` / `remove` / `conflict`) so
 there are no surprises.
 

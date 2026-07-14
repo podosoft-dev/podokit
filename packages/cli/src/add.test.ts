@@ -451,6 +451,11 @@ describe("addModule (auth / better-auth)", () => {
     expect(existsSync(join(project, "apps/web/src/routes/(app)/+layout.svelte"))).toBe(true);
     expect(existsSync(join(project, "apps/web/src/lib/components/app-sidebar.svelte"))).toBe(true);
     expect(existsSync(join(project, "apps/web/src/lib/components/ui/sidebar/index.ts"))).toBe(true);
+    // Public routes remain app-owned, while the managed runtime applies global
+    // branding and theme settings through the starter layout's stable slot.
+    expect(result.preserved).toEqual(expect.arrayContaining(["apps/web/src/routes/+page.svelte"]));
+    expect(readFileSync(join(project, "apps/web/src/routes/+page.svelte"), "utf8")).toContain("API health");
+    expect(readFileSync(join(project, "apps/web/src/lib/components/site-runtime.svelte"), "utf8")).toContain("applyTheme");
     // i18n: message catalog + language switch
     expect(existsSync(join(project, "apps/web/src/lib/i18n/messages.ts"))).toBe(true);
     expect(existsSync(join(project, "apps/web/src/lib/components/language-switch.svelte"))).toBe(true);

@@ -18,7 +18,7 @@ test("register a passkey and sign in with it @smoke", async ({ page, baseURL }) 
   const email = `pk-${Date.now()}@example.com`;
   const pw = "Podokit3e-Str0ng!pw";
   const signup = await page.context().request.post("/api/auth/sign-up/email", { data: { email, password: pw, name: "PK" }, headers: origin });
-  expect(signup.ok()).toBeTruthy();
+  expect(signup.ok(), await signup.text()).toBeTruthy();
 
   await ready(page, "/admin/account");
   await page.getByRole("button", { name: "Security" }).click();
