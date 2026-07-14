@@ -64,6 +64,11 @@ owned so applications can implement their own design and SEO. The additive
 migration preserves an existing `blog_posts` table, adds author snapshots and
 ownership, and creates comments with post-cascade deletion.
 
+Use the managed `BlogProse` component in an application-owned article route. It
+shares a safe GFM renderer with `BlogEditor`, keeping preview and published body
+markup and typography consistent while the surrounding article layout stays
+application-owned.
+
 ### `auth` (better-auth)
 
 Full authentication built on [better-auth](https://better-auth.com): email/password

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto, invalidateAll } from "$app/navigation";
   import { toast } from "svelte-sonner";
-  import { blogClient, formatBlogDate, renderBlogMarkdown, type BlogComment } from "$lib/blog";
+  import { BlogProse, blogClient, formatBlogDate, type BlogComment } from "$lib/blog";
   import * as Avatar from "$lib/components/ui/avatar";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
@@ -98,7 +98,7 @@
         </div>
       {/if}
     </header>
-    <div class="blog-prose py-10">{@html renderBlogMarkdown(data.post.body)}</div>
+    <BlogProse markdown={data.post.body} title={data.post.title} class="py-10" />
   </article>
 
   <section class="border-t pt-10" aria-labelledby="comments-heading">
@@ -172,16 +172,3 @@
     <Dialog.Footer><Button variant="outline" onclick={() => (deleteCommentTarget = null)}>{i18n.t.blog.cancel}</Button><Button variant="destructive" onclick={removeComment}>{i18n.t.blog.delete}</Button></Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>
-
-<style>
-  .blog-prose :global(h1), .blog-prose :global(h2), .blog-prose :global(h3) { margin-top: 2rem; margin-bottom: 0.75rem; font-weight: 600; letter-spacing: -0.02em; }
-  .blog-prose :global(h1) { font-size: 1.875rem; }
-  .blog-prose :global(h2) { font-size: 1.5rem; }
-  .blog-prose :global(h3) { font-size: 1.25rem; }
-  .blog-prose :global(p), .blog-prose :global(li) { line-height: 1.8; }
-  .blog-prose :global(p) { margin: 1rem 0; }
-  .blog-prose :global(ul) { margin: 1rem 0; list-style: disc; padding-left: 1.5rem; }
-  .blog-prose :global(pre) { overflow-x: auto; border-radius: 0.5rem; background: var(--muted); padding: 1rem; }
-  .blog-prose :global(code) { font-family: ui-monospace, monospace; }
-  .blog-prose :global(a) { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
-</style>

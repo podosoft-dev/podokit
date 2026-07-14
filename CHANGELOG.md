@@ -47,6 +47,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (ui + api) tests included. No DB migration (uses the existing `app_setting` store).
 
 ### Fixed
+- **Blog previews now match published article bodies.** `BlogEditor` and the new
+  reusable `BlogProse` component share one safe GFM renderer and one prose style,
+  including blockquotes, ordered lists, tables, and duplicate-title handling.
+  Application-owned article routes can use the same managed component without
+  giving up their surrounding visual design.
 - **Adding a module no longer adopts the whole working tree.** Pre-existing
   managed-file edits retain their old lock baseline and unrelated application
   files remain outside `files.lock`, preventing later updates from overwriting or

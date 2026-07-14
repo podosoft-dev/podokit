@@ -29,3 +29,8 @@ Posts created by regular users are published immediately. Authors can edit and
 delete their own posts and comments; admins can manage all content. Deleting a
 user keeps their content with its author snapshot, while deleting a post also
 deletes its comments.
+
+`BlogEditor` and `BlogProse` share the same safe GFM renderer, so blockquotes,
+ordered lists, tables, and other supported Markdown have the same markup and
+presentation before and after publishing. Application-owned article routes should
+render the body with `BlogProse`, passing both `markdown` and the post `title`.

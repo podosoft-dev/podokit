@@ -5,7 +5,7 @@
   import * as Select from "$lib/components/ui/select";
   import * as Tabs from "$lib/components/ui/tabs";
   import { Textarea } from "$lib/components/ui/textarea";
-  import { renderBlogMarkdown } from "./markdown";
+  import BlogProse from "./blog-prose.svelte";
   import type { BlogDraft, BlogEditorLabels } from "./types";
 
   interface Props {
@@ -86,10 +86,8 @@
       <Tabs.Content value="write" class="mt-3">
         <Textarea id="blog-body" bind:value={value.body} required maxlength={200000} class="min-h-96 font-mono" />
       </Tabs.Content>
-      <Tabs.Content value="preview" class="mt-3 min-h-96 rounded-lg border p-5">
-        <article class="prose prose-neutral dark:prose-invert max-w-none">
-          {@html renderBlogMarkdown(value.body)}
-        </article>
+      <Tabs.Content value="preview" data-blog-preview class="mt-3 min-h-96 rounded-lg border p-5">
+        <BlogProse markdown={value.body} title={value.title} />
       </Tabs.Content>
     </Tabs.Root>
   </div>
