@@ -48,6 +48,10 @@ services:
     environment:
       - VITE_DOCKER=1
       - BACKEND_INTERNAL_URL=http://api:5002
+      # One trusted Traefik proxy sits in front of SvelteKit. This keeps
+      # getClientAddress() tied to the visitor instead of the proxy container.
+      - ADDRESS_HEADER=x-forwarded-for
+      - XFF_DEPTH=1
       # Match Traefik's published port so HMR's WebSocket targets the right port
       # (default 80). Without this, HMR connects to :80 and a non-80 stack falls
       # back to a full page reload on every edit.

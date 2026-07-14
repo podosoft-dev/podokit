@@ -12,7 +12,7 @@ export function backendBaseUrl(): string {
 // IPv4 as-is but anonymizes IPv6 (masks the host bits), so an IPv6 loopback would
 // be recorded as "::" — map loopback to 127.0.0.1 for a clean local value, and
 // unwrap IPv4-mapped addresses.
-function normalizeClientIp(address: string | undefined): string | undefined {
+export function normalizeClientIp(address: string | undefined): string | undefined {
   if (!address) return undefined;
   if (address === "::1" || address === "::") return "127.0.0.1";
   if (address.startsWith("::ffff:")) return address.slice("::ffff:".length);

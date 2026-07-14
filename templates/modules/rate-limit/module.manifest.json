@@ -10,7 +10,9 @@
   "env": [
     "# rate limit (window in seconds, max requests per window per client)",
     "RATE_LIMIT_TTL=60",
-    "RATE_LIMIT_MAX=100"
+    "RATE_LIMIT_MAX=100",
+    "# higher ceiling for SSR runtime settings reads (maintenance, sign-up, branding)",
+    "RATE_LIMIT_RUNTIME_MAX=1000"
   ],
   "inject": [
     { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:imports", "text": "import { RateLimitModule } from \"./rate-limit/rate-limit.module\";" },
@@ -18,8 +20,9 @@
   ],
   "instructions": [
     "Ensure Redis is running:  docker compose -f infra/docker/docker-compose.yml up -d",
-    "Tune RATE_LIMIT_TTL / RATE_LIMIT_MAX in .env.",
+    "Tune RATE_LIMIT_TTL / RATE_LIMIT_MAX / RATE_LIMIT_RUNTIME_MAX in .env.",
     "Exceeding the limit returns HTTP 429. Skip a route with @SkipThrottle() or tune it with @Throttle().",
-    "The limit is shared across API replicas because it is stored in Redis."
+    "The limit is shared across API replicas because it is stored in Redis.",
+    "PodoKit's web proxy forwards the resolved client address, so visitors receive independent counters."
   ]
 }

@@ -125,6 +125,8 @@ describe("create (integration against templates)", () => {
     // same value so Vite HMR targets the right port (no full-reload fallback).
     expect(compose).toContain('"${TRAEFIK_PORT:-80}:80"');
     expect(compose).toContain("VITE_HMR_CLIENT_PORT=${TRAEFIK_PORT:-80}");
+    expect(compose).toContain("ADDRESS_HEADER=x-forwarded-for");
+    expect(compose).toContain("XFF_DEPTH=1");
     expect(compose).not.toMatch(/\n\s+-\s+"5432:5432"/);
     expect(compose).not.toMatch(/\n\s+-\s+"5001:5001"/);
 
@@ -147,6 +149,8 @@ describe("create (integration against templates)", () => {
     );
     expect(backendProxy).toContain("request.arrayBuffer()");
     expect(backendProxy).not.toContain("request.text()");
+    const serverApi = readFileSync(join(target, "apps", "web", "src", "lib", "server", "api.ts"), "utf8");
+    expect(serverApi).toContain('headers.set("x-forwarded-for", clientIp)');
     const traefikConfig = readFileSync(join(target, "infra", "traefik", "dynamic.yml"), "utf8");
     expect(traefikConfig).toContain("http://web:5001");
     expect(traefikConfig).toContain("middlewares: [compression]");
@@ -157,6 +161,9 @@ describe("create (integration against templates)", () => {
     expect(ingress).toContain("kind: Middleware");
     expect(ingress).toContain("name: compression");
     expect(ingress).toContain("podokit-compression@kubernetescrd");
+    const k3sConfig = readFileSync(join(target, "infra", "k3s", "configmap.yaml"), "utf8");
+    expect(k3sConfig).toContain('ADDRESS_HEADER: "x-forwarded-for"');
+    expect(k3sConfig).toContain('XFF_DEPTH: "1"');
 
     // AI-free of tiers: the dev scaffolding is owned so updates never clobber it
     const lock = readFileSync(join(target, ".podokit", "files.lock"), "utf8");
