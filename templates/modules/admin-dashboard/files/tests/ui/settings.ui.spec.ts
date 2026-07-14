@@ -9,7 +9,7 @@ async function saveGeneral(page: Page): Promise<void> {
   );
   await page.getByRole("button", { name: "Save changes" }).click();
   expect((await saved).ok()).toBeTruthy();
-  await expect(page.getByText("General settings saved.")).toBeVisible();
+  await expect(page.getByText("General settings saved.").last()).toBeVisible();
 }
 
 test("settings has General and Authentication tabs @smoke", async ({ page }) => {

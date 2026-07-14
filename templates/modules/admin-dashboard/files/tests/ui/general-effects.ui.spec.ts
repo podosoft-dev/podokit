@@ -14,7 +14,7 @@ async function saveGeneral(page: Page): Promise<void> {
   );
   await page.getByRole("button", { name: "Save changes" }).click();
   expect((await saved).ok()).toBeTruthy();
-  await expect(page.getByText("General settings saved.")).toBeVisible();
+  await expect(page.getByText("General settings saved.").last()).toBeVisible();
 }
 
 test("general: footer text and links render on public pages @smoke", async ({ page, browser }) => {
