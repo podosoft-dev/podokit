@@ -56,6 +56,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (ui + api) tests included. No DB migration (uses the existing `app_setting` store).
 
 ### Fixed
+- **Production images use the workspace lockfile.** Generated API and web
+  Dockerfiles now use Node 22 and build from the repository root with `npm ci`,
+  preserving the resolved workspace dependency graph and avoiding
+  non-deterministic app-local installs. Generated fullstack workspaces declare
+  the current authentication stack's Node.js `>=22.22.1` runtime requirement,
+  and the BullMQ worker Compose example follows the same build contract.
 - **Local Outer tests ignore unrelated Mailpit instances.** Email specs are
   exposed to Mailpit only when the generated API has SMTP configured for the same
   run, preventing false failures against a stale local sink.

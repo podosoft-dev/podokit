@@ -101,6 +101,19 @@ describe("create (integration against templates)", () => {
     expect(existsSync(join(target, "apps", "web", "src", "routes", "api", "todos"))).toBe(false);
     const apiPkg = JSON.parse(readFileSync(join(target, "apps", "api", "package.json"), "utf8")) as { name: string };
     expect(apiPkg.name).toBe("app-api");
+
+    for (const workspace of ["api", "web"]) {
+      const dockerfile = readFileSync(join(target, "apps", workspace, "Dockerfile"), "utf8");
+      expect(dockerfile).toContain("FROM node:22-alpine AS deps");
+      expect(dockerfile).toContain("COPY package.json package-lock.json ./");
+      expect(dockerfile).toContain("RUN npm ci --no-audit --no-fund");
+      expect(dockerfile).toContain(`RUN npm run build --workspace=apps/${workspace}`);
+      expect(dockerfile).not.toContain("npm install --omit=dev=false");
+    }
+    const rootPkg = JSON.parse(readFileSync(join(target, "package.json"), "utf8")) as {
+      engines: { node: string };
+    };
+    expect(rootPkg.engines.node).toBe(">=22.22.1");
   });
 
   it("ships the containerized dev environment (Traefik + internal services + devcontainer)", () => {

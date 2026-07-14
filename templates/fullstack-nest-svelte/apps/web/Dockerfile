@@ -1,22 +1,26 @@
 # syntax=docker/dockerfile:1
-FROM node:20-alpine AS deps
+FROM node:22-alpine AS deps
 WORKDIR /app
-COPY package.json ./
-RUN npm install --no-audit --no-fund
+COPY package.json package-lock.json ./
+COPY apps/api/package.json ./apps/api/package.json
+COPY apps/web/package.json ./apps/web/package.json
+COPY tests/package.json ./tests/package.json
+RUN npm ci --no-audit --no-fund
 
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
+RUN npm run build --workspace=apps/web
 
-FROM node:20-alpine AS runtime
+FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 RUN addgroup -S app && adduser -S app -G app
-COPY --from=build /app/build ./build
 COPY --from=build /app/node_modules ./node_modules
-COPY package.json ./
+COPY --from=deps /app/apps/web ./apps/web
+COPY --from=build /app/apps/web/build ./apps/web/build
+WORKDIR /app/apps/web
 USER app
 EXPOSE 3000
 CMD ["node", "build"]

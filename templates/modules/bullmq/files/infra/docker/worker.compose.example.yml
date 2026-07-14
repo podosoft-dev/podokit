@@ -8,7 +8,8 @@
 services:
   worker:
     build:
-      context: ../../apps/api
+      context: ../..
+      dockerfile: apps/api/Dockerfile
     command: ["node", "dist/main-worker"]
     environment:
       REDIS_HOST: redis
