@@ -2,7 +2,7 @@ import { getContext, setContext } from "svelte";
 import { site } from "$lib/site.svelte";
 import type { Locale, Messages } from "./messages";
 
-const KEY = Symbol("i18n");
+const KEY = Symbol.for("podokit.i18n");
 
 export type I18nContext = { readonly t: Messages; readonly locale: Locale };
 
