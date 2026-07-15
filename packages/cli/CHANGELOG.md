@@ -1,5 +1,11 @@
 # @podosoft/podokit
 
+## 0.10.2
+
+### Patch Changes
+
+- [#87](https://github.com/podosoft-dev/podokit/pull/87) [`829ef6c`](https://github.com/podosoft-dev/podokit/commit/829ef6c3bfe6d5408c0a20028672f05c95cc7886) Thanks [@korone00](https://github.com/korone00)! - Keep generated liveness and readiness endpoints outside the global rate-limit quota.
+
 ## 0.10.1
 
 ### Patch Changes
