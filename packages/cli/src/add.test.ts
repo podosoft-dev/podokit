@@ -433,6 +433,8 @@ describe("addModule (auth / better-auth)", () => {
     const rateLimitModule = readFileSync(join(project, "apps/api/src/rate-limit/rate-limit.module.ts"), "utf8");
     expect(rateLimitModule).toContain("ProxyAwareThrottlerGuard");
     expect(rateLimitModule).toContain('request.headers');
+    expect(rateLimitModule).toContain('["/health", "/health/ready"]');
+    expect(rateLimitModule).toContain("unthrottledHealthPaths.has(path)");
     expect(rateLimitModule).toContain('path === "/site/settings"');
   });
 
