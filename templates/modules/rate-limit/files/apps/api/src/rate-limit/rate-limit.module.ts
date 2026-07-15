@@ -11,6 +11,7 @@ import Redis from "ioredis";
 const ttlSeconds = Number(process.env.RATE_LIMIT_TTL ?? 60);
 const limit = Number(process.env.RATE_LIMIT_MAX ?? 100);
 const runtimeLimit = Number(process.env.RATE_LIMIT_RUNTIME_MAX ?? 1000);
+const unthrottledHealthPaths = new Set(["/health", "/health/ready"]);
 
 function forwardedClient(headers: unknown): string | undefined {
   if (!headers || typeof headers !== "object") return undefined;
@@ -29,6 +30,9 @@ class ProxyAwareThrottlerGuard extends ThrottlerGuard {
     const { req } = this.getRequestResponse(requestProps.context);
     const method = typeof req.method === "string" ? req.method : "";
     const path = typeof req.path === "string" ? req.path : "";
+    if (method === "GET" && unthrottledHealthPaths.has(path)) {
+      return Promise.resolve(true);
+    }
     if (method === "GET" && path === "/site/settings") {
       return super.handleRequest({ ...requestProps, limit: runtimeLimit });
     }

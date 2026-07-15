@@ -13,19 +13,28 @@ const origin = { origin: base };
 // to the module default and allow a little headroom.
 const limit = Number(process.env.RATE_LIMIT_MAX ?? 100);
 
-test("rate limit: exceeding the window returns 429 @smoke", async ({ playwright }) => {
+test("rate limit: health probes stay available while ordinary routes return 429 @smoke", async ({
+  playwright,
+}) => {
   const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
-  // /health is public — no session needed. If the first hit is a 5xx the
-  // throttler's Redis backing isn't reachable; nothing to assert.
-  const probe = await ctx.get("/api/health");
+  for (const path of ["/api/health", "/api/health/ready"]) {
+    for (let i = 0; i < limit + 5; i++) {
+      const response = await ctx.get(path);
+      expect(response.status(), `${path} request ${i + 1}`).toBe(200);
+    }
+  }
+
+  // The redis module is added automatically and exposes a public demo cache
+  // route, so it provides a stable ordinary endpoint for the global limit.
+  const probe = await ctx.get("/api/cache/rate-limit-probe");
   test.skip(probe.status() >= 500, "throttler storage (redis) not reachable");
 
   let seen200 = probe.status() === 200;
   let got429 = false;
   for (let i = 0; i < limit + 5 && !got429; i++) {
-    const r = await ctx.get("/api/health");
-    if (r.status() === 200) seen200 = true;
-    if (r.status() === 429) got429 = true;
+    const response = await ctx.get("/api/cache/rate-limit-probe");
+    if (response.status() === 200) seen200 = true;
+    if (response.status() === 429) got429 = true;
   }
   // A fresh window serves the first requests (200) and rejects once the limit is
   // crossed (429).

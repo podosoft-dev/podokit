@@ -22,6 +22,7 @@
     "Ensure Redis is running:  docker compose -f infra/docker/docker-compose.yml up -d",
     "Tune RATE_LIMIT_TTL / RATE_LIMIT_MAX / RATE_LIMIT_RUNTIME_MAX in .env.",
     "Exceeding the limit returns HTTP 429. Skip a route with @SkipThrottle() or tune it with @Throttle().",
+    "GET /health and GET /health/ready bypass request quotas so orchestrator probes remain reliable.",
     "The limit is shared across API replicas because it is stored in Redis.",
     "PodoKit's web proxy forwards the resolved client address, so visitors receive independent counters."
   ]

@@ -343,6 +343,8 @@ curl -b cookies.txt localhost:5002/audit-logs   # [{ userId, method:"POST", path
 Rate limiting with [`@nestjs/throttler`](https://docs.nestjs.com/security/rate-limiting)
 backed by **Redis** (added automatically), so the limit holds across API replicas.
 Adding it installs a global throttler guard; exceeding the limit returns **429**.
+The liveness and readiness endpoints (`GET /health` and `GET /health/ready`) are
+excluded so orchestrator probes cannot consume the application request quota.
 
 ```bash
 npx @podosoft/podokit add rate-limit   # also adds redis
