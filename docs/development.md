@@ -167,6 +167,8 @@ Non-injected template files mirror live; when you change an injection target
 (`auth.ts`, `app.module.ts`, a manifest `inject`) regenerate this one app with
 `dev-app.mjs`. Run the full Verdaccio e2e (`scripts/e2e-ci.mjs --smoke`) once per
 batch of changes, as the pre-PR gate — see [testing.md](./testing.md).
+The mirror renders `projectName` and `packageManager` from the generated app's
+`.podokit/manifest.json`; it must never copy unresolved template placeholders.
 
 ## Testing
 

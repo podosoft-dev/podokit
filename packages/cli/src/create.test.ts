@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -5,6 +6,7 @@ import { join, resolve } from "node:path";
 import { create, assertValidName } from "./create";
 
 const REPO_TEMPLATES = resolve(process.cwd(), "..", "..", "templates");
+const DEV_WATCH = resolve(process.cwd(), "..", "..", "scripts", "dev-watch.mjs");
 
 const created: string[] = [];
 function tmp(): string {
@@ -29,6 +31,25 @@ describe("assertValidName", () => {
 });
 
 describe("create (integration against templates)", () => {
+  it("renders every template variable during a dev-watch sync", () => {
+    const target = join(tmp(), "different-directory-name");
+    create({
+      name: "manifest-project-name",
+      template: "fullstack-nest-svelte",
+      packageManager: "pnpm",
+      templatesDir: REPO_TEMPLATES,
+      targetDir: target,
+    });
+    writeFileSync(join(target, "README.md"), "stale\n");
+
+    execFileSync(process.execPath, [DEV_WATCH, target, "--once"], { stdio: "pipe" });
+
+    const readme = readFileSync(join(target, "README.md"), "utf8");
+    expect(readme).toContain("# manifest-project-name");
+    expect(readme).toContain("pnpm install");
+    expect(readme).not.toContain("{{packageManager}}");
+  });
+
   it("scaffolds the base template with a rendered project name", () => {
     const target = join(tmp(), "my-app");
     const result = create({ name: "my-app", template: "base", templatesDir: REPO_TEMPLATES, targetDir: target });

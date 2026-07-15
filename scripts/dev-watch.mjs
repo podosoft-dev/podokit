@@ -33,6 +33,30 @@ const requested = (flag("add") ?? flag("module") ?? "").split(",").map((m) => m.
 const appName = appDir.split(sep).pop();
 const modulesRoot = join(repoRoot, "templates", "modules");
 
+function readTemplateVars() {
+  const manifestPath = join(appDir, ".podokit", "manifest.json");
+  if (!existsSync(manifestPath)) {
+    return { projectName: appName, packageManager: "npm" };
+  }
+  try {
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    const answers = manifest?.answers && typeof manifest.answers === "object" ? manifest.answers : {};
+    return {
+      projectName: typeof answers.projectName === "string" ? answers.projectName : appName,
+      packageManager:
+        typeof manifest.packageManager === "string"
+          ? manifest.packageManager
+          : typeof answers.packageManager === "string"
+            ? answers.packageManager
+            : "npm",
+    };
+  } catch {
+    return { projectName: appName, packageManager: "npm" };
+  }
+}
+
+const templateVars = readTemplateVars();
+
 const readManifest = (m) => {
   const p = join(modulesRoot, m, "module.manifest.json");
   return existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : null;
@@ -106,7 +130,9 @@ function mirror(srcRoot, isBase, absFile) {
   let content = readFileSync(absFile, "utf8");
   // extra guard: never mirror a file that carries injection markers
   if (content.includes("// podokit:")) return false;
-  content = content.replace(/\{\{\s*projectName\s*\}\}/g, appName);
+  content = content
+    .replace(/\{\{\s*projectName\s*\}\}/g, templateVars.projectName)
+    .replace(/\{\{\s*packageManager\s*\}\}/g, templateVars.packageManager);
   const dest = join(appDir, rel);
   mkdirSync(dirname(dest), { recursive: true });
   writeFileSync(dest, content);
