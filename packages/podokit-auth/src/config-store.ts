@@ -85,6 +85,7 @@ export function createConfigStore(pool: Pool) {
       version: versionOf(rs),
       social: socialFrom(rs),
       requireEmailVerification: server ? bool(server.config.requireEmailVerification, env.requireEmailVerification) : env.requireEmailVerification,
+      requireSignupApproval: server ? bool(server.config.requireSignupApproval, env.requireSignupApproval) : env.requireSignupApproval,
       allowDelete: server ? bool(server.config.allowDelete, env.allowDelete) : env.allowDelete,
       hibp: server ? bool(server.config.hibp, env.hibp) : env.hibp,
       auditLog: server ? bool(server.config.auditLog, env.auditLog) : env.auditLog,
@@ -129,6 +130,7 @@ export function createConfigStore(pool: Pool) {
   async function capabilitiesSnapshot(): Promise<{
     providers: string[];
     requireEmailVerification: boolean;
+    requireSignupApproval: boolean;
     allowDelete: boolean;
     passwordBreachCheck: boolean;
     auditLog: boolean;
@@ -139,6 +141,7 @@ export function createConfigStore(pool: Pool) {
         .filter(([, p]) => p?.enabled && p.clientId && p.clientSecret)
         .map(([name]) => name),
       requireEmailVerification: cfg.requireEmailVerification,
+      requireSignupApproval: cfg.requireSignupApproval,
       allowDelete: cfg.allowDelete,
       passwordBreachCheck: cfg.hibp,
       auditLog: cfg.auditLog,

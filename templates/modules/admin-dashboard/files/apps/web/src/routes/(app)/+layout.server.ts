@@ -9,6 +9,7 @@ export const load: LayoutServerLoad = async ({ locals, fetch }) => {
     deleteAccount: false,
     auditLog: false,
     emailVerification: false,
+    signupApprovalRequired: false,
     passwordBreachCheck: false,
     magicLink: false,
     emailOtp: false,

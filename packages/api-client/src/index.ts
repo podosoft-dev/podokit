@@ -1,5 +1,5 @@
 import { createAuthClient } from "better-auth/client";
-import { adminClient, twoFactorClient, magicLinkClient, emailOTPClient, usernameClient, multiSessionClient, phoneNumberClient, organizationClient } from "better-auth/client/plugins";
+import { adminClient, twoFactorClient, magicLinkClient, emailOTPClient, usernameClient, multiSessionClient, phoneNumberClient, organizationClient, inferAdditionalFields } from "better-auth/client/plugins";
 import { apiKeyClient } from "@better-auth/api-key/client";
 import { passkeyClient } from "@better-auth/passkey/client";
 
@@ -27,6 +27,9 @@ export interface ApiClientOptions {
 // Capabilities is a shared contract; re-exported so existing frontend imports
 // (`from "@podosoft/podokit-api-client"`) keep working.
 export type { Capabilities } from "@podosoft/podokit-contracts";
+
+/** Stable better-auth error code returned when a user still needs approval. */
+export const SIGNUP_APPROVAL_REQUIRED = "SIGNUP_APPROVAL_REQUIRED" as const;
 
 /** Error thrown when the API returns the standard error envelope or a non-2xx status. */
 export class ApiError extends Error {
@@ -84,7 +87,23 @@ export function createApiClient(options: ApiClientOptions = {}) {
   const makeAuthClient = () =>
     createAuthClient({
       baseURL: authOrigin,
-      plugins: [adminClient(), twoFactorClient(), magicLinkClient(), emailOTPClient(), usernameClient(), multiSessionClient(), phoneNumberClient(), apiKeyClient(), passkeyClient(), organizationClient()],
+      plugins: [
+        adminClient(),
+        twoFactorClient(),
+        magicLinkClient(),
+        emailOTPClient(),
+        usernameClient(),
+        multiSessionClient(),
+        phoneNumberClient(),
+        apiKeyClient(),
+        passkeyClient(),
+        organizationClient(),
+        inferAdditionalFields({
+          user: {
+            signupApproved: { type: "boolean", required: false, defaultValue: true, input: false },
+          },
+        }),
+      ],
       fetchOptions: {
         credentials,
         ...(options.fetch ? { customFetchImpl: options.fetch } : {}),

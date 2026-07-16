@@ -10,7 +10,7 @@ export type AuthConfigView = {
   social: Record<string, SocialProviderView>;
   catalog: ReadonlyArray<{ id: string; label: string }>;
   smtp: { enabled: boolean; host: string; port: number; secure: boolean; user: string; from: string; hasSecret: boolean };
-  server: { requireEmailVerification: boolean; allowDelete: boolean; hibp: boolean; auditLog: boolean };
+  server: { requireEmailVerification: boolean; requireSignupApproval: boolean; allowDelete: boolean; hibp: boolean; auditLog: boolean };
 };
 
 export const load: PageServerLoad = async ({ locals, fetch }) => {

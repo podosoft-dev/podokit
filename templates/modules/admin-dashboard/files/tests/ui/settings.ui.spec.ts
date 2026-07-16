@@ -88,4 +88,5 @@ test("settings: the require-two-factor toggle is available @smoke", async ({ pag
   // the require-2fa api/ui specs. Not toggled here — turning it on would gate this
   // admin session.
   await expect(page.getByRole("switch", { name: "Require two-factor" })).toBeVisible();
+  await expect(page.getByRole("switch", { name: "Sign-up approval" })).toBeVisible();
 });

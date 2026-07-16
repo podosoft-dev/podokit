@@ -32,6 +32,7 @@
     email: string;
     role?: string | null;
     banned?: boolean | null;
+    signupApproved?: boolean | null;
     emailVerified?: boolean | null;
     createdAt?: string | Date | null;
     banReason?: string | null;
@@ -74,6 +75,7 @@
       options: [
         { value: "", label: i18n.t.toolbar.all },
         { value: "active", label: i18n.t.users.active },
+        { value: "pending", label: i18n.t.users.pendingApproval },
         { value: "banned", label: i18n.t.users.banned },
       ],
     },
@@ -91,7 +93,8 @@
       }
       if (appliedFilters.role && (u.role ?? "user") !== appliedFilters.role) return false;
       if (appliedFilters.status === "banned" && !u.banned) return false;
-      if (appliedFilters.status === "active" && u.banned) return false;
+      if (appliedFilters.status === "pending" && u.signupApproved !== false) return false;
+      if (appliedFilters.status === "active" && (u.banned || u.signupApproved === false)) return false;
       return true;
     }),
   );
@@ -115,6 +118,19 @@
     const { error } = await api.auth.admin.impersonateUser({ userId: u.id });
     if (error) return void toast.error(error.message ?? i18n.t.users.actionFailed);
     await goto("/admin", { invalidateAll: true });
+  }
+
+  async function approve(u: Row): Promise<void> {
+    busy = true;
+    const { error } = await api.auth.admin.updateUser({
+      userId: u.id,
+      data: { signupApproved: true },
+    });
+    busy = false;
+    if (error) return void toast.error(error.message ?? i18n.t.users.actionFailed);
+    if (mUser?.id === u.id) mUser = { ...mUser, signupApproved: true };
+    toast.success(i18n.t.users.approved);
+    await load();
   }
 
   // Create user
@@ -372,7 +388,13 @@
       <Table.Cell><Badge variant={user.role === "admin" ? "default" : "secondary"}>{user.role ?? "user"}</Badge></Table.Cell>
       <Table.Cell>
         <div class="flex flex-wrap gap-1">
-          {#if user.banned}<Badge variant="destructive">{i18n.t.users.banned}</Badge>{:else}<Badge variant="outline">{i18n.t.users.active}</Badge>{/if}
+          {#if user.signupApproved === false}
+            <Badge variant="secondary">{i18n.t.users.pendingApproval}</Badge>
+          {:else if user.banned}
+            <Badge variant="destructive">{i18n.t.users.banned}</Badge>
+          {:else}
+            <Badge variant="outline">{i18n.t.users.active}</Badge>
+          {/if}
           {#if emailVerificationEnabled}
             {#if user.emailVerified}<Badge variant="outline" class="text-green-600 dark:text-green-400">{i18n.t.users.verified}</Badge>{:else}<Badge variant="secondary">{i18n.t.users.unverified}</Badge>{/if}
           {/if}
@@ -387,8 +409,11 @@
             {/snippet}
           </DropdownMenu.Trigger>
           <DropdownMenu.Content align="end">
+            {#if user.signupApproved === false}
+              <DropdownMenu.Item onSelect={() => approve(user)}>{i18n.t.users.approve}</DropdownMenu.Item>
+            {/if}
             <DropdownMenu.Item onSelect={() => openManage(user)}>{i18n.t.users.manage}</DropdownMenu.Item>
-            <DropdownMenu.Item disabled={user.id === data.currentUserId} onSelect={() => impersonate(user)}>
+            <DropdownMenu.Item disabled={user.id === data.currentUserId || user.signupApproved === false} onSelect={() => impersonate(user)}>
               {i18n.t.users.impersonate}
             </DropdownMenu.Item>
           </DropdownMenu.Content>
@@ -461,6 +486,14 @@
               </Select.Root>
             </div>
             {#if mUser?.banned}<Badge variant="destructive" class="w-fit">{i18n.t.users.banned}</Badge>{/if}
+            {#if mUser?.signupApproved === false}
+              <div class="flex items-center gap-2">
+                <Badge variant="secondary">{i18n.t.users.pendingApproval}</Badge>
+                <Button type="button" variant="outline" size="sm" disabled={busy} onclick={() => { if (mUser) void approve(mUser); }}>
+                  {i18n.t.users.approve}
+                </Button>
+              </div>
+            {/if}
             {#if emailVerificationEnabled}
               <div class="flex items-center gap-2">
                 {#if mUser?.emailVerified}<Badge variant="outline" class="text-green-600 dark:text-green-400">{i18n.t.users.verified}</Badge>

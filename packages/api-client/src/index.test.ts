@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ApiError, createApiClient } from "./index";
+import { ApiError, SIGNUP_APPROVAL_REQUIRED, createApiClient } from "./index";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(body === undefined ? "" : JSON.stringify(body), {
@@ -9,6 +9,9 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("createApiClient", () => {
+  it("exports the pending sign-up approval error code", () => {
+    expect(SIGNUP_APPROVAL_REQUIRED).toBe("SIGNUP_APPROVAL_REQUIRED");
+  });
   it("builds request URLs from baseUrl + apiBasePath", async () => {
     const fetch = vi.fn(async () => jsonResponse({ ok: true }));
     const client = createApiClient({ baseUrl: "http://api.test", fetch });

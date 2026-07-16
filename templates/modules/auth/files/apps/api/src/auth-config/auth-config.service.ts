@@ -16,7 +16,7 @@ export type AuthConfigView = {
   /** Catalog of addable providers (id + display label) for the "add provider" picker. */
   catalog: ReadonlyArray<{ id: string; label: string }>;
   smtp: { enabled: boolean; host: string; port: number; secure: boolean; user: string; from: string; hasSecret: boolean };
-  server: { requireEmailVerification: boolean; allowDelete: boolean; hibp: boolean; auditLog: boolean };
+  server: { requireEmailVerification: boolean; requireSignupApproval: boolean; allowDelete: boolean; hibp: boolean; auditLog: boolean };
 };
 
 type ProviderUpdate = { enabled?: boolean; clientId?: string; clientSecret?: string; redirectURI?: string; delete?: boolean };
@@ -24,7 +24,7 @@ export type AuthConfigUpdate = {
   /** Per-provider upsert (keyed by provider id); `{ delete: true }` removes it. */
   social?: Record<string, ProviderUpdate>;
   smtp?: { enabled?: boolean; host?: string; port?: number; secure?: boolean; user?: string; pass?: string; from?: string };
-  server?: { requireEmailVerification?: boolean; allowDelete?: boolean; hibp?: boolean; auditLog?: boolean };
+  server?: { requireEmailVerification?: boolean; requireSignupApproval?: boolean; allowDelete?: boolean; hibp?: boolean; auditLog?: boolean };
 };
 
 @Injectable()
@@ -53,7 +53,13 @@ export class AuthConfigService {
     const smtpRow = byKey.get("smtp");
     const smtpC = (smtpRow?.config ?? {}) as { host?: string; port?: number; secure?: boolean; user?: string; from?: string };
     const serverRow = byKey.get("server");
-    const serverC = (serverRow?.config ?? {}) as { requireEmailVerification?: boolean; allowDelete?: boolean; hibp?: boolean; auditLog?: boolean };
+    const serverC = (serverRow?.config ?? {}) as {
+      requireEmailVerification?: boolean;
+      requireSignupApproval?: boolean;
+      allowDelete?: boolean;
+      hibp?: boolean;
+      auditLog?: boolean;
+    };
     return {
       social,
       catalog: SUPPORTED_SOCIAL_PROVIDERS,
@@ -68,6 +74,7 @@ export class AuthConfigService {
       },
       server: {
         requireEmailVerification: serverC.requireEmailVerification ?? env.requireEmailVerification,
+        requireSignupApproval: serverC.requireSignupApproval ?? env.requireSignupApproval,
         allowDelete: serverC.allowDelete ?? env.allowDelete,
         hibp: serverC.hibp ?? env.hibp,
         auditLog: serverC.auditLog ?? env.auditLog,
@@ -111,7 +118,9 @@ export class AuthConfigService {
   private async upsertServer(u: NonNullable<AuthConfigUpdate["server"]>): Promise<void> {
     const row = (await this.repo.findOneBy({ key: "server" })) ?? this.repo.create({ key: "server", enabled: true, config: {}, secret: null });
     const config = { ...(row.config as Record<string, unknown>) };
-    for (const f of ["requireEmailVerification", "allowDelete", "hibp", "auditLog"] as const) if (u[f] !== undefined) config[f] = u[f];
+    for (const f of ["requireEmailVerification", "requireSignupApproval", "allowDelete", "hibp", "auditLog"] as const) {
+      if (u[f] !== undefined) config[f] = u[f];
+    }
     row.config = config;
     await this.repo.save(row);
   }

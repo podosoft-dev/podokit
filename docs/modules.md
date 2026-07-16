@@ -108,7 +108,7 @@ for a Kubernetes migration Job before a rolling deployment.
 
 - **Secure by default**: all module endpoints (jobs, storage, files, cache, …) are protected once `auth` is added.
 - **Configure it in the admin Settings page, not env.** Social OAuth providers, SMTP, the
-  server-enforced toggles (email verification, breached-password check, account deletion, and —
+  server-enforced toggles (email verification, sign-up approval, breached-password check, account deletion, and —
   with the audit-log module — audit logging), and the feature flags (2FA, magic link, email OTP,
   username, multi-session, phone number, …) are all stored in the DB and **applied live — no
   restart** (paste a client id/secret and social login works on the next request). Only
@@ -120,7 +120,30 @@ for a Kubernetes migration Job before a rolling deployment.
   … — see `auth/auth-config.ts` `SUPPORTED_SOCIAL_PROVIDERS`), paste its client id/secret, and it
   takes effect on the next request. Each provider is one `social.<id>` row in `auth_config`;
   removing it deletes the row. `GOOGLE_CLIENT_*` / `GITHUB_CLIENT_*` env vars still seed those two
-  as a fallback.
+  as a fallback. Enabled providers appear automatically on `/login`; OAuth failures return to the
+  login origin through `errorCallbackURL`.
+- **Sign-up approval is provider-independent.** Turn on *Sign-up approval* in Settings to mark
+  every new self-registered account as pending, whether it came from email/password, Google,
+  Apple, magic link, or another provider. Pending accounts cannot create a session and receive the
+  stable `SIGNUP_APPROVAL_REQUIRED` code. Existing users, `ADMIN_EMAILS`, and users created by an
+  administrator remain approved. Turning the policy off auto-approves future registrations; it
+  does not silently approve the existing queue. Approve those users from `/admin/users`.
+- **Automate provider and SMTP configuration.** Generated APIs include a redacting admin-API
+  helper. Pass secrets through environment variables, never command arguments:
+
+  ```bash
+  export AUTH_SETUP_ORIGIN="https://example.com"
+  export AUTH_SETUP_ADMIN_EMAIL="admin@example.com"
+  export AUTH_SETUP_ADMIN_PASSWORD="<from-secret-manager>"
+  export OAUTH_CLIENT_ID="<provider-client-id>"
+  export OAUTH_CLIENT_SECRET="<from-secret-manager>"
+  npm run auth:configure -w <app>-api -- --provider google --require-signup-approval --dry-run
+  npm run auth:configure -w <app>-api -- --provider google --require-signup-approval
+  npm run auth:configure -w <app>-api -- --provider google --check-only
+  ```
+
+  The generated `.claude/skills/podokit-configure-auth` skill contains Google, Apple, SMTP relay,
+  secret-handling, callback, and verification workflows.
 - **Secrets are encrypted at rest**: OAuth client secrets and the SMTP password are stored with
   AES-256-GCM, the key derived from `BETTER_AUTH_SECRET` (never in the DB it protects). They are
   never returned to the browser (the API exposes only a `hasSecret` flag). Keep
@@ -409,18 +432,18 @@ goes through the typed ApiClient; routes are guarded server-side.
 npx @podosoft/podokit add admin-dashboard   # also adds auth
 npm install
 docker compose -f infra/docker/docker-compose.yml up -d
-# admin columns (role/banned) + set ADMIN_EMAILS in .env
+# admin and approval columns (role/banned/signupApproved) + set ADMIN_EMAILS in .env
 npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
 npm run dev
 # open /signup, register an ADMIN_EMAILS address (→ admin), then sign in at /login
 ```
 
 - **/admin** — overview.
-- **/admin/users** (admin only) — list, filter & search users, ban/unban, set role, revoke sessions, create/delete.
+- **/admin/users** (admin only) — list, filter & search users, approve pending registrations, ban/unban, set role, revoke sessions, create/delete.
 - **/admin/sessions** (admin only) — active sessions across all users (revoke).
 - **/admin/organizations** (admin only) — organizations, members, and invitations.
 - **/admin/audit** (admin only) — the audit log of security-relevant actions.
-- **/admin/settings** (admin only) — enable/disable sign-in methods and configure OAuth providers, SMTP, and server toggles at runtime (see below), plus the **Appearance** tab for the runtime theme (see "Appearance").
+- **/admin/settings** (admin only) — enable/disable sign-in methods and configure OAuth providers, SMTP, sign-up approval, and other server toggles at runtime (see below), plus the **Appearance** tab for the runtime theme (see "Appearance").
 - **/account** — the signed-in user's profile, password, 2FA, passkeys, API keys, and sessions without the admin shell.
 - **/admin/account** — the same account controls inside the admin shell, retained for existing links and applications.
 

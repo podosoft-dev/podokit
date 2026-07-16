@@ -56,6 +56,8 @@ export type AuthConfig = {
   social: Record<string, OAuthProviderConfig>;
   /** Require new sign-ups to verify their email before signing in. */
   requireEmailVerification: boolean;
+  /** Require an administrator to approve newly self-registered users. */
+  requireSignupApproval: boolean;
   /** Allow users to delete their own account. */
   allowDelete: boolean;
   /** Reject passwords found in known breaches (Have I Been Pwned). */
@@ -80,6 +82,7 @@ export function envAuthConfig(): AuthConfig {
     version: "env",
     social,
     requireEmailVerification: process.env.AUTH_EMAIL_VERIFICATION === "true",
+    requireSignupApproval: process.env.AUTH_REQUIRE_SIGNUP_APPROVAL === "true",
     allowDelete: process.env.AUTH_ALLOW_DELETE === "true",
     hibp: process.env.AUTH_HIBP === "true",
     auditLog: process.env.AUDIT_LOG_ENABLED === "true",

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { AppException, type Capabilities, type ErrorEnvelope } from "./index";
+import { AppException, SIGNUP_APPROVAL_REQUIRED, type Capabilities, type ErrorEnvelope } from "./index";
 
 describe("AppException", () => {
   it("carries a stable code and defaults the status", () => {
@@ -16,12 +16,17 @@ describe("AppException", () => {
 
 describe("contract shapes", () => {
   it("Capabilities and ErrorEnvelope are structurally usable", () => {
-    const caps: Pick<Capabilities, "twoFactor" | "roles"> = { twoFactor: true, roles: ["admin"] };
+    const caps: Pick<Capabilities, "twoFactor" | "signupApprovalRequired" | "roles"> = {
+      twoFactor: true,
+      signupApprovalRequired: true,
+      roles: ["admin"],
+    };
     const envelope: ErrorEnvelope = {
       success: false,
       error: { code: "X", message: "m", statusCode: 400, path: "/x", timestamp: "t" },
     };
     expect(caps.roles).toEqual(["admin"]);
+    expect(SIGNUP_APPROVAL_REQUIRED).toBe("SIGNUP_APPROVAL_REQUIRED");
     expect(envelope.error.code).toBe("X");
   });
 });

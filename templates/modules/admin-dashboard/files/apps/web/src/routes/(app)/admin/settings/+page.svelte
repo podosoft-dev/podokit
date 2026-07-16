@@ -27,7 +27,7 @@
   // require2fa is a policy flag stored alongside the feature flags but not part of
   // the typed Capabilities, so it is toggled but never read from `caps`.
   type ToggleFlag = EditableFlag | "require2fa";
-  type ServerKey = "requireEmailVerification" | "hibp" | "allowDelete" | "auditLog";
+  type ServerKey = "requireEmailVerification" | "requireSignupApproval" | "hibp" | "allowDelete" | "auditLog";
 
   // Every card renders from this one shape, so they share size and structure: a
   // title (+ optional enable switch), a description, and a footer with a status
@@ -178,6 +178,12 @@
     },
   ]);
   const security = $derived<Item[]>([
+    serverCard(
+      "requireSignupApproval",
+      i18n.t.settings.signupApproval,
+      i18n.t.settings.signupApprovalDesc,
+      caps.signupApprovalRequired,
+    ),
     flagCard("twoFactor", i18n.t.settings.twoFactor, i18n.t.settings.twoFactorDesc),
     {
       key: "flag-require2fa",

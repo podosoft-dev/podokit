@@ -7,6 +7,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- **Provider-independent sign-up approval and automated auth setup.** Generated
+  auth/admin apps can require administrator approval for every self-registration
+  path, block pending sessions with a stable error code, approve users from the
+  shared Users table, and show configured social providers on the login page.
+  The new `auth:configure` command and generated skill apply OAuth/SMTP settings
+  without exposing secrets and cover Google now while keeping Apple rotation and
+  additional providers on the same workflow.
 - **Compiled production database migration command.** Auth-enabled generated APIs
   include `npm run migrate:all`, which applies Better Auth and TypeORM migrations
   from `dist` for container and Kubernetes migration jobs without a runtime CLI

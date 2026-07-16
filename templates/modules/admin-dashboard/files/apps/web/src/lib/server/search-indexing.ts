@@ -7,6 +7,7 @@ const NON_INDEXABLE_PATH_PREFIXES = [
   "/forgot-password",
   "/reset-password",
   "/verify-email",
+  "/pending-approval",
   "/setup-2fa",
   "/oauth2",
   "/accept-invitation",

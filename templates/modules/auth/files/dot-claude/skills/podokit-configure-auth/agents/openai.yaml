@@ -1,0 +1,4 @@
+interface:
+  display_name: "PodoKit Auth Setup"
+  short_description: "Configure social login, SMTP, and signup approval"
+  default_prompt: "Use $podokit-configure-auth to configure Google login, SMTP, and sign-up approval safely."

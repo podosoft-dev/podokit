@@ -105,6 +105,7 @@ test("account capabilities reports optional-feature flags", async ({ playwright 
   expect(typeof caps.twoFactor).toBe("boolean");
   expect(Array.isArray(caps.providers)).toBe(true);
   expect(typeof caps.deleteAccount).toBe("boolean");
+  expect(typeof caps.signupApprovalRequired).toBe("boolean");
   await ctx.dispose();
 });
 
