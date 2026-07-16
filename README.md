@@ -135,7 +135,10 @@ user & session management, an audit log, and a Settings page where OAuth
 providers, SMTP, provider-independent sign-up approval, and server toggles are
 configured at runtime (encrypted in the DB, applied without a restart). Pending
 registrations are approved from `/admin/users`, and the generated
-`auth:configure` command automates applying provider/SMTP credentials:
+`admin:bootstrap` command creates or verifies the first administrator without
+using the public sign-up page. The separate `auth:configure` command automates
+applying provider/SMTP credentials. Both workflows keep passwords and provider
+secrets out of source files and logs; see [the module guide](docs/modules.md#admin-dashboard).
 
 ![PodoKit admin dashboard — Settings, social login](docs/images/admin-settings-social.png)
 

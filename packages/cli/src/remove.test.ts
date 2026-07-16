@@ -155,6 +155,23 @@ describe("removeModule", () => {
     expect(env).toContain("SHARED_ENV=1");
   });
 
+  it("prunes package overlays from an app other than targetApp", () => {
+    const project = generate();
+    const modulesDir = join(tmp(), "modules");
+    widgetModule(modulesDir, "multi-app", {
+      targetApp: "web",
+      packageOverlays: { api: { scripts: { "multi:check": "node scripts/check.mjs" } } },
+    });
+
+    addModule({ projectRoot: project, module: "multi-app", modulesDir });
+    removeModule({ projectRoot: project, module: "multi-app", modulesDir });
+
+    const apiPkg = JSON.parse(readFileSync(join(project, "apps/api/package.json"), "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+    expect(apiPkg.scripts?.["multi:check"]).toBeUndefined();
+  });
+
   it("errors when the module is not installed", () => {
     const project = generate();
     expect(() => removeModule({ projectRoot: project, module: "auth", modulesDir: BUNDLED })).toThrow(

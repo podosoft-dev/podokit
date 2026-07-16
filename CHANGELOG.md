@@ -7,6 +7,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- **Idempotent initial administrator bootstrap.** Generated admin applications
+  include `admin:bootstrap`, a database-backed command that creates a verified,
+  approved administrator from `ADMIN_EMAILS` after migrations. Dry-run and
+  check-only modes are read-only, repeated execution verifies the existing role
+  and password, and credentials remain ephemeral and redacted. Public setup docs
+  and the generated auth configuration skill now use this command instead of
+  relying on browser sign-up.
+- **Multi-app module package overlays.** Module manifests can declare
+  `packageOverlays.<app>` when a feature needs dependencies or scripts in a
+  workspace app other than its primary `targetApp`. Add, update, and remove now
+  apply those package declarations symmetrically.
+- **Update-managed module workflows inside owned AI guidance.** Module manifests
+  can declare `managedOverrides` for generated skills that must continue to
+  receive safe 3-way updates even though `.claude/**` is user-owned by default.
+  Existing unchanged skills migrate from owned to managed on update, while an
+  explicit file-level eject still takes precedence.
+- **Generated API runtime images include operator scripts.** Production images
+  now copy `apps/api/scripts`, so generated commands such as `auth:configure`
+  and `admin:bootstrap` can run inside the deployed API container after the
+  compiled migration step. Compose watch also synchronizes these scripts into
+  the API and worker development containers.
 - **Provider-independent sign-up approval and automated auth setup.** Generated
   auth/admin apps can require administrator approval for every self-registration
   path, block pending sessions with a stable error code, approve users from the

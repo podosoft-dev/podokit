@@ -53,6 +53,20 @@ npx @podosoft/podokit add admin-dashboard   # a full admin console (also adds au
 
 See [modules.md](modules.md) for the full list.
 
+After adding `admin-dashboard`, set `ADMIN_EMAILS`, build and migrate the API,
+then create the initial administrator without using the public sign-up page:
+
+```bash
+export ADMIN_BOOTSTRAP_EMAIL="admin@example.com"
+IFS= read -r -s ADMIN_BOOTSTRAP_PASSWORD && export ADMIN_BOOTSTRAP_PASSWORD
+npm run admin:bootstrap -w my-app-api
+unset ADMIN_BOOTSTRAP_PASSWORD
+```
+
+The email must be listed in `ADMIN_EMAILS`. The command is idempotent and never
+prints or stores the password. See the [`admin-dashboard` module](modules.md#admin-dashboard)
+for dry-run, verification, migration order, and secret-manager usage.
+
 ## AI coding agents
 
 Your project ships with agent guidance so tools like Claude Code, Codex, and

@@ -136,6 +136,53 @@ describe("applyUpdate", () => {
     return dir;
   }
 
+  it("promotes a module skill from owned to managed during update", () => {
+    const oldTemplates = oldTemplatesCopy();
+    const oldAuthManifestPath = join(oldTemplates, "modules/auth/module.manifest.json");
+    const oldAuthManifest = JSON.parse(readFileSync(oldAuthManifestPath, "utf8")) as {
+      managedOverrides?: string[];
+    };
+    delete oldAuthManifest.managedOverrides;
+    writeFileSync(oldAuthManifestPath, `${JSON.stringify(oldAuthManifest, null, 2)}\n`);
+    const oldSkillPath = join(
+      oldTemplates,
+      "modules/auth/files/dot-claude/skills/podokit-configure-auth/SKILL.md",
+    );
+    writeFileSync(oldSkillPath, "---\nname: podokit-configure-auth\ndescription: Old skill.\n---\n\n# Old skill\n");
+    rmSync(
+      join(
+        oldTemplates,
+        "modules/auth/files/dot-claude/skills/podokit-configure-auth/references/bootstrap-admin.md",
+      ),
+    );
+
+    const dir = join(tmp(), "app");
+    create({ name: "app", template: "fullstack-nest-svelte", templatesDir: oldTemplates, targetDir: dir });
+    addModule({ projectRoot: dir, module: "auth", modulesDir: join(oldTemplates, "modules") });
+    const skill = ".claude/skills/podokit-configure-auth/SKILL.md";
+    expect(readFilesLock(dir)?.files[skill]?.tier).toBe("owned");
+
+    const plan = planUpdate(dir, REPO_TEMPLATES);
+    expect(plan.changes.find((change) => change.path === skill)?.action).toBe("update");
+    expect(
+      plan.changes.find(
+        (change) =>
+          change.path ===
+          ".claude/skills/podokit-configure-auth/references/bootstrap-admin.md",
+      )?.action,
+    ).toBe("add");
+
+    const result = applyUpdate(dir, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+    expect(result.written).toContain(skill);
+    expect(readFilesLock(dir)?.files[skill]?.tier).toBe("managed");
+    const manifest = JSON.parse(readFileSync(join(dir, ".podokit/manifest.json"), "utf8")) as {
+      managedOverrides?: string[];
+    };
+    expect(manifest.managedOverrides).toContain(
+      ".claude/skills/podokit-configure-auth/**",
+    );
+  });
+
   it("applies a clean update to an unedited managed file", () => {
     const oldTemplates = oldTemplatesCopy();
     const dir = join(tmp(), "app");

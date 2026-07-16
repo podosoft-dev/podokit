@@ -69,6 +69,29 @@ describe("module-declared ownedGlobs", () => {
   });
 });
 
+describe("module-declared package overlays", () => {
+  it("merges scripts into an app other than targetApp", () => {
+    const project = generate("fullstack-nest-svelte");
+    const modulesDir = join(tmp(), "modules");
+    writeFile(
+      join(modulesDir, "multi-app", "module.manifest.json"),
+      JSON.stringify({
+        name: "multi-app",
+        description: "test",
+        targetApp: "web",
+        packageOverlays: { api: { scripts: { "multi:check": "node scripts/check.mjs" } } },
+      }),
+    );
+
+    const result = addModule({ projectRoot: project, module: "multi-app", modulesDir });
+    const apiPkg = JSON.parse(readFileSync(join(project, "apps/api/package.json"), "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    expect(apiPkg.scripts["multi:check"]).toBe("node scripts/check.mjs");
+    expect(result.touched).toContain("apps/api/package.json");
+  });
+});
+
 describe("adopting an existing owned feature", () => {
   it("preserves owned files by default and adopts only declared managed paths", () => {
     const project = generate("fullstack-nest-svelte");
@@ -479,6 +502,19 @@ describe("addModule (auth / better-auth)", () => {
     expect(authTs).toContain("trustedOrigins");
     // env
     expect(readFileSync(join(project, ".env.example"), "utf8")).toContain("ADMIN_EMAILS");
+    const apiPkg = JSON.parse(readFileSync(join(project, "apps/api/package.json"), "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    expect(apiPkg.scripts["admin:bootstrap"]).toBe("node scripts/bootstrap-admin.mjs");
+    expect(existsSync(join(project, "apps/api/scripts/bootstrap-admin.mjs"))).toBe(true);
+    expect(readManifest(project)?.managedOverrides).toContain(
+      ".claude/skills/podokit-configure-auth/**",
+    );
+    expect(
+      readFilesLock(project)?.files[
+        ".claude/skills/podokit-configure-auth/SKILL.md"
+      ]?.tier,
+    ).toBe("managed");
   });
 
   it("rejects a project without the target app", () => {

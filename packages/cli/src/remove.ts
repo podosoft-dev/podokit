@@ -7,7 +7,7 @@ import {
   type JsonObject,
   type TemplateVars,
 } from "@podosoft/podokit-template-engine";
-import { resolveModuleDir, type ModuleManifest } from "./add";
+import { modulePackageOverlays, resolveModuleDir, type ModuleManifest } from "./add";
 import {
   computeFilesLock,
   readFilesLock,
@@ -149,8 +149,18 @@ export function removeModule(options: RemoveOptions): RemoveResult {
   manifest.modules = manifest.modules
     .filter((m) => m.name !== module)
     .map((m, i) => ({ ...m, order: i }));
+  const sharedManagedOverrides = new Set(
+    others.flatMap((other) => other.manifest.managedOverrides ?? []),
+  );
+  const targetManagedOverrides = new Set(targetManifest.managedOverrides ?? []);
+  manifest.managedOverrides = (manifest.managedOverrides ?? []).filter(
+    (glob) => !targetManagedOverrides.has(glob) || sharedManagedOverrides.has(glob),
+  );
   writeManifest(projectRoot, manifest);
-  writeFilesLock(projectRoot, computeFilesLock(projectRoot, manifest.ownedGlobs));
+  writeFilesLock(
+    projectRoot,
+    computeFilesLock(projectRoot, manifest.ownedGlobs, manifest.managedOverrides),
+  );
 
   return { module, removed, keptEdited, keptShared, unwired };
 }
@@ -174,28 +184,33 @@ function pruneAppPackage(
   target: ModuleManifest,
   others: { manifest: ModuleManifest }[],
 ): void {
-  if (!(target.dependencies || target.devDependencies || target.scripts)) return;
-  const appPkgPath = join(projectRoot, "apps", target.targetApp, "package.json");
-  if (!existsSync(appPkgPath)) return;
-  const keep = (section: "dependencies" | "devDependencies" | "scripts"): Set<string> =>
-    new Set(others.flatMap((o) => Object.keys(o.manifest[section] ?? {})));
-  const pkg = readJson(appPkgPath);
-  let changed = false;
-  for (const section of ["dependencies", "devDependencies", "scripts"] as const) {
-    const declared = target[section];
-    const current = pkg[section] as Record<string, string> | undefined;
-    if (!declared || !current) continue;
-    const shared = keep(section);
-    for (const name of Object.keys(declared)) {
-      if (shared.has(name)) continue;
-      if (name in current) {
-        delete current[name];
-        changed = true;
+  for (const [app, declaration] of modulePackageOverlays(target)) {
+    const appPkgPath = join(projectRoot, "apps", app, "package.json");
+    if (!existsSync(appPkgPath)) continue;
+    const keep = (section: "dependencies" | "devDependencies" | "scripts"): Set<string> =>
+      new Set(
+        others.flatMap((other) =>
+          Object.keys(modulePackageOverlays(other.manifest).get(app)?.[section] ?? {}),
+        ),
+      );
+    const pkg = readJson(appPkgPath);
+    let changed = false;
+    for (const section of ["dependencies", "devDependencies", "scripts"] as const) {
+      const declared = declaration[section];
+      const current = pkg[section] as Record<string, string> | undefined;
+      if (!declared || !current) continue;
+      const shared = keep(section);
+      for (const name of Object.keys(declared)) {
+        if (shared.has(name)) continue;
+        if (name in current) {
+          delete current[name];
+          changed = true;
+        }
       }
+      if (current && Object.keys(current).length === 0) delete pkg[section];
     }
-    if (current && Object.keys(current).length === 0) delete pkg[section];
+    if (changed) writeFileSync(appPkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
   }
-  if (changed) writeFileSync(appPkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
 }
 
 function pruneEnvExample(

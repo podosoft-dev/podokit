@@ -53,6 +53,18 @@ describe("classifyTier", () => {
   it("managed otherwise", () => {
     expect(classifyTier("apps/api/src/main.ts", "bootstrap()", [])).toBe("managed");
   });
+  it("lets module-managed paths override broad owned globs", () => {
+    const path = ".claude/skills/podokit-configure-auth/SKILL.md";
+    expect(classifyTier(path, "skill", DEFAULT_OWNED_GLOBS, [
+      ".claude/skills/podokit-configure-auth/**",
+    ])).toBe("managed");
+  });
+  it("keeps an explicitly ejected file owned over a managed override", () => {
+    const path = ".claude/skills/podokit-configure-auth/SKILL.md";
+    expect(classifyTier(path, "skill", [...DEFAULT_OWNED_GLOBS, path], [
+      ".claude/skills/podokit-configure-auth/**",
+    ])).toBe("owned");
+  });
 });
 
 describe("walkFiles", () => {
@@ -85,6 +97,7 @@ describe("initLockfile + computeFilesLock", () => {
     expect(manifest?.template).toBe("fullstack-nest-svelte");
     expect(manifest?.modules).toEqual([]);
     expect(manifest?.ownedGlobs).toEqual(DEFAULT_OWNED_GLOBS);
+    expect(manifest?.managedOverrides).toEqual([]);
 
     const lock = JSON.parse(readFileSync(join(root, ".podokit/files.lock"), "utf8")) as FilesLock;
     expect(lock.files["apps/api/src/main.ts"].tier).toBe("managed");
