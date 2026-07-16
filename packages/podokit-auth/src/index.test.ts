@@ -23,7 +23,18 @@ describe("auth-config helpers", () => {
   it("envAuthConfig returns a config object", () => {
     const config = envAuthConfig();
     expect(config).toHaveProperty("social");
+    expect(config).toHaveProperty("requireSignupApproval");
     expect(config.version).toBe("env");
+  });
+  it("reads the sign-up approval environment fallback", () => {
+    const previous = process.env.AUTH_REQUIRE_SIGNUP_APPROVAL;
+    try {
+      process.env.AUTH_REQUIRE_SIGNUP_APPROVAL = "true";
+      expect(envAuthConfig().requireSignupApproval).toBe(true);
+    } finally {
+      if (previous === undefined) delete process.env.AUTH_REQUIRE_SIGNUP_APPROVAL;
+      else process.env.AUTH_REQUIRE_SIGNUP_APPROVAL = previous;
+    }
   });
   it("SUPPORTED_PROVIDER_IDS gates provider keys and socialKey formats", () => {
     expect(SUPPORTED_PROVIDER_IDS.has("google")).toBe(true);

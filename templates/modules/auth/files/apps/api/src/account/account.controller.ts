@@ -60,6 +60,7 @@ export class AccountController {
       providers: snapshot.providers,
       deleteAccount: snapshot.allowDelete,
       emailVerification: snapshot.requireEmailVerification,
+      signupApprovalRequired: snapshot.requireSignupApproval,
       passwordBreachCheck: snapshot.passwordBreachCheck,
       auditLog: snapshot.auditLog,
       roles: ROLE_NAMES,

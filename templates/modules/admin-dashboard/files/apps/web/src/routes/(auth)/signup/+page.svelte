@@ -8,7 +8,10 @@
   import * as Alert from "$lib/components/ui/alert";
   import { api } from "$lib/api";
   import { getI18n } from "$lib/i18n";
+  import { SIGNUP_APPROVAL_REQUIRED } from "@podosoft/podokit-api-client";
+  import type { PageData } from "./$types";
 
+  let { data }: { data: PageData } = $props();
   const i18n = getI18n();
   let name = $state("");
   let email = $state("");
@@ -30,6 +33,10 @@
     });
     if (authError) {
       loading = false;
+      if (authError.code === SIGNUP_APPROVAL_REQUIRED) {
+        await goto("/pending-approval");
+        return;
+      }
       error = authError.message ?? i18n.t.auth.signUpFailed;
       return;
     }
@@ -38,6 +45,10 @@
     const { data: session } = await api.auth.getSession();
     loading = false;
     if (!session?.session) {
+      if (data.capabilities?.signupApprovalRequired) {
+        await goto("/pending-approval");
+        return;
+      }
       await goto(`/verify-email?email=${encodeURIComponent(email)}`);
       return;
     }

@@ -197,6 +197,7 @@ describe("mailer extraction", () => {
     // nodemailer ships via the mailer module (merged into the api workspace)
     const apiPkg = JSON.parse(readFileSync(join(project, "apps/api/package.json"), "utf8")) as {
       dependencies: Record<string, string>;
+      scripts: Record<string, string>;
     };
     expect(apiPkg.dependencies.nodemailer).toBeDefined();
     const manifest = JSON.parse(readFileSync(join(project, ".podokit/manifest.json"), "utf8")) as {
@@ -241,6 +242,8 @@ describe("addModule (auth / better-auth)", () => {
     };
     expect(apiPkg.dependencies["better-auth"]).toBeDefined();
     expect(apiPkg.dependencies["@thallesp/nestjs-better-auth"]).toBeDefined();
+    expect(apiPkg.scripts["auth:configure"]).toBe("node scripts/configure-auth.mjs");
+    expect(existsSync(join(project, "apps/api/scripts/configure-auth.mjs"))).toBe(true);
     // secure-by-default: global guard wired
     const appModule = readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8");
     expect(appModule).toContain("AuthModule.forRoot(authRuntime),");

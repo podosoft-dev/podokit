@@ -1,4 +1,5 @@
 import { betterAuth, type BetterAuthOptions, type BetterAuthPlugin } from "better-auth";
+import { APIError } from "better-auth/api";
 import { twoFactor, haveIBeenPwned, magicLink, emailOTP, username, multiSession, phoneNumber, organization, jwt, bearer } from "better-auth/plugins";
 import { actionEmail, sendMail } from "../mail/mailer";
 import { sendSms } from "../sms/sms";
@@ -9,11 +10,19 @@ import { type AuthConfig, envAuthConfig, SUPPORTED_PROVIDER_IDS } from "@podosof
 import { apiKey } from "@better-auth/api-key";
 import { passkey } from "@better-auth/passkey";
 import { oauthProvider } from "@better-auth/oauth-provider";
+import { SIGNUP_APPROVAL_REQUIRED } from "@podosoft/podokit-contracts";
 // podokit:begin:auth-imports
 // podokit:end:auth-imports
 
 // Web origin(s) where the browser runs (WebAuthn ceremonies must match these).
 const webOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5001").split(",").map((o) => o.trim());
+
+const adminEmails = new Set(
+  (process.env.ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean),
+);
 
 // Enabled social providers, from the resolved config (DB-first, env fallback).
 // Admins add/edit/remove providers dynamically (Settings page), so this maps the
@@ -115,6 +124,47 @@ export function buildAuth(config: AuthConfig) {
   // podokit:begin:auth-plugins
   // podokit:end:auth-plugins
 
+  const databaseHooks: NonNullable<BetterAuthOptions["databaseHooks"]> = {
+    user: {
+      create: {
+        before: async (user, context) => {
+          const adminEmail = adminEmails.has(user.email.toLowerCase());
+          const createdByAdmin = context?.path === "/admin/create-user";
+          return {
+            data: {
+              ...user,
+              // The admin plugin contributes `role` before this hook. Preserve an
+              // explicitly requested admin-created role, while bootstrap emails
+              // always become administrators.
+              ...(Object.prototype.hasOwnProperty.call(user, "role")
+                ? { role: adminEmail ? "admin" : user.role }
+                : {}),
+              // Existing rows are treated as approved through the field default.
+              // Only self-registration while the policy is enabled starts pending.
+              signupApproved: adminEmail || createdByAdmin || !config.requireSignupApproval,
+            },
+          };
+        },
+      },
+    },
+    session: {
+      create: {
+        before: async (session, context) => {
+          if (!context) return;
+          const user = (await context.context.internalAdapter.findUserById(session.userId)) as {
+            signupApproved?: boolean | null;
+          } | null;
+          if (user?.signupApproved === false) {
+            throw APIError.from("FORBIDDEN", {
+              code: SIGNUP_APPROVAL_REQUIRED,
+              message: "Your account is waiting for administrator approval.",
+            });
+          }
+        },
+      },
+    },
+  };
+
   // Request-time hooks. The feature gate turns the admin Settings toggles into a
   // real server boundary (disabled features 404). Other PodoKit modules add their
   // own hooks below the marker.
@@ -126,6 +176,9 @@ export function buildAuth(config: AuthConfig) {
     database: pool,
     emailAndPassword: {
       enabled: true,
+      // Pending email/password registrations should complete without creating a
+      // session. All later sign-in methods are enforced by the session hook below.
+      autoSignIn: !config.requireSignupApproval,
       requireEmailVerification: config.requireEmailVerification,
       sendResetPassword: async ({ user, url }) => {
         await sendMail({
@@ -163,6 +216,14 @@ export function buildAuth(config: AuthConfig) {
       },
     },
     user: {
+      additionalFields: {
+        signupApproved: {
+          type: "boolean",
+          required: false,
+          defaultValue: true,
+          input: false,
+        },
+      },
       // Self-service email change. When email verification is on, better-auth sends
       // an approval link to the current address before switching; otherwise it
       // changes immediately.
@@ -193,6 +254,7 @@ export function buildAuth(config: AuthConfig) {
       // Self-service account deletion — admin-toggleable (auth_config), applied live.
       deleteUser: { enabled: config.allowDelete },
     },
+    databaseHooks,
     // podokit:begin:auth-options
     // podokit:end:auth-options
   });

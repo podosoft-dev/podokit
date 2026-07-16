@@ -17,7 +17,8 @@
     "@types/pg": "^8.11.10"
   },
   "scripts": {
-    "migrate:all": "node dist/migrate"
+    "migrate:all": "node dist/migrate",
+    "auth:configure": "node scripts/configure-auth.mjs"
   },
   "env": [
     "# \u2500\u2500 Auth (better-auth) \u2014 the only required secrets \u2500\u2500",
@@ -27,7 +28,7 @@
     "BETTER_AUTH_SECRET=change-me-in-production-min-32-characters",
     "BETTER_AUTH_URL=http://localhost:5002",
     "# Everything below is OPTIONAL. OAuth providers, SMTP, and the server-enforced",
-    "# toggles (email verification, breached-password check, self-delete) \u2014 plus the",
+    "# toggles (email verification, sign-up approval, breached-password check, self-delete) \u2014 plus the",
     "# feature flags \u2014 are configured on the admin Settings page, stored encrypted in",
     "# the DB and applied live (no restart). These env vars still work as a fallback/",
     "# override (e.g. for secrets-manager injection in production); the DB takes",
@@ -38,6 +39,7 @@
     "# SMS_WEBHOOK_URL=http://localhost:8095/sms",
     "# AUTH_HIBP=false",
     "# AUTH_EMAIL_VERIFICATION=false",
+    "# AUTH_REQUIRE_SIGNUP_APPROVAL=false",
     "# AUTH_ALLOW_DELETE=false",
     "# GOOGLE_CLIENT_ID=",
     "# GOOGLE_CLIENT_SECRET=",
@@ -104,7 +106,7 @@
       "file": "AGENTS.md",
       "marker": "<!-- podokit:end:agents-modules -->",
       "optional": true,
-      "text": "### auth (better-auth)\n- The API is **secure by default**: every route needs a session except `/health` and `/api/auth/*`. Opt a route out with `@Public()`; read the user with `@Session()`.\n- Configure OAuth providers, SMTP, and the server toggles on the admin **Settings** page (DB-backed, applied live \u2014 not via env). Only `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are required env vars.\n- Development setup: create auth tables with `npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts`, then run TypeORM migrations. Production images can run both from compiled output with `npm run migrate:all`.\n"
+      "text": "### auth (better-auth)\n- The API is **secure by default**: every route needs a session except `/health` and `/api/auth/*`. Opt a route out with `@Public()`; read the user with `@Session()`.\n- Configure OAuth providers, SMTP, sign-up approval, and the other server toggles on the admin **Settings** page (DB-backed, applied live \u2014 not via env). Only `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are required env vars.\n- Use `npm run auth:configure -w <app>-api -- ...` and `.claude/skills/podokit-configure-auth` to apply OAuth/SMTP credentials without committing secrets. The sign-up approval gate is provider-independent; do not add provider-specific approval checks.\n- Development setup: create auth tables with `npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts`, then run TypeORM migrations. Production images can run both from compiled output with `npm run migrate:all`.\n"
     }
   ],
   "instructions": [
@@ -114,6 +116,7 @@
     "After building a production image, run all Better Auth and TypeORM migrations:  npm run migrate:all",
     "Sign up:  curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-up/email -H 'content-type: application/json' -d '{\"email\":\"a@example.com\",\"password\":\"password123\",\"name\":\"A\"}'",
     "Call a protected route with the session:  curl -b cookies.txt localhost:5002/account/me",
-    "Everything is protected by default; mark public routes with @Public(). Configure OAuth (Google/GitHub), SMTP, and server-enforced toggles on the admin Settings page \u2014 stored encrypted in the DB and applied live (no restart). Environment variables (GOOGLE_CLIENT_*, SMTP_*, AUTH_*) still work as an optional fallback/override."
+    "Use npm run auth:configure -w <app>-api -- --help for redacted OAuth, SMTP, and sign-up approval automation.",
+    "Everything is protected by default; mark public routes with @Public(). Configure OAuth providers, SMTP, and server-enforced toggles on the admin Settings page \u2014 stored encrypted in the DB and applied live (no restart). Environment variables (GOOGLE_CLIENT_*, SMTP_*, AUTH_*) still work as an optional fallback/override."
   ]
 }

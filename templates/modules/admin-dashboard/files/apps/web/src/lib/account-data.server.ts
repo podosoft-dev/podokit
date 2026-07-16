@@ -8,6 +8,7 @@ const defaultCapabilities: Capabilities = {
   deleteAccount: false,
   auditLog: false,
   emailVerification: false,
+  signupApprovalRequired: false,
   passwordBreachCheck: false,
   magicLink: false,
   emailOtp: false,

@@ -6,6 +6,7 @@ SvelteKit frontend must agree on, in one place so they cannot drift:
 - `Capabilities` — feature flags reported at `GET /account/capabilities`.
 - `ErrorEnvelope` / `ErrorBody` — the standard non-2xx response shape.
 - `AppException` — backend exception carrying a stable `code`.
+- `SIGNUP_APPROVAL_REQUIRED` — the stable pending-registration error code.
 
 Pure types and small classes, zero runtime dependencies.
 
@@ -32,4 +33,3 @@ rather than importing this package directly.
 ## License
 
 Apache-2.0
-

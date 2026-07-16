@@ -7,7 +7,8 @@
   import * as Card from "$lib/components/ui/card";
   import * as Alert from "$lib/components/ui/alert";
   import { api } from "$lib/api";
-  import { getI18n } from "$lib/i18n";
+  import { getI18n, fmt } from "$lib/i18n";
+  import { SIGNUP_APPROVAL_REQUIRED } from "@podosoft/podokit-api-client";
   import { site } from "$lib/site.svelte";
 
   import type { PageData } from "./$types";
@@ -22,6 +23,10 @@
   let unverified = $state(false);
   let loading = $state(false);
 
+  $effect(() => {
+    if (data.oauthError) error = i18n.t.auth.signInFailed;
+  });
+
   // Second-factor step: a password/OTP sign-in with 2FA enabled returns
   // `twoFactorRedirect` and no session; the user then verifies with an
   // authenticator code or a backup code to complete the login.
@@ -30,6 +35,34 @@
   let useBackupCode = $state(false);
   let twoFaLoading = $state(false);
   const redirectTo = (): string => page.url.searchParams.get("redirect") ?? "/admin";
+  const socialProviders = $derived(data.capabilities?.providers ?? []);
+  const providerLabels: Record<string, string> = {
+    github: "GitHub",
+    google: "Google",
+    apple: "Apple",
+    microsoft: "Microsoft",
+  };
+  const providerLabel = (provider: string): string =>
+    providerLabels[provider] ?? provider.charAt(0).toUpperCase() + provider.slice(1);
+
+  async function signInSocial(provider: string): Promise<void> {
+    error = null;
+    const callbackURL = new URL(redirectTo(), page.url.origin).toString();
+    type SocialProvider = Parameters<typeof api.auth.signIn.social>[0]["provider"];
+    const { error: authError } = await api.auth.signIn.social({
+      provider: provider as SocialProvider,
+      callbackURL,
+      errorCallbackURL: `${page.url.origin}/login`,
+      newUserCallbackURL: callbackURL,
+    });
+    if (authError) {
+      if (authError.code === SIGNUP_APPROVAL_REQUIRED) {
+        await goto("/pending-approval");
+        return;
+      }
+      error = authError.message ?? i18n.t.auth.signInFailed;
+    }
+  }
 
   // Returns true when 2FA is still owed (caller shows the step instead of leaving).
   function needsTwoFactor(data: unknown): boolean {
@@ -59,6 +92,10 @@
       : await api.auth.twoFactor.verifyTotp({ code: twoFaCode.trim() });
     twoFaLoading = false;
     if (authError) {
+      if (authError.code === SIGNUP_APPROVAL_REQUIRED) {
+        await goto("/pending-approval");
+        return;
+      }
       error = twoFactorError(authError.code);
       return;
     }
@@ -78,10 +115,15 @@
     error = null;
     const { error: authError } = await api.auth.signIn.magicLink({
       email,
-      callbackURL: page.url.searchParams.get("redirect") ?? "/admin",
+      callbackURL: new URL(redirectTo(), page.url.origin).toString(),
+      errorCallbackURL: `${page.url.origin}/login`,
     });
     magicLoading = false;
     if (authError) {
+      if (authError.code === SIGNUP_APPROVAL_REQUIRED) {
+        await goto("/pending-approval");
+        return;
+      }
       error = authError.message ?? i18n.t.auth.signInFailed;
       return;
     }
@@ -104,6 +146,10 @@
     const { error: authError } = await api.auth.emailOtp.sendVerificationOtp({ email, type: "sign-in" });
     otpLoading = false;
     if (authError) {
+      if (authError.code === SIGNUP_APPROVAL_REQUIRED) {
+        await goto("/pending-approval");
+        return;
+      }
       error = authError.message ?? i18n.t.auth.signInFailed;
       return;
     }
@@ -115,6 +161,10 @@
     const { data, error: authError } = await api.auth.signIn.emailOtp({ email, otp: otpCode });
     otpLoading = false;
     if (authError) {
+      if (authError.code === SIGNUP_APPROVAL_REQUIRED) {
+        await goto("/pending-approval");
+        return;
+      }
       error = authError.message ?? i18n.t.auth.signInFailed;
       return;
     }
@@ -134,6 +184,10 @@
     const res = await api.auth.signIn.passkey();
     passkeyLoading = false;
     if (res?.error) {
+      if ("code" in res.error && res.error.code === SIGNUP_APPROVAL_REQUIRED) {
+        await goto("/pending-approval");
+        return;
+      }
       error = res.error.message ?? i18n.t.auth.signInFailed;
       return;
     }
@@ -152,6 +206,10 @@
       : await api.auth.signIn.email({ email, password });
     loading = false;
     if (authError) {
+      if (authError.code === SIGNUP_APPROVAL_REQUIRED) {
+        await goto("/pending-approval");
+        return;
+      }
       // Surface an unverified address with a path to a fresh verification link.
       unverified = authError.code === "EMAIL_NOT_VERIFIED";
       error = unverified ? i18n.t.auth.emailNotVerified : (authError.message ?? i18n.t.auth.signInFailed);
@@ -225,8 +283,13 @@
       </div>
       <Button type="submit" disabled={loading}>{loading ? i18n.t.auth.signingIn : i18n.t.auth.signIn}</Button>
     </form>
-    {#if magicLinkEnabled || emailOtpEnabled || passkeyEnabled}
+    {#if socialProviders.length > 0 || magicLinkEnabled || emailOtpEnabled || passkeyEnabled}
       <div class="mt-4 flex flex-col gap-3 border-t pt-4">
+        {#each socialProviders as provider (provider)}
+          <Button type="button" variant="outline" class="w-full" onclick={() => signInSocial(provider)}>
+            {fmt(i18n.t.auth.continueWith, { provider: providerLabel(provider) })}
+          </Button>
+        {/each}
         {#if passkeyEnabled}
           <Button type="button" variant="outline" class="w-full" disabled={passkeyLoading} onclick={signInWithPasskey}>
             {passkeyLoading ? i18n.t.auth.signingIn : i18n.t.auth.passkeyButton}

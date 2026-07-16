@@ -132,8 +132,10 @@ podo add blog
 
 The **`admin-dashboard`** module adds a full admin console on top of `auth`:
 user & session management, an audit log, and a Settings page where OAuth
-providers, SMTP, and server toggles are configured at runtime (encrypted in the
-DB, applied without a restart):
+providers, SMTP, provider-independent sign-up approval, and server toggles are
+configured at runtime (encrypted in the DB, applied without a restart). Pending
+registrations are approved from `/admin/users`, and the generated
+`auth:configure` command automates applying provider/SMTP credentials:
 
 ![PodoKit admin dashboard — Settings, social login](docs/images/admin-settings-social.png)
 
@@ -162,7 +164,8 @@ error-code envelope), and the `podo` tooling. `CLAUDE.md` imports it
 (`@AGENTS.md`) for Claude Code, with thin `.cursor/rules` and
 `.github/copilot-instructions.md` pointers included too. Claude Code **skills**
 (`.claude/skills/`) add procedural know-how (scaffolding a NestJS endpoint or a
-SvelteKit route, using the DataTable, running `podo add`/`podo update`); modules
+SvelteKit route, using the DataTable, running `podo add`/`podo update`, and safely
+configuring Google/Apple OAuth plus SMTP); modules
 extend `AGENTS.md` with their own conventions as you add them. Skip it all with
 `podo create --no-ai`.
 

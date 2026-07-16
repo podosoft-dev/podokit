@@ -78,3 +78,82 @@ test("auth-config is admin-only and never leaks secrets @smoke", async ({ playwr
   expect((await user.put("/api/account/auth-config", { data: { server: { hibp: true } } })).status()).toBe(403);
   await user.dispose();
 });
+
+test("new registrations require approval when the policy is enabled @smoke", async ({ playwright }) => {
+  const admin = await adminCtx(playwright);
+  const anon = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  const password = "Podokit3e-Str0ng!pw";
+  const email = `approval-${Date.now()}@example.com`;
+  const adminCreatedEmail = `approval-admin-${Date.now()}@example.com`;
+  let pendingId = "";
+  let adminCreatedId = "";
+
+  try {
+    const enabled = await admin.put("/api/account/auth-config", {
+      data: { server: { requireSignupApproval: true } },
+    });
+    expect(enabled.ok()).toBeTruthy();
+    expect((await enabled.json()).server.requireSignupApproval).toBe(true);
+
+    // authRuntime and its config store use a short cache; an auth request after
+    // the TTL applies the new policy without restarting the process.
+    await new Promise((resolve) => setTimeout(resolve, 3_200));
+    await anon.get("/api/auth/get-session");
+
+    const signup = await anon.post("/api/auth/sign-up/email", {
+      data: { email, password, name: "Pending User" },
+    });
+    expect(signup.ok()).toBeTruthy();
+    expect((await signup.json()).token).toBeNull();
+    expect((await anon.get("/api/auth/get-session")).status()).toBe(200);
+    expect((await (await anon.get("/api/auth/get-session")).json())?.session).toBeFalsy();
+
+    const listed = await admin.get(
+      `/api/auth/admin/list-users?searchValue=${encodeURIComponent(email)}&searchField=email`,
+    );
+    const pending = ((await listed.json()).users ?? [])[0] as {
+      id: string;
+      signupApproved?: boolean | null;
+    };
+    pendingId = pending.id;
+    expect(pending.signupApproved).toBe(false);
+
+    const blocked = await anon.post("/api/auth/sign-in/email", { data: { email, password } });
+    expect(blocked.status()).toBe(403);
+    expect((await blocked.json()).code).toBe("SIGNUP_APPROVAL_REQUIRED");
+
+    const approved = await admin.post("/api/auth/admin/update-user", {
+      data: { userId: pendingId, data: { signupApproved: true } },
+    });
+    expect(approved.ok()).toBeTruthy();
+    expect((await approved.json()).signupApproved).toBe(true);
+    expect((await anon.post("/api/auth/sign-in/email", { data: { email, password } })).ok()).toBeTruthy();
+
+    // Accounts created intentionally by an administrator bypass the queue.
+    const adminCreated = await admin.post("/api/auth/admin/create-user", {
+      data: { email: adminCreatedEmail, password, name: "Admin Created", role: "user" },
+    });
+    expect(adminCreated.ok()).toBeTruthy();
+    const adminCreatedUser = (await adminCreated.json()).user as {
+      id: string;
+      signupApproved?: boolean | null;
+    };
+    adminCreatedId = adminCreatedUser.id;
+    expect(adminCreatedUser.signupApproved).toBe(true);
+    const adminCreatedSession = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+    expect(
+      (await adminCreatedSession.post("/api/auth/sign-in/email", {
+        data: { email: adminCreatedEmail, password },
+      })).ok(),
+    ).toBeTruthy();
+    await adminCreatedSession.dispose();
+  } finally {
+    if (pendingId) await admin.post("/api/auth/admin/remove-user", { data: { userId: pendingId } });
+    if (adminCreatedId) await admin.post("/api/auth/admin/remove-user", { data: { userId: adminCreatedId } });
+    await admin.put("/api/account/auth-config", { data: { server: { requireSignupApproval: false } } });
+    await new Promise((resolve) => setTimeout(resolve, 3_200));
+    await anon.get("/api/auth/get-session");
+    await anon.dispose();
+    await admin.dispose();
+  }
+});

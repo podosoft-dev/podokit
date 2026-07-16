@@ -36,13 +36,13 @@
     {
       "file": "apps/api/src/auth/auth.ts",
       "marker": "// podokit:end:auth-options",
-      "text": "trustedOrigins: (process.env.CORS_ORIGIN ?? \"http://localhost:5001\").split(\",\").map((origin) => origin.trim()),\n  databaseHooks: {\n    user: {\n      create: {\n        before: async (user) => ({\n          data: {\n            ...user,\n            role: (process.env.ADMIN_EMAILS ?? \"\")\n              .split(\",\")\n              .map((email) => email.trim().toLowerCase())\n              .includes(user.email.toLowerCase())\n              ? \"admin\"\n              : \"user\",\n          },\n        }),\n      },\n    },\n  },"
+      "text": "trustedOrigins: (process.env.CORS_ORIGIN ?? \"http://localhost:5001\").split(\",\").map((origin) => origin.trim()),"
     },
     {
       "file": "AGENTS.md",
       "marker": "<!-- podokit:end:agents-modules -->",
       "optional": true,
-      "text": "### admin-dashboard\n- Admin console lives at `/admin/*` (users, sessions, organizations, audit, settings, account). Emails in `ADMIN_EMAILS` become admins on sign-up.\n- **Every list/table MUST use the shared `$lib/components/data-table.svelte` (`DataTable`)** \u2014 it gives sortable headers + a footer pagination. Add search/filters with `$lib/components/table-toolbar.svelte`. Never assemble `Table.Root`/`Table.Header`/`Table.Body` by hand.\n"
+      "text": "### admin-dashboard\n- Admin console lives at `/admin/*` (users, sessions, organizations, audit, settings, account). Emails in `ADMIN_EMAILS` become admins on sign-up. When sign-up approval is enabled, self-registered users stay pending until an administrator approves them on `/admin/users`; administrator-created users bypass the queue.\n- **Every list/table MUST use the shared `$lib/components/data-table.svelte` (`DataTable`)** \u2014 it gives sortable headers + a footer pagination. Add search/filters with `$lib/components/table-toolbar.svelte`. Never assemble `Table.Root`/`Table.Header`/`Table.Body` by hand.\n"
     },
     {
       "file": "apps/api/src/app.module.ts",
@@ -57,9 +57,9 @@
   ],
   "instructions": [
     "Set ADMIN_EMAILS in .env (comma-separated). Those emails become admins on sign-up.",
-    "Re-run the auth migration to add the admin columns:  npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts",
+    "Re-run the auth migration to add the admin and sign-up approval columns:  npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts",
     "Start the app (npm run dev), open /signup, register an ADMIN_EMAILS address, then sign in.",
-    "Admin pages: /admin/users (list, ban, set role, revoke sessions). Signed-in users manage their profile and security at /account; /admin/account remains available in the admin shell. Admin, account, authentication, maintenance, and API responses include X-Robots-Tag: noindex, nofollow by default.",
+    "Admin pages: /admin/users (list, approve pending registrations, ban, set role, revoke sessions). Signed-in users manage their profile and security at /account; /admin/account remains available in the admin shell. Admin, account, authentication, maintenance, and API responses include X-Robots-Tag: noindex, nofollow by default.",
     "Password reset emails go through the mailer module (installed automatically with auth); in dev without SMTP they are logged to the API console. Configure SMTP in admin settings or via SMTP_* env for production."
   ]
 }

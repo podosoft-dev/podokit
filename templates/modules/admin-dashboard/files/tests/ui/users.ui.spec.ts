@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { ready } from "../helpers/hydration";
 
+const base = process.env.E2E_BASE_URL ?? "http://localhost:5001";
+
 test("admin can create a user with a custom role @smoke", async ({ page }) => {
   await ready(page, "/admin/users");
   await page.getByRole("button", { name: "Add user" }).click();
@@ -48,4 +50,45 @@ test("row menu exposes admin actions", async ({ page }) => {
   await row.getByRole("button").click();
   await expect(page.getByRole("menuitem", { name: "Manage" })).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Impersonate" })).toBeVisible();
+});
+
+test("admin can approve a pending registration from the user list @smoke", async ({ page }) => {
+  const email = `pending-ui-${Date.now()}@example.com`;
+  const created = await page.request.post("/api/auth/admin/create-user", {
+    headers: { origin: base },
+    data: { email, password: "Podokit3e-Str0ng!pw", name: "Pending UI", role: "user" },
+  });
+  expect(created.ok()).toBeTruthy();
+  const userId = ((await created.json()).user?.id ?? "") as string;
+
+  try {
+    expect(userId).toBeTruthy();
+    expect(
+      (await page.request.post("/api/auth/admin/update-user", {
+        headers: { origin: base },
+        data: { userId, data: { signupApproved: false } },
+      })).ok(),
+    ).toBeTruthy();
+
+    await ready(page, "/admin/users");
+    await page.locator("#toolbar-search").fill(email);
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    const row = page.getByRole("row", { name: new RegExp(email) });
+    await expect(row.getByText("Pending approval")).toBeVisible();
+    await row.getByRole("button").click();
+    const response = page.waitForResponse(
+      (res) => res.url().endsWith("/api/auth/admin/update-user") && res.request().method() === "POST",
+    );
+    await page.getByRole("menuitem", { name: "Approve sign-up" }).click();
+    expect((await response).ok()).toBeTruthy();
+    await expect(page.getByText("Sign-up approved")).toBeVisible();
+    await expect(row.getByText("Active")).toBeVisible();
+  } finally {
+    if (userId) {
+      await page.request.post("/api/auth/admin/remove-user", {
+        headers: { origin: base },
+        data: { userId },
+      });
+    }
+  }
 });

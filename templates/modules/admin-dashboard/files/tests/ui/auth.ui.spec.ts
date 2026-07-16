@@ -4,6 +4,8 @@ import { ready } from "../helpers/hydration";
 
 test.use({ storageState: anonState });
 
+const base = process.env.E2E_BASE_URL ?? "http://localhost:5001";
+
 test("login page renders @smoke", async ({ page }) => {
   await page.goto("/login");
   await expect(page.getByLabel("Email")).toBeVisible();
@@ -26,6 +28,48 @@ test("signup page renders", async ({ page }) => {
   await page.goto("/signup");
   await expect(page.getByLabel("Name")).toBeVisible();
   await expect(page.getByRole("button", { name: "Create account" })).toBeVisible();
+});
+
+test("pending approval errors show the approval status page", async ({ page }) => {
+  await page.goto("/login?error=SIGNUP_APPROVAL_REQUIRED");
+  await expect(page).toHaveURL(/\/pending-approval$/);
+  await expect(page.getByRole("heading", { name: "Waiting for approval" })).toBeVisible();
+});
+
+test("configured social providers appear on the login page", async ({ page, playwright }) => {
+  const admin = await playwright.request.newContext({
+    baseURL: base,
+    extraHTTPHeaders: { origin: base },
+  });
+  await admin.post("/api/auth/sign-in/email", {
+    data: { email: ADMIN.email, password: ADMIN.password },
+  });
+  try {
+    expect(
+      (await admin.put("/api/account/auth-config", {
+        data: {
+          social: {
+            google: {
+              enabled: true,
+              clientId: "dummy-google-client-id",
+              clientSecret: "dummy-google-client-secret",
+            },
+          },
+        },
+      })).ok(),
+    ).toBeTruthy();
+    await expect
+      .poll(async () => {
+        await page.goto("/login");
+        return page.getByRole("button", { name: "Continue with Google" }).count();
+      }, { timeout: 8_000 })
+      .toBe(1);
+  } finally {
+    await admin.put("/api/account/auth-config", {
+      data: { social: { google: { enabled: false } } },
+    });
+    await admin.dispose();
+  }
 });
 
 test("forgot-password shows a sent confirmation", async ({ page }) => {

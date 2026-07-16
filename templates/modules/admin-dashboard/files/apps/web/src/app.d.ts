@@ -8,6 +8,7 @@ export type SessionUser = {
   role?: string | null;
   image?: string | null;
   emailVerified?: boolean;
+  signupApproved?: boolean | null;
   twoFactorEnabled?: boolean | null;
   username?: string | null;
   phoneNumber?: string | null;

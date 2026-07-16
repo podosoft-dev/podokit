@@ -15,6 +15,8 @@ export interface Capabilities {
   deleteAccount: boolean;
   auditLog: boolean;
   emailVerification: boolean;
+  /** Require administrator approval before a newly registered user can sign in. */
+  signupApprovalRequired: boolean;
   /** Reject passwords found in known breaches (Have I Been Pwned) on sign-up/change. */
   passwordBreachCheck: boolean;
   /** Passwordless sign-in via an emailed magic link. */
@@ -38,6 +40,9 @@ export interface Capabilities {
   /** Assignable role names (access-control). */
   roles: string[];
 }
+
+/** Stable better-auth error code returned when a user still needs approval. */
+export const SIGNUP_APPROVAL_REQUIRED = "SIGNUP_APPROVAL_REQUIRED" as const;
 
 /** The body of the standard REST error envelope. */
 export interface ErrorBody {

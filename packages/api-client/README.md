@@ -4,7 +4,8 @@ Typed API client for PodoKit backends. Every frontend talks to the backend
 through this single entry point — never with a raw `fetch`.
 
 - `client.auth` — the [better-auth](https://better-auth.com) client (email/password,
-  sessions, and the admin plugin: `listUsers`, `banUser`, `setRole`, `listUserSessions`, …).
+  sessions, the `signupApproved` user field, and the admin plugin: `listUsers`,
+  `updateUser`, `banUser`, `setRole`, `listUserSessions`, …).
 - `client.get/post/put/patch/del` — the app's REST endpoints, parsing the standard
   error envelope and throwing `ApiError` on failure.
 
@@ -32,3 +33,5 @@ const session = await api.auth.getSession();
 | `credentials` | `include` | Send cookies with requests. |
 
 Errors are thrown as `ApiError` (`code`, `message`, `statusCode`, `details`).
+`SIGNUP_APPROVAL_REQUIRED` is re-exported for provider-independent pending-account
+handling.
