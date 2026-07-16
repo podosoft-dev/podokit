@@ -13,7 +13,7 @@
   "dependencies": {
     "@internationalized/date": "^3.12.2",
     "@lucide/svelte": "^1.23.0",
-    "@podosoft/podokit-api-client": "^0.5.0",
+    "@podosoft/podokit-api-client": "^0.6.0",
     "bits-ui": "^2.18.1",
     "clsx": "^2.1.1",
     "mode-watcher": "^1.1.0",

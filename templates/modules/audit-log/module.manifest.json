@@ -40,6 +40,6 @@
     "List recent entries (admin session required):  curl -b cookies.txt localhost:5002/audit-logs"
   ],
   "dependencies": {
-    "@podosoft/podokit-auth": "^0.1.0"
+    "@podosoft/podokit-auth": "^0.2.0"
   }
 }
