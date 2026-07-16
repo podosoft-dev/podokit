@@ -1,5 +1,11 @@
 # @podosoft/podokit
 
+## 0.11.1
+
+### Patch Changes
+
+- [#92](https://github.com/podosoft-dev/podokit/pull/92) [`63a1a4e`](https://github.com/podosoft-dev/podokit/commit/63a1a4ed14828d951d8709f0843c284ab8fd160f) Thanks [@korone00](https://github.com/korone00)! - Update generated app and module dependency ranges to install the package versions required by the sign-up approval APIs.
+
 ## 0.11.0
 
 ### Minor Changes
