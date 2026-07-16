@@ -17,7 +17,8 @@
   "scripts": {
     "build": "npm run build -w @podosoft/podokit-contracts && npm run build -w @podosoft/podokit-auth && npm run build -w @podosoft/podokit-template-engine && npm run build -w @podosoft/podokit-api-client && npm run build -w @podosoft/podokit && npm run build -w @podosoft/podokit-mcp",
     "lint": "npm run lint --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present",
+    "test": "npm run test:scripts && npm run test --workspaces --if-present",
+    "test:scripts": "node --test scripts/*.test.mjs",
     "e2e": "node scripts/e2e-ci.mjs",
     "e2e:smoke": "node scripts/e2e-ci.mjs --smoke",
     "changeset": "changeset",
