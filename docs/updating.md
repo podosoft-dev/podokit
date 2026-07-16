@@ -117,6 +117,17 @@ you `podo add` such a module, its `ownedGlobs` are merged into your project's
 `ownedGlobs`, so those files are yours to restyle and `podo update` never
 touches them.
 
+### Managed files inside owned areas
+
+Broad guidance directories such as `.claude/**` remain user-owned by default.
+A module can declare `managedOverrides` for the exact workflow it supplies, for
+example `.claude/skills/podokit-configure-auth/**`. Those files receive normal
+managed update protection: unchanged files update automatically, while local
+edits require a 3-way merge and are never silently replaced. The exception is
+recorded in `.podokit/manifest.json` and removed with the module. A file-level
+`podo eject <path>` still wins over a broad managed override when an application
+chooses to own that generated workflow permanently.
+
 ## Overriding providers — `app.extensions.ts`
 
 To change how the backend behaves without editing managed code, use the owned

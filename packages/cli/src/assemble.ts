@@ -8,7 +8,7 @@ import {
   type TemplateVars,
   type VfsTree,
 } from "@podosoft/podokit-template-engine";
-import { resolveModule, type ModuleManifest } from "./add";
+import { modulePackageOverlays, resolveModule, type ModuleManifest } from "./add";
 import type { ManifestModule } from "./lockfile";
 
 /**
@@ -46,14 +46,14 @@ function applyModuleToTree(tree: VfsTree, moduleDir: string, vars: TemplateVars)
     for (const [path, file] of renderTemplate(filesDir, vars)) tree.set(path, file);
   }
 
-  // 2) merge dependencies/scripts into the target app's package.json
-  if (manifest.dependencies || manifest.devDependencies || manifest.scripts) {
-    const pkgPath = `apps/${manifest.targetApp}/package.json`;
+  // 2) merge dependencies/scripts into every declared app package.json
+  for (const [app, declaration] of modulePackageOverlays(manifest)) {
+    const pkgPath = `apps/${app}/package.json`;
     const base = JSON.parse(textOf(tree, pkgPath) || "{}") as JsonObject;
     const overlay: JsonObject = {};
-    if (manifest.dependencies) overlay.dependencies = manifest.dependencies;
-    if (manifest.devDependencies) overlay.devDependencies = manifest.devDependencies;
-    if (manifest.scripts) overlay.scripts = manifest.scripts;
+    if (declaration.dependencies) overlay.dependencies = declaration.dependencies;
+    if (declaration.devDependencies) overlay.devDependencies = declaration.devDependencies;
+    if (declaration.scripts) overlay.scripts = declaration.scripts;
     setText(tree, pkgPath, `${JSON.stringify(mergePackageJson(base, overlay), null, 2)}\n`);
   }
 

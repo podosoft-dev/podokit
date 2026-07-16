@@ -3,6 +3,9 @@
   "description": "Full authentication (better-auth): email/password, sessions, and \u2014 via config \u2014 OAuth and 2FA. Installs a global guard so the API is secure by default; health and /api/auth stay public.",
   "requires": ["mailer"],
   "targetApp": "api",
+  "managedOverrides": [
+    ".claude/skills/podokit-configure-auth/**"
+  ],
   "dependencies": {
     "@podosoft/podokit-auth": "^0.2.0",
     "@podosoft/podokit-contracts": "^0.2.0",

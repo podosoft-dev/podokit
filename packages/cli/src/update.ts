@@ -5,6 +5,7 @@ import { assembleProject } from "./assemble";
 import {
   classifyTier,
   computeFilesLock,
+  matchGlob,
   podokitVersion,
   readFilesLock,
   readManifest,
@@ -14,7 +15,7 @@ import {
   type FilesLock,
 } from "./lockfile";
 import { NotAProjectError } from "./inspect";
-import { resolveModule } from "./add";
+import { readModuleManifest, resolveModule } from "./add";
 
 /**
  * `podo update` planner. For now it produces a dry-run plan only: it assembles
@@ -52,6 +53,22 @@ function diskContent(projectRoot: string, path: string): Buffer | null {
   return existsSync(abs) ? readFileSync(abs) : null;
 }
 
+function targetManagedOverrides(
+  projectRoot: string,
+  templatesDir: string,
+  modules: { name: string; packageName?: string }[],
+  current: string[] = [],
+): string[] {
+  const overrides = new Set(current);
+  const modulesDir = join(templatesDir, "modules");
+  for (const module of modules) {
+    const resolved = resolveModule(module.packageName ?? module.name, modulesDir, projectRoot);
+    if (!resolved) continue;
+    for (const glob of readModuleManifest(resolved.dir).managedOverrides ?? []) overrides.add(glob);
+  }
+  return [...overrides];
+}
+
 /**
  * Build the update plan. `templatesDir` is the installed CLI's template set (the
  * new version); the lock records what PodoKit last wrote (to detect user edits).
@@ -68,6 +85,12 @@ export function planUpdate(projectRoot: string, templatesDir: string): UpdatePla
     modules: manifest.modules,
     projectRoot,
   });
+  const managedOverrides = targetManagedOverrides(
+    projectRoot,
+    templatesDir,
+    manifest.modules,
+    manifest.managedOverrides,
+  );
 
   const changes: FileChange[] = [];
   const paths = new Set<string>([...newTree.keys(), ...Object.keys(lock.files)]);
@@ -77,10 +100,15 @@ export function planUpdate(projectRoot: string, templatesDir: string): UpdatePla
     const newText = treeText(newTree, path);
     const disk = diskContent(projectRoot, path);
 
-    // tier: prefer the lock; else classify the new file.
-    const tier: Tier =
-      locked?.tier ??
-      (newText !== null ? classifyTier(path, newText, manifest.ownedGlobs) : "managed");
+    // A newer module can explicitly take responsibility for a path that older
+    // projects classified under a broad owned glob (notably generated skills).
+    const managedByTarget = managedOverrides.some((glob) => matchGlob(path, glob));
+    const tier: Tier = managedByTarget
+      ? "managed"
+      : locked?.tier ??
+        (newText !== null
+          ? classifyTier(path, newText, manifest.ownedGlobs, managedOverrides)
+          : "managed");
 
     if (tier === "owned") {
       changes.push({ path, tier, action: "skip", note: "owned — never modified" });
@@ -164,14 +192,17 @@ function updatedFilesLock(
   newTree: VfsTree,
   previous: FilesLock,
   ownedGlobs: string[],
+  managedOverrides: string[],
 ): FilesLock {
-  const next = computeFilesLock(projectRoot, ownedGlobs);
+  const next = computeFilesLock(projectRoot, ownedGlobs, managedOverrides);
 
   for (const [path, entry] of Object.entries(next.files)) {
     const newText = treeText(newTree, path);
     if (newText !== null) {
       if (entry.tier !== "owned") {
-        entry.tier = previous.files[path]?.tier ?? entry.tier;
+        if (!managedOverrides.some((glob) => matchGlob(path, glob))) {
+          entry.tier = previous.files[path]?.tier ?? entry.tier;
+        }
         entry.outHash = hashContent(newText);
       }
       continue;
@@ -218,6 +249,12 @@ export function applyUpdate(
     modules,
     projectRoot,
   });
+  const managedOverrides = targetManagedOverrides(
+    projectRoot,
+    templatesDir,
+    modules,
+    manifest.managedOverrides,
+  );
   const oldTree = options.oldTemplatesDir
     ? assembleProject({
         templatesDir: options.oldTemplatesDir,
@@ -256,7 +293,16 @@ export function applyUpdate(
   // Keep the assembled target as the managed baseline. A merged working file
   // intentionally remains drifted so a future update performs another 3-way
   // merge instead of treating the user's lines as clean generated output.
-  writeFilesLock(projectRoot, updatedFilesLock(projectRoot, newTree, previousLock, manifest.ownedGlobs));
+  writeFilesLock(
+    projectRoot,
+    updatedFilesLock(
+      projectRoot,
+      newTree,
+      previousLock,
+      manifest.ownedGlobs,
+      managedOverrides,
+    ),
+  );
   const modulesDir = join(templatesDir, "modules");
   const refreshedModules = manifest.modules.map((module) => {
     const resolved = resolveModule(module.packageName ?? module.name, modulesDir, projectRoot);
@@ -270,6 +316,7 @@ export function applyUpdate(
   });
   writeManifest(projectRoot, {
     ...manifest,
+    managedOverrides,
     modules: refreshedModules,
     podokitVersion: podokitVersion(),
   });

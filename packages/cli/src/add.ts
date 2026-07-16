@@ -40,6 +40,9 @@ export interface ModuleManifest {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
   scripts?: Record<string, string>;
+  /** Extra package.json overlays keyed by app name. Use when a module's files
+   *  span more than its primary targetApp. */
+  packageOverlays?: Record<string, PackageOverlay>;
   env?: string[];
   inject?: Injection[];
   instructions?: string[];
@@ -51,6 +54,44 @@ export interface ModuleManifest {
   /** Paths that an existing app may explicitly hand back to this module with
    *  `podo add --adopt`. Broad app-owned route globs are never removed. */
   managedGlobs?: string[];
+  /** Module files that remain update-managed even when a broad default glob
+   *  (for example `.claude/**`) would otherwise classify them as owned. */
+  managedOverrides?: string[];
+}
+
+export interface PackageOverlay {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  scripts?: Record<string, string>;
+}
+
+/** Return the legacy targetApp package fields plus any additional app overlays. */
+export function modulePackageOverlays(manifest: ModuleManifest): Map<string, PackageOverlay> {
+  const overlays = new Map<string, PackageOverlay>();
+  const merge = (app: string, overlay: PackageOverlay): void => {
+    const current = overlays.get(app) ?? {};
+    overlays.set(app, {
+      ...(current.dependencies || overlay.dependencies
+        ? { dependencies: { ...current.dependencies, ...overlay.dependencies } }
+        : {}),
+      ...(current.devDependencies || overlay.devDependencies
+        ? { devDependencies: { ...current.devDependencies, ...overlay.devDependencies } }
+        : {}),
+      ...(current.scripts || overlay.scripts
+        ? { scripts: { ...current.scripts, ...overlay.scripts } }
+        : {}),
+    });
+  };
+
+  if (manifest.dependencies || manifest.devDependencies || manifest.scripts) {
+    merge(manifest.targetApp, {
+      dependencies: manifest.dependencies,
+      devDependencies: manifest.devDependencies,
+      scripts: manifest.scripts,
+    });
+  }
+  for (const [app, overlay] of Object.entries(manifest.packageOverlays ?? {})) merge(app, overlay);
+  return overlays;
 }
 
 export interface AddOptions {
@@ -70,6 +111,8 @@ export interface AddResult {
   added: string[];
   /** ownedGlobs declared by this module and every module it pulled in. */
   ownedGlobs: string[];
+  /** Managed exceptions declared by this module and its requirements. */
+  managedOverrides: string[];
   /** Existing owned presentation files intentionally left untouched. */
   preserved: string[];
   /** Paths explicitly adopted as module-managed files. */
@@ -109,7 +152,7 @@ export function resolveModuleDir(name: string, modulesDir: string, projectRoot: 
 export function resolveModule(name: string, modulesDir: string, projectRoot: string): ResolvedModule | null {
   const dir = resolveModuleDir(name, modulesDir, projectRoot);
   if (!dir) return null;
-  const manifest = readManifest(dir);
+  const manifest = readModuleManifest(dir);
   const bundled = join(modulesDir, manifest.name);
   if (dir === bundled) return { dir, name: manifest.name };
   const packageFile = join(dir, "package.json");
@@ -142,7 +185,7 @@ export function listModules(
   if (existsSync(modulesDir)) {
     for (const name of readdirSync(modulesDir)) {
       if (existsSync(join(modulesDir, name, "module.manifest.json"))) {
-        out.set(name, readManifest(join(modulesDir, name)).description);
+        out.set(name, readModuleManifest(join(modulesDir, name)).description);
       }
     }
   }
@@ -153,7 +196,7 @@ export function listModules(
         if (!dir.startsWith("podokit-module-")) continue;
         const manifestPath = join(scope, dir, "module.manifest.json");
         if (!existsSync(manifestPath)) continue;
-        const manifest = readManifest(join(scope, dir));
+        const manifest = readModuleManifest(join(scope, dir));
         if (!out.has(manifest.name)) out.set(manifest.name, manifest.description);
       }
     }
@@ -161,7 +204,7 @@ export function listModules(
   return [...out].map(([name, description]) => ({ name, description }));
 }
 
-function readManifest(moduleDir: string): ModuleManifest {
+export function readModuleManifest(moduleDir: string): ModuleManifest {
   return JSON.parse(readFileSync(join(moduleDir, "module.manifest.json"), "utf8")) as ModuleManifest;
 }
 
@@ -188,7 +231,7 @@ function appendEnv(projectRoot: string, lines: string[]): void {
 function isApplied(projectRoot: string, modulesDir: string, module: string): boolean {
   const moduleDir = resolveModuleDir(module, modulesDir, projectRoot);
   if (!moduleDir) return false;
-  const manifest = readManifest(moduleDir);
+  const manifest = readModuleManifest(moduleDir);
   const firstInject = manifest.inject?.[0];
   if (firstInject) {
     const target = join(projectRoot, firstInject.file);
@@ -241,6 +284,7 @@ export function addModule(options: AddOptions): AddResult {
           adoptedPaths: result.adopted,
         }
       : undefined,
+    result.managedOverrides,
   );
   return result;
 }
@@ -260,13 +304,16 @@ function applyModule(
     );
   }
   const moduleDir = resolved.dir;
-  const manifest = readManifest(moduleDir);
+  const manifest = readModuleManifest(moduleDir);
   assertManifestVersion(module, manifest);
 
-  const appPkgPath = join(projectRoot, "apps", manifest.targetApp, "package.json");
-  if (!existsSync(appPkgPath)) {
+  const requiredApps = new Set([manifest.targetApp, ...Object.keys(manifest.packageOverlays ?? {})]);
+  const missingApp = [...requiredApps].find(
+    (app) => !existsSync(join(projectRoot, "apps", app, "package.json")),
+  );
+  if (missingApp) {
     throw new Error(
-      `This does not look like a PodoKit project: ${join("apps", manifest.targetApp, "package.json")} not found. Run inside a generated project.`,
+      `This does not look like a PodoKit project: ${join("apps", missingApp, "package.json")} not found. Run inside a generated project.`,
     );
   }
 
@@ -275,6 +322,7 @@ function applyModule(
   // 0) apply required modules first (auto-add if missing)
   const added: string[] = [];
   const ownedGlobs: string[] = [...(manifest.ownedGlobs ?? [])];
+  const managedOverrides: string[] = [...(manifest.managedOverrides ?? [])];
   const preserved: string[] = [];
   const adopted: string[] = [];
   const touched: string[] = [];
@@ -283,6 +331,7 @@ function applyModule(
     const result = applyModule(projectRoot, required, modulesDir, applied, adopt);
     added.push(required, ...result.added);
     ownedGlobs.push(...result.ownedGlobs);
+    managedOverrides.push(...result.managedOverrides);
     preserved.push(...result.preserved);
     adopted.push(...result.adopted);
     touched.push(...result.touched);
@@ -306,15 +355,16 @@ function applyModule(
     touched.push(...copied.touched);
   }
 
-  // 2) merge dependencies and scripts into the target app
-  if (manifest.dependencies || manifest.devDependencies || manifest.scripts) {
+  // 2) merge dependencies and scripts into every declared app package
+  for (const [app, declaration] of modulePackageOverlays(manifest)) {
+    const appPkgPath = join(projectRoot, "apps", app, "package.json");
     const overlay: JsonObject = {};
-    if (manifest.dependencies) overlay.dependencies = manifest.dependencies;
-    if (manifest.devDependencies) overlay.devDependencies = manifest.devDependencies;
-    if (manifest.scripts) overlay.scripts = manifest.scripts;
+    if (declaration.dependencies) overlay.dependencies = declaration.dependencies;
+    if (declaration.devDependencies) overlay.devDependencies = declaration.devDependencies;
+    if (declaration.scripts) overlay.scripts = declaration.scripts;
     const merged = mergePackageJson(readJson(appPkgPath), overlay);
     writeFileSync(appPkgPath, `${JSON.stringify(merged, null, 2)}\n`);
-    touched.push(`apps/${manifest.targetApp}/package.json`);
+    touched.push(`apps/${app}/package.json`);
   }
 
   // 3) append env example lines
@@ -337,7 +387,16 @@ function applyModule(
   }
 
   const instructions = (manifest.instructions ?? []).map((line) => line.replace(/<app>/g, appName));
-  return { module: manifest.name, instructions, added, ownedGlobs, preserved, adopted, touched };
+  return {
+    module: manifest.name,
+    instructions,
+    added,
+    ownedGlobs,
+    managedOverrides,
+    preserved,
+    adopted,
+    touched,
+  };
 }
 
 function moduleRecord(module: ResolvedModule): ManifestModuleInput {

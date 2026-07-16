@@ -48,6 +48,8 @@ export interface PodokitManifest {
   modules: ManifestModule[];
   /** Globs whose files are user-owned and never touched by update. */
   ownedGlobs: string[];
+  /** Module-supplied globs that stay managed even inside a broad owned glob. */
+  managedOverrides?: string[];
 }
 
 export interface FileEntry {
@@ -173,7 +175,17 @@ function isTextPath(relPath: string): boolean {
 }
 
 /** Classify a file's ownership tier. See ADR-0010 priority order. */
-export function classifyTier(relPath: string, content: string | Buffer, ownedGlobs: string[]): Tier {
+export function classifyTier(
+  relPath: string,
+  content: string | Buffer,
+  ownedGlobs: string[],
+  managedOverrides: string[] = [],
+): Tier {
+  const explicitlyOwned = ownedGlobs.some(
+    (glob) => !glob.includes("*") && matchGlob(relPath, glob),
+  );
+  if (explicitlyOwned) return "owned";
+  if (managedOverrides.some((glob) => matchGlob(relPath, glob))) return "managed";
   if (ownedGlobs.some((glob) => matchGlob(relPath, glob))) return "owned";
   if (isTextPath(relPath) && content.toString("utf8").includes(INJECTION_MARKER)) return "assembled";
   return "managed";
@@ -195,11 +207,18 @@ export function walkFiles(projectRoot: string, prefix = ""): string[] {
 }
 
 /** Recompute the files.lock by hashing and classifying every project file. */
-export function computeFilesLock(projectRoot: string, ownedGlobs: string[]): FilesLock {
+export function computeFilesLock(
+  projectRoot: string,
+  ownedGlobs: string[],
+  managedOverrides: string[] = [],
+): FilesLock {
   const files: Record<string, FileEntry> = {};
   for (const rel of walkFiles(projectRoot).sort()) {
     const content = readFileSync(join(projectRoot, rel));
-    files[rel] = { tier: classifyTier(rel, content, ownedGlobs), outHash: hashContent(content) };
+    files[rel] = {
+      tier: classifyTier(rel, content, ownedGlobs, managedOverrides),
+      outHash: hashContent(content),
+    };
   }
   return { schemaVersion: LOCK_SCHEMA_VERSION, files };
 }
@@ -257,6 +276,7 @@ export function initLockfile(projectRoot: string, options: InitLockOptions): voi
     answers: options.answers,
     modules: [],
     ownedGlobs,
+    managedOverrides: [],
   };
   writeManifest(projectRoot, manifest);
   writeFilesLock(projectRoot, computeFilesLock(projectRoot, ownedGlobs));
@@ -288,6 +308,7 @@ export function recordModules(
   version?: string,
   ownedGlobs?: string[],
   lockSnapshot?: RecordModulesLockSnapshot,
+  managedOverrides?: string[],
 ): void {
   const manifest = readManifest(projectRoot);
   if (!manifest) return;
@@ -311,8 +332,15 @@ export function recordModules(
     known.add(module.name);
   }
   if (ownedGlobs?.length) manifest.ownedGlobs = mergeOwnedGlobs(manifest.ownedGlobs, ownedGlobs);
+  if (managedOverrides?.length) {
+    manifest.managedOverrides = mergeOwnedGlobs(manifest.managedOverrides ?? [], managedOverrides);
+  }
   writeManifest(projectRoot, manifest);
-  const computed = computeFilesLock(projectRoot, manifest.ownedGlobs);
+  const computed = computeFilesLock(
+    projectRoot,
+    manifest.ownedGlobs,
+    manifest.managedOverrides ?? [],
+  );
   if (!lockSnapshot) {
     writeFilesLock(projectRoot, computed);
     return;

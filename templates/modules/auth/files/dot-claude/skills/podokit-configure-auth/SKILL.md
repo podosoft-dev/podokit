@@ -1,6 +1,6 @@
 ---
 name: podokit-configure-auth
-description: Configure and verify PodoKit social OAuth providers, SMTP delivery, and the administrator sign-up approval policy. Use when enabling Google, Apple, or another Better Auth provider; calculating callback URLs; applying credentials through Admin Settings; configuring outbound mail; or diagnosing why a configured sign-in method is unavailable.
+description: Bootstrap and verify the initial PodoKit administrator, then configure social OAuth providers, SMTP delivery, and sign-up approval. Use when setting the first admin email/password; enabling Google, Apple, or another Better Auth provider; calculating callback URLs; applying credentials through Admin Settings; configuring outbound mail; or diagnosing unavailable sign-in methods.
 ---
 
 # Configure PodoKit authentication
@@ -12,6 +12,7 @@ Use the generated `auth:configure` command so credentials enter the encrypted `a
 - Read [references/google.md](references/google.md) for Google sign-in, including External audience requirements.
 - Read [references/apple.md](references/apple.md) for Apple sign-in and client-secret rotation.
 - Read [references/smtp.md](references/smtp.md) for Google Workspace SMTP relay and DNS authentication.
+- Read [references/bootstrap-admin.md](references/bootstrap-admin.md) before creating or repairing access to the first administrator.
 - Run the same generated command for other provider IDs. Confirm the provider appears in Admin Settings before applying it.
 
 ## Prepare the app
@@ -24,7 +25,8 @@ Use the generated `auth:configure` command so credentials enter the encrypted `a
    npm run migrate:all -w <app>-api
    ```
 
-4. Derive the default callback as `<BETTER_AUTH_URL>/api/auth/callback/<provider>`. Only set `OAUTH_REDIRECT_URI` when the provider requires an explicit override.
+4. Create or verify the initial administrator with `admin:bootstrap` before enabling mandatory email verification or other runtime authentication settings.
+5. Derive the default callback as `<BETTER_AUTH_URL>/api/auth/callback/<provider>`. Only set `OAUTH_REDIRECT_URI` when the provider requires an explicit override.
 
 ## Handle secrets safely
 
@@ -42,6 +44,17 @@ IFS= read -r -s OAUTH_CLIENT_SECRET
 printf "\n" >&2
 export OAUTH_CLIENT_SECRET
 export OAUTH_CLIENT_ID="provider-client-id"
+```
+
+The bootstrap command accepts the same `AUTH_SETUP_ADMIN_EMAIL` and
+`AUTH_SETUP_ADMIN_PASSWORD` variables as fallbacks. Keep `ADMIN_EMAILS` in the
+deployment environment, run the bootstrap once, and reuse the ephemeral
+credentials for `auth:configure`:
+
+```bash
+export ADMIN_EMAILS="admin@example.com"
+npm run admin:bootstrap -w <app>-api -- --dry-run
+npm run admin:bootstrap -w <app>-api
 ```
 
 Unset sensitive variables when finished:

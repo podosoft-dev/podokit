@@ -16,7 +16,10 @@ npx @podosoft/podokit add <module>
 - wires itself into `app.module.ts` at marker comments,
 - may declare `ownedGlobs` (paths it ships as user-owned — e.g. public pages you
   restyle — merged into your project so `podo update` never touches them; see
-  [updating](updating.md#module-owned-paths)), and
+  [updating](updating.md#module-owned-paths)),
+- may declare `managedOverrides` for module-owned files inside a broadly owned
+  area, such as a generated `.claude/skills/<module>/**` workflow that must keep
+  receiving updates, and
 - prints follow-up steps.
 
 ## Available modules
@@ -424,19 +427,37 @@ the `API_KEYS` allowlist with a constant-time comparison.
 
 A ready-made admin dashboard on top of `auth` (added automatically): login /
 signup / forgot- & reset-password pages, a shadcn-svelte **sidebar shell**, and
-**user + session management** through the better-auth admin plugin. Emails listed
-in `ADMIN_EMAILS` are promoted to the `admin` role on sign-up. All API access
-goes through the typed ApiClient; routes are guarded server-side.
+**user + session management** through the better-auth admin plugin. The generated
+`admin:bootstrap` command creates the initial verified, approved administrator
+from an email listed in `ADMIN_EMAILS`, or verifies the same account safely when
+rerun. All API access goes through the typed ApiClient; routes are guarded
+server-side.
 
 ```bash
 npx @podosoft/podokit add admin-dashboard   # also adds auth
 npm install
 docker compose -f infra/docker/docker-compose.yml up -d
-# admin and approval columns (role/banned/signupApproved) + set ADMIN_EMAILS in .env
-npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
-npm run dev
-# open /signup, register an ADMIN_EMAILS address (→ admin), then sign in at /login
+# Set ADMIN_EMAILS in the deployment environment, then build and migrate.
+npm run build
+npm run migrate:all -w my-app-api
+
+# Inject these only for the bootstrap command; do not save the password in Git
+# or a long-lived deployment secret.
+export ADMIN_BOOTSTRAP_EMAIL="admin@example.com"
+IFS= read -r -s ADMIN_BOOTSTRAP_PASSWORD && export ADMIN_BOOTSTRAP_PASSWORD
+npm run admin:bootstrap -w my-app-api -- --dry-run
+npm run admin:bootstrap -w my-app-api
+unset ADMIN_BOOTSTRAP_PASSWORD
 ```
+
+`ADMIN_BOOTSTRAP_EMAIL` must be present in `ADMIN_EMAILS`. New accounts are
+created with `role=admin`, `emailVerified=true`, and `signupApproved=true`.
+Existing accounts are never modified: the command succeeds only when the stored
+role, flags, and password already match. Use `--check-only` for a read-only
+deployment check. Run bootstrap before enabling mandatory email verification or
+other runtime authentication settings. The generated
+`.claude/skills/podokit-configure-auth` skill covers secret-safe bootstrap plus
+OAuth, SMTP, and sign-up approval configuration.
 
 - **/admin** — overview.
 - **/admin/users** (admin only) — list, filter & search users, approve pending registrations, ban/unban, set role, revoke sessions, create/delete.
@@ -635,8 +656,12 @@ Add your own org fields/roles the same way: extend `additionalFields` and the
 This keeps the core lean and lets modules — including third-party ones — ship and
 version independently. A package module is just a `module.manifest.json` (with a
 `manifestVersion`) plus a `files/` overlay, resolved and applied exactly like a
-bundled one; the CLI rejects a manifest that needs a newer PodoKit. `podo add`
-with no argument lists both bundled and installed package modules.
+bundled one; the CLI rejects a manifest that needs a newer PodoKit. A module's
+legacy `dependencies`, `devDependencies`, and `scripts` fields apply to its
+`targetApp`. Modules spanning several workspace apps can add the same sections
+under `packageOverlays.<app>`; `podo add`, `update`, and `remove` apply them
+symmetrically. `podo add` with no argument lists both bundled and installed
+package modules.
 
 ## Adding admin nav & settings (module registry)
 

@@ -130,6 +130,12 @@ describe("create (integration against templates)", () => {
       expect(dockerfile).toContain("RUN npm ci --no-audit --no-fund");
       expect(dockerfile).toContain(`RUN npm run build --workspace=apps/${workspace}`);
       expect(dockerfile).not.toContain("npm install --omit=dev=false");
+      if (workspace === "api") {
+        expect(dockerfile).toContain(
+          "COPY --from=build /app/apps/api/scripts ./apps/api/scripts",
+        );
+        expect(existsSync(join(target, "apps/api/scripts/.keep"))).toBe(true);
+      }
     }
     const rootPkg = JSON.parse(readFileSync(join(target, "package.json"), "utf8")) as {
       engines: { node: string };
@@ -154,6 +160,9 @@ describe("create (integration against templates)", () => {
     expect(existsSync(join(target, "infra", "traefik", "dynamic.yml"))).toBe(true);
 
     const compose = readFileSync(join(target, "compose.dev.yaml"), "utf8");
+    expect(
+      compose.match(/path: \.\/apps\/api\/scripts, target: \/app\/apps\/api\/scripts/g),
+    ).toHaveLength(2);
     // project name is rendered into the workspace commands / stack name
     expect(compose).toContain("name: app-dev");
     expect(compose).toContain("npm run dev -w app-web");

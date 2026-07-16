@@ -83,6 +83,7 @@ services:
         # sync+restart is the stable, recommended approach; the web keeps instant
         # HMR via plain sync.
         - { action: sync+restart, path: ./apps/api/src, target: /app/apps/api/src }
+        - { action: sync, path: ./apps/api/scripts, target: /app/apps/api/scripts }
         - { action: rebuild, path: ./apps/api/package.json }
 
   worker:
@@ -105,6 +106,7 @@ services:
         # sync+restart is the stable, recommended approach; the web keeps instant
         # HMR via plain sync.
         - { action: sync+restart, path: ./apps/api/src, target: /app/apps/api/src }
+        - { action: sync, path: ./apps/api/scripts, target: /app/apps/api/scripts }
         - { action: rebuild, path: ./apps/api/package.json }
 
   postgres:

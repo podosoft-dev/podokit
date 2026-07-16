@@ -20,6 +20,7 @@ RUN addgroup -S app && adduser -S app -G app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=deps /app/apps/api ./apps/api
 COPY --from=build /app/apps/api/dist ./apps/api/dist
+COPY --from=build /app/apps/api/scripts ./apps/api/scripts
 WORKDIR /app/apps/api
 USER app
 EXPOSE 3000
