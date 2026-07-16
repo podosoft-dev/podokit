@@ -1,5 +1,11 @@
 # @podosoft/podokit
 
+## 0.11.2
+
+### Patch Changes
+
+- [#95](https://github.com/podosoft-dev/podokit/pull/95) [`05fc8a8`](https://github.com/podosoft-dev/podokit/commit/05fc8a87b4f6ca3c4247eeaebaf42e2d206d91d5) Thanks [@korone00](https://github.com/korone00)! - Add an idempotent, secret-safe initial administrator bootstrap command, keep its generated authentication skill update-managed, and include generated operator scripts in API runtime images.
+
 ## 0.11.1
 
 ### Patch Changes
