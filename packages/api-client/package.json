@@ -1,6 +1,6 @@
 {
   "name": "@podosoft/podokit-api-client",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Typed API client for PodoKit backends: better-auth (auth + admin) plus a standard error-envelope request layer.",
   "license": "Apache-2.0",
   "type": "module",
@@ -29,7 +29,7 @@
     "provenance": true
   },
   "dependencies": {
-    "@podosoft/podokit-contracts": "^0.1.0",
+    "@podosoft/podokit-contracts": "^0.2.0",
     "better-auth": "^1.6.23",
     "@better-auth/api-key": "^1.6.23",
     "@better-auth/passkey": "^1.6.23"

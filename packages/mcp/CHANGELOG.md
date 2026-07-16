@@ -1,5 +1,12 @@
 # @podosoft/podokit-mcp
 
+## 0.1.5
+
+### Patch Changes
+
+- Updated dependencies [[`b6267eb`](https://github.com/podosoft-dev/podokit/commit/b6267ebc568c01fdf35452c17a00a8d068cdcb36)]:
+  - @podosoft/podokit@0.11.0
+
 ## 0.1.4
 
 ### Patch Changes
