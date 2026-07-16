@@ -116,10 +116,12 @@ What you get:
   connects to `:80`, fails, and Vite silently falls back to a **full page reload on every edit**
   (which also wipes any in-progress form input). `TRAEFIK_DASHBOARD_PORT` (default 8080) does the
   same for the dashboard. Set them inline as above or in the project `.env`.
-- **Single entry.** The browser only ever calls the web origin (`app.localhost`); SvelteKit
-  proxies `/api/*` to the api container internally. Traefik only routes `Host(app.localhost) → web`
+- **Single entry.** The browser normally calls the web origin (`app.localhost`); SvelteKit
+  proxies `/api/*` to the api container internally. Traefik routes any host on its dedicated port to the web service
   and compresses eligible HTML, JSON, CSS, and JavaScript responses according to the browser's
-  `Accept-Encoding` header (see `infra/traefik/dynamic.yml`).
+  `Accept-Encoding` header (see `infra/traefik/dynamic.yml`). The dedicated proxy also accepts
+  literal `localhost`, which is required for OAuth providers whose HTTP development exception does
+  not accept custom `*.localhost` names. Keep the entire OAuth round trip on one hostname.
 - **Live edits.** `docker compose watch` syncs your source into the containers. The web has
   instant Vite HMR; an **API** source change restarts the api service (~5s) — the stable
   approach for NestJS in a container (its in-process watcher doesn't reliably respawn).

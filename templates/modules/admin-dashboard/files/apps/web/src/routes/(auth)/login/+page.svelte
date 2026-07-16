@@ -7,6 +7,8 @@
   import * as Card from "$lib/components/ui/card";
   import * as Alert from "$lib/components/ui/alert";
   import { api } from "$lib/api";
+  import { PUBLIC_SIGNUP_DISABLED } from "$lib/auth-errors";
+  import { safeAuthRedirect, withAuthRedirect } from "$lib/auth-redirect";
   import { getI18n, fmt } from "$lib/i18n";
   import { SIGNUP_APPROVAL_REQUIRED } from "@podosoft/podokit-api-client";
   import { site } from "$lib/site.svelte";
@@ -24,7 +26,8 @@
   let loading = $state(false);
 
   $effect(() => {
-    if (data.oauthError) error = i18n.t.auth.signInFailed;
+    if (data.oauthError === PUBLIC_SIGNUP_DISABLED) error = i18n.t.auth.publicSignupDisabled;
+    else if (data.oauthError) error = i18n.t.auth.signInFailed;
   });
 
   // Second-factor step: a password/OTP sign-in with 2FA enabled returns
@@ -34,7 +37,10 @@
   let twoFaCode = $state("");
   let useBackupCode = $state(false);
   let twoFaLoading = $state(false);
-  const redirectTo = (): string => page.url.searchParams.get("redirect") ?? "/admin";
+  const redirectTo = (): string => safeAuthRedirect(page.url.searchParams.get("redirect"));
+  const authErrorCallback = (): string =>
+    new URL(withAuthRedirect("/login", redirectTo()), page.url.origin).toString();
+  const signupHref = (): string => withAuthRedirect("/signup", redirectTo());
   const socialProviders = $derived(data.capabilities?.providers ?? []);
   const providerLabels: Record<string, string> = {
     github: "GitHub",
@@ -45,6 +51,18 @@
   const providerLabel = (provider: string): string =>
     providerLabels[provider] ?? provider.charAt(0).toUpperCase() + provider.slice(1);
 
+  async function handlePolicyError(code: string | undefined): Promise<boolean> {
+    if (code === SIGNUP_APPROVAL_REQUIRED) {
+      await goto("/pending-approval");
+      return true;
+    }
+    if (code === PUBLIC_SIGNUP_DISABLED) {
+      error = i18n.t.auth.publicSignupDisabled;
+      return true;
+    }
+    return false;
+  }
+
   async function signInSocial(provider: string): Promise<void> {
     error = null;
     const callbackURL = new URL(redirectTo(), page.url.origin).toString();
@@ -52,14 +70,11 @@
     const { error: authError } = await api.auth.signIn.social({
       provider: provider as SocialProvider,
       callbackURL,
-      errorCallbackURL: `${page.url.origin}/login`,
+      errorCallbackURL: authErrorCallback(),
       newUserCallbackURL: callbackURL,
     });
     if (authError) {
-      if (authError.code === SIGNUP_APPROVAL_REQUIRED) {
-        await goto("/pending-approval");
-        return;
-      }
+      if (await handlePolicyError(authError.code)) return;
       error = authError.message ?? i18n.t.auth.signInFailed;
     }
   }
@@ -92,10 +107,7 @@
       : await api.auth.twoFactor.verifyTotp({ code: twoFaCode.trim() });
     twoFaLoading = false;
     if (authError) {
-      if (authError.code === SIGNUP_APPROVAL_REQUIRED) {
-        await goto("/pending-approval");
-        return;
-      }
+      if (await handlePolicyError(authError.code)) return;
       error = twoFactorError(authError.code);
       return;
     }
@@ -116,14 +128,11 @@
     const { error: authError } = await api.auth.signIn.magicLink({
       email,
       callbackURL: new URL(redirectTo(), page.url.origin).toString(),
-      errorCallbackURL: `${page.url.origin}/login`,
+      errorCallbackURL: authErrorCallback(),
     });
     magicLoading = false;
     if (authError) {
-      if (authError.code === SIGNUP_APPROVAL_REQUIRED) {
-        await goto("/pending-approval");
-        return;
-      }
+      if (await handlePolicyError(authError.code)) return;
       error = authError.message ?? i18n.t.auth.signInFailed;
       return;
     }
@@ -146,10 +155,7 @@
     const { error: authError } = await api.auth.emailOtp.sendVerificationOtp({ email, type: "sign-in" });
     otpLoading = false;
     if (authError) {
-      if (authError.code === SIGNUP_APPROVAL_REQUIRED) {
-        await goto("/pending-approval");
-        return;
-      }
+      if (await handlePolicyError(authError.code)) return;
       error = authError.message ?? i18n.t.auth.signInFailed;
       return;
     }
@@ -161,10 +167,7 @@
     const { data, error: authError } = await api.auth.signIn.emailOtp({ email, otp: otpCode });
     otpLoading = false;
     if (authError) {
-      if (authError.code === SIGNUP_APPROVAL_REQUIRED) {
-        await goto("/pending-approval");
-        return;
-      }
+      if (await handlePolicyError(authError.code)) return;
       error = authError.message ?? i18n.t.auth.signInFailed;
       return;
     }
@@ -184,14 +187,11 @@
     const res = await api.auth.signIn.passkey();
     passkeyLoading = false;
     if (res?.error) {
-      if ("code" in res.error && res.error.code === SIGNUP_APPROVAL_REQUIRED) {
-        await goto("/pending-approval");
-        return;
-      }
+      if (await handlePolicyError("code" in res.error ? res.error.code : undefined)) return;
       error = res.error.message ?? i18n.t.auth.signInFailed;
       return;
     }
-    await goto(page.url.searchParams.get("redirect") ?? "/admin", { invalidateAll: true });
+    await goto(redirectTo(), { invalidateAll: true });
   }
 
   async function submit(event: SubmitEvent): Promise<void> {
@@ -206,10 +206,7 @@
       : await api.auth.signIn.email({ email, password });
     loading = false;
     if (authError) {
-      if (authError.code === SIGNUP_APPROVAL_REQUIRED) {
-        await goto("/pending-approval");
-        return;
-      }
+      if (await handlePolicyError(authError.code)) return;
       // Surface an unverified address with a path to a fresh verification link.
       unverified = authError.code === "EMAIL_NOT_VERIFIED";
       error = unverified ? i18n.t.auth.emailNotVerified : (authError.message ?? i18n.t.auth.signInFailed);
@@ -230,7 +227,7 @@
   </Card.Header>
   <Card.Content>
     {#if error}
-      <Alert.Root variant="destructive" class="mb-4">
+      <Alert.Root data-testid="auth-error" variant="destructive" class="mb-4">
         <Alert.Description>
           {error}
           {#if unverified}
@@ -325,7 +322,7 @@
   </Card.Content>
   {#if signupOpen}
     <Card.Footer class="justify-center">
-      <p class="text-muted-foreground text-sm">{i18n.t.auth.noAccount} <a href="/signup" class="text-foreground hover:underline">{i18n.t.auth.signUp}</a></p>
+      <p class="text-muted-foreground text-sm">{i18n.t.auth.noAccount} <a href={signupHref()} class="text-foreground hover:underline">{i18n.t.auth.signUp}</a></p>
     </Card.Footer>
   {/if}
 </Card.Root>

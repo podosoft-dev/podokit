@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { AppException, SIGNUP_APPROVAL_REQUIRED, type Capabilities, type ErrorEnvelope } from "./index";
+import {
+  AppException,
+  PUBLIC_SIGNUP_DISABLED,
+  SIGNUP_APPROVAL_REQUIRED,
+  type Capabilities,
+  type ErrorEnvelope,
+} from "./index";
 
 describe("AppException", () => {
   it("carries a stable code and defaults the status", () => {
@@ -27,6 +33,7 @@ describe("contract shapes", () => {
     };
     expect(caps.roles).toEqual(["admin"]);
     expect(SIGNUP_APPROVAL_REQUIRED).toBe("SIGNUP_APPROVAL_REQUIRED");
+    expect(PUBLIC_SIGNUP_DISABLED).toBe("PUBLIC_SIGNUP_DISABLED");
     expect(envelope.error.code).toBe("X");
   });
 });

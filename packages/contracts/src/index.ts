@@ -44,6 +44,9 @@ export interface Capabilities {
 /** Stable better-auth error code returned when a user still needs approval. */
 export const SIGNUP_APPROVAL_REQUIRED = "SIGNUP_APPROVAL_REQUIRED" as const;
 
+/** Stable better-auth error code returned when public registration is closed. */
+export const PUBLIC_SIGNUP_DISABLED = "PUBLIC_SIGNUP_DISABLED" as const;
+
 /** The body of the standard REST error envelope. */
 export interface ErrorBody {
   /** Stable, language-independent code the frontend branches on. */

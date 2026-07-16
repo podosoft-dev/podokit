@@ -1,5 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
+  import { page } from "$app/state";
+  import { currentPath, withAuthRedirect } from "$lib/auth-redirect";
   import { Button } from "$lib/components/ui/button";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import LayoutDashboardIcon from "@lucide/svelte/icons/layout-dashboard";
@@ -12,16 +14,19 @@
 
   let { user }: { user: SessionUser | null } = $props();
   const i18n = getI18n();
+  const loginHref = $derived(withAuthRedirect("/login", currentPath(page.url)));
 
   async function signOut(): Promise<void> {
+    const returnTo = currentPath(page.url);
     await api.auth.signOut();
-    await goto("/login", { invalidateAll: true });
+    await goto(returnTo, { invalidateAll: true });
   }
 </script>
 
 {#if user}
   <DropdownMenu.Root>
     <DropdownMenu.Trigger
+      data-testid="account-menu"
       class="hover:bg-muted focus-visible:border-ring focus-visible:ring-ring/50 inline-flex size-8 items-center justify-center rounded-full outline-none focus-visible:ring-3"
       aria-label={i18n.t.nav.account}
     >
@@ -38,9 +43,9 @@
         <DropdownMenu.Item onSelect={() => goto("/admin")}><LayoutDashboardIcon class="mr-2 size-4" /> {i18n.t.common.appName}</DropdownMenu.Item>
       {/if}
       <DropdownMenu.Separator />
-      <DropdownMenu.Item onSelect={signOut}><LogOutIcon class="mr-2 size-4" /> {i18n.t.nav.signOut}</DropdownMenu.Item>
+      <DropdownMenu.Item data-testid="sign-out" onSelect={signOut}><LogOutIcon class="mr-2 size-4" /> {i18n.t.nav.signOut}</DropdownMenu.Item>
     </DropdownMenu.Content>
   </DropdownMenu.Root>
 {:else}
-  <Button href="/login" variant="ghost">{i18n.t.auth.signIn}</Button>
+  <Button data-testid="sign-in-link" href={loginHref} variant="ghost">{i18n.t.auth.signIn}</Button>
 {/if}

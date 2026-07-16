@@ -131,6 +131,18 @@ for a Kubernetes migration Job before a rolling deployment.
   stable `SIGNUP_APPROVAL_REQUIRED` code. Existing users, `ADMIN_EMAILS`, and users created by an
   administrator remain approved. Turning the policy off auto-approves future registrations; it
   does not silently approve the existing queue. Approve those users from `/admin/users`.
+- **Closing public sign-up is provider-independent.** Turn off *Allow public sign-up* under
+  Settings → General to reject every new self-registration path with the stable
+  `PUBLIC_SIGNUP_DISABLED` code. Email, Google, Apple, magic-link, and future providers all use
+  the same new-user database gate. Existing users can still sign in with any enabled method, and
+  administrators can still create users deliberately from `/admin/users`.
+- **Use literal localhost for local Google OAuth.** Google accepts HTTP loopback callbacks such as
+  `http://localhost:5001/api/auth/callback/google`, but it does not grant that development
+  exception to custom names such as `app.localhost`. Add both the literal localhost origin and
+  exact callback in Google Auth Platform, include it in `CORS_ORIGIN`, configure the provider with
+  `AUTH_SETUP_ORIGIN=http://localhost:<port>`, and run the whole flow from that same host. See the
+  generated `.claude/skills/podokit-configure-auth/references/google.md` for the exact workflow and
+  the optional OAuth Proxy pattern for non-registerable preview hostnames.
 - **Automate provider and SMTP configuration.** Generated APIs include a redacting admin-API
   helper. Pass secrets through environment variables, never command arguments:
 
@@ -478,6 +490,9 @@ domain are specific to each application.
 Use the managed `$lib/components/account-menu.svelte` in a public header to show
 a sign-in action to guests and an avatar menu to signed-in users. The avatar menu
 links to `/account` and adds the admin dashboard entry only for administrators.
+The sign-in link carries the current same-site page as a validated return target;
+successful login and public-page logout return there instead of forcing `/admin`.
+Direct login and admin-sidebar logout fall back to `/`.
 
 Users & the runtime Settings page:
 

@@ -28,8 +28,11 @@ export interface ApiClientOptions {
 // (`from "@podosoft/podokit-api-client"`) keep working.
 export type { Capabilities } from "@podosoft/podokit-contracts";
 
-/** Stable better-auth error code returned when a user still needs approval. */
-export const SIGNUP_APPROVAL_REQUIRED = "SIGNUP_APPROVAL_REQUIRED" as const;
+/** Stable authentication policy error codes re-exported for browser clients. */
+export {
+  PUBLIC_SIGNUP_DISABLED,
+  SIGNUP_APPROVAL_REQUIRED,
+} from "@podosoft/podokit-contracts";
 
 /** Error thrown when the API returns the standard error envelope or a non-2xx status. */
 export class ApiError extends Error {

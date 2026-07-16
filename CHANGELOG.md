@@ -84,6 +84,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (ui + api) tests included. No DB migration (uses the existing `app_setting` store).
 
 ### Fixed
+- **Registration policy and authentication return paths are consistent.** Turning
+  off public sign-up now blocks every new-user path, including OAuth callbacks,
+  while preserving existing social logins and administrator-created users.
+  Login and public-page logout return to a validated previous path instead of
+  forcing `/admin`. Generated Google guidance documents literal `localhost`
+  callbacks for local HTTP testing and the optional OAuth Proxy alternative.
 - **Readiness fails when PostgreSQL is unavailable.** Generated APIs now return
   HTTP 503 from `/health/ready` when the database probe fails, preventing
   Kubernetes and load balancers from routing traffic to an unready API pod.

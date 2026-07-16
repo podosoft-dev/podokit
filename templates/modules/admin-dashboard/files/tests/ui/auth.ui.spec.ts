@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { safeAuthRedirect, withAuthRedirect } from "../../apps/web/src/lib/auth-redirect";
 import { anonState, ADMIN } from "../helpers/accounts";
 import { ready } from "../helpers/hydration";
 
@@ -24,6 +25,25 @@ test("invalid credentials show an error", async ({ page }) => {
   await expect(page).toHaveURL(/\/login/);
 });
 
+test("login returns to the requested page instead of the admin dashboard", async ({ page }) => {
+  await ready(page, "/login?redirect=%2F%3Ffrom%3Dlogin");
+  await page.locator("#email").fill(ADMIN.email);
+  await page.locator("#password").fill(ADMIN.password);
+  await page.locator('form button[type="submit"]').click();
+  await expect(page).toHaveURL((url) => url.pathname === "/" && url.searchParams.get("from") === "login");
+});
+
+test("authentication return targets reject external and recursive redirects", () => {
+  expect(safeAuthRedirect("/products?page=2")).toBe("/products?page=2");
+  expect(safeAuthRedirect("https://example.com/steal")).toBe("/");
+  expect(safeAuthRedirect("//example.com/steal")).toBe("/");
+  expect(safeAuthRedirect("/\\example.com/steal")).toBe("/");
+  expect(safeAuthRedirect("/login")).toBe("/");
+  expect(withAuthRedirect("/login", "/products?page=2")).toBe(
+    "/login?redirect=%2Fproducts%3Fpage%3D2",
+  );
+});
+
 test("signup page renders", async ({ page }) => {
   await page.goto("/signup");
   await expect(page.getByLabel("Name")).toBeVisible();
@@ -34,6 +54,13 @@ test("pending approval errors show the approval status page", async ({ page }) =
   await page.goto("/login?error=SIGNUP_APPROVAL_REQUIRED");
   await expect(page).toHaveURL(/\/pending-approval$/);
   await expect(page.getByRole("heading", { name: "Waiting for approval" })).toBeVisible();
+});
+
+test("closed social registration errors explain that existing users may sign in", async ({ page }) => {
+  await page.goto("/login?error=PUBLIC_SIGNUP_DISABLED");
+  await expect(page.getByTestId("auth-error")).toContainText(
+    /Public sign-up is closed|공개 가입이 닫혀 있습니다/,
+  );
 });
 
 test("configured social providers appear on the login page", async ({ page, playwright }) => {
@@ -96,5 +123,5 @@ test("signup creates an account and enters the app @smoke", async ({ page }) => 
   await page.getByLabel("Password").fill("Podokit3e-Str0ng!pw");
   await page.getByRole("button", { name: "Create account" }).click();
   // Verification off → straight into the app; on → the verify-email page.
-  await expect(page).toHaveURL(/\/admin|\/verify-email/);
+  await expect(page).toHaveURL((url) => url.pathname === "/" || url.pathname === "/verify-email");
 });

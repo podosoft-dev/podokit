@@ -1,4 +1,8 @@
 import { expect, test } from "@playwright/test";
+import {
+  PUBLIC_SIGNUP_DISABLED,
+  isUserCreationAllowed,
+} from "../../apps/api/src/auth/feature-gate";
 import { ADMIN } from "../helpers/accounts";
 
 const base = process.env.E2E_BASE_URL ?? "http://localhost:5001";
@@ -151,6 +155,80 @@ test("new registrations require approval when the policy is enabled @smoke", asy
     if (pendingId) await admin.post("/api/auth/admin/remove-user", { data: { userId: pendingId } });
     if (adminCreatedId) await admin.post("/api/auth/admin/remove-user", { data: { userId: adminCreatedId } });
     await admin.put("/api/account/auth-config", { data: { server: { requireSignupApproval: false } } });
+    await new Promise((resolve) => setTimeout(resolve, 3_200));
+    await anon.get("/api/auth/get-session");
+    await anon.dispose();
+    await admin.dispose();
+  }
+});
+
+test("closed public sign-up blocks new OAuth users but preserves existing sign-in @smoke", async ({ playwright }) => {
+  const admin = await adminCtx(playwright);
+  const anon = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  const password = "Podokit3e-Str0ng!pw";
+  const adminCreatedEmail = `closed-admin-${Date.now()}@example.com`;
+  const initialSite = (await (await anon.get("/api/site/settings")).json()) as {
+    allowSignup?: string | null;
+  };
+  const initialAllowSignup = initialSite.allowSignup === "false" ? "false" : "true";
+  let adminCreatedId = "";
+
+  try {
+    expect(
+      (await admin.put("/api/account/auth-config", {
+        data: {
+          social: {
+            google: {
+              enabled: true,
+              clientId: "dummy-google-client-id",
+              clientSecret: "dummy-google-client-secret",
+            },
+          },
+        },
+      })).ok(),
+    ).toBeTruthy();
+    expect((await admin.put("/api/site/settings", { data: { allowSignup: "false" } })).ok()).toBeTruthy();
+
+    // The site policy uses a short cache shared by sign-up requests and user
+    // creation hooks, so wait for the setting to become live.
+    await new Promise((resolve) => setTimeout(resolve, 3_200));
+
+    const signup = await anon.post("/api/auth/sign-up/email", {
+      data: {
+        email: `closed-${Date.now()}@example.com`,
+        password,
+        name: "Closed Registration",
+      },
+    });
+    expect(signup.status()).toBe(403);
+    expect((await signup.json()).code).toBe(PUBLIC_SIGNUP_DISABLED);
+
+    // OAuth initiation must stay available for existing social users. Only a
+    // callback that attempts to create a new user is rejected by the DB hook.
+    const social = await anon.post("/api/auth/sign-in/social", {
+      data: { provider: "google", callbackURL: `${base}/` },
+    });
+    expect(social.ok()).toBeTruthy();
+    expect(((await social.json()).url as string)).toContain("accounts.google.com");
+    expect(isUserCreationAllowed(false, "/callback/google")).toBe(false);
+    expect(isUserCreationAllowed(false, undefined)).toBe(false);
+
+    // Deliberate administrator provisioning remains available while the public
+    // site is closed.
+    expect(isUserCreationAllowed(false, "/admin/create-user")).toBe(true);
+    const adminCreated = await admin.post("/api/auth/admin/create-user", {
+      data: { email: adminCreatedEmail, password, name: "Admin Created", role: "user" },
+    });
+    expect(adminCreated.ok()).toBeTruthy();
+    adminCreatedId = ((await adminCreated.json()).user as { id: string }).id;
+  } finally {
+    if (adminCreatedId) {
+      await admin.post("/api/auth/admin/remove-user", { data: { userId: adminCreatedId } });
+    }
+    await admin.put("/api/site/settings", { data: { allowSignup: initialAllowSignup } });
+    await admin.put("/api/account/auth-config", {
+      data: { social: { google: { enabled: false } } },
+    });
     await new Promise((resolve) => setTimeout(resolve, 3_200));
     await anon.get("/api/auth/get-session");
     await anon.dispose();

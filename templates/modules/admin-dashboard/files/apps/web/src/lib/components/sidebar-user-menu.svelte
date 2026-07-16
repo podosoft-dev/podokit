@@ -15,7 +15,7 @@
 
   async function signOut(): Promise<void> {
     await api.auth.signOut();
-    await goto("/login", { invalidateAll: true });
+    await goto("/", { invalidateAll: true });
   }
 </script>
 
