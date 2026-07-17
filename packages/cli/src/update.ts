@@ -69,6 +69,22 @@ function targetManagedOverrides(
   return [...overrides];
 }
 
+function targetOwnedGlobs(
+  projectRoot: string,
+  templatesDir: string,
+  modules: { name: string; packageName?: string }[],
+  current: string[],
+): string[] {
+  const owned = new Set(current);
+  const modulesDir = join(templatesDir, "modules");
+  for (const module of modules) {
+    const resolved = resolveModule(module.packageName ?? module.name, modulesDir, projectRoot);
+    if (!resolved) continue;
+    for (const glob of readModuleManifest(resolved.dir).ownedGlobs ?? []) owned.add(glob);
+  }
+  return [...owned];
+}
+
 /**
  * Build the update plan. `templatesDir` is the installed CLI's template set (the
  * new version); the lock records what PodoKit last wrote (to detect user edits).
@@ -91,6 +107,7 @@ export function planUpdate(projectRoot: string, templatesDir: string): UpdatePla
     manifest.modules,
     manifest.managedOverrides,
   );
+  const ownedGlobs = targetOwnedGlobs(projectRoot, templatesDir, manifest.modules, manifest.ownedGlobs);
 
   const changes: FileChange[] = [];
   const paths = new Set<string>([...newTree.keys(), ...Object.keys(lock.files)]);
@@ -103,11 +120,14 @@ export function planUpdate(projectRoot: string, templatesDir: string): UpdatePla
     // A newer module can explicitly take responsibility for a path that older
     // projects classified under a broad owned glob (notably generated skills).
     const managedByTarget = managedOverrides.some((glob) => matchGlob(path, glob));
+    const ownedByTarget = ownedGlobs.some((glob) => matchGlob(path, glob));
     const tier: Tier = managedByTarget
       ? "managed"
-      : locked?.tier ??
+      : ownedByTarget
+        ? "owned"
+        : locked?.tier ??
         (newText !== null
-          ? classifyTier(path, newText, manifest.ownedGlobs, managedOverrides)
+          ? classifyTier(path, newText, ownedGlobs, managedOverrides)
           : "managed");
 
     if (tier === "owned") {
@@ -255,6 +275,7 @@ export function applyUpdate(
     modules,
     manifest.managedOverrides,
   );
+  const ownedGlobs = targetOwnedGlobs(projectRoot, templatesDir, modules, manifest.ownedGlobs);
   const oldTree = options.oldTemplatesDir
     ? assembleProject({
         templatesDir: options.oldTemplatesDir,
@@ -299,7 +320,7 @@ export function applyUpdate(
       projectRoot,
       newTree,
       previousLock,
-      manifest.ownedGlobs,
+      ownedGlobs,
       managedOverrides,
     ),
   );
@@ -316,6 +337,7 @@ export function applyUpdate(
   });
   writeManifest(projectRoot, {
     ...manifest,
+    ownedGlobs,
     managedOverrides,
     modules: refreshedModules,
     podokitVersion: podokitVersion(),

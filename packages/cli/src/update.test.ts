@@ -136,6 +136,30 @@ describe("applyUpdate", () => {
     return dir;
   }
 
+  it("promotes newly declared module-owned paths during update", () => {
+    const oldTemplates = oldTemplatesCopy();
+    const newTemplates = oldTemplatesCopy();
+    const newManifestPath = join(newTemplates, "modules/admin-dashboard/module.manifest.json");
+    const newManifest = JSON.parse(readFileSync(newManifestPath, "utf8")) as { ownedGlobs?: string[] };
+    const ownedFile = "apps/api/src/site-settings/site-settings.service.ts";
+    newManifest.ownedGlobs = [...(newManifest.ownedGlobs ?? []), ownedFile];
+    writeFileSync(newManifestPath, `${JSON.stringify(newManifest, null, 2)}\n`);
+
+    const dir = join(tmp(), "app");
+    create({ name: "app", template: "fullstack-nest-svelte", templatesDir: oldTemplates, targetDir: dir });
+    addModule({ projectRoot: dir, module: "admin-dashboard", modulesDir: join(oldTemplates, "modules") });
+
+    expect(readFilesLock(dir)?.files[ownedFile]?.tier).toBe("managed");
+    expect(planUpdate(dir, newTemplates).changes.find((change) => change.path === ownedFile)?.action).toBe("skip");
+
+    applyUpdate(dir, newTemplates);
+    expect(readFilesLock(dir)?.files[ownedFile]?.tier).toBe("owned");
+    const manifest = JSON.parse(readFileSync(join(dir, ".podokit/manifest.json"), "utf8")) as {
+      ownedGlobs: string[];
+    };
+    expect(manifest.ownedGlobs).toContain(ownedFile);
+  });
+
   it("promotes a module skill from owned to managed during update", () => {
     const oldTemplates = oldTemplatesCopy();
     const oldAuthManifestPath = join(oldTemplates, "modules/auth/module.manifest.json");
