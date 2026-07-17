@@ -12,24 +12,24 @@ Use a Google Cloud project owned by the organization, not a personal project.
 
 Google may require verification for an External production app, especially when sensitive scopes or branding are involved. Keep the homepage, privacy policy, terms, and verified domain consistent with the OAuth consent screen.
 
-## Local development
+## Development
 
-Google's HTTP development exception applies to the literal `localhost` host (and
-localhost IP addresses), not to custom loopback names such as `app.localhost`.
-Use the same container stack through its literal localhost URL for the entire
-OAuth round trip:
+Keep normal development on the portless `*.localhost` origin provided by `podo dev`.
+For an actual OAuth round trip, expose the web container through a stable HTTPS
+development hostname using a Cloudflare Named Tunnel, a reserved ngrok domain, or a
+preview deployment. Use a separate Google Cloud project and Web client for development.
 
-1. Add `http://localhost:<port>` as an authorized JavaScript origin.
-2. Add `http://localhost:<port>/api/auth/callback/google` as an authorized
-   redirect URI. The port and path must match exactly.
-3. Include `http://localhost:<port>` in `CORS_ORIGIN` / Better Auth trusted
-   origins. The generated Docker environment includes literal localhost by
-   default; add the published port when an override uses a non-default port.
-4. Configure the local provider callback without putting the secret on the
-   command line:
+1. Add `https://app-dev.example.com` as an authorized JavaScript origin.
+2. Add `https://app-dev.example.com/api/auth/callback/google` as the exact redirect URI.
+3. Include both `http://app.localhost` and `https://app-dev.example.com` in
+   `CORS_ORIGIN`. Use the HTTPS origin as `BETTER_AUTH_URL` for the tunnel profile.
+4. Open Admin Settings through the HTTPS origin before saving Google. The displayed
+   callback is persisted. With the CLI, `AUTH_SETUP_ORIGIN` derives and persists the
+   same callback; set `OAUTH_REDIRECT_URI` only for an explicit override. Configure
+   without putting the secret on the command line:
 
    ```bash
-   export AUTH_SETUP_ORIGIN="http://localhost:<port>"
+   export AUTH_SETUP_ORIGIN="https://app-dev.example.com"
    export AUTH_SETUP_ADMIN_EMAIL="admin@example.com"
    export AUTH_SETUP_ADMIN_PASSWORD="<from-secret-manager>"
    export OAUTH_CLIENT_ID="<google-client-id>"
@@ -38,16 +38,21 @@ OAuth round trip:
    npm run auth:configure -w <app>-api -- --provider google
    ```
 
-5. Open `http://localhost:<port>` and start Google sign-in there. Do not start
-   on `app.localhost` and return on `localhost`; OAuth state cookies are scoped
-   to the host that created them.
+   If only an existing callback is stale, keep the stored client ID, client
+   secret, and enabled state:
 
-`BETTER_AUTH_URL` may keep the normal custom local hostname when the provider has
-the explicit localhost `redirectURI` written by `auth:configure`. For arbitrary
-preview hostnames that Google cannot register, Better Auth's OAuth Proxy plugin
-is an advanced alternative: it uses a registered production callback and a
-dedicated shared proxy secret. That option requires a deployed production proxy
-and is not necessary for ordinary localhost testing.
+   ```bash
+   AUTH_SETUP_ORIGIN=https://app-dev.example.com \
+     npm run auth:configure -w <app>-api -- --provider google --redirect-only
+   ```
+
+5. Start and finish Google sign-in through the HTTPS origin. Do not mix it with
+   `app.localhost`; OAuth state cookies are scoped to the origin that created them.
+
+Protect development content with the tunnel provider's access control, but bypass
+the exact `/api/auth/callback/*` path so Google can reach it. Quick tunnels with a
+changing hostname are unsuitable for a registered callback. See the PodoKit
+`docs/oauth-development.md` guide for the provider-neutral boundary.
 
 Official references:
 

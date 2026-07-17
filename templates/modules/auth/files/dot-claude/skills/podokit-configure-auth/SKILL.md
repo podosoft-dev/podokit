@@ -26,7 +26,7 @@ Use the generated `auth:configure` command so credentials enter the encrypted `a
    ```
 
 4. Create or verify the initial administrator with `admin:bootstrap` before enabling mandatory email verification or other runtime authentication settings.
-5. Derive the default callback as `<BETTER_AUTH_URL>/api/auth/callback/<provider>`. Only set `OAUTH_REDIRECT_URI` when the provider requires an explicit override.
+5. Derive the default callback as `<BETTER_AUTH_URL>/api/auth/callback/<provider>`. Only set `OAUTH_REDIRECT_URI` when the provider requires an explicit override. If credentials are already stored, use `--provider <id> --redirect-only` to update the callback without reading or replacing the client secret.
 
 ## Handle secrets safely
 

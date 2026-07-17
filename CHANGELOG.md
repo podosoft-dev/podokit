@@ -88,8 +88,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   off public sign-up now blocks every new-user path, including OAuth callbacks,
   while preserving existing social logins and administrator-created users.
   Login and public-page logout return to a validated previous path instead of
-  forcing `/admin`. Generated Google guidance documents literal `localhost`
-  callbacks for local HTTP testing and the optional OAuth Proxy alternative.
+  forcing `/admin`. Generated Google guidance documents stable HTTPS development
+  callbacks through provider-neutral tunnels and separate clients per tier.
+  Admin Settings and `auth:configure` now persist the exact callback instead
+  of silently falling back to the application's default hostname; the
+  `--redirect-only` mode repairs stale callbacks without reading or replacing
+  stored provider credentials.
 - **Readiness fails when PostgreSQL is unavailable.** Generated APIs now return
   HTTP 503 from `/health/ready` when the database probe fails, preventing
   Kubernetes and load balancers from routing traffic to an unready API pod.

@@ -136,13 +136,14 @@ for a Kubernetes migration Job before a rolling deployment.
   `PUBLIC_SIGNUP_DISABLED` code. Email, Google, Apple, magic-link, and future providers all use
   the same new-user database gate. Existing users can still sign in with any enabled method, and
   administrators can still create users deliberately from `/admin/users`.
-- **Use literal localhost for local Google OAuth.** Google accepts HTTP loopback callbacks such as
-  `http://localhost:5001/api/auth/callback/google`, but it does not grant that development
-  exception to custom names such as `app.localhost`. Add both the literal localhost origin and
-  exact callback in Google Auth Platform, include it in `CORS_ORIGIN`, configure the provider with
-  `AUTH_SETUP_ORIGIN=http://localhost:<port>`, and run the whole flow from that same host. See the
-  generated `.claude/skills/podokit-configure-auth/references/google.md` for the exact workflow and
-  the optional OAuth Proxy pattern for non-registerable preview hostnames.
+- **Use a stable HTTPS origin for development OAuth.** Keep portless `*.localhost` for normal
+  multi-app work, then expose the web container through a Cloudflare Named Tunnel, reserved ngrok
+  domain, or preview deployment for provider callbacks. Register the exact HTTPS origin and
+  `/api/auth/callback/google`, and use a separate Google Cloud project/client for development.
+  Admin Settings persists the displayed callback when the provider is saved, and `auth:configure`
+  derives and persists it from `AUTH_SETUP_ORIGIN` unless `OAUTH_REDIRECT_URI` explicitly overrides
+  it. Use `--redirect-only` to repair a stale callback while preserving the stored credentials and
+  enabled state. See [OAuth development over HTTPS](oauth-development.md).
 - **Automate provider and SMTP configuration.** Generated APIs include a redacting admin-API
   helper. Pass secrets through environment variables, never command arguments:
 
