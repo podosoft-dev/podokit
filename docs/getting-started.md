@@ -26,6 +26,34 @@ Then:
 cd my-app
 npm install
 cp .env.example .env
+npx @podosoft/podokit dev watch
+```
+
+Open **http://my-app.localhost**. The first running project starts a user-level,
+socket-free Traefik gateway on `127.0.0.1:80`. Each additional project reuses
+that gateway with its own hostname, so no project-specific host port is needed.
+
+Use a second terminal for lifecycle and container commands:
+
+```bash
+npx @podosoft/podokit dev url
+npx @podosoft/podokit dev ps
+npx @podosoft/podokit dev logs
+npx @podosoft/podokit dev exec api npm run migration:run -w my-app-api
+npx @podosoft/podokit dev down
+```
+
+`dev down` removes only the current project. When it removes the last registered
+project, it also removes the shared gateway and network. Hostname collisions and
+an unrelated process already owning loopback port 80 fail with an actionable
+error instead of silently remapping a port. See [development.md](development.md)
+for module profiles, HMR, multi-project routing, and HTTPS OAuth tunnels.
+
+For a quick host-process loop instead, start the dependencies and run the app on
+the traditional ports:
+
+```bash
+docker compose -f infra/docker/docker-compose.yml up -d
 npm run dev
 ```
 

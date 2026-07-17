@@ -114,6 +114,7 @@ export const DEFAULT_OWNED_GLOBS = [
   ".devcontainer/**",
   ".env.docker",
   "infra/traefik/**",
+  ".podokit/dev.json",
 ];
 
 const TEXT_EXT = /\.(json|md|ts|tsx|js|mjs|cjs|css|html|yml|yaml|txt|env|svelte|gitignore|example)$/i;

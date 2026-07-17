@@ -7,6 +7,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- **Shared portless development gateway.** `podo dev watch|exec|logs|ps|down|url`
+  runs generated stacks behind one user-level, socket-free Traefik gateway on
+  loopback port 80. Each project owns a stable `*.localhost` hostname through
+  `.podokit/dev.json`, hostname collisions fail early, and the final `down`
+  removes the shared gateway. Vite HMR derives its endpoint from the browser
+  origin, so the same app works through a stable HTTPS tunnel without a special
+  OAuth port. Provider-neutral guidance covers Cloudflare Named Tunnels, reserved
+  ngrok domains, callback access bypasses, and separate provider clients per tier.
+  Root, CLI, getting-started, template, and generated test guides document the
+  single-project lifecycle, multi-project reuse, host-process alternative, and
+  portless Playwright origin; generation tests keep both fullstack READMEs aligned.
 - **Idempotent initial administrator bootstrap.** Generated admin applications
   include `admin:bootstrap`, a database-backed command that creates a verified,
   approved administrator from `ADMIN_EMAILS` after migrations. Dry-run and

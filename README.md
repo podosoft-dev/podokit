@@ -13,11 +13,14 @@ npx @podosoft/podokit create my-app
 cd my-app
 npm install
 cp .env.example .env
-npm run dev
+npx @podosoft/podokit dev watch
 ```
 
-- API: http://localhost:5002 (health at `/health`)
-- Web: http://localhost:5001
+Open **http://my-app.localhost**. The first running project starts one user-level
+Traefik gateway on loopback port 80; additional projects reuse it and route by
+their own `*.localhost` hostname. Stop this project with
+`npx @podosoft/podokit dev down`. See [Development](docs/development.md) for
+profiles, migrations, lifecycle commands, and the alternative host-process loop.
 
 ## CLI
 
@@ -44,6 +47,7 @@ Run without flags in a terminal and PodoKit prompts for the template and package
 | `podo doctor` | Framework versions vs. supported ranges |
 | `podo update [--apply]` | Preview or apply a version update (3-way merges your edits) |
 | `podo eject <path…>` | Take ownership of a managed file |
+| `podo dev <action>` | Run container development through the shared portless `*.localhost` gateway (`npx @podosoft/podokit dev …` without a global install) |
 
 ## Templates
 

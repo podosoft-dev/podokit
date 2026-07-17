@@ -25,7 +25,7 @@ cause, which speeds up triage.
 
 - **Reproduction that starts from zero.** The exact commands, from `npx @podosoft/podokit create …`
   onward — including the template, the modules added (`podo add …`), and how you ran it
-  (host `npm run dev` vs. containerized `compose.dev.yaml`, and any non-default `TRAEFIK_PORT`/ports).
+  (host `npm run dev` vs. `podo dev`, plus the `.podokit/dev.json` hostname).
 - **Expected vs. actual**, stated separately.
 - **Evidence, not adjectives.** Paste the failing log line, the browser console/network error,
   the stack trace, or a screenshot. "Doesn't work" is not reproducible; `WebSocket to
@@ -50,7 +50,7 @@ headings — they map directly onto how we triage. Delete the italic hints.
 - PodoKit / CLI version: *e.g. @podosoft/podokit 0.7.0 (`podo --version`)*
 - Template: *fullstack-nest-svelte | todo | base*
 - Modules added: *e.g. auth, admin-dashboard — or "none"*
-- Run mode: *host `npm run dev` | containerized `compose.dev.yaml` (note any custom TRAEFIK_PORT/ports)*
+- Run mode: *host `npm run dev` | `podo dev` (note the local hostname and any HTTPS tunnel)*
 - OS / Node / package manager: *e.g. macOS 15 / Node 22.11 / npm 10*
 
 ## Steps to reproduce

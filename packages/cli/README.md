@@ -11,11 +11,13 @@ npx @podosoft/podokit create my-app
 cd my-app
 npm install
 cp .env.example .env
-npm run dev
+npx @podosoft/podokit dev watch
 ```
 
-- API: http://localhost:5002 (health at `/health`)
-- Web: http://localhost:5001
+Open **http://my-app.localhost**. The first project starts one user-level
+Traefik gateway on loopback port 80; later projects reuse it and route by
+hostname. Stop this project with `npx @podosoft/podokit dev down`. The traditional
+`npm run dev` loop remains available on web port 5001 and API port 5002.
 
 When run in a terminal, `podo create` lists the templates with descriptions and asks which one (and which package manager) to use. Pass flags (or `--yes`) to skip the prompts.
 
@@ -34,6 +36,7 @@ The `todo` template (`--template todo`) generates a working todo app (SvelteKit 
 | `podo doctor` | Check framework versions against the supported ranges |
 | `podo update [--apply]` | Preview (or apply) what a version update would change |
 | `podo eject <path…>` | Take ownership of a managed file so updates skip it |
+| `podo dev <action>` | Watch, inspect, execute in, or stop a container stack behind the shared `*.localhost` gateway |
 
 ## Usage
 

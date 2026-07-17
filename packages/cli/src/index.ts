@@ -9,6 +9,7 @@ import { removeModule } from "./remove";
 import { status, diff, doctor } from "./inspect";
 import { planUpdate, applyUpdate, summarize } from "./update";
 import { eject } from "./eject";
+import { runDevCommand } from "./dev";
 
 const HELP = `podo — PodoKit project generator
 
@@ -19,6 +20,7 @@ Usage:
   podo status              Show version, modules, file tiers, and local edits
   podo diff                List PodoKit-managed files you have edited
   podo doctor              Check framework versions against supported ranges
+  podo dev <action> [...]  Run the shared, portless container development gateway
   podo update [--apply]    Preview (or apply) what a version update would change
   podo eject <path...>     Take ownership of managed files (update skips them)
 
@@ -221,6 +223,15 @@ async function main(argv: string[]): Promise<void> {
           "\nSome frameworks are outside the supported range; @podosoft/* extensions may not match.\n",
         );
       }
+    } catch (err) {
+      fail((err as Error).message);
+    }
+    return;
+  }
+
+  if (args.command === "dev") {
+    try {
+      runDevCommand(process.cwd(), args.name, argv.slice(2));
     } catch (err) {
       fail((err as Error).message);
     }
