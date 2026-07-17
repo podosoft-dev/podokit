@@ -501,7 +501,7 @@ Users & the runtime Settings page:
 | --- | --- |
 | ![Admin users](images/admin-users.png) | ![Admin settings — social login](images/admin-settings-social.png) |
 - Password reset link is logged to the API console in dev; wire a real mailer via `emailAndPassword.sendResetPassword` for production.
-- **i18n**: all pages are localized (English default + Korean); a language switch sits on the login screen and in the dashboard header. Add locales/strings in `apps/web/src/lib/i18n/messages.ts`.
+- **i18n**: all pages are localized (English fallback + Korean); a language switch sits on the login screen and in the dashboard header. JSON catalogs are split by module and locale, and the site default is selected in **Settings → General**. See [Localization](localization.md) to add languages with `podo locale`.
 
 #### Appearance (runtime theme)
 

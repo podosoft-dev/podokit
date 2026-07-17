@@ -1,6 +1,7 @@
 import type { LayoutServerLoad } from "./$types";
 import { redirect } from "@sveltejs/kit";
 import { safeAuthRedirect } from "$lib/auth-redirect";
+import { loadMessages } from "$lib/i18n/messages";
 
 // "/" is a public landing page. Auth pages return signed-in users to their safe
 // requested page, and the admin area requires a session. /maintenance is public
@@ -52,5 +53,6 @@ export const load: LayoutServerLoad = async (event) => {
   if (!locals.user && !isPublic(pathname)) {
     redirect(303, `/login?redirect=${encodeURIComponent(`${pathname}${url.search}`)}`);
   }
-  return { user: locals.user, locale: locals.locale, site };
+  const messages = await loadMessages(locals.locale, site?.locale);
+  return { user: locals.user, locale: locals.locale, messages, site };
 };

@@ -31,6 +31,7 @@ const ICON_TYPES = new Set(["image/svg+xml", "image/png", "image/x-icon", "image
 // preset a slug, and overrides a JSON map of hex colors under known token keys.
 const HEX = /^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
 const PRESET = /^[a-z0-9-]{1,32}$/;
+const LOCALE = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
 const THEME_TOKEN_KEYS = new Set([
   "background",
   "card",
@@ -46,6 +47,14 @@ const THEME_TOKEN_KEYS = new Set([
 /** Validate/normalize a single theme setting value. Empty string clears it. */
 function validateThemeValue(key: string, value: string): string {
   if (value === "") return "";
+  if (key === "locale") {
+    if (!LOCALE.test(value)) throw new BadRequestException("locale must be a valid BCP 47 language tag");
+    try {
+      return Intl.getCanonicalLocales(value)[0] ?? value;
+    } catch {
+      throw new BadRequestException("locale must be a valid BCP 47 language tag");
+    }
+  }
   if (key === "brandColor") {
     if (!HEX.test(value)) throw new BadRequestException("brandColor must be a hex color");
     return value;

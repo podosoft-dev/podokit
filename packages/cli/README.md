@@ -34,6 +34,7 @@ The `todo` template (`--template todo`) generates a working todo app (SvelteKit 
 | `podo status` | Show the PodoKit version, modules, file tiers, and local edits |
 | `podo diff` | List the PodoKit-managed files you've edited since generation |
 | `podo doctor` | Check framework versions against the supported ranges |
+| `podo locale <command>` | Add, validate, activate, deactivate, or list JSON locales |
 | `podo update [--apply]` | Preview (or apply) what a version update would change |
 | `podo eject <path…>` | Take ownership of a managed file so updates skip it |
 | `podo dev <action>` | Watch, inspect, execute in, or stop a container stack behind the shared `*.localhost` gateway |

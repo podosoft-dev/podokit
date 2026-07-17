@@ -45,6 +45,7 @@ Run without flags in a terminal and PodoKit prompts for the template and package
 | `podo status` | Version, modules, file tiers, and local edits |
 | `podo diff` | Managed files you've edited since generation |
 | `podo doctor` | Framework versions vs. supported ranges |
+| `podo locale <command>` | Add, validate, activate, deactivate, or list JSON locales |
 | `podo update [--apply]` | Preview or apply a version update (3-way merges your edits) |
 | `podo eject <path…>` | Take ownership of a managed file |
 | `podo dev <action>` | Run container development through the shared portless `*.localhost` gateway (`npx @podosoft/podokit dev …` without a global install) |
@@ -211,6 +212,7 @@ conventions already loaded from `AGENTS.md`.
 - [Getting Started](docs/getting-started.md)
 - [Templates](docs/templates.md)
 - [Modules (`podo add`)](docs/modules.md)
+- [Localization and JSON catalogs](docs/localization.md)
 - [Updating a project (`podo update`)](docs/updating.md)
 - [Examples](examples/README.md)
 - [Development](docs/development.md) · [Testing](docs/testing.md)

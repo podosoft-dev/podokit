@@ -10,6 +10,13 @@ import { status, diff, doctor } from "./inspect";
 import { planUpdate, applyUpdate, summarize } from "./update";
 import { eject } from "./eject";
 import { runDevCommand } from "./dev";
+import {
+  addLocale,
+  listLocales,
+  setLocaleEnabled,
+  validateLocale,
+  type LocaleDirection,
+} from "./locale";
 
 const HELP = `podo — PodoKit project generator
 
@@ -21,6 +28,7 @@ Usage:
   podo diff                List PodoKit-managed files you have edited
   podo doctor              Check framework versions against supported ranges
   podo dev <action> [...]  Run the shared, portless container development gateway
+  podo locale <command>    Add, validate, activate, or list JSON locales
   podo update [--apply]    Preview (or apply) what a version update would change
   podo eject <path...>     Take ownership of managed files (update skips them)
 
@@ -28,6 +36,8 @@ Options:
   --template <t> Template to scaffold (see below)
   --dir <path>   Target directory (default: ./<name>)
   --pm <name>    Package manager: npm | pnpm | yarn (default: npm)
+  --name <label> Display name for a locale
+  --direction <direction>  Text direction: ltr | rtl (default: ltr)
   --adopt        Adopt colliding paths explicitly declared managed by a module
   --no-ai        Skip AI agent guidance (AGENTS.md, CLAUDE.md, editor rules)
   -y, --yes      Skip prompts and accept defaults
@@ -54,10 +64,20 @@ interface ParsedArgs {
   yes: boolean;
   help: boolean;
   ai: boolean;
+  positionals: string[];
+  localeName?: string;
+  localeDirection?: LocaleDirection;
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
-  const parsed: ParsedArgs = { help: false, yes: false, apply: false, adopt: false, ai: true };
+  const parsed: ParsedArgs = {
+    help: false,
+    yes: false,
+    apply: false,
+    adopt: false,
+    ai: true,
+    positionals: [],
+  };
   const positionals: string[] = [];
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -79,12 +99,21 @@ export function parseArgs(argv: string[]): ParsedArgs {
       parsed.from = argv[++i];
     } else if (arg === "--pm") {
       parsed.pm = argv[++i] as PackageManager;
+    } else if (arg === "--name") {
+      parsed.localeName = argv[++i];
+    } else if (arg === "--direction") {
+      const direction = argv[++i];
+      if (direction !== "ltr" && direction !== "rtl") {
+        throw new Error('--direction must be either "ltr" or "rtl".');
+      }
+      parsed.localeDirection = direction;
     } else if (arg !== undefined && !arg.startsWith("-")) {
       positionals.push(arg);
     }
   }
   parsed.command = positionals[0];
   parsed.name = positionals[1];
+  parsed.positionals = positionals;
   return parsed;
 }
 
@@ -238,6 +267,59 @@ async function main(argv: string[]): Promise<void> {
     return;
   }
 
+  if (args.command === "locale") {
+    const action = args.positionals[1] ?? "list";
+    const code = args.positionals[2];
+    try {
+      if (action === "add") {
+        if (!code) fail("Usage: podo locale add <code> [--name <label>] [--direction ltr|rtl]");
+        const definition = addLocale(process.cwd(), code, {
+          name: args.localeName,
+          direction: args.localeDirection,
+        });
+        process.stdout.write(
+          `Added ${definition.code} (${definition.name}) as inactive. Translate catalogs, run ` +
+            `"podo locale validate ${definition.code}", then activate it.\n`,
+        );
+        return;
+      }
+      if (action === "validate") {
+        const locales = code ? [code] : listLocales(process.cwd()).map((locale) => locale.code);
+        for (const locale of locales) {
+          const coverage = validateLocale(process.cwd(), locale);
+          process.stdout.write(
+            `${coverage.definition.code.padEnd(10)} ${String(coverage.percent).padStart(3)}% ` +
+              `(${coverage.translated}/${coverage.total})` +
+              `${coverage.missing.length ? `  missing ${coverage.missing.length}` : ""}\n`,
+          );
+        }
+        return;
+      }
+      if (action === "activate" || action === "deactivate") {
+        if (!code) fail(`Usage: podo locale ${action} <code>`);
+        const coverage = setLocaleEnabled(process.cwd(), code, action === "activate");
+        process.stdout.write(
+          `${action === "activate" ? "Activated" : "Deactivated"} ${coverage.definition.code} ` +
+            `(${coverage.percent}% translated; missing keys use the configured fallback).\n`,
+        );
+        return;
+      }
+      if (action === "list") {
+        for (const locale of listLocales(process.cwd())) {
+          const coverage = validateLocale(process.cwd(), locale.code);
+          process.stdout.write(
+            `${locale.enabled ? "active  " : "inactive"} ${locale.code.padEnd(10)} ` +
+              `${locale.name}  ${coverage.percent}%\n`,
+          );
+        }
+        return;
+      }
+      fail(`Unknown locale command "${action}". Use add, validate, activate, deactivate, or list.`);
+    } catch (err) {
+      fail((err as Error).message);
+    }
+  }
+
   if (args.command === "update") {
     const templatesDir = join(__dirname, "templates");
     try {
@@ -280,7 +362,7 @@ async function main(argv: string[]): Promise<void> {
   }
 
   if (args.command === "eject") {
-    const targets = argv.filter((a) => !a.startsWith("-")).slice(1);
+    const targets = args.positionals.slice(1);
     if (!targets.length) {
       fail("Usage: podo eject <path...>");
     }

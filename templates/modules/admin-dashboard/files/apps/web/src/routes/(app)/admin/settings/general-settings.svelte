@@ -3,10 +3,12 @@
   import { Label } from "$lib/components/ui/label";
   import { Button } from "$lib/components/ui/button";
   import { Switch } from "$lib/components/ui/switch";
+  import * as Select from "$lib/components/ui/select";
   import * as Card from "$lib/components/ui/card";
   import { toast } from "svelte-sonner";
   import { api } from "$lib/api";
   import { getI18n } from "$lib/i18n";
+  import { LOCALES, localeNames } from "$lib/i18n/messages";
   import { site, type SiteSettings } from "$lib/site.svelte";
 
   const i18n = getI18n();
@@ -157,7 +159,16 @@
         </div>
         <div class="flex flex-col gap-1.5">
           <Label for="locale">{t.locale}</Label>
-          <Input id="locale" bind:value={form.locale} placeholder="en" />
+          <Select.Root type="single" bind:value={form.locale}>
+            <Select.Trigger id="locale" class="w-full">
+              {localeNames[form.locale] ?? form.locale ?? ""}
+            </Select.Trigger>
+            <Select.Content>
+              {#each LOCALES as locale (locale)}
+                <Select.Item value={locale}>{localeNames[locale] ?? locale}</Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
         </div>
         <div class="flex flex-col gap-1.5">
           <Label for="timezone">{t.timezone}</Label>

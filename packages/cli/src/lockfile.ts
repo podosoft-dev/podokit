@@ -97,6 +97,9 @@ const WALK_IGNORE = new Set([
 export const DEFAULT_OWNED_GLOBS = [
   "apps/web/src/routes/**",
   "apps/web/src/lib/components/ui/**",
+  // Locale definitions and app messages are application-owned extension points.
+  "apps/web/src/lib/i18n/locales/**",
+  "apps/web/src/lib/i18n/catalogs/app/**",
   // Owned Nest DI extension slot — override providers here; update never touches it.
   "apps/api/src/app.extensions.ts",
   // AI agent guidance — yours to customize; update never touches it.

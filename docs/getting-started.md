@@ -189,5 +189,6 @@ docker build -f apps/web/Dockerfile -t my-app-web .
 
 - Explore the generated `apps/api` and `apps/web`.
 - Add features with [Modules (`podo add`)](modules.md).
+- Add or translate languages with [Localization](localization.md).
 - Learn how to [update a project (`podo update`)](updating.md).
 - Read [Examples](../examples/README.md) for feature-focused walkthroughs.

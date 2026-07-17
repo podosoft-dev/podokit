@@ -28,13 +28,13 @@
   let searchField = $state("actor");
   let appliedSearchField = $state("actor");
 
-  const columns: DataTableColumn<Entry>[] = [
+  const columns = $derived<DataTableColumn<Entry>[]>([
     { key: "createdAt", label: i18n.t.audit.when, sortable: true, class: "whitespace-nowrap" },
     { key: "actor", label: i18n.t.audit.actor, sortable: true, value: (e) => e.actorName ?? e.actorEmail },
     { key: "action", label: i18n.t.audit.action, sortable: true },
     { key: "target", label: i18n.t.audit.target, sortable: true, value: (e) => e.targetLabel },
     { key: "ip", label: i18n.t.audit.ip, sortable: true },
-  ];
+  ]);
 
   const actions = $derived([...new Set(entries.map((e) => e.action))].sort());
   const filters = $derived<ToolbarFilter[]>([
@@ -45,10 +45,10 @@
     },
   ]);
 
-  const searchFields: ToolbarSearchField[] = [
+  const searchFields = $derived<ToolbarSearchField[]>([
     { value: "actor", label: i18n.t.audit.actor },
     { value: "target", label: i18n.t.audit.target },
-  ];
+  ]);
 
   const filtered = $derived(
     entries.filter((e) => {
