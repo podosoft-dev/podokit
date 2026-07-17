@@ -40,6 +40,27 @@ Add both the local and HTTPS origins to the API's `CORS_ORIGIN` and set
 origin and return on another because state cookies are scoped to the origin that
 created them.
 
+## Linking an existing email account
+
+When a signed-in email/password user connects an OAuth provider from the account
+page, the provider must return the same email address as the existing user. A
+different address is rejected with `email_doesn't_match`; this is an account-takeover
+protection, not a callback configuration failure. Do not enable
+`account.accountLinking.allowDifferentEmails` merely to bypass the error.
+
+If public sign-up is disabled, use this sequence:
+
+1. Have an administrator create and approve the user with the intended provider
+   email and assign any required role.
+2. Sign out of the administrator account and sign in as the newly created user.
+3. Connect the OAuth provider and select the provider account with that exact email.
+4. Verify the callback returns to the original HTTPS page and the linked provider is
+   listed on the account page.
+
+For example, a user signed in as `admin@example.com` cannot link a Google account
+for `dev@example.com`. Create or sign in as `dev@example.com` first, then connect
+that Google account.
+
 ## Tunnel choices
 
 - A Cloudflare Named Tunnel is a good fit when a Cloudflare-managed domain is already
@@ -61,3 +82,5 @@ Provider documentation remains authoritative:
 - Apple web redirect requirements: https://developer.apple.com/documentation/signinwithapplerestapi/request-an-authorization-to-the-sign-in-with-apple-server
 - Cloudflare Tunnel: https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/
 - ngrok OAuth testing: https://ngrok.com/docs/guides/oauth/
+- Better Auth account linking: https://better-auth.com/docs/concepts/users-accounts#account-linking
+- Better Auth `email_doesn't_match`: https://better-auth.com/docs/reference/errors/email_doesn%27t_match
