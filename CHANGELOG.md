@@ -95,6 +95,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (ui + api) tests included. No DB migration (uses the existing `app_setting` store).
 
 ### Fixed
+- **New default-owned paths are promoted during update.** Existing applications
+  now adopt newly declared PodoKit ownership defaults, so project-specific files
+  such as `.podokit/dev.json` stay untouched instead of surfacing as conflicts.
+- **Owned HTML defaults no longer override the selected locale on SSR.** The
+  managed localization hook now replaces any existing `<html lang>` value, so
+  an application that owns `app.html` and starts in Korean still preserves an
+  English locale cookie across a server-rendered reload.
+- **Development teardown removes optional profile services.** `podo dev down`
+  now activates every Compose profile automatically, so Redis, MinIO, workers,
+  tunnels, and other services started by an earlier watch command cannot keep
+  the project network or stale containers alive.
 - **Registration policy and authentication return paths are consistent.** Turning
   off public sign-up now blocks every new-user path, including OAuth callbacks,
   while preserving existing social logins and administrator-created users.
