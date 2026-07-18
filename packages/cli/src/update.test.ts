@@ -160,6 +160,24 @@ describe("applyUpdate", () => {
     expect(manifest.ownedGlobs).toContain(ownedFile);
   });
 
+  it("promotes newly declared default-owned paths during update", () => {
+    const dir = join(tmp(), "app");
+    create({ name: "app", template: "fullstack-nest-svelte", templatesDir: REPO_TEMPLATES, targetDir: dir });
+    const manifestPath = join(dir, ".podokit/manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { ownedGlobs: string[] };
+    manifest.ownedGlobs = manifest.ownedGlobs.filter((glob) => glob !== ".podokit/dev.json");
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    const devConfigPath = join(dir, ".podokit/dev.json");
+    writeFileSync(devConfigPath, '{"schemaVersion":1,"hostname":"custom.localhost"}\n');
+
+    expect(planUpdate(dir, REPO_TEMPLATES).changes.find((change) => change.path === ".podokit/dev.json")?.action).toBe("skip");
+
+    applyUpdate(dir, REPO_TEMPLATES);
+    const refreshed = JSON.parse(readFileSync(manifestPath, "utf8")) as { ownedGlobs: string[] };
+    expect(refreshed.ownedGlobs).toContain(".podokit/dev.json");
+    expect(readFileSync(devConfigPath, "utf8")).toContain("custom.localhost");
+  });
+
   it("promotes a module skill from owned to managed during update", () => {
     const oldTemplates = oldTemplatesCopy();
     const oldAuthManifestPath = join(oldTemplates, "modules/auth/module.manifest.json");

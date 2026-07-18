@@ -5,6 +5,7 @@ import { assembleProject } from "./assemble";
 import {
   classifyTier,
   computeFilesLock,
+  DEFAULT_OWNED_GLOBS,
   matchGlob,
   podokitVersion,
   readFilesLock,
@@ -75,7 +76,7 @@ function targetOwnedGlobs(
   modules: { name: string; packageName?: string }[],
   current: string[],
 ): string[] {
-  const owned = new Set(current);
+  const owned = new Set([...DEFAULT_OWNED_GLOBS, ...current]);
   const modulesDir = join(templatesDir, "modules");
   for (const module of modules) {
     const resolved = resolveModule(module.packageName ?? module.name, modulesDir, projectRoot);
