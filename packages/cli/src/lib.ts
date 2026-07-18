@@ -12,6 +12,8 @@ export { status, diff, doctor, SUPPORTED_FRAMEWORKS } from "./inspect";
 export type { StatusReport, DoctorFinding } from "./inspect";
 export { planUpdate, summarize } from "./update";
 export type { UpdatePlan, FileChange } from "./update";
+export { readDevConfig, renderRoute, renderRuntimeCompose, resolveDevRuntime, runDevCommand } from "./dev";
+export type { CommandRunner, DevConfig, DevRuntime } from "./dev";
 
 /** Absolute path to the templates bundled in this installed package. */
 export function builtinTemplatesDir(): string {

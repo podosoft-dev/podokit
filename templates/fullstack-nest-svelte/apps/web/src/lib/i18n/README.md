@@ -1,7 +1,9 @@
-# i18n
+# Localization
 
-Locales use [typesafe-i18n](https://github.com/ivanhofer/typesafe-i18n).
+Locale definitions live in `locales/<code>.json`. Product copy and intentional
+module overrides live in the app-owned `catalogs/app/<code>.json` files.
 
-- `en.ts` is the base locale; `ko.ts` mirrors its shape.
-- Run `npx typesafe-i18n` to generate the typed runtime and Svelte store,
-  then use `$LL.appTitle()` in components. Add keys to every locale.
+The admin-dashboard module installs the composed JSON message runtime and its
+complete English and Korean catalogs. Use `podo locale add`, `validate`, and
+`activate` to extend it. See the generated `$podokit-add-locale` skill for the
+complete workflow.

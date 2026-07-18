@@ -33,5 +33,5 @@ const session = await api.auth.getSession();
 | `credentials` | `include` | Send cookies with requests. |
 
 Errors are thrown as `ApiError` (`code`, `message`, `statusCode`, `details`).
-`SIGNUP_APPROVAL_REQUIRED` is re-exported for provider-independent pending-account
-handling.
+`PUBLIC_SIGNUP_DISABLED` and `SIGNUP_APPROVAL_REQUIRED` are re-exported for
+provider-independent registration-policy handling.

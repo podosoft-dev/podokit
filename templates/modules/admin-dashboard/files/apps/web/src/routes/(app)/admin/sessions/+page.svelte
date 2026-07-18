@@ -41,19 +41,19 @@
   let searchField = $state("email");
   let appliedSearchField = $state("email");
 
-  const columns: DataTableColumn<Row>[] = [
+  const columns = $derived<DataTableColumn<Row>[]>([
     { key: "user", label: i18n.t.adminSessions.user, sortable: true, value: (r) => r.userName },
     { key: "device", label: i18n.t.adminSessions.device, sortable: true, value: (r) => r.userAgent },
     { key: "ip", label: i18n.t.adminSessions.ip, sortable: true, value: (r) => r.ipAddress },
     { key: "createdAt", label: i18n.t.adminSessions.since, sortable: true },
     { key: "expiresAt", label: i18n.t.adminSessions.expires, sortable: true, value: (r) => (r.expiresAt ? new Date(r.expiresAt).getTime() : 0) },
     { key: "actions", label: "", class: "w-10" },
-  ];
+  ]);
 
-  const searchFields: ToolbarSearchField[] = [
+  const searchFields = $derived<ToolbarSearchField[]>([
     { value: "email", label: i18n.t.users.email },
     { value: "name", label: i18n.t.users.name },
-  ];
+  ]);
 
   const filtered = $derived(
     rows.filter((r) => {

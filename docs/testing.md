@@ -60,8 +60,18 @@ npm run test:e2e:api     # request-only — backend endpoints
 npm run test:e2e:report  # open the HTML report
 ```
 
-The suite runs against a **live stack**: the web on `E2E_BASE_URL` (default
-`http://localhost:5001`) proxying `/api/*` to the API. Bring it up first:
+The suite runs against a **live stack**: the web on `E2E_BASE_URL` proxying
+`/api/*` to the API. With the recommended containerized loop, bring the app up
+through its generated hostname and pass that origin to Playwright:
+
+```bash
+npx @podosoft/podokit dev watch
+# then, in another shell:
+E2E_BASE_URL=http://my-app.localhost npm run test:e2e
+```
+
+The default `http://localhost:5001` remains convenient for the alternative
+host-process loop:
 
 ```bash
 docker compose -f infra/docker/docker-compose.yml up -d postgres

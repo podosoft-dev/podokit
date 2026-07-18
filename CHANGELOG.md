@@ -7,6 +7,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- **Shared portless development gateway.** `podo dev watch|exec|logs|ps|down|url`
+  runs generated stacks behind one user-level, socket-free Traefik gateway on
+  loopback port 80. Each project owns a stable `*.localhost` hostname through
+  `.podokit/dev.json`, hostname collisions fail early, and the final `down`
+  removes the shared gateway. Vite HMR derives its endpoint from the browser
+  origin, so the same app works through a stable HTTPS tunnel without a special
+  OAuth port. Provider-neutral guidance covers Cloudflare Named Tunnels, reserved
+  ngrok domains, callback access bypasses, and separate provider clients per tier.
+  Root, CLI, getting-started, template, and generated test guides document the
+  single-project lifecycle, multi-project reuse, host-process alternative, and
+  portless Playwright origin; generation tests keep both fullstack READMEs aligned.
 - **Idempotent initial administrator bootstrap.** Generated admin applications
   include `admin:bootstrap`, a database-backed command that creates a verified,
   approved administrator from `ADMIN_EMAILS` after migrations. Dry-run and
@@ -84,6 +95,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (ui + api) tests included. No DB migration (uses the existing `app_setting` store).
 
 ### Fixed
+- **The General Settings language selector shows the application default.** An
+  empty stored locale now resolves to the generated application's default locale
+  instead of rendering a blank select trigger, and the form waits for the
+  server-loaded site settings before taking its one-time editable snapshot.
+- **New default-owned paths are promoted during update.** Existing applications
+  now adopt newly declared PodoKit ownership defaults, so project-specific files
+  such as `.podokit/dev.json` stay untouched instead of surfacing as conflicts.
+- **Owned HTML defaults no longer override the selected locale on SSR.** The
+  managed localization hook now replaces any existing `<html lang>` value, so
+  an application that owns `app.html` and starts in Korean still preserves an
+  English locale cookie across a server-rendered reload.
+- **Development teardown removes optional profile services.** `podo dev down`
+  now activates every Compose profile automatically, so Redis, MinIO, workers,
+  tunnels, and other services started by an earlier watch command cannot keep
+  the project network or stale containers alive.
+- **Registration policy and authentication return paths are consistent.** Turning
+  off public sign-up now blocks every new-user path, including OAuth callbacks,
+  while preserving existing social logins and administrator-created users.
+  Login and public-page logout return to a validated previous path instead of
+  forcing `/admin`. Generated Google guidance documents stable HTTPS development
+  callbacks through provider-neutral tunnels and separate clients per tier.
+  Admin Settings and `auth:configure` now persist the exact callback instead
+  of silently falling back to the application's default hostname; the
+  `--redirect-only` mode repairs stale callbacks without reading or replacing
+  stored provider credentials.
 - **Readiness fails when PostgreSQL is unavailable.** Generated APIs now return
   HTTP 503 from `/health/ready` when the database probe fails, preventing
   Kubernetes and load balancers from routing traffic to an unready API pod.

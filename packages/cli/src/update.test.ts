@@ -136,6 +136,48 @@ describe("applyUpdate", () => {
     return dir;
   }
 
+  it("promotes newly declared module-owned paths during update", () => {
+    const oldTemplates = oldTemplatesCopy();
+    const newTemplates = oldTemplatesCopy();
+    const newManifestPath = join(newTemplates, "modules/admin-dashboard/module.manifest.json");
+    const newManifest = JSON.parse(readFileSync(newManifestPath, "utf8")) as { ownedGlobs?: string[] };
+    const ownedFile = "apps/api/src/site-settings/site-settings.service.ts";
+    newManifest.ownedGlobs = [...(newManifest.ownedGlobs ?? []), ownedFile];
+    writeFileSync(newManifestPath, `${JSON.stringify(newManifest, null, 2)}\n`);
+
+    const dir = join(tmp(), "app");
+    create({ name: "app", template: "fullstack-nest-svelte", templatesDir: oldTemplates, targetDir: dir });
+    addModule({ projectRoot: dir, module: "admin-dashboard", modulesDir: join(oldTemplates, "modules") });
+
+    expect(readFilesLock(dir)?.files[ownedFile]?.tier).toBe("managed");
+    expect(planUpdate(dir, newTemplates).changes.find((change) => change.path === ownedFile)?.action).toBe("skip");
+
+    applyUpdate(dir, newTemplates);
+    expect(readFilesLock(dir)?.files[ownedFile]?.tier).toBe("owned");
+    const manifest = JSON.parse(readFileSync(join(dir, ".podokit/manifest.json"), "utf8")) as {
+      ownedGlobs: string[];
+    };
+    expect(manifest.ownedGlobs).toContain(ownedFile);
+  });
+
+  it("promotes newly declared default-owned paths during update", () => {
+    const dir = join(tmp(), "app");
+    create({ name: "app", template: "fullstack-nest-svelte", templatesDir: REPO_TEMPLATES, targetDir: dir });
+    const manifestPath = join(dir, ".podokit/manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { ownedGlobs: string[] };
+    manifest.ownedGlobs = manifest.ownedGlobs.filter((glob) => glob !== ".podokit/dev.json");
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    const devConfigPath = join(dir, ".podokit/dev.json");
+    writeFileSync(devConfigPath, '{"schemaVersion":1,"hostname":"custom.localhost"}\n');
+
+    expect(planUpdate(dir, REPO_TEMPLATES).changes.find((change) => change.path === ".podokit/dev.json")?.action).toBe("skip");
+
+    applyUpdate(dir, REPO_TEMPLATES);
+    const refreshed = JSON.parse(readFileSync(manifestPath, "utf8")) as { ownedGlobs: string[] };
+    expect(refreshed.ownedGlobs).toContain(".podokit/dev.json");
+    expect(readFileSync(devConfigPath, "utf8")).toContain("custom.localhost");
+  });
+
   it("promotes a module skill from owned to managed during update", () => {
     const oldTemplates = oldTemplatesCopy();
     const oldAuthManifestPath = join(oldTemplates, "modules/auth/module.manifest.json");

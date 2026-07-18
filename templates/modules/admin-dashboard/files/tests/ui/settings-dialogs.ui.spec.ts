@@ -7,6 +7,7 @@ test("settings: add and remove a social login provider @smoke", async ({ page })
   const dialog = page.getByRole("dialog");
   const addBtn = dialog.getByRole("button", { name: "Add provider" });
   const openConfigure = async (): Promise<void> => {
+    await page.waitForLoadState("networkidle");
     await page.getByRole("tab", { name: "Authentication" }).click();
     await page.getByRole("button", { name: "Configure" }).click();
   };
@@ -27,12 +28,16 @@ test("settings: add and remove a social login provider @smoke", async ({ page })
   const callback = await dialog.locator("code").textContent();
   const providerId = callback?.trim().split("/").pop() ?? ""; // first addable provider (not hard-coded)
   expect(providerId).not.toBe("");
+  const expectedCallback = new URL(`/api/auth/callback/${providerId}`, page.url()).toString();
+  expect(callback?.trim()).toBe(expectedCallback);
   try {
     await dialog.locator("#social-id").fill("test-client-id");
     await dialog.locator("#social-secret").fill("test-secret");
     await dialog.getByRole("button", { name: "Save", exact: true }).click();
     // Save returns to the list view, where the new provider row has an enable switch.
     await expect(dialog.getByRole("switch").first()).toBeVisible();
+    const saved = await (await page.request.get("/api/account/auth-config")).json();
+    expect(saved.social[providerId].redirectURI).toBe(expectedCallback);
   } finally {
     if (providerId) {
       await page.request

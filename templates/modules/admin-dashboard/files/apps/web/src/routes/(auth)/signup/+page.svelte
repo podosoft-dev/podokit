@@ -7,6 +7,8 @@
   import * as Card from "$lib/components/ui/card";
   import * as Alert from "$lib/components/ui/alert";
   import { api } from "$lib/api";
+  import { PUBLIC_SIGNUP_DISABLED } from "$lib/auth-errors";
+  import { safeAuthRedirect, withAuthRedirect } from "$lib/auth-redirect";
   import { getI18n } from "$lib/i18n";
   import { SIGNUP_APPROVAL_REQUIRED } from "@podosoft/podokit-api-client";
   import type { PageData } from "./$types";
@@ -18,6 +20,7 @@
   let password = $state("");
   let error = $state<string | null>(null);
   let loading = $state(false);
+  const redirectTo = (): string => safeAuthRedirect(page.url.searchParams.get("redirect"));
 
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
@@ -29,12 +32,16 @@
       name,
       email,
       password,
-      callbackURL: `${page.url.origin}/admin`,
+      callbackURL: new URL(redirectTo(), page.url.origin).toString(),
     });
     if (authError) {
       loading = false;
       if (authError.code === SIGNUP_APPROVAL_REQUIRED) {
         await goto("/pending-approval");
+        return;
+      }
+      if (authError.code === PUBLIC_SIGNUP_DISABLED) {
+        error = i18n.t.auth.publicSignupDisabled;
         return;
       }
       error = authError.message ?? i18n.t.auth.signUpFailed;
@@ -52,7 +59,7 @@
       await goto(`/verify-email?email=${encodeURIComponent(email)}`);
       return;
     }
-    await goto("/admin", { invalidateAll: true });
+    await goto(redirectTo(), { invalidateAll: true });
   }
 </script>
 
@@ -82,6 +89,6 @@
     </form>
   </Card.Content>
   <Card.Footer class="justify-center">
-    <p class="text-muted-foreground text-sm">{i18n.t.auth.haveAccount} <a href="/login" class="text-foreground hover:underline">{i18n.t.auth.signIn}</a></p>
+    <p class="text-muted-foreground text-sm">{i18n.t.auth.haveAccount} <a href={withAuthRedirect("/login", redirectTo())} class="text-foreground hover:underline">{i18n.t.auth.signIn}</a></p>
   </Card.Footer>
 </Card.Root>

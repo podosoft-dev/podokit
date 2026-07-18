@@ -41,6 +41,10 @@ describe("create (integration against templates)", () => {
       targetDir: target,
     });
     writeFileSync(join(target, "README.md"), "stale\n");
+    writeFileSync(
+      join(target, ".podokit", "dev.json"),
+      '{"schemaVersion":1,"hostname":"custom.localhost"}\n',
+    );
 
     execFileSync(process.execPath, [DEV_WATCH, target, "--once"], { stdio: "pipe" });
 
@@ -48,6 +52,7 @@ describe("create (integration against templates)", () => {
     expect(readme).toContain("# manifest-project-name");
     expect(readme).toContain("pnpm install");
     expect(readme).not.toContain("{{packageManager}}");
+    expect(readFileSync(join(target, ".podokit", "dev.json"), "utf8")).toContain("custom.localhost");
   });
 
   it("scaffolds the base template with a rendered project name", () => {
@@ -167,22 +172,21 @@ describe("create (integration against templates)", () => {
     expect(compose).toContain("name: app-dev");
     expect(compose).toContain("npm run dev -w app-web");
     expect(compose).toContain("npm run dev -w app-api");
-    // only Traefik binds a host port; the published port is a single env
-    // (default 80) so several stacks can coexist, and the web container gets the
-    // same value so Vite HMR targets the right port (no full-reload fallback).
+    // The legacy per-project proxy remains available only as an explicit profile;
+    // podo dev normally connects the web service to one shared loopback gateway.
+    expect(compose).toContain("profiles: [podokit-legacy-proxy]");
     expect(compose).toContain('"${TRAEFIK_PORT:-80}:80"');
-    expect(compose).toContain("VITE_HMR_CLIENT_PORT=${TRAEFIK_PORT:-80}");
+    expect(compose).not.toContain("VITE_HMR_CLIENT_PORT");
     expect(compose).toContain("ADDRESS_HEADER=x-forwarded-for");
     expect(compose).toContain("XFF_DEPTH=1");
     expect(compose).not.toMatch(/\n\s+-\s+"5432:5432"/);
     expect(compose).not.toMatch(/\n\s+-\s+"5001:5001"/);
 
-    // HMR client port is derived from the injected env, never hardcoded to :80
-    // (a hardcoded :80 breaks HMR on any non-80 Traefik stack — full reload that
-    // wipes in-progress form input; misdiagnosed as a signup/login form bug).
+    // HMR derives the public endpoint from the browser origin so both the local
+    // gateway and a provider-neutral HTTPS tunnel can proxy the WebSocket.
     const viteConfig = readFileSync(join(target, "apps", "web", "vite.config.ts"), "utf8");
     expect(viteConfig).not.toContain("clientPort: 80");
-    expect(viteConfig).toContain("Number(process.env.VITE_HMR_CLIENT_PORT)");
+    expect(viteConfig).not.toContain("VITE_HMR_CLIENT_PORT");
     // module-specific services are profile-gated so a minimal app never breaks
     expect(compose).toMatch(/profiles: \[queue\]/);
     expect(compose).toMatch(/profiles: \[cache\]/);
@@ -190,6 +194,9 @@ describe("create (integration against templates)", () => {
 
     // web proxies /api to the api container by service name (Traefik only routes web)
     expect(readFileSync(join(target, ".env.docker"), "utf8")).toContain("BACKEND_INTERNAL_URL=http://api:5002");
+    expect(readFileSync(join(target, ".env.docker"), "utf8")).toContain("BETTER_AUTH_URL=http://app.localhost");
+    expect(readFileSync(join(target, ".podokit", "dev.json"), "utf8")).toContain('"hostname": "app.localhost"');
+    expect(readFileSync(join(target, ".gitignore"), "utf8")).toContain(".podokit/runtime/");
     const backendProxy = readFileSync(
       join(target, "apps", "web", "src", "lib", "server", "backend-proxy.ts"),
       "utf8",
@@ -248,6 +255,26 @@ describe("create (integration against templates)", () => {
       "podokit-compression@kubernetescrd",
     );
   });
+
+  it.each(["fullstack-nest-svelte", "todo"])(
+    "documents the shared development gateway in the %s generated README",
+    (template) => {
+      const target = join(tmp(), "documented-app");
+      create({ name: "documented-app", template, templatesDir: REPO_TEMPLATES, targetDir: target });
+
+      const readme = readFileSync(join(target, "README.md"), "utf8");
+      expect(readme).toContain("npx @podosoft/podokit dev watch");
+      expect(readme).toContain("http://documented-app.localhost");
+      expect(readme).toContain("Even a single app uses");
+      expect(readme).toContain("npx @podosoft/podokit dev down");
+      expect(readme).toContain("final registered");
+      expect(readme).toContain("Alternative: host processes");
+
+      const testingReadme = readFileSync(join(target, "tests", "README.md"), "utf8");
+      expect(testingReadme).toContain("E2E_BASE_URL=http://documented-app.localhost");
+      expect(testingReadme).toContain("default `http://localhost:5001`");
+    },
+  );
 
   it("refuses a non-empty target directory", () => {
     const target = tmp();

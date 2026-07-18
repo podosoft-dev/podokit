@@ -46,8 +46,8 @@ pick per situation.
 |---|---|---|
 | App (web/api) | run on your host (`npm run dev`) | run in containers |
 | Databases | Docker, **host ports published** (5432, 6379, 9000) | Docker, **no host ports** (internal only) |
-| Reach the app | `localhost:5001` / `:5002` | `http://app.localhost` (one Traefik port) |
-| Multiple projects at once | ports collide — you remap by hand | never collide — only Traefik binds a port |
+| Reach the app | `localhost:5001` / `:5002` | a portless `http://<project>.localhost` origin |
+| Multiple projects at once | ports collide — you remap by hand | one shared loopback gateway routes by hostname |
 | Editors / AI agents | on the host | on the host **or inside the container** (`.devcontainer/`) |
 | Best for | quick single-project work | many projects at once; dev/prod (k3s Traefik) parity |
 
@@ -86,56 +86,66 @@ The two commands above run the app (`npm run dev`) on your host and the database
 Docker. If you juggle several projects at once, their databases fight over the same host
 ports (5432, 6379, 9000) and the web/api ports collide too. The generated project also
 ships a **fully containerized** dev environment that avoids this: everything runs in
-containers, only Traefik binds a host port, and you edit source on your host as usual.
+containers, one user-level gateway owns loopback port 80, and you edit source on your host as usual.
+
+The examples use the short `podo` executable. If the CLI is not installed globally,
+replace it with `npx @podosoft/podokit`, for example
+`npx @podosoft/podokit dev watch`.
 
 ```bash
 cd /tmp/myapp
-docker compose -f compose.dev.yaml watch                         # core stack
+podo dev watch                                                   # core stack
 # with modules that need extra services, enable their profiles:
-docker compose -f compose.dev.yaml \
-  --profile cache --profile storage --profile queue watch
+podo dev watch --profile cache --profile storage --profile queue
 # first run only — create the tables (in the api container):
-docker compose -f compose.dev.yaml exec api \
+podo dev exec api \
   npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
-docker compose -f compose.dev.yaml exec api npm run migration:run -w myapp-api
+podo dev exec api npm run migration:run -w myapp-api
 ```
 
-Open **http://app.localhost** (browsers resolve `*.localhost` to 127.0.0.1 automatically).
+Open the URL printed by `podo dev watch`. New projects default to
+**http://myapp.localhost**; browsers resolve `*.localhost` to loopback automatically.
 
 What you get:
 
-- **One host port.** Only Traefik publishes `:80` (dashboard on `127.0.0.1:8080`). `postgres`,
-  `redis`, `minio`, and even the `api` have **no published ports** — they talk to each other by
-  service name on an internal network, so this stack never collides with other projects. To run
-  **several** containerized stacks at once (which would otherwise fight over `:80`), publish
-  Traefik on another port with `TRAEFIK_PORT` — HMR follows automatically (next bullet).
-- **Changing the published port.** `TRAEFIK_PORT` sets the host port Traefik binds (default 80):
-  `TRAEFIK_PORT=8001 docker compose -f compose.dev.yaml watch` serves the app at
-  **http://app.localhost:8001**. compose passes the same value to the web container as
-  `VITE_HMR_CLIENT_PORT`, so Vite's HMR WebSocket targets that port. Without it the HMR socket
-  connects to `:80`, fails, and Vite silently falls back to a **full page reload on every edit**
-  (which also wipes any in-progress form input). `TRAEFIK_DASHBOARD_PORT` (default 8080) does the
-  same for the dashboard. Set them inline as above or in the project `.env`.
-- **Single entry.** The browser only ever calls the web origin (`app.localhost`); SvelteKit
-  proxies `/api/*` to the api container internally. Traefik only routes `Host(app.localhost) → web`
+- **One shared entry point.** `podo dev` creates one socket-free Traefik gateway at
+  `127.0.0.1:80`. Every project joins its external Docker network with a unique alias, while
+  `postgres`, `redis`, `minio`, and `api` remain internal. A hostname collision fails with the
+  path of the project that already owns it.
+- **Project-owned hostname.** Commit `.podokit/dev.json` to select the stable local hostname and,
+  optionally, document an HTTPS development origin. Ports are intentionally not part of this contract:
+
+  ```json
+  { "schemaVersion": 1, "hostname": "myapp.localhost", "publicUrl": "https://myapp-dev.example.com" }
+  ```
+
+- **Single origin.** The browser calls the web origin; SvelteKit
+  proxies `/api/*` to the api container internally. The shared gateway routes the exact host to the web service
   and compresses eligible HTML, JSON, CSS, and JavaScript responses according to the browser's
-  `Accept-Encoding` header (see `infra/traefik/dynamic.yml`).
-- **Live edits.** `docker compose watch` syncs your source into the containers. The web has
+  `Accept-Encoding` header. It mounts only generated file-provider routes; it never mounts the
+  Docker socket.
+- **Live edits.** `podo dev watch` delegates to Compose Watch. The web has
   instant Vite HMR; an **API** source change restarts the api service (~5s) — the stable
   approach for NestJS in a container (its in-process watcher doesn't reliably respawn).
+- **Lifecycle helpers.** Use `podo dev ps`, `podo dev logs`, `podo dev exec`, and
+  `podo dev down`. `down` automatically activates every Compose profile so it also
+  removes optional services that were started by an earlier `watch` command. The last
+  project removed also removes the shared gateway and network.
 - **Profiles match modules** (same names as above): `cache` (redis), `storage` (minio),
   `queue` (worker). A minimal app needs none; enable the ones your app uses.
 - **Editors & AI agents inside the container.** `.devcontainer/devcontainer.json` lets VS Code
   ("Reopen in Container") and Dev-Container-aware agents attach *inside* the container, where
   `node_modules`, TypeScript, and `git` all resolve. Install/upgrade packages in the container
-  (`docker compose exec api npm install …`) so native binaries match Linux.
+  (`podo dev exec api npm install …`) so native binaries match Linux.
 
 Prefer the host `npm run dev` loop for quick single-project work; reach for the containerized
 loop when you run several projects at once or want dev to mirror the k3s/Traefik production
 topology. These files (`compose.dev.yaml`, `Dockerfile.dev`, `.devcontainer/`, `.env.docker`,
-`infra/traefik/`) are yours to edit — `podo update` never touches them. New projects include the
-compression middleware by default; existing projects can adopt the corresponding
-`infra/traefik/dynamic.yml` template change manually because this directory is owned.
+`infra/traefik/`) are yours to edit — `podo update` never touches them. The per-project Traefik
+service remains available only through the `podokit-legacy-proxy` profile for compatibility.
+
+OAuth providers should use a stable HTTPS development origin instead of adding local ports to a
+provider client. See [OAuth development over HTTPS](oauth-development.md).
 
 ## Verifying template / module changes
 

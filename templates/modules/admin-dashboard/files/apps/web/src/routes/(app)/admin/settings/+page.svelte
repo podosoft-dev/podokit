@@ -72,6 +72,7 @@
   }
 
   const callbackBase = $derived(typeof window === "undefined" ? "" : window.location.origin);
+  const providerCallback = (id: string): string => `${callbackBase}/api/auth/callback/${id}`;
   const labelOf = (id: string): string => ac?.catalog.find((c) => c.id === id)?.label ?? id;
   const configured = $derived(Object.values(ac?.social ?? {}));
   const enabledProviders = $derived(configured.filter((p) => p.enabled && p.clientId && p.hasSecret));
@@ -102,6 +103,11 @@
   });
   const editingView = $derived(socialForm.adding ? undefined : ac?.social[socialForm.id]);
 
+  function socialRedirectURI(): string {
+    const configured = socialForm.redirectURI.trim();
+    return socialForm.adding || !configured ? providerCallback(socialForm.id) : configured;
+  }
+
   function openSocialManager(): void {
     socialView = "list";
     openDialog = "social";
@@ -122,7 +128,7 @@
         [socialForm.id]: {
           enabled: socialForm.enabled,
           clientId: socialForm.clientId,
-          redirectURI: socialForm.redirectURI,
+          redirectURI: socialRedirectURI(),
           ...(socialForm.clientSecret ? { clientSecret: socialForm.clientSecret } : {}),
         },
       },
@@ -335,7 +341,7 @@
         <div class="flex flex-col gap-1"><Label for="social-id">{i18n.t.settings.clientId}</Label><Input id="social-id" bind:value={socialForm.clientId} autocomplete="off" /></div>
         <div class="flex flex-col gap-1"><Label for="social-secret">{i18n.t.settings.clientSecret}</Label><Input id="social-secret" type="password" bind:value={socialForm.clientSecret} autocomplete="off" placeholder={editingView?.hasSecret ? i18n.t.settings.secretSet : ""} /></div>
         {#if socialForm.id}
-          <p class="text-muted-foreground text-xs">{i18n.t.settings.redirectUri}: <code class="break-all">{callbackBase}/api/auth/callback/{socialForm.id}</code></p>
+          <p class="text-muted-foreground text-xs">{i18n.t.settings.redirectUri}: <code class="break-all">{socialRedirectURI()}</code></p>
         {/if}
       </div>
       <Dialog.Footer>

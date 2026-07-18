@@ -112,6 +112,9 @@ const sources = [
 
 function shouldMirror(rel, base, isBase) {
   if (HARD_SKIP.has(base)) return false;
+  // `.podokit` contains instance metadata and project-owned development config.
+  // Generation seeds it once; the live template mirror must never rewrite it.
+  if (rel.startsWith(".podokit/")) return false;
   // Never mirror env files: they hold instance config/secrets (BETTER_AUTH_SECRET,
   // per-host CORS_ORIGIN/BETTER_AUTH_URL). The template ships defaults; the running
   // instance's values must be preserved. (`.env`, `.env.docker`, `dot-env.*`, …)

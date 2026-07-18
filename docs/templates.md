@@ -59,10 +59,13 @@ or strip down.
 ```bash
 npx @podosoft/podokit create my-app --template todo
 cd my-app && npm install && cp .env.example .env
-docker compose -f infra/docker/docker-compose.yml up -d
-npm run migration:run -w my-app-api
-npm run dev
+npx @podosoft/podokit dev watch
+# in a second terminal:
+npx @podosoft/podokit dev exec api npm run migration:run -w my-app-api
 ```
+
+Open `http://my-app.localhost`. See [development.md](development.md) for the
+shared gateway lifecycle and the alternative host-process loop.
 
 ## `base`
 

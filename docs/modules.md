@@ -131,6 +131,19 @@ for a Kubernetes migration Job before a rolling deployment.
   stable `SIGNUP_APPROVAL_REQUIRED` code. Existing users, `ADMIN_EMAILS`, and users created by an
   administrator remain approved. Turning the policy off auto-approves future registrations; it
   does not silently approve the existing queue. Approve those users from `/admin/users`.
+- **Closing public sign-up is provider-independent.** Turn off *Allow public sign-up* under
+  Settings → General to reject every new self-registration path with the stable
+  `PUBLIC_SIGNUP_DISABLED` code. Email, Google, Apple, magic-link, and future providers all use
+  the same new-user database gate. Existing users can still sign in with any enabled method, and
+  administrators can still create users deliberately from `/admin/users`.
+- **Use a stable HTTPS origin for development OAuth.** Keep portless `*.localhost` for normal
+  multi-app work, then expose the web container through a Cloudflare Named Tunnel, reserved ngrok
+  domain, or preview deployment for provider callbacks. Register the exact HTTPS origin and
+  `/api/auth/callback/google`, and use a separate Google Cloud project/client for development.
+  Admin Settings persists the displayed callback when the provider is saved, and `auth:configure`
+  derives and persists it from `AUTH_SETUP_ORIGIN` unless `OAUTH_REDIRECT_URI` explicitly overrides
+  it. Use `--redirect-only` to repair a stale callback while preserving the stored credentials and
+  enabled state. See [OAuth development over HTTPS](oauth-development.md).
 - **Automate provider and SMTP configuration.** Generated APIs include a redacting admin-API
   helper. Pass secrets through environment variables, never command arguments:
 
@@ -478,6 +491,9 @@ domain are specific to each application.
 Use the managed `$lib/components/account-menu.svelte` in a public header to show
 a sign-in action to guests and an avatar menu to signed-in users. The avatar menu
 links to `/account` and adds the admin dashboard entry only for administrators.
+The sign-in link carries the current same-site page as a validated return target;
+successful login and public-page logout return there instead of forcing `/admin`.
+Direct login and admin-sidebar logout fall back to `/`.
 
 Users & the runtime Settings page:
 
@@ -485,7 +501,7 @@ Users & the runtime Settings page:
 | --- | --- |
 | ![Admin users](images/admin-users.png) | ![Admin settings — social login](images/admin-settings-social.png) |
 - Password reset link is logged to the API console in dev; wire a real mailer via `emailAndPassword.sendResetPassword` for production.
-- **i18n**: all pages are localized (English default + Korean); a language switch sits on the login screen and in the dashboard header. Add locales/strings in `apps/web/src/lib/i18n/messages.ts`.
+- **i18n**: all pages are localized (English fallback + Korean); a language switch sits on the login screen and in the dashboard header. JSON catalogs are split by module and locale, and the site default is selected in **Settings → General**. See [Localization](localization.md) to add languages with `podo locale`.
 
 #### Appearance (runtime theme)
 

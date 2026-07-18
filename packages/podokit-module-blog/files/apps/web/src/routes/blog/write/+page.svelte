@@ -7,7 +7,7 @@
   const i18n = getI18n();
   let draft = $state(emptyBlogDraft());
   let saving = $state(false);
-  const labels: BlogEditorLabels = {
+  const labels = $derived<BlogEditorLabels>({
     title: i18n.t.blog.postTitle, slug: i18n.t.blog.slug, excerpt: i18n.t.blog.excerpt,
     body: i18n.t.blog.body, coverImage: i18n.t.blog.coverImage, tags: i18n.t.blog.tags,
     status: i18n.t.blog.status, published: i18n.t.blog.published, draft: i18n.t.blog.draft,
@@ -15,7 +15,7 @@
     cancel: i18n.t.blog.cancel, addImage: i18n.t.blog.addImage,
     uploadingImage: i18n.t.blog.uploadingImage, imageHelp: i18n.t.blog.imageHelp,
     imageUploadFailed: i18n.t.blog.imageUploadFailed,
-  };
+  });
 
   async function save(value: BlogDraft): Promise<void> {
     saving = true;

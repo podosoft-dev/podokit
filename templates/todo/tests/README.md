@@ -9,7 +9,13 @@ npm run test:e2e:ui      # pages (chromium)
 npm run test:e2e:report  # open the HTML report
 ```
 
-The suite runs against a live stack (web on `E2E_BASE_URL`, default
-`http://localhost:5001`, proxying `/api/*` to the API). Start PostgreSQL, run the
-auth migration, and start the API + web first. Files ending in `*.api.spec.ts` run
-in the request-only `api` project; `*.ui.spec.ts` run in the chromium `ui` project.
+The suite runs against a live stack (web on `E2E_BASE_URL`, proxying `/api/*` to
+the API). With the recommended containerized loop, start `podo dev watch` and run:
+
+```bash
+E2E_BASE_URL=http://{{projectName}}.localhost npm run test:e2e
+```
+
+The default `http://localhost:5001` is for the alternative `npm run dev`
+host-process loop. Files ending in `*.api.spec.ts` run in the request-only `api`
+project; `*.ui.spec.ts` run in the chromium `ui` project.

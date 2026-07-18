@@ -7,6 +7,7 @@ SvelteKit frontend must agree on, in one place so they cannot drift:
 - `ErrorEnvelope` / `ErrorBody` — the standard non-2xx response shape.
 - `AppException` — backend exception carrying a stable `code`.
 - `SIGNUP_APPROVAL_REQUIRED` — the stable pending-registration error code.
+- `PUBLIC_SIGNUP_DISABLED` — the stable closed-registration error code.
 
 Pure types and small classes, zero runtime dependencies.
 

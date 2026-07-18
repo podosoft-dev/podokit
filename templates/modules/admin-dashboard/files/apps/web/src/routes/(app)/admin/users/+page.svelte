@@ -55,14 +55,14 @@
   let filterValues = $state<Record<string, string>>({ role: "", status: "" });
   let appliedFilters = $state<Record<string, string>>({ role: "", status: "" });
 
-  const columns: DataTableColumn<Row>[] = [
+  const columns = $derived<DataTableColumn<Row>[]>([
     { key: "name", label: i18n.t.users.name, sortable: true },
     { key: "email", label: i18n.t.users.email, sortable: true },
     { key: "role", label: i18n.t.users.role, sortable: true },
     { key: "status", label: i18n.t.users.status },
     { key: "createdAt", label: i18n.t.users.joined, sortable: true, value: (u) => (u.createdAt ? new Date(u.createdAt).getTime() : 0) },
     { key: "actions", label: "", class: "w-10" },
-  ];
+  ]);
   const filters = $derived<ToolbarFilter[]>([
     {
       key: "role",
@@ -80,10 +80,10 @@
       ],
     },
   ]);
-  const searchFields: ToolbarSearchField[] = [
+  const searchFields = $derived<ToolbarSearchField[]>([
     { value: "email", label: i18n.t.users.email },
     { value: "name", label: i18n.t.users.name },
-  ];
+  ]);
 
   const filtered = $derived(
     users.filter((u) => {

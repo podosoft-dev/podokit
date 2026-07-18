@@ -28,6 +28,21 @@ async function saveGeneral(
   await expect(page.getByText("General settings saved.").last()).toBeVisible();
 }
 
+test("general: empty locale displays the application default", async ({ page }) => {
+  await ready(page, "/admin/settings");
+  const origin = new URL(page.url()).origin;
+  const settingsUrl = `${origin}/api/site/settings`;
+  const previous = await (await page.request.get(settingsUrl)).json() as { locale?: string };
+
+  try {
+    expect((await page.request.put(settingsUrl, { data: { locale: "" } })).ok()).toBeTruthy();
+    await ready(page, "/admin/settings");
+    await expect(page.locator("#locale")).toContainText("English");
+  } finally {
+    await page.request.put(settingsUrl, { data: { locale: previous.locale ?? "" } });
+  }
+});
+
 test("general: footer text and links render on public pages @smoke", async ({ page, browser }) => {
   await ready(page, "/admin/settings");
   const origin = new URL(page.url()).origin;

@@ -16,6 +16,7 @@ function usage() {
 
 Usage:
   npm run auth:configure -- --provider google --require-signup-approval
+  npm run auth:configure -- --provider google --redirect-only
   npm run auth:configure -- --smtp
   npm run auth:configure -- --check-only --provider google
 
@@ -34,6 +35,7 @@ SMTP environment (with --smtp):
 
 Options:
   --provider <id>                 Configure a social provider
+  --redirect-only                 Update only the provider callback; keep credentials and enabled state
   --smtp                          Configure SMTP from environment variables
   --require-signup-approval       Require admin approval for future registrations
   --no-require-signup-approval    Auto-approve future registrations
@@ -114,6 +116,7 @@ async function main() {
   const rawOrigin = process.env.AUTH_SETUP_ORIGIN ?? process.env.BETTER_AUTH_URL ?? "http://localhost:5002";
   const origin = new URL(rawOrigin).origin;
   const provider = value("--provider");
+  const redirectOnly = has("--redirect-only");
   const configureSmtp = has("--smtp");
   const approval = has("--require-signup-approval")
     ? true
@@ -122,8 +125,12 @@ async function main() {
       : undefined;
 
   if (provider && !/^[a-z0-9-]+$/.test(provider)) throw new Error("Provider id must use lowercase letters, numbers, or hyphens.");
+  if (redirectOnly && !provider) throw new Error("--redirect-only requires --provider <id>.");
 
-  if (provider) console.log(`OAuth callback URL: ${origin}/api/auth/callback/${provider}`);
+  const redirectURI = provider
+    ? process.env.OAUTH_REDIRECT_URI ?? `${origin}/api/auth/callback/${provider}`
+    : undefined;
+  if (redirectURI) console.log(`OAuth callback URL: ${redirectURI}`);
   if (has("--check-only")) {
     const capabilities = await publicCapabilities(origin);
     console.log(JSON.stringify(capabilities, null, 2));
@@ -135,16 +142,20 @@ async function main() {
 
   const body = {};
   if (provider) {
-    const clientId = process.env.OAUTH_CLIENT_ID ?? process.env[providerEnvName(provider, "CLIENT_ID")];
-    const clientSecret = process.env.OAUTH_CLIENT_SECRET ?? process.env[providerEnvName(provider, "CLIENT_SECRET")];
-    body.social = {
-      [provider]: {
-        enabled: true,
-        clientId: required("OAUTH_CLIENT_ID", clientId),
-        clientSecret: required("OAUTH_CLIENT_SECRET", clientSecret),
-        ...(process.env.OAUTH_REDIRECT_URI ? { redirectURI: process.env.OAUTH_REDIRECT_URI } : {}),
-      },
-    };
+    if (redirectOnly) {
+      body.social = { [provider]: { redirectURI } };
+    } else {
+      const clientId = process.env.OAUTH_CLIENT_ID ?? process.env[providerEnvName(provider, "CLIENT_ID")];
+      const clientSecret = process.env.OAUTH_CLIENT_SECRET ?? process.env[providerEnvName(provider, "CLIENT_SECRET")];
+      body.social = {
+        [provider]: {
+          enabled: true,
+          clientId: required("OAUTH_CLIENT_ID", clientId),
+          clientSecret: required("OAUTH_CLIENT_SECRET", clientSecret),
+          redirectURI,
+        },
+      };
+    }
   }
   if (configureSmtp) {
     body.smtp = {

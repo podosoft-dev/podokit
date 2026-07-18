@@ -17,13 +17,13 @@
   let orgs = $state<Org[]>([]);
   let sort = $state<SortState | null>({ key: "createdAt", dir: "desc" });
   let listPage = $state(1);
-  const columns: DataTableColumn<Org>[] = [
+  const columns = $derived<DataTableColumn<Org>[]>([
     { key: "name", label: i18n.t.organizations.name, sortable: true },
     { key: "slug", label: i18n.t.organizations.slug, sortable: true },
     { key: "parent", label: i18n.t.organizations.parent, sortable: true, value: (o) => orgName(o.parentOrganizationId) },
     { key: "createdAt", label: i18n.t.organizations.created, sortable: true },
     { key: "actions", label: "", class: "w-10" },
-  ];
+  ]);
   let busy = $state(false);
   let createOpen = $state(false);
   let form = $state({ name: "", slug: "", parentOrganizationId: "" });
