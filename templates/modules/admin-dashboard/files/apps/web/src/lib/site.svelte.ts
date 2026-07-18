@@ -40,14 +40,21 @@ const empty: SiteSettings = {
 };
 
 let current = $state<SiteSettings>({ ...empty });
+let initialized = $state(false);
 
 export const site = {
   get value(): SiteSettings {
     return current;
   },
+  get initialized(): boolean {
+    return initialized;
+  },
   /** Seed from the server load (idempotent). */
   init(v: Partial<SiteSettings> | null | undefined): void {
-    if (v) current = { ...empty, ...v };
+    if (v) {
+      current = { ...empty, ...v };
+      initialized = true;
+    }
   },
   /** Merge in changes so the layout re-applies title/favicon immediately. */
   patch(v: Partial<SiteSettings>): void {

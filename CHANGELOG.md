@@ -95,6 +95,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (ui + api) tests included. No DB migration (uses the existing `app_setting` store).
 
 ### Fixed
+- **The General Settings language selector shows the application default.** An
+  empty stored locale now resolves to the generated application's default locale
+  instead of rendering a blank select trigger, and the form waits for the
+  server-loaded site settings before taking its one-time editable snapshot.
 - **New default-owned paths are promoted during update.** Existing applications
   now adopt newly declared PodoKit ownership defaults, so project-specific files
   such as `.podokit/dev.json` stay untouched instead of surfacing as conflicts.

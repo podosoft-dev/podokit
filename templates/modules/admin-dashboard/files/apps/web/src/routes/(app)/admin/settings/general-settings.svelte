@@ -8,7 +8,7 @@
   import { toast } from "svelte-sonner";
   import { api } from "$lib/api";
   import { getI18n } from "$lib/i18n";
-  import { LOCALES, localeNames } from "$lib/i18n/messages";
+  import { defaultLocale, LOCALES, localeNames, resolveLocale } from "$lib/i18n/messages";
   import { site, type SiteSettings } from "$lib/site.svelte";
 
   const i18n = getI18n();
@@ -23,14 +23,14 @@
     footerText: "",
     termsUrl: "",
     privacyUrl: "",
-    locale: "",
+    locale: defaultLocale,
     timezone: "",
   });
   let maintenanceMode = $state(false);
   let allowSignup = $state(true);
   let seeded = $state(false);
   $effect(() => {
-    if (seeded) return;
+    if (seeded || !site.initialized) return;
     form = {
       name: s.name ?? "",
       description: s.description ?? "",
@@ -38,7 +38,7 @@
       footerText: s.footerText ?? "",
       termsUrl: s.termsUrl ?? "",
       privacyUrl: s.privacyUrl ?? "",
-      locale: s.locale ?? "",
+      locale: resolveLocale(s.locale),
       timezone: s.timezone ?? "",
     };
     maintenanceMode = s.maintenanceMode === "true";
