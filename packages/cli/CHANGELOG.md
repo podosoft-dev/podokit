@@ -1,5 +1,11 @@
 # @podosoft/podokit
 
+## 0.12.2
+
+### Patch Changes
+
+- [#103](https://github.com/podosoft-dev/podokit/pull/103) [`ad6d0dc`](https://github.com/podosoft-dev/podokit/commit/ad6d0dc1fe216397f26a95b522706c1ed4083e2f) Thanks [@korone00](https://github.com/korone00)! - Reconstruct three-way merge bases with the external module versions recorded in the project manifest.
+
 ## 0.12.1
 
 ### Patch Changes
