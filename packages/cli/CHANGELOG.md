@@ -1,5 +1,11 @@
 # @podosoft/podokit
 
+## 0.12.1
+
+### Patch Changes
+
+- [#101](https://github.com/podosoft-dev/podokit/pull/101) [`5fb7791`](https://github.com/podosoft-dev/podokit/commit/5fb7791b3af8a6f4a2bc90e77e88c089841500e9) Thanks [@korone00](https://github.com/korone00)! - Report an actionable error when a three-way update uses previous templates after an external module was already upgraded.
+
 ## 0.12.0
 
 ### Minor Changes
