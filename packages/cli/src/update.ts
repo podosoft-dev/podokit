@@ -1,4 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { hashContent, threeWayMerge, type VfsTree } from "@podosoft/podokit-template-engine";
 import { assembleProject } from "./assemble";
@@ -184,6 +186,8 @@ export function planUpdate(projectRoot: string, templatesDir: string): UpdatePla
 export interface ApplyOptions {
   /** Templates for the version the project is currently on, for 3-way merges. */
   oldTemplatesDir?: string;
+  /** Preinstalled previous external modules. Primarily useful for offline updates. */
+  oldExternalModulesRoot?: string;
 }
 
 export interface ApplyResult {
@@ -195,23 +199,76 @@ export interface ApplyResult {
   conflicts: string[];
 }
 
-function assertPreviousExternalModulesInstalled(
-  projectRoot: string,
+function assertRecordedExternalModules(
+  moduleRoot: string,
   templatesDir: string,
   modules: { name: string; packageName?: string; moduleVersion?: string }[],
 ): void {
   const modulesDir = join(templatesDir, "modules");
   for (const module of modules) {
     if (!module.packageName || !module.moduleVersion) continue;
-    const resolved = resolveModule(module.packageName, modulesDir, projectRoot);
-    if (!resolved?.moduleVersion || resolved.moduleVersion === module.moduleVersion) continue;
+    const resolved = resolveModule(module.packageName, modulesDir, moduleRoot);
+    if (resolved?.moduleVersion === module.moduleVersion) continue;
+    const actual = resolved?.moduleVersion ?? "not installed";
     throw new Error(
-      `Cannot use --from while external module "${module.packageName}" is installed at ` +
-        `${resolved.moduleVersion} but the project records ${module.moduleVersion}. Restore ` +
-        `${module.packageName}@${module.moduleVersion}, update PodoKit with --from, then upgrade ` +
-        "external modules separately.",
+      `Previous external module root has ${module.packageName} at ${actual}; ` +
+        `expected ${module.moduleVersion} from the project manifest.`,
     );
   }
+}
+
+interface PreviousExternalModules {
+  root: string;
+  cleanup: boolean;
+}
+
+function previousExternalModules(
+  projectRoot: string,
+  templatesDir: string,
+  modules: { name: string; packageName?: string; moduleVersion?: string }[],
+  providedRoot?: string,
+): PreviousExternalModules {
+  const external = modules.filter(
+    (module): module is { name: string; packageName: string; moduleVersion: string } =>
+      Boolean(module.packageName && module.moduleVersion),
+  );
+  if (!external.length) return { root: projectRoot, cleanup: false };
+
+  if (providedRoot) {
+    assertRecordedExternalModules(providedRoot, templatesDir, external);
+    return { root: providedRoot, cleanup: false };
+  }
+
+  const currentMatchesRecorded = external.every((module) => {
+    const resolved = resolveModule(module.packageName, join(templatesDir, "modules"), projectRoot);
+    return resolved?.moduleVersion === module.moduleVersion;
+  });
+  if (currentMatchesRecorded) return { root: projectRoot, cleanup: false };
+
+  const root = mkdtempSync(join(tmpdir(), "podokit-update-modules-"));
+  const devDependencies = Object.fromEntries(
+    external.map((module) => [module.packageName, module.moduleVersion]),
+  );
+  writeFileSync(
+    join(root, "package.json"),
+    `${JSON.stringify({ name: "podokit-update-modules", private: true, devDependencies }, null, 2)}\n`,
+  );
+  try {
+    execFileSync(
+      "npm",
+      ["install", "--ignore-scripts", "--no-audit", "--no-fund", "--package-lock=false"],
+      { cwd: root, stdio: "pipe" },
+    );
+    assertRecordedExternalModules(root, templatesDir, external);
+  } catch {
+    rmSync(root, { recursive: true, force: true });
+    const expected = external.map((module) => `${module.packageName}@${module.moduleVersion}`).join(", ");
+    throw new Error(
+      `Cannot install previous external modules (${expected}) for the 3-way merge. ` +
+        "Check npm registry access and try again.",
+    );
+  }
+  return { root, cleanup: true };
 }
 
 function writeFile(projectRoot: string, path: string, content: string): void {
@@ -297,18 +354,26 @@ export function applyUpdate(
   );
   const ownedGlobs = targetOwnedGlobs(projectRoot, templatesDir, modules, manifest.ownedGlobs);
   const needsMergeBase = plan.changes.some((change) => change.action === "conflict");
+  let oldTree: VfsTree | null = null;
   if (options.oldTemplatesDir && needsMergeBase) {
-    assertPreviousExternalModulesInstalled(projectRoot, templatesDir, modules);
-  }
-  const oldTree = options.oldTemplatesDir && needsMergeBase
-    ? assembleProject({
+    const previousModules = previousExternalModules(
+      projectRoot,
+      options.oldTemplatesDir,
+      modules,
+      options.oldExternalModulesRoot,
+    );
+    try {
+      oldTree = assembleProject({
         templatesDir: options.oldTemplatesDir,
         template: manifest.template,
         answers: manifest.answers,
         modules,
-        projectRoot,
-      })
-    : null;
+        projectRoot: previousModules.root,
+      });
+    } finally {
+      if (previousModules.cleanup) rmSync(previousModules.root, { recursive: true, force: true });
+    }
+  }
 
   const result: ApplyResult = { written: [], removed: [], merged: [], conflicts: [] };
 
