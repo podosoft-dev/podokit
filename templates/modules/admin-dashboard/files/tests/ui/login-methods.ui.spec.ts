@@ -37,5 +37,5 @@ test("login: an emailed one-time code signs a user in @smoke", async ({ page, pl
   const otp = await waitForOtp(email);
   await page.getByLabel("One-time code").fill(otp);
   await page.getByRole("button", { name: "Verify code" }).click();
-  await expect(page).toHaveURL(/\/admin/);
+  await expect(page).toHaveURL(new URL("/", base).toString());
 });

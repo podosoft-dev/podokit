@@ -38,5 +38,5 @@ test("forgot password: request, open the emailed link, set a new password, sign 
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill("Podokit3e-N3wStr0ng!pw");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/admin/);
+  await expect(page).toHaveURL(new URL("/", base).toString());
 });
