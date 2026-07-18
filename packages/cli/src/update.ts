@@ -195,6 +195,25 @@ export interface ApplyResult {
   conflicts: string[];
 }
 
+function assertPreviousExternalModulesInstalled(
+  projectRoot: string,
+  templatesDir: string,
+  modules: { name: string; packageName?: string; moduleVersion?: string }[],
+): void {
+  const modulesDir = join(templatesDir, "modules");
+  for (const module of modules) {
+    if (!module.packageName || !module.moduleVersion) continue;
+    const resolved = resolveModule(module.packageName, modulesDir, projectRoot);
+    if (!resolved?.moduleVersion || resolved.moduleVersion === module.moduleVersion) continue;
+    throw new Error(
+      `Cannot use --from while external module "${module.packageName}" is installed at ` +
+        `${resolved.moduleVersion} but the project records ${module.moduleVersion}. Restore ` +
+        `${module.packageName}@${module.moduleVersion}, update PodoKit with --from, then upgrade ` +
+        "external modules separately.",
+    );
+  }
+}
+
 function writeFile(projectRoot: string, path: string, content: string): void {
   const abs = join(projectRoot, path);
   mkdirSync(dirname(abs), { recursive: true });
@@ -277,7 +296,11 @@ export function applyUpdate(
     manifest.managedOverrides,
   );
   const ownedGlobs = targetOwnedGlobs(projectRoot, templatesDir, modules, manifest.ownedGlobs);
-  const oldTree = options.oldTemplatesDir
+  const needsMergeBase = plan.changes.some((change) => change.action === "conflict");
+  if (options.oldTemplatesDir && needsMergeBase) {
+    assertPreviousExternalModulesInstalled(projectRoot, templatesDir, modules);
+  }
+  const oldTree = options.oldTemplatesDir && needsMergeBase
     ? assembleProject({
         templatesDir: options.oldTemplatesDir,
         template: manifest.template,

@@ -73,6 +73,21 @@ podo update
 podo update --apply
 ```
 
+When a PodoKit version update also needs `--from` to merge edited managed files,
+update PodoKit before upgrading external packages. The previous template set
+must be assembled with the external versions recorded in the project manifest:
+
+```bash
+podo update --apply --from <previous-podokit-templates>
+npm update @podosoft/podokit-module-blog
+podo update --apply
+```
+
+If the external package was upgraded first, restore its recorded version, apply
+the PodoKit update with `--from`, and then upgrade the external package in a
+separate update. PodoKit reports this ordering problem before attempting the
+3-way merge.
+
 The update assembler resolves the package from the generated project's
 `node_modules` and retains its root dependency declaration. If the package is
 missing, update stops with a resolution error instead of silently dropping the
