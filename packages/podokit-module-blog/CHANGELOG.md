@@ -1,5 +1,11 @@
 # @podosoft/podokit-module-blog
 
+## 0.3.0
+
+### Minor Changes
+
+- [#99](https://github.com/podosoft-dev/podokit/pull/99) [`b048480`](https://github.com/podosoft-dev/podokit/commit/b048480b8a35f1e26ad8c1c354822e1ea3477d22) Thanks [@korone00](https://github.com/korone00)! - Add split JSON locale catalogs, runtime fallback composition, locale management commands, and a generated locale workflow skill.
+
 ## 0.2.1
 
 ### Patch Changes
