@@ -73,8 +73,8 @@ test("require-2fa: a new sign-up is forced through the enrolment page @smoke", a
     }).toPass({ timeout: 8000 });
     await probe.dispose();
 
-    // Signing in through the UI lands on the mandatory enrolment page.
-    await openHydratedLogin(page);
+    // Signing in toward a protected route lands on the mandatory enrolment page.
+    await openHydratedLogin(page, "/admin");
     await page.getByLabel("Email").fill(email);
     await page.getByLabel("Password").fill(pw);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();

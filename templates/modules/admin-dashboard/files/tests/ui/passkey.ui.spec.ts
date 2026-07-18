@@ -32,5 +32,5 @@ test("register a passkey and sign in with it @smoke", async ({ page, baseURL }) 
   await page.context().request.post("/api/auth/sign-out", { headers: origin });
   await ready(page, "/login");
   await page.getByRole("button", { name: "Use a passkey" }).click();
-  await expect(page).toHaveURL(/\/admin(\/|$)/);
+  await expect(page).toHaveURL(new URL("/", baseURL).toString());
 });
