@@ -68,6 +68,11 @@ Later entries override earlier entries, so a missing selected-locale key falls
 back to the site default and then English. The site default is stored in runtime
 site settings and can be changed from **Admin → Settings → General → Language**.
 
+The language switch stores the selected locale in a cookie. Server rendering
+uses that cookie before the site default and rewrites the existing `<html lang>`
+value, so applications may own `app.html` and choose any static default without
+breaking a different selected language on reload.
+
 This message fallback is independent from localized application records. Content
 such as articles, FAQs, or collection entries needs locale-aware persistence,
 draft/publication state, and an application-owned record fallback policy.

@@ -35,7 +35,11 @@ export const handle: Handle = async ({ event, resolve }) => {
     event.locals.session = null;
   }
   const response = await resolve(event, {
-    transformPageChunk: ({ html }) => html.replace('lang="en"', `lang="${event.locals.locale}"`),
+    transformPageChunk: ({ html }) =>
+      html.replace(
+        /(<html\b[^>]*?\slang=)(["'])[^"']*\2/i,
+        `$1"${event.locals.locale}"`,
+      ),
   });
   return applySearchIndexingHeaders(response, event.url.pathname);
 };

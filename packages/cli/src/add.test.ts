@@ -490,7 +490,9 @@ describe("addModule (auth / better-auth)", () => {
     expect(result.preserved).toEqual(expect.arrayContaining(["apps/web/src/routes/+page.svelte"]));
     expect(readFileSync(join(project, "apps/web/src/routes/+page.svelte"), "utf8")).toContain("API health");
     expect(readFileSync(join(project, "apps/web/src/lib/components/site-runtime.svelte"), "utf8")).toContain("applyTheme");
-    expect(readFileSync(join(project, "apps/web/src/hooks.server.ts"), "utf8")).toContain("event.route.id === null");
+    const hooks = readFileSync(join(project, "apps/web/src/hooks.server.ts"), "utf8");
+    expect(hooks).toContain("event.route.id === null");
+    expect(hooks).toContain('/(<html\\b[^>]*?\\slang=)(["\'])[^"\']*\\2/i');
     // i18n: message catalog + language switch
     expect(existsSync(join(project, "apps/web/src/lib/i18n/messages.ts"))).toBe(true);
     expect(existsSync(join(project, "apps/web/src/lib/components/language-switch.svelte"))).toBe(true);
