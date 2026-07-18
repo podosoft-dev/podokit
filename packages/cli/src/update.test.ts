@@ -117,12 +117,41 @@ describe("external module updates", () => {
     const plan = planUpdate(project, REPO_TEMPLATES);
     expect(plan.changes.find((change) => change.path === fileRel)?.action).toBe("update");
     expect(plan.changes.find((change) => change.path === "package.json")?.action).toBe("up-to-date");
-    applyUpdate(project, REPO_TEMPLATES);
+    applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: REPO_TEMPLATES });
     expect(readFileSync(join(project, fileRel), "utf8")).toContain("version = 2");
     const after = JSON.parse(readFileSync(join(project, ".podokit/manifest.json"), "utf8")) as {
       modules: { name: string; moduleVersion?: string }[];
     };
     expect(after.modules.find((module) => module.name === "blog")?.moduleVersion).toBe("0.2.0");
+  });
+
+  it("rejects a merge base after an external module was upgraded", () => {
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack-nest-svelte", templatesDir: REPO_TEMPLATES, targetDir: project });
+    const packageDir = join(project, "node_modules/@podosoft/podokit-module-blog");
+    mkdirSync(packageDir, { recursive: true });
+    writeFileSync(
+      join(packageDir, "package.json"),
+      JSON.stringify({ name: "@podosoft/podokit-module-blog", version: "0.1.0" }),
+    );
+    writeFileSync(
+      join(packageDir, "module.manifest.json"),
+      JSON.stringify({ manifestVersion: 1, name: "blog", description: "test", targetApp: "api" }),
+    );
+    addModule({ projectRoot: project, module: "blog", modulesDir: join(REPO_TEMPLATES, "modules") });
+
+    const mainPath = join(project, "apps/api/src/main.ts");
+    writeFileSync(mainPath, `${readFileSync(mainPath, "utf8")}\n// application edit\n`);
+    writeFileSync(
+      join(packageDir, "package.json"),
+      JSON.stringify({ name: "@podosoft/podokit-module-blog", version: "0.2.0" }),
+    );
+
+    expect(() =>
+      applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: REPO_TEMPLATES }),
+    ).toThrow(
+      'Restore @podosoft/podokit-module-blog@0.1.0, update PodoKit with --from, then upgrade external modules separately.',
+    );
   });
 });
 
