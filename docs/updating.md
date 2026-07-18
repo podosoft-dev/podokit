@@ -74,19 +74,17 @@ podo update --apply
 ```
 
 When a PodoKit version update also needs `--from` to merge edited managed files,
-update PodoKit before upgrading external packages. The previous template set
-must be assembled with the external versions recorded in the project manifest:
+install the target external package versions before applying the update. PodoKit
+uses those installed packages for the target tree and temporarily installs the
+exact versions recorded in the project manifest to reconstruct the merge base:
 
 ```bash
-podo update --apply --from <previous-podokit-templates>
 npm update @podosoft/podokit-module-blog
-podo update --apply
+podo update --apply --from <previous-podokit-templates>
 ```
 
-If the external package was upgraded first, restore its recorded version, apply
-the PodoKit update with `--from`, and then upgrade the external package in a
-separate update. PodoKit reports this ordering problem before attempting the
-3-way merge.
+Registry access to the recorded external versions is required only when a
+3-way merge needs a previous tree. Clean updates do not fetch a merge base.
 
 The update assembler resolves the package from the generated project's
 `node_modules` and retains its root dependency declaration. If the package is

@@ -125,7 +125,7 @@ describe("external module updates", () => {
     expect(after.modules.find((module) => module.name === "blog")?.moduleVersion).toBe("0.2.0");
   });
 
-  it("rejects a merge base after an external module was upgraded", () => {
+  it("replays the recorded external module version for the merge base", () => {
     const project = join(tmp(), "app");
     create({ name: "app", template: "fullstack-nest-svelte", templatesDir: REPO_TEMPLATES, targetDir: project });
     const packageDir = join(project, "node_modules/@podosoft/podokit-module-blog");
@@ -147,11 +147,29 @@ describe("external module updates", () => {
       JSON.stringify({ name: "@podosoft/podokit-module-blog", version: "0.2.0" }),
     );
 
-    expect(() =>
-      applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: REPO_TEMPLATES }),
-    ).toThrow(
-      'Restore @podosoft/podokit-module-blog@0.1.0, update PodoKit with --from, then upgrade external modules separately.',
+    const previousRoot = join(tmp(), "previous-modules");
+    const previousPackageDir = join(previousRoot, "node_modules/@podosoft/podokit-module-blog");
+    mkdirSync(previousPackageDir, { recursive: true });
+    writeFileSync(join(previousRoot, "package.json"), JSON.stringify({ name: "previous-modules", private: true }));
+    writeFileSync(
+      join(previousPackageDir, "package.json"),
+      JSON.stringify({ name: "@podosoft/podokit-module-blog", version: "0.1.0" }),
     );
+    writeFileSync(
+      join(previousPackageDir, "module.manifest.json"),
+      JSON.stringify({ manifestVersion: 1, name: "blog", description: "test", targetApp: "api" }),
+    );
+
+    const result = applyUpdate(project, REPO_TEMPLATES, {
+      oldTemplatesDir: REPO_TEMPLATES,
+      oldExternalModulesRoot: previousRoot,
+    });
+    expect(result.merged).toContain("apps/api/src/main.ts");
+    expect(readFileSync(mainPath, "utf8")).toContain("// application edit");
+    const manifest = JSON.parse(readFileSync(join(project, ".podokit/manifest.json"), "utf8")) as {
+      modules: { name: string; moduleVersion?: string }[];
+    };
+    expect(manifest.modules.find((module) => module.name === "blog")?.moduleVersion).toBe("0.2.0");
   });
 });
 
