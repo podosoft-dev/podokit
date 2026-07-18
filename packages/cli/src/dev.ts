@@ -319,7 +319,8 @@ function composeCommand(action: "down" | "exec" | "logs" | "ps" | "watch", args:
       command.push(value);
     }
   }
-  return [...global, action, ...command];
+  const activeProfiles = action === "down" ? ["--profile", "*"] : [];
+  return [...activeProfiles, ...global, action, ...command];
 }
 
 function stopGatewayWhenUnused(runner: CommandRunner): void {

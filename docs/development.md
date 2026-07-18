@@ -128,7 +128,9 @@ What you get:
   instant Vite HMR; an **API** source change restarts the api service (~5s) — the stable
   approach for NestJS in a container (its in-process watcher doesn't reliably respawn).
 - **Lifecycle helpers.** Use `podo dev ps`, `podo dev logs`, `podo dev exec`, and
-  `podo dev down`. The last project removed also removes the shared gateway and network.
+  `podo dev down`. `down` automatically activates every Compose profile so it also
+  removes optional services that were started by an earlier `watch` command. The last
+  project removed also removes the shared gateway and network.
 - **Profiles match modules** (same names as above): `cache` (redis), `storage` (minio),
   `queue` (worker). A minimal app needs none; enable the ones your app uses.
 - **Editors & AI agents inside the container.** `.devcontainer/devcontainer.json` lets VS Code

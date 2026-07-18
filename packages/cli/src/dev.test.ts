@@ -119,9 +119,26 @@ describe("PodoKit development gateway", () => {
 
     runDevCommand(root, "down", ["--profile", "cache", "--volumes"], runner);
     const downCall = calls.find(({ args }) => args.includes("down"));
-    expect(downCall?.args.slice(-4)).toEqual(["--profile", "cache", "down", "--volumes"]);
+    expect(downCall?.args.slice(-6)).toEqual(["--profile", "*", "--profile", "cache", "down", "--volumes"]);
     expect(existsSync(join(devHome, "projects", `${runtime.routeId}.json`))).toBe(false);
     expect(calls.some(({ args }) => args[0] === "rm" && args.includes("podokit-dev-gateway"))).toBe(true);
+  });
+
+  it("activates every compose profile when stopping a project", () => {
+    const root = project();
+    const devHome = temporaryDirectory("podokit-dev-home-");
+    process.env.PODOKIT_DEV_HOME = devHome;
+    const calls: string[][] = [];
+    const runner: CommandRunner = (_command, args) => {
+      calls.push(args);
+      if (args[0] === "info") return { status: 0, stdout: "27.0.0\n", stderr: "" };
+      return { status: 0, stdout: "", stderr: "" };
+    };
+
+    runDevCommand(root, "down", [], runner);
+
+    const downCall = calls.find((args) => args.includes("down"));
+    expect(downCall?.slice(-3)).toEqual(["--profile", "*", "down"]);
   });
 
   it("preserves the route when compose down fails", () => {

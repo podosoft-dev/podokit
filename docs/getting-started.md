@@ -43,11 +43,13 @@ npx @podosoft/podokit dev exec api npm run migration:run -w my-app-api
 npx @podosoft/podokit dev down
 ```
 
-`dev down` removes only the current project. When it removes the last registered
-project, it also removes the shared gateway and network. Hostname collisions and
-an unrelated process already owning loopback port 80 fail with an actionable
-error instead of silently remapping a port. See [development.md](development.md)
-for module profiles, HMR, multi-project routing, and HTTPS OAuth tunnels.
+`dev down` removes only the current project, including services started with any
+Compose profile; you do not need to repeat the earlier `--profile` flags. When it
+removes the last registered project, it also removes the shared gateway and network.
+Hostname collisions and an unrelated process already owning loopback port 80 fail
+with an actionable error instead of silently remapping a port. See
+[development.md](development.md) for module profiles, HMR, multi-project routing,
+and HTTPS OAuth tunnels.
 
 For a quick host-process loop instead, start the dependencies and run the app on
 the traditional ports:
