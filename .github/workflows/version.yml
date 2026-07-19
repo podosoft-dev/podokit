@@ -32,7 +32,7 @@ jobs:
       # review, "Dismiss stale approvals when new commits are pushed", ideally
       # CODEOWNERS). This workflow only *creates* the PR; it never approves, and it
       # never publishes (publishing is release.yml on a vX.Y.Z tag).
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 20
