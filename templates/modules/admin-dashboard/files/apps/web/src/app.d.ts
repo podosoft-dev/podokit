@@ -20,8 +20,10 @@ declare global {
     interface Locals {
       user: SessionUser | null;
       session: { id: string; impersonatedBy?: string | null } | null;
+      authUnavailable: boolean;
       locale: Locale;
       site: SiteSettings | null;
+      siteUnavailable: boolean;
     }
   }
 }

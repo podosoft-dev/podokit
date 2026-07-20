@@ -146,8 +146,10 @@ It starts Verdaccio (`scripts/verdaccio.yaml`), publishes the three packages
 + `podo add admin-dashboard`, `npm install`s **resolving `@podosoft/*` from the
 registry** (no `file:` shortcut), writes `.env`, migrates, builds + starts the API and
 web, and runs the shipped `test:e2e`. Ports and Postgres are env-configurable
-(`REGISTRY_PORT`, `API_PORT`, `WEB_PORT`, `POSTGRES_*`); `KEEP=1` preserves the app for
-inspection.
+(`REGISTRY_PORT`, `API_PORT`, `WEB_PORT`, `OUTAGE_WEB_PORT`, `POSTGRES_*`). Before
+starting the API, it also boots the generated web app against an unreachable backend
+and verifies that public `/` still renders, protected `/admin` returns 503 without a
+redirect, and no session cookie is modified. `KEEP=1` preserves the app for inspection.
 
 This is the CI job [`.github/workflows/e2e.yml`](../.github/workflows/e2e.yml):
 PostgreSQL service with a health check, Playwright browser cache, report + trace

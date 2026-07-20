@@ -50,7 +50,7 @@
       "text": "  { href: \"/admin/blog\", label: (t) => t.blog.nav, icon: NewspaperIcon, adminOnly: true },"
     },
     {
-      "file": "apps/web/src/routes/+layout.server.ts",
+      "file": "apps/web/src/lib/server/guards.ts",
       "marker": "// podokit:end:public-paths",
       "text": "  \"/blog\","
     },
