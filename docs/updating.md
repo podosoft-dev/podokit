@@ -132,12 +132,15 @@ touches them.
 
 ### Managed files inside owned areas
 
-Broad guidance directories such as `.claude/**` remain user-owned by default.
-A module can declare `managedOverrides` for the exact workflow it supplies, for
-example `.claude/skills/podokit-configure-auth/**`. Those files receive normal
-managed update protection: unchanged files update automatically, while local
-edits require a 3-way merge and are never silently replaced. The exception is
-recorded in `.podokit/manifest.json` and removed with the module. A file-level
+Broad areas such as `.claude/**` and `apps/web/src/routes/**` remain user-owned
+by default. A module can declare `managedOverrides` for the exact workflow or
+route behavior it supplies, for example
+`.claude/skills/podokit-configure-auth/**` or a generated
+`+page.server.ts` loader. Presentation files and the application root layout
+remain owned. Managed exceptions receive normal update protection: unchanged
+files update automatically, while local edits require a 3-way merge and are
+never silently replaced. The exception is recorded in
+`.podokit/manifest.json` and removed with the module. A file-level
 `podo eject <path>` still wins over a broad managed override when an application
 chooses to own that generated workflow permanently.
 

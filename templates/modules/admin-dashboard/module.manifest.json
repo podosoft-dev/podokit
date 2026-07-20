@@ -17,6 +17,19 @@
     "apps/web/src/lib/i18n/locales/**",
     "apps/web/src/lib/i18n/catalogs/app/**"
   ],
+  "managedOverrides": [
+    "apps/web/src/routes/(app)/+layout.server.ts",
+    "apps/web/src/routes/(app)/admin/account/+page.server.ts",
+    "apps/web/src/routes/(app)/admin/audit/+page.server.ts",
+    "apps/web/src/routes/(app)/admin/organizations/+page.server.ts",
+    "apps/web/src/routes/(app)/admin/sessions/+page.server.ts",
+    "apps/web/src/routes/(app)/admin/settings/+page.server.ts",
+    "apps/web/src/routes/(app)/admin/users/+page.server.ts",
+    "apps/web/src/routes/(auth)/login/+page.server.ts",
+    "apps/web/src/routes/(auth)/signup/+page.server.ts",
+    "apps/web/src/routes/account/+page.server.ts",
+    "apps/web/src/routes/setup-2fa/+page.server.ts"
+  ],
   "packageOverlays": {
     "api": {
       "scripts": {
