@@ -25,10 +25,13 @@ podo update
 podo update --apply
 ```
 
-Posts created by regular users are published immediately. Authors can edit and
-delete their own posts and comments; admins can manage all content. Deleting a
-user keeps their content with its author snapshot, while deleting a post also
-deletes its comments.
+Posts start as drafts for every authenticated author. The **Show post** switch
+includes a post in public lists and detail pages; turning it off hides the post
+without changing its first publication time or list position. Authors can find
+both drafts and published posts under `/blog/mine`, edit or delete their own
+posts and comments, and admins can manage all content. Deleting a user keeps
+their content with its author snapshot, while deleting a post also deletes its
+comments.
 
 `BlogEditor` and `BlogProse` share the same safe GFM renderer, so blockquotes,
 ordered lists, tables, and other supported Markdown have the same markup and
@@ -39,3 +42,4 @@ Signed-in authors can select **Add image** in `BlogEditor`. PNG, JPEG, GIF, WebP
 and AVIF files up to 5 MB are stored in object storage and inserted at the current
 cursor as Markdown. Blog images use the stable public path `/api/blog/images/:id`;
 they do not use expiring presigned URLs. SVG uploads are intentionally unsupported.
+The same upload flow supports a cover image, with an immediate editor preview.

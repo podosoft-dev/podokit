@@ -142,6 +142,22 @@ export class BlogController {
     return new StreamableFile(image.body, { type: image.contentType });
   }
 
+  @Get("blog/mine")
+  mine(
+    @Session() session: UserSession,
+    @Query() query: BlogPageDto,
+  ): Promise<Paginated<BlogPost>> {
+    return this.blog.listMine(query, actorFrom(session));
+  }
+
+  @Get("blog/manage/:slug")
+  manage(
+    @Session() session: UserSession,
+    @Param("slug") slug: string,
+  ): Promise<BlogPost> {
+    return this.blog.getManageableBySlug(slug, actorFrom(session));
+  }
+
   @Public()
   @Get("blog/:slug/comments")
   comments(

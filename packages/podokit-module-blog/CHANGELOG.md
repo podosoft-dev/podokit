@@ -1,5 +1,12 @@
 # @podosoft/podokit-module-blog
 
+## Unreleased
+
+### Minor Changes
+
+- Start posts as private drafts, add author draft management and cover image uploads,
+  and preserve the original publication time when visibility changes.
+
 ## 0.3.1
 
 ### Patch Changes

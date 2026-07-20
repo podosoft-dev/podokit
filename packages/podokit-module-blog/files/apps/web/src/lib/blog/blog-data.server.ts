@@ -10,8 +10,22 @@ export function loadBlogPosts(
   return serverApiClient(event).get<Paginated<BlogPost>>(`/blog?page=${page}&pageSize=${pageSize}`);
 }
 
+export function loadMyBlogPosts(
+  event: RequestEvent,
+  page: number,
+  pageSize = 10,
+): Promise<Paginated<BlogPost>> {
+  return serverApiClient(event).get<Paginated<BlogPost>>(
+    `/blog/mine?page=${page}&pageSize=${pageSize}`,
+  );
+}
+
 export function loadBlogPost(event: RequestEvent, slug: string): Promise<BlogPost> {
   return serverApiClient(event).get<BlogPost>(`/blog/${encodeURIComponent(slug)}`);
+}
+
+export function loadManagedBlogPost(event: RequestEvent, slug: string): Promise<BlogPost> {
+  return serverApiClient(event).get<BlogPost>(`/blog/manage/${encodeURIComponent(slug)}`);
 }
 
 export function loadBlogComments(
@@ -57,5 +71,6 @@ function toPayload(draft: BlogDraft): Record<string, unknown> {
     body: draft.body,
     coverImage: draft.coverImage || null,
     tags: draft.tags,
+    status: draft.status,
   };
 }

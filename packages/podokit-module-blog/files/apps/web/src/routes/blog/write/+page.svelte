@@ -15,6 +15,8 @@
     cancel: i18n.t.blog.cancel, addImage: i18n.t.blog.addImage,
     uploadingImage: i18n.t.blog.uploadingImage, imageHelp: i18n.t.blog.imageHelp,
     imageUploadFailed: i18n.t.blog.imageUploadFailed,
+    showPost: i18n.t.blog.showPost, showPostHelp: i18n.t.blog.showPostHelp,
+    uploadCover: i18n.t.blog.uploadCover, removeCover: i18n.t.blog.removeCover,
   });
 
   async function save(value: BlogDraft): Promise<void> {
@@ -22,7 +24,7 @@
     try {
       const post = await blogClient.createPost(value);
       toast.success(i18n.t.blog.saved);
-      await goto(`/blog/${post.slug}`);
+      await goto(post.status === "published" ? `/blog/${post.slug}` : `/blog/${post.slug}/edit`);
     } catch {
       toast.error(i18n.t.blog.saveFailed);
     } finally {

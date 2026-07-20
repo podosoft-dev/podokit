@@ -88,7 +88,7 @@ test("authenticated authors can upload stable public blog images", async ({
   await context.dispose();
 });
 
-test("authenticated author can publish, edit, comment, and delete", async ({
+test("authenticated author can manage draft visibility without changing publication order", async ({
   playwright,
 }) => {
   const marker = Date.now();
@@ -104,15 +104,40 @@ test("authenticated author can publish, edit, comment, and delete", async ({
   const created = await context.post("/api/blog", {
     data: {
       title: `User post ${marker}`,
-      excerpt: "Published immediately",
+      excerpt: "Starts as a draft",
       body: "# Safe",
+      coverImage: "/api/blog/images/example.png",
       tags: ["e2e"],
     },
   });
   expect(created.ok()).toBeTruthy();
   const post = await created.json();
-  expect(post.status).toBe("published");
+  expect(post.status).toBe("draft");
+  expect(post.publishedAt).toBeNull();
+  expect(post.coverImage).toBe("/api/blog/images/example.png");
   expect(post.authorId).toBeTruthy();
+  expect((await context.get(`/api/blog/${post.slug}`)).status()).toBe(404);
+
+  const mine = await context.get("/api/blog/mine?page=1&pageSize=10");
+  expect(mine.ok()).toBeTruthy();
+  expect(
+    ((await mine.json()).items as Array<{ id: string }>).some(
+      (item) => item.id === post.id,
+    ),
+  ).toBeTruthy();
+  const manageable = await context.get(`/api/blog/manage/${post.slug}`);
+  expect(manageable.ok()).toBeTruthy();
+  expect((await manageable.json()).id).toBe(post.id);
+
+  const published = await context.patch(`/api/blog/${post.id}`, {
+    data: { status: "published" },
+  });
+  expect(published.ok()).toBeTruthy();
+  const publishedPost = await published.json();
+  expect(publishedPost.status).toBe("published");
+  expect(typeof publishedPost.publishedAt).toBe("string");
+  const firstPublishedAt = publishedPost.publishedAt as string;
+  expect((await context.get(`/api/blog/${post.slug}`)).ok()).toBeTruthy();
 
   const comment = await context.post(`/api/blog/${post.slug}/comments`, {
     data: { body: "A comment" },
@@ -131,7 +156,33 @@ test("authenticated author can publish, edit, comment, and delete", async ({
     data: { excerpt: "Updated" },
   });
   expect(updated.ok()).toBeTruthy();
-  expect((await updated.json()).excerpt).toBe("Updated");
+  expect(await updated.json()).toMatchObject({
+    excerpt: "Updated",
+    status: "published",
+    publishedAt: firstPublishedAt,
+  });
+
+  const hidden = await context.patch(`/api/blog/${post.id}`, {
+    data: { status: "draft" },
+  });
+  expect(hidden.ok()).toBeTruthy();
+  expect(await hidden.json()).toMatchObject({
+    status: "draft",
+    publishedAt: firstPublishedAt,
+  });
+  expect((await context.get(`/api/blog/${post.slug}`)).status()).toBe(404);
+  const publicPage = await context.get("/api/blog?page=1&pageSize=50");
+  expect(
+    ((await publicPage.json()).items as Array<{ id: string }>).some(
+      (item) => item.id === post.id,
+    ),
+  ).toBeFalsy();
+
+  const republished = await context.patch(`/api/blog/${post.id}`, {
+    data: { status: "published" },
+  });
+  expect(republished.ok()).toBeTruthy();
+  expect((await republished.json()).publishedAt).toBe(firstPublishedAt);
 
   const removed = await context.delete(`/api/blog/${post.id}`);
   expect(removed.status()).toBe(204);
@@ -153,7 +204,12 @@ test("another user cannot modify an author's post while an admin can", async ({
     true,
   );
   const created = await user.post("/api/blog", {
-    data: { title: `Owned ${marker}`, body: "body", tags: [] },
+    data: {
+      title: `Owned ${marker}`,
+      body: "body",
+      tags: [],
+      status: "published",
+    },
   });
   expect(created.ok()).toBeTruthy();
   const post = await created.json();
@@ -173,12 +229,16 @@ test("another user cannot modify an author's post while an admin can", async ({
   expect(forbiddenUpdate.status()).toBe(403);
   expect((await forbiddenUpdate.json()).error.code).toBe("BLOG_POST_FORBIDDEN");
   expect((await other.delete(`/api/blog/${post.id}`)).status()).toBe(403);
+  const forbiddenManage = await other.get(`/api/blog/manage/${post.slug}`);
+  expect(forbiddenManage.status()).toBe(403);
+  expect((await forbiddenManage.json()).error.code).toBe("BLOG_POST_FORBIDDEN");
 
   const admin = await signedIn(playwright, ADMIN);
   const updated = await admin.patch(`/api/admin/blog/${post.id}`, {
     data: { status: "draft" },
   });
   expect(updated.ok()).toBeTruthy();
+  expect((await updated.json()).publishedAt).toBe(post.publishedAt);
   expect((await admin.get(`/api/blog/${post.slug}`)).status()).toBe(404);
   expect((await admin.delete(`/api/admin/blog/${post.id}`)).status()).toBe(204);
 

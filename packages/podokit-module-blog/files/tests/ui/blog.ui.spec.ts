@@ -25,6 +25,10 @@ test.describe("signed-in blog author", () => {
     const body = `# ${title}\n\n## Section\n\n> Quoted text\n\n1. First\n2. Second\n\n| State | Value |\n| --- | --- |\n| Ready | Yes |\n\n<script>alert(1)</script>`;
     await ready(page, "/blog/write");
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    const visibility = page.getByRole("switch", {
+      name: /show post|게시글 표시/i,
+    });
+    await expect(visibility).not.toBeChecked();
     await page.getByLabel(/title|제목/i).fill(title);
     const bodyInput = page.getByLabel(/body|본문/i);
     await bodyInput.fill(body);
@@ -39,6 +43,12 @@ test.describe("signed-in blog author", () => {
     await expect(bodyInput).toHaveValue(
       /!\[preview-pixel\]\(\/api\/blog\/images\/.+\.png\)/,
     );
+    await page.locator("#blog-cover-file").setInputFiles({
+      name: "cover-pixel.png",
+      mimeType: "image/png",
+      buffer: PNG_PIXEL,
+    });
+    await expect(page.locator('img[src*="/api/blog/images/"]').first()).toBeVisible();
     await page.getByRole("tab", { name: /preview|미리보기/i }).click();
     const preview = page.locator("[data-blog-preview] [data-blog-prose]");
     await expect(
@@ -54,6 +64,8 @@ test.describe("signed-in blog author", () => {
     );
     await expect(preview.locator("script")).toHaveCount(0);
     const previewHtml = await preview.innerHTML();
+    await visibility.click();
+    await expect(visibility).toBeChecked();
 
     const save = page.getByRole("button", { name: /save|저장/i });
     let publishedSlug = "";
@@ -80,6 +92,81 @@ test.describe("signed-in blog author", () => {
       .getByRole("button", { name: /delete|삭제/i })
       .click();
     await expect(page).toHaveURL(/\/blog$/);
+  });
+
+  test("keeps drafts private and preserves their first publication date", async ({
+    page,
+  }) => {
+    const marker = Date.now();
+    const title = `Draft visibility ${marker}`;
+    await ready(page, "/blog/write");
+    await page.getByLabel(/title|제목/i).fill(title);
+    await page.getByLabel(/body|본문/i).fill("Draft lifecycle body");
+
+    const created = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/api/blog" &&
+        response.request().method() === "POST",
+    );
+    await page.getByRole("button", { name: /save|저장/i }).click();
+    const createdResponse = await created;
+    expect(createdResponse.ok()).toBeTruthy();
+    const post = (await createdResponse.json()) as {
+      id: string;
+      slug: string;
+      status: string;
+      publishedAt: string | null;
+    };
+    expect(post.status).toBe("draft");
+    expect(post.publishedAt).toBeNull();
+    await expect(page).toHaveURL(new RegExp(`/blog/${post.slug}/edit$`));
+    expect((await page.request.get(`/api/blog/${post.slug}`)).status()).toBe(404);
+
+    await ready(page, "/blog/mine");
+    const row = page.getByRole("row").filter({ hasText: title });
+    await expect(row.getByText(/^(draft|초안)$/i)).toBeVisible();
+    await row.getByRole("link", { name: /edit|수정/i }).click();
+
+    const visibility = page.getByRole("switch", {
+      name: /show post|게시글 표시/i,
+    });
+    await visibility.click();
+    const firstPublish = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === `/api/blog/${post.id}` &&
+        response.request().method() === "PATCH",
+    );
+    await page.getByRole("button", { name: /save|저장/i }).click();
+    const firstPublishedPost = (await (await firstPublish).json()) as {
+      publishedAt: string;
+    };
+    await expect(page).toHaveURL(new RegExp(`/blog/${post.slug}$`));
+
+    await page.getByRole("link", { name: /edit|수정/i }).first().click();
+    await visibility.click();
+    const hidden = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === `/api/blog/${post.id}` &&
+        response.request().method() === "PATCH",
+    );
+    await page.getByRole("button", { name: /save|저장/i }).click();
+    expect((await (await hidden).json()).publishedAt).toBe(
+      firstPublishedPost.publishedAt,
+    );
+    await expect(page).toHaveURL(new RegExp(`/blog/${post.slug}/edit$`));
+    expect((await page.request.get(`/api/blog/${post.slug}`)).status()).toBe(404);
+
+    await visibility.click();
+    const republished = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === `/api/blog/${post.id}` &&
+        response.request().method() === "PATCH",
+    );
+    await page.getByRole("button", { name: /save|저장/i }).click();
+    expect((await (await republished).json()).publishedAt).toBe(
+      firstPublishedPost.publishedAt,
+    );
+    expect((await page.request.delete(`/api/blog/${post.id}`)).status()).toBe(204);
   });
 
   test("can create, edit, and delete a comment", async ({
