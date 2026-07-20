@@ -1,5 +1,11 @@
 # @podosoft/podokit-module-blog
 
+## 0.3.1
+
+### Patch Changes
+
+- [#108](https://github.com/podosoft-dev/podokit/pull/108) [`752ae13`](https://github.com/podosoft-dev/podokit/commit/752ae13e6d379dbc0db03faae694d8119f92c1f9) Thanks [@korone00](https://github.com/korone00)! - Return 503 for protected pages when session or site policy checks cannot reach the backend, while preserving session cookies and public-page fallbacks.
+
 ## 0.3.0
 
 ### Minor Changes
