@@ -18,8 +18,9 @@ npx @podosoft/podokit add <module>
   restyle — merged into your project so `podo update` never touches them; see
   [updating](updating.md#module-owned-paths)),
 - may declare `managedOverrides` for module-owned files inside a broadly owned
-  area, such as a generated `.claude/skills/<module>/**` workflow that must keep
-  receiving updates, and
+  area, such as a generated `.claude/skills/<module>/**` workflow or an exact
+  route server loader that must keep receiving behavioral and security updates;
+  presentation routes and the application root layout stay owned, and
 - prints follow-up steps.
 
 ## Available modules

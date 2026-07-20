@@ -9,6 +9,19 @@ import { planUpdate, applyUpdate, summarize } from "./update";
 import { readFilesLock } from "./lockfile";
 
 const REPO_TEMPLATES = resolve(process.cwd(), "..", "..", "templates");
+const ADMIN_DASHBOARD_MANAGED_ROUTE_LOADERS = [
+  "apps/web/src/routes/(app)/+layout.server.ts",
+  "apps/web/src/routes/(app)/admin/account/+page.server.ts",
+  "apps/web/src/routes/(app)/admin/audit/+page.server.ts",
+  "apps/web/src/routes/(app)/admin/organizations/+page.server.ts",
+  "apps/web/src/routes/(app)/admin/sessions/+page.server.ts",
+  "apps/web/src/routes/(app)/admin/settings/+page.server.ts",
+  "apps/web/src/routes/(app)/admin/users/+page.server.ts",
+  "apps/web/src/routes/(auth)/login/+page.server.ts",
+  "apps/web/src/routes/(auth)/signup/+page.server.ts",
+  "apps/web/src/routes/account/+page.server.ts",
+  "apps/web/src/routes/setup-2fa/+page.server.ts",
+];
 
 const created: string[] = [];
 function tmp(): string {
@@ -272,38 +285,24 @@ describe("applyUpdate", () => {
     );
   });
 
-  it("delivers backend availability handling through managed files", () => {
+  it("promotes pristine module route loaders from owned to managed", () => {
     const oldTemplates = oldTemplatesCopy();
-    const oldHooksPath = join(
+    const oldManifestPath = join(oldTemplates, "modules/admin-dashboard/module.manifest.json");
+    const oldManifest = JSON.parse(readFileSync(oldManifestPath, "utf8")) as {
+      managedOverrides?: string[];
+    };
+    delete oldManifest.managedOverrides;
+    writeFileSync(oldManifestPath, `${JSON.stringify(oldManifest, null, 2)}\n`);
+
+    const oldUsersLoaderPath = join(
       oldTemplates,
-      "modules/admin-dashboard/files/apps/web/src/hooks.server.ts",
+      "modules/admin-dashboard/files/apps/web/src/routes/(app)/admin/users/+page.server.ts",
     );
     writeFileSync(
-      oldHooksPath,
-      readFileSync(oldHooksPath, "utf8").replace(
-        "event.locals.authUnavailable = false;",
-        "event.locals.authUnavailable = true; // previous managed baseline",
-      ),
-    );
-    const oldAppTypesPath = join(
-      oldTemplates,
-      "modules/admin-dashboard/files/apps/web/src/app.d.ts",
-    );
-    writeFileSync(
-      oldAppTypesPath,
-      readFileSync(oldAppTypesPath, "utf8")
-        .replace("      authUnavailable: boolean;\n", "")
-        .replace("      siteUnavailable: boolean;\n", ""),
-    );
-    const oldGuardsPath = join(
-      oldTemplates,
-      "modules/admin-dashboard/files/apps/web/src/lib/server/guards.ts",
-    );
-    writeFileSync(
-      oldGuardsPath,
-      readFileSync(oldGuardsPath, "utf8").replace(
-        "return PUBLIC_PATHS.some((path) => pathname === path || (path !== \"/\" && pathname.startsWith(`${path}/`)));",
-        "return false; // previous managed baseline",
+      oldUsersLoaderPath,
+      readFileSync(oldUsersLoaderPath, "utf8").replace(
+        "requireAdmin(locals.user, locals);",
+        "requireAdmin(locals.user);",
       ),
     );
 
@@ -320,30 +319,86 @@ describe("applyUpdate", () => {
       modulesDir: join(oldTemplates, "modules"),
     });
 
-    const ownedLayoutPath = join(project, "apps/web/src/routes/+layout.server.ts");
-    writeFileSync(
-      ownedLayoutPath,
-      `${readFileSync(ownedLayoutPath, "utf8")}\n// application-owned layout\n`,
+    const usersLoader = "apps/web/src/routes/(app)/admin/users/+page.server.ts";
+    expect(readFilesLock(project)?.files[usersLoader]?.tier).toBe("owned");
+    expect(readFilesLock(project)?.files["apps/web/src/routes/+layout.server.ts"]?.tier).toBe(
+      "owned",
     );
 
     const plan = planUpdate(project, REPO_TEMPLATES);
-    expect(plan.changes.find((change) => change.path === "apps/web/src/hooks.server.ts")?.action).toBe("update");
-    expect(plan.changes.find((change) => change.path === "apps/web/src/app.d.ts")?.action).toBe("update");
-    expect(plan.changes.find((change) => change.path === "apps/web/src/lib/server/guards.ts")?.action).toBe("update");
-    expect(plan.changes.find((change) => change.path === "apps/web/src/routes/+layout.server.ts")?.action).toBe("skip");
+    expect(plan.changes.find((change) => change.path === usersLoader)?.action).toBe("update");
+    expect(
+      plan.changes.find((change) => change.path === "apps/web/src/routes/+layout.server.ts")
+        ?.action,
+    ).toBe("skip");
 
     const result = applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
     expect(result.conflicts).toEqual([]);
-    expect(readFileSync(join(project, "apps/web/src/hooks.server.ts"), "utf8")).toContain(
-      "event.locals.authUnavailable = false;",
+    expect(result.written).toContain(usersLoader);
+    expect(readFileSync(join(project, usersLoader), "utf8")).toContain(
+      "requireAdmin(locals.user, locals);",
     );
-    expect(readFileSync(join(project, "apps/web/src/app.d.ts"), "utf8")).toContain(
-      "authUnavailable: boolean;",
+    for (const path of ADMIN_DASHBOARD_MANAGED_ROUTE_LOADERS) {
+      expect(readFilesLock(project)?.files[path]?.tier).toBe("managed");
+    }
+    expect(readFilesLock(project)?.files["apps/web/src/routes/+layout.server.ts"]?.tier).toBe(
+      "owned",
     );
-    expect(readFileSync(join(project, "apps/web/src/lib/server/guards.ts"), "utf8")).toContain(
-      "pathname.startsWith(`${path}/`)",
+    const manifest = JSON.parse(readFileSync(join(project, ".podokit/manifest.json"), "utf8")) as {
+      managedOverrides?: string[];
+    };
+    expect(manifest.managedOverrides).toEqual(
+      expect.arrayContaining(ADMIN_DASHBOARD_MANAGED_ROUTE_LOADERS),
     );
-    expect(readFileSync(ownedLayoutPath, "utf8")).toContain("// application-owned layout");
+  });
+
+  it("three-way merges an edited route loader when a module starts managing it", () => {
+    const oldTemplates = oldTemplatesCopy();
+    const oldManifestPath = join(oldTemplates, "modules/admin-dashboard/module.manifest.json");
+    const oldManifest = JSON.parse(readFileSync(oldManifestPath, "utf8")) as {
+      managedOverrides?: string[];
+    };
+    delete oldManifest.managedOverrides;
+    writeFileSync(oldManifestPath, `${JSON.stringify(oldManifest, null, 2)}\n`);
+
+    const usersLoader = "apps/web/src/routes/(app)/admin/users/+page.server.ts";
+    const oldUsersLoaderPath = join(oldTemplates, "modules/admin-dashboard/files", usersLoader);
+    writeFileSync(
+      oldUsersLoaderPath,
+      readFileSync(oldUsersLoaderPath, "utf8").replace(
+        "requireAdmin(locals.user, locals);",
+        "requireAdmin(locals.user);",
+      ),
+    );
+
+    const project = join(tmp(), "app");
+    create({
+      name: "app",
+      template: "fullstack-nest-svelte",
+      templatesDir: oldTemplates,
+      targetDir: project,
+    });
+    addModule({
+      projectRoot: project,
+      module: "admin-dashboard",
+      modulesDir: join(oldTemplates, "modules"),
+    });
+    const projectLoaderPath = join(project, usersLoader);
+    writeFileSync(
+      projectLoaderPath,
+      `${readFileSync(projectLoaderPath, "utf8")}\n// application-specific audit hook\n`,
+    );
+
+    const plan = planUpdate(project, REPO_TEMPLATES);
+    expect(plan.changes.find((change) => change.path === usersLoader)?.action).toBe("conflict");
+
+    const result = applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+    const merged = readFileSync(projectLoaderPath, "utf8");
+    expect(result.merged).toContain(usersLoader);
+    expect(result.conflicts).toEqual([]);
+    expect(merged).toContain("requireAdmin(locals.user, locals);");
+    expect(merged).toContain("// application-specific audit hook");
+    expect(readFilesLock(project)?.files[usersLoader]?.tier).toBe("managed");
   });
 
   it("applies a clean update to an unedited managed file", () => {

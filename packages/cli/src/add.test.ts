@@ -531,11 +531,22 @@ describe("addModule (auth / better-auth)", () => {
     expect(readManifest(project)?.managedOverrides).toContain(
       ".claude/skills/podokit-configure-auth/**",
     );
+    expect(readManifest(project)?.managedOverrides).toContain(
+      "apps/web/src/routes/(app)/admin/users/+page.server.ts",
+    );
     expect(
       readFilesLock(project)?.files[
         ".claude/skills/podokit-configure-auth/SKILL.md"
       ]?.tier,
     ).toBe("managed");
+    expect(
+      readFilesLock(project)?.files[
+        "apps/web/src/routes/(app)/admin/users/+page.server.ts"
+      ]?.tier,
+    ).toBe("managed");
+    expect(readFilesLock(project)?.files["apps/web/src/routes/+layout.server.ts"]?.tier).toBe(
+      "owned",
+    );
   });
 
   it("rejects a project without the target app", () => {
