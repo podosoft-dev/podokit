@@ -1,5 +1,11 @@
 # @podosoft/podokit
 
+## 0.12.4
+
+### Patch Changes
+
+- [#110](https://github.com/podosoft-dev/podokit/pull/110) [`2d0d99b`](https://github.com/podosoft-dev/podokit/commit/2d0d99b0717c2cbd9038b91b93c86fe98783e653) Thanks [@korone00](https://github.com/korone00)! - Keep admin dashboard route server loaders update-managed while preserving application-owned route presentation and root layouts.
+
 ## 0.12.3
 
 ### Patch Changes
