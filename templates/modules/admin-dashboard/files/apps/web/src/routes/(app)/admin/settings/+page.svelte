@@ -14,7 +14,7 @@
   import { moduleSettingsSections } from "$lib/admin/registry.svelte";
   import { toast } from "svelte-sonner";
   import { api } from "$lib/api";
-  import { getI18n } from "$lib/i18n";
+  import { fmt, getI18n } from "$lib/i18n";
   import type { Capabilities } from "@podosoft/podokit-api-client";
   import type { AuthConfigView, SocialProviderView } from "./+page.server";
 
@@ -93,14 +93,21 @@
   // ── Dialogs. Secret fields are write-only; leaving them blank keeps the stored
   //    secret. The Social login dialog manages every provider (list ⇄ add/edit
   //    form) in one popup. ──
-  let openDialog = $state<"social" | "smtp" | null>(null);
+  let openDialog = $state<"social" | "smtp" | "sessionIdle" | null>(null);
   let socialView = $state<"list" | "form">("list");
   let socialForm = $state({ id: "", clientId: "", clientSecret: "", redirectURI: "", enabled: true, adding: false });
   let smtp = $state({ enabled: false, host: "", port: 587, secure: false, user: "", from: "", pass: "" });
+  let sessionIdleTimeoutMinutes = $state(30);
   $effect(() => {
     if (!ac) return;
     smtp = { enabled: ac.smtp.enabled, host: ac.smtp.host, port: ac.smtp.port, secure: ac.smtp.secure, user: ac.smtp.user, from: ac.smtp.from, pass: "" };
+    sessionIdleTimeoutMinutes = ac.server.sessionIdleTimeoutMinutes ?? 30;
   });
+  const sessionIdleTimeoutValid = $derived(
+    Number.isInteger(Number(sessionIdleTimeoutMinutes))
+      && Number(sessionIdleTimeoutMinutes) >= 5
+      && Number(sessionIdleTimeoutMinutes) <= 10_080,
+  );
   const editingView = $derived(socialForm.adding ? undefined : ac?.social[socialForm.id]);
 
   function socialRedirectURI(): string {
@@ -140,6 +147,22 @@
   }
   async function saveSmtp(): Promise<void> {
     const done = await put({ smtp: { enabled: smtp.enabled, host: smtp.host, port: Number(smtp.port), secure: smtp.secure, user: smtp.user, from: smtp.from, ...(smtp.pass ? { pass: smtp.pass } : {}) } });
+    if (done) openDialog = null;
+  }
+  async function toggleSessionIdle(enabled: boolean): Promise<void> {
+    await put({
+      server: {
+        sessionIdleTimeoutMinutes: enabled
+          ? (ac?.server.sessionIdleTimeoutMinutes ?? 30)
+          : null,
+      },
+    });
+  }
+  async function saveSessionIdleTimeout(): Promise<void> {
+    if (!sessionIdleTimeoutValid) return;
+    const done = await put({
+      server: { sessionIdleTimeoutMinutes: Number(sessionIdleTimeoutMinutes) },
+    });
     if (done) openDialog = null;
   }
 
@@ -198,6 +221,28 @@
       status: { on: data.require2fa, label: data.require2fa ? i18n.t.settings.enabled : i18n.t.settings.disabled },
       // Only meaningful when 2FA itself is on; disabled otherwise.
       toggle: { checked: data.require2fa, disabled: saving || !caps.twoFactor, onChange: (v) => toggleFlag("require2fa", v) },
+    },
+    {
+      key: "session-idle-timeout",
+      name: i18n.t.settings.autoLogout,
+      desc: i18n.t.settings.autoLogoutDesc,
+      status: ac?.server.sessionIdleTimeoutMinutes
+        ? {
+            on: true,
+            label: fmt(i18n.t.settings.autoLogoutMinutes, {
+              minutes: ac.server.sessionIdleTimeoutMinutes,
+            }),
+          }
+        : { on: false, label: i18n.t.settings.disabled },
+      toggle: {
+        checked: ac?.server.sessionIdleTimeoutMinutes !== null && ac?.server.sessionIdleTimeoutMinutes !== undefined,
+        disabled: saving || !ac,
+        onChange: toggleSessionIdle,
+      },
+      configure: {
+        label: i18n.t.settings.configure,
+        onClick: () => (openDialog = "sessionIdle"),
+      },
     },
     serverCard("hibp", i18n.t.settings.breachCheck, i18n.t.settings.breachCheckDesc, caps.passwordBreachCheck),
     serverCard("allowDelete", i18n.t.settings.accountDeletion, i18n.t.settings.accountDeletionDesc, caps.deleteAccount),
@@ -349,6 +394,32 @@
         <Button disabled={saving || !socialForm.id} onclick={saveSocial}>{i18n.t.settings.save}</Button>
       </Dialog.Footer>
     {/if}
+  </Dialog.Content>
+</Dialog.Root>
+
+<!-- Sliding session expiration — enforced by better-auth and mirrored by the browser timer. -->
+<Dialog.Root open={openDialog === "sessionIdle"} onOpenChange={(v) => { if (!v) openDialog = null; }}>
+  <Dialog.Content>
+    <Dialog.Header>
+      <Dialog.Title>{i18n.t.settings.autoLogout}</Dialog.Title>
+      <Dialog.Description>{i18n.t.settings.autoLogoutDialogDesc}</Dialog.Description>
+    </Dialog.Header>
+    <div class="flex flex-col gap-2">
+      <Label for="session-idle-timeout">{i18n.t.settings.autoLogoutField}</Label>
+      <Input
+        id="session-idle-timeout"
+        type="number"
+        min="5"
+        max="10080"
+        step="1"
+        bind:value={sessionIdleTimeoutMinutes}
+      />
+      <p class="text-muted-foreground text-xs">{i18n.t.settings.autoLogoutHint}</p>
+    </div>
+    <Dialog.Footer>
+      <Button variant="outline" onclick={() => (openDialog = null)}>{i18n.t.settings.cancel}</Button>
+      <Button disabled={saving || !sessionIdleTimeoutValid} onclick={saveSessionIdleTimeout}>{i18n.t.settings.save}</Button>
+    </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>
 

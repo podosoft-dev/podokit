@@ -112,7 +112,7 @@ for a Kubernetes migration Job before a rolling deployment.
 
 - **Secure by default**: all module endpoints (jobs, storage, files, cache, …) are protected once `auth` is added.
 - **Configure it in the admin Settings page, not env.** Social OAuth providers, SMTP, the
-  server-enforced toggles (email verification, sign-up approval, breached-password check, account deletion, and —
+  server-enforced toggles (email verification, sign-up approval, automatic logout, breached-password check, account deletion, and —
   with the audit-log module — audit logging), and the feature flags (2FA, magic link, email OTP,
   username, multi-session, phone number, …) are all stored in the DB and **applied live — no
   restart** (paste a client id/secret and social login works on the next request). Only
@@ -132,6 +132,13 @@ for a Kubernetes migration Job before a rolling deployment.
   stable `SIGNUP_APPROVAL_REQUIRED` code. Existing users, `ADMIN_EMAILS`, and users created by an
   administrator remain approved. Turning the policy off auto-approves future registrations; it
   does not silently approve the existing queue. Approve those users from `/admin/users`.
+- **Automatic logout is server-enforced.** Turn on *Automatic logout* in Settings and choose an
+  idle period from 5 minutes through 7 days. Better Auth uses a sliding session expiration, while
+  the generated browser runtime observes user activity across tabs, refreshes active sessions at
+  a bounded cadence, and returns an inactive user to `/login`. Enabling or changing the policy
+  resets existing session expirations from the change time, so it applies without a restart or a
+  new sign-in. `AUTH_SESSION_IDLE_TIMEOUT_MINUTES` is the optional environment fallback; the DB
+  setting takes precedence and `null` preserves Better Auth's default seven-day lifetime.
 - **Closing public sign-up is provider-independent.** Turn off *Allow public sign-up* under
   Settings → General to reject every new self-registration path with the stable
   `PUBLIC_SIGNUP_DISABLED` code. Email, Google, Apple, magic-link, and future providers all use
@@ -478,7 +485,7 @@ OAuth, SMTP, and sign-up approval configuration.
 - **/admin/sessions** (admin only) — active sessions across all users (revoke).
 - **/admin/organizations** (admin only) — organizations, members, and invitations.
 - **/admin/audit** (admin only) — the audit log of security-relevant actions.
-- **/admin/settings** (admin only) — enable/disable sign-in methods and configure OAuth providers, SMTP, sign-up approval, and other server toggles at runtime (see below), plus the **Appearance** tab for the runtime theme (see "Appearance").
+- **/admin/settings** (admin only) — enable/disable sign-in methods and configure OAuth providers, SMTP, sign-up approval, automatic logout, and other server toggles at runtime (see below), plus the **Appearance** tab for the runtime theme (see "Appearance").
 - **/account** — the signed-in user's profile, password, 2FA, passkeys, API keys, and sessions without the admin shell.
 - **/admin/account** — the same account controls inside the admin shell, retained for existing links and applications.
 

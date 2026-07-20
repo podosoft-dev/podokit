@@ -39,6 +39,8 @@ export interface Capabilities {
   oidcProvider: boolean;
   /** Assignable role names (access-control). */
   roles: string[];
+  /** Automatic logout after this many inactive minutes; null/absent means disabled. */
+  sessionIdleTimeoutMinutes?: number | null;
 }
 
 /** Stable better-auth error code returned when a user still needs approval. */

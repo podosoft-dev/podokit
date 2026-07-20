@@ -1,5 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { encryptSecret, decryptSecret, envAuthConfig, SUPPORTED_PROVIDER_IDS, socialKey } from "./index";
+import {
+  DEFAULT_SESSION_IDLE_TIMEOUT_MINUTES,
+  MAX_SESSION_IDLE_TIMEOUT_MINUTES,
+  MIN_SESSION_IDLE_TIMEOUT_MINUTES,
+  decryptSecret,
+  encryptSecret,
+  envAuthConfig,
+  isSessionIdleTimeoutMinutes,
+  resolveSessionIdleTimeoutMinutes,
+  sessionIdleOptions,
+  socialKey,
+  SUPPORTED_PROVIDER_IDS,
+} from "./index";
 
 describe("secret envelope", () => {
   it("round-trips a value", () => {
@@ -35,6 +47,29 @@ describe("auth-config helpers", () => {
       if (previous === undefined) delete process.env.AUTH_REQUIRE_SIGNUP_APPROVAL;
       else process.env.AUTH_REQUIRE_SIGNUP_APPROVAL = previous;
     }
+  });
+  it("reads and validates the session idle-timeout environment fallback", () => {
+    const previous = process.env.AUTH_SESSION_IDLE_TIMEOUT_MINUTES;
+    try {
+      process.env.AUTH_SESSION_IDLE_TIMEOUT_MINUTES = String(DEFAULT_SESSION_IDLE_TIMEOUT_MINUTES);
+      expect(envAuthConfig().sessionIdleTimeoutMinutes).toBe(DEFAULT_SESSION_IDLE_TIMEOUT_MINUTES);
+      process.env.AUTH_SESSION_IDLE_TIMEOUT_MINUTES = "4";
+      expect(envAuthConfig().sessionIdleTimeoutMinutes).toBeNull();
+    } finally {
+      if (previous === undefined) delete process.env.AUTH_SESSION_IDLE_TIMEOUT_MINUTES;
+      else process.env.AUTH_SESSION_IDLE_TIMEOUT_MINUTES = previous;
+    }
+  });
+  it("normalizes idle timeout values and builds sliding session options", () => {
+    expect(isSessionIdleTimeoutMinutes(null)).toBe(true);
+    expect(isSessionIdleTimeoutMinutes(MIN_SESSION_IDLE_TIMEOUT_MINUTES)).toBe(true);
+    expect(isSessionIdleTimeoutMinutes(MAX_SESSION_IDLE_TIMEOUT_MINUTES)).toBe(true);
+    expect(isSessionIdleTimeoutMinutes(MIN_SESSION_IDLE_TIMEOUT_MINUTES - 1)).toBe(false);
+    expect(isSessionIdleTimeoutMinutes(MAX_SESSION_IDLE_TIMEOUT_MINUTES + 1)).toBe(false);
+    expect(isSessionIdleTimeoutMinutes(30.5)).toBe(false);
+    expect(resolveSessionIdleTimeoutMinutes("30", null)).toBeNull();
+    expect(sessionIdleOptions(null)).toBeUndefined();
+    expect(sessionIdleOptions(30)).toEqual({ expiresIn: 1_800, updateAge: 60 });
   });
   it("SUPPORTED_PROVIDER_IDS gates provider keys and socialKey formats", () => {
     expect(SUPPORTED_PROVIDER_IDS.has("google")).toBe(true);

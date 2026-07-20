@@ -6,12 +6,13 @@ import { SIGNUP_APPROVAL_REQUIRED, type Capabilities } from "@podosoft/podokit-a
 // (magic link, ...) the server actually enabled.
 export const load: PageServerLoad = async ({ fetch, url }) => {
   const oauthError = url.searchParams.get("error");
+  const idleLogout = url.searchParams.get("reason") === "idle";
   if (oauthError === SIGNUP_APPROVAL_REQUIRED) redirect(302, "/pending-approval");
   try {
     const res = await fetch("/api/account/capabilities");
-    if (res.ok) return { capabilities: (await res.json()) as Capabilities, oauthError };
+    if (res.ok) return { capabilities: (await res.json()) as Capabilities, oauthError, idleLogout };
   } catch {
     /* fall through to defaults */
   }
-  return { capabilities: null, oauthError };
+  return { capabilities: null, oauthError, idleLogout };
 };

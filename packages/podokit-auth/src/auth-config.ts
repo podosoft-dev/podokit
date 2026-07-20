@@ -44,6 +44,46 @@ export const SUPPORTED_SOCIAL_PROVIDERS: ReadonlyArray<{ id: string; label: stri
 
 export const SUPPORTED_PROVIDER_IDS = new Set(SUPPORTED_SOCIAL_PROVIDERS.map((p) => p.id));
 
+/** Default value offered when an administrator enables automatic logout. */
+export const DEFAULT_SESSION_IDLE_TIMEOUT_MINUTES = 30;
+/** Smallest accepted idle timeout. Shorter values create excessive refresh traffic. */
+export const MIN_SESSION_IDLE_TIMEOUT_MINUTES = 5;
+/** Largest accepted idle timeout (seven days, matching better-auth's default session lifetime). */
+export const MAX_SESSION_IDLE_TIMEOUT_MINUTES = 7 * 24 * 60;
+/** better-auth's default session lifetime, used when the custom policy is disabled. */
+export const DEFAULT_SESSION_LIFETIME_SECONDS = 7 * 24 * 60 * 60;
+
+export type SessionIdleOptions = { expiresIn: number; updateAge: number };
+
+/** Narrow an API/DB value to a supported timeout. `null` explicitly disables the policy. */
+export function isSessionIdleTimeoutMinutes(value: unknown): value is number | null {
+  return value === null || (
+    typeof value === "number"
+    && Number.isInteger(value)
+    && value >= MIN_SESSION_IDLE_TIMEOUT_MINUTES
+    && value <= MAX_SESSION_IDLE_TIMEOUT_MINUTES
+  );
+}
+
+/** Resolve an optional DB value without letting malformed persisted data break auth startup. */
+export function resolveSessionIdleTimeoutMinutes(
+  value: unknown,
+  fallback: number | null,
+): number | null {
+  return isSessionIdleTimeoutMinutes(value) ? value : fallback;
+}
+
+/** Translate the admin policy into better-auth's sliding session-expiry options. */
+export function sessionIdleOptions(minutes: number | null): SessionIdleOptions | undefined {
+  if (minutes === null) return undefined;
+  return {
+    expiresIn: minutes * 60,
+    // Refresh at most once a minute so active sessions slide forward without a
+    // database write on every authenticated request.
+    updateAge: Math.min(60, Math.floor((minutes * 60) / 2)),
+  };
+}
+
 /** Config row key for a social provider (e.g. "social.google"). */
 export const socialKey = (id: string): string => `social.${id}`;
 
@@ -64,6 +104,8 @@ export type AuthConfig = {
   hibp: boolean;
   /** Record security-relevant actions to the audit_logs table (audit-log module). */
   auditLog: boolean;
+  /** End an inactive session after this many minutes; null preserves the default lifetime. */
+  sessionIdleTimeoutMinutes: number | null;
 };
 
 /** Build the config purely from environment variables — the backward-compatible
@@ -78,6 +120,10 @@ export function envAuthConfig(): AuthConfig {
   if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
     social.github = { enabled: true, clientId: process.env.GITHUB_CLIENT_ID, clientSecret: process.env.GITHUB_CLIENT_SECRET };
   }
+  const configuredIdleTimeout = Number(process.env.AUTH_SESSION_IDLE_TIMEOUT_MINUTES);
+  const sessionIdleTimeoutMinutes = process.env.AUTH_SESSION_IDLE_TIMEOUT_MINUTES === undefined
+    ? null
+    : resolveSessionIdleTimeoutMinutes(configuredIdleTimeout, null);
   return {
     version: "env",
     social,
@@ -86,5 +132,6 @@ export function envAuthConfig(): AuthConfig {
     allowDelete: process.env.AUTH_ALLOW_DELETE === "true",
     hibp: process.env.AUTH_HIBP === "true",
     auditLog: process.env.AUDIT_LOG_ENABLED === "true",
+    sessionIdleTimeoutMinutes,
   };
 }

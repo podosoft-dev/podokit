@@ -3,9 +3,13 @@
   import { ModeWatcher } from "mode-watcher";
   import { site, type SiteSettings } from "$lib/site.svelte";
   import { applyTheme, themeConfigFromSettings } from "$lib/site/apply-theme";
+  import SessionIdleTimeout from "$lib/components/session-idle-timeout.svelte";
 
   const loadedSite = $derived(
     (page.data as { site?: Partial<SiteSettings> | null }).site,
+  );
+  const sessionIdleTimeoutMinutes = $derived(
+    (page.data as { sessionIdleTimeoutMinutes?: number | null }).sessionIdleTimeoutMinutes ?? null,
   );
 
   // Seed the reactive site settings for every route without taking ownership of
@@ -37,3 +41,4 @@
 </svelte:head>
 
 <ModeWatcher />
+<SessionIdleTimeout timeoutMinutes={sessionIdleTimeoutMinutes} />

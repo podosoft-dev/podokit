@@ -1,6 +1,5 @@
 import { auth as bootstrapAuth, buildAuth } from "./auth";
-import { pool } from "./db";
-import { createConfigStore } from "@podosoft/podokit-auth";
+import { authConfigStore } from "./auth-config-store";
 
 // Runtime auth instance that rebuilds when the DB config changes, so admin edits
 // (OAuth credentials, SMTP, server-enforced toggles) apply WITHOUT a restart.
@@ -12,7 +11,6 @@ import { createConfigStore } from "@podosoft/podokit-auth";
 // current instance too. The guard/session behavior is unchanged (session tokens are
 // signed with the stable BETTER_AUTH_SECRET; trustedOrigins is baked into every build).
 
-const store = createConfigStore(pool);
 const TTL_MS = 3_000;
 
 let current = bootstrapAuth;
@@ -32,7 +30,7 @@ export async function refreshIfStale(): Promise<void> {
   checkedAt = Date.now();
   let latest: string;
   try {
-    latest = await store.currentVersion();
+    latest = await authConfigStore.currentVersion();
   } catch {
     return; // DB blip — keep serving the last-good instance
   }
@@ -40,7 +38,7 @@ export async function refreshIfStale(): Promise<void> {
   if (inflight) return inflight;
   inflight = (async () => {
     try {
-      const config = await store.load();
+      const config = await authConfigStore.load();
       current = buildAuth(config);
       currentVersion = config.version;
     } catch (err) {
@@ -50,6 +48,15 @@ export async function refreshIfStale(): Promise<void> {
     }
   })();
   return inflight;
+}
+
+/** Apply a successful in-process admin write before the response is returned. */
+export async function refreshAuthNow(): Promise<void> {
+  authConfigStore.invalidate();
+  checkedAt = 0;
+  // Force a rebuild even if two writes receive the same millisecond timestamp.
+  currentVersion = `stale:${Date.now()}`;
+  await refreshIfStale();
 }
 
 // Stable handler reference the adapter captures once; redispatches per request.

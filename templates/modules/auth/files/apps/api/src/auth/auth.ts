@@ -6,7 +6,7 @@ import { sendSms } from "../sms/sms";
 import { assertUserCreationAllowed, createFeatureGate, createSignupOpenCheck } from "./feature-gate";
 import { orgAc, orgRoles } from "./org-permissions";
 import { pool } from "./db";
-import { type AuthConfig, envAuthConfig, SUPPORTED_PROVIDER_IDS } from "@podosoft/podokit-auth";
+import { type AuthConfig, envAuthConfig, sessionIdleOptions, SUPPORTED_PROVIDER_IDS } from "@podosoft/podokit-auth";
 import { apiKey } from "@better-auth/api-key";
 import { passkey } from "@better-auth/passkey";
 import { oauthProvider } from "@better-auth/oauth-provider";
@@ -176,6 +176,8 @@ export function buildAuth(config: AuthConfig) {
   // podokit:begin:auth-hooks
   // podokit:end:auth-hooks
 
+  const session = sessionIdleOptions(config.sessionIdleTimeoutMinutes);
+
   return betterAuth({
     database: pool,
     emailAndPassword: {
@@ -208,6 +210,7 @@ export function buildAuth(config: AuthConfig) {
       },
     },
     socialProviders: buildSocial(config),
+    ...(session ? { session } : {}),
     plugins,
     hooks,
     secret: process.env.BETTER_AUTH_SECRET ?? "change-me-in-production-min-32-characters",
