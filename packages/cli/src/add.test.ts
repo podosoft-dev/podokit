@@ -493,6 +493,25 @@ describe("addModule (auth / better-auth)", () => {
     const hooks = readFileSync(join(project, "apps/web/src/hooks.server.ts"), "utf8");
     expect(hooks).toContain("event.route.id === null");
     expect(hooks).toContain('/(<html\\b[^>]*?\\slang=)(["\'])[^"\']*\\2/i');
+    expect(hooks).toContain("event.locals.authUnavailable = false");
+    expect(hooks).toContain("error.status !== 401");
+    expect(hooks).toContain("event.locals.siteUnavailable = false");
+    expect(hooks).toContain("isTemporaryServiceFailure(cause)");
+    expect(hooks).toContain("cause.statusCode === 408 || cause.statusCode === 429 || cause.statusCode >= 500");
+    expect(hooks).toContain('error(503, "Service temporarily unavailable")');
+    expect(hooks.indexOf('error(503, "Service temporarily unavailable")')).toBeLessThan(
+      hooks.lastIndexOf("const response = await resolve(event"),
+    );
+    const appTypes = readFileSync(join(project, "apps/web/src/app.d.ts"), "utf8");
+    expect(appTypes).toContain("authUnavailable: boolean");
+    expect(appTypes).toContain("siteUnavailable: boolean");
+    const rootLayout = readFileSync(join(project, "apps/web/src/routes/+layout.server.ts"), "utf8");
+    expect(rootLayout.indexOf("requireBackendAvailable(locals)")).toBeLessThan(
+      rootLayout.indexOf("redirect(303, `/login?redirect="),
+    );
+    const guards = readFileSync(join(project, "apps/web/src/lib/server/guards.ts"), "utf8");
+    expect(guards).toContain('error(503, "Service temporarily unavailable")');
+    expect(guards).toContain("export function isPublicPath");
     // i18n: message catalog + language switch
     expect(existsSync(join(project, "apps/web/src/lib/i18n/messages.ts"))).toBe(true);
     expect(existsSync(join(project, "apps/web/src/lib/components/language-switch.svelte"))).toBe(true);

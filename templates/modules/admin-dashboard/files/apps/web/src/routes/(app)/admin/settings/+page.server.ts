@@ -14,7 +14,7 @@ export type AuthConfigView = {
 };
 
 export const load: PageServerLoad = async ({ locals, fetch }) => {
-  requireAdmin(locals.user);
+  requireAdmin(locals.user, locals);
   let authConfig: AuthConfigView | null = null;
   try {
     const res = await fetch("/api/account/auth-config");

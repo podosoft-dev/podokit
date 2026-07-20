@@ -6,6 +6,7 @@
 //
 // Usage: node scripts/e2e-ci.mjs [--smoke] [--keep]
 // Env (with CI-friendly defaults): REGISTRY_PORT, API_PORT, WEB_PORT,
+//   OUTAGE_WEB_PORT,
 //   POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB,
 //   APP_DIR, KEEP.
 import { spawn, execFileSync } from "node:child_process";
@@ -28,6 +29,7 @@ const env = {
   // standing dev app never collides with the isolated Outer verification.
   API_PORT: process.env.API_PORT ?? "5012",
   WEB_PORT: process.env.WEB_PORT ?? "5011",
+  OUTAGE_WEB_PORT: process.env.OUTAGE_WEB_PORT ?? "5013",
   POSTGRES_HOST: process.env.POSTGRES_HOST ?? "localhost",
   POSTGRES_PORT: process.env.POSTGRES_PORT ?? "5432",
   POSTGRES_USER: process.env.POSTGRES_USER ?? "podokit",
@@ -36,6 +38,7 @@ const env = {
 };
 const registry = `http://localhost:${env.REGISTRY_PORT}`;
 const webURL = `http://localhost:${env.WEB_PORT}`;
+const outageWebURL = `http://localhost:${env.OUTAGE_WEB_PORT}`;
 const appDir = process.env.APP_DIR ? resolve(process.env.APP_DIR) : mkdtempSync(join(tmpdir(), "podokit-e2e-"));
 // Publish order: contracts first (api-client depends on it), then the rest.
 const PACKAGES = [
@@ -56,6 +59,17 @@ function bg(cmd, cmdArgs, opts = {}) {
   const child = spawn(cmd, cmdArgs, { stdio: "inherit", detached: true, ...opts });
   children.push(child);
   return child;
+}
+function stop(child) {
+  try {
+    process.kill(-child.pid, "SIGKILL");
+  } catch {
+    try {
+      child.kill("SIGKILL");
+    } catch {
+      /* already stopped */
+    }
+  }
 }
 async function waitFor(url, label, tries = 60) {
   for (let i = 0; i < tries; i += 1) {
@@ -209,6 +223,36 @@ async function main() {
 
   step("build web");
   run("npm", ["run", "build", "-w", "app-web"], { cwd: target });
+
+  step("verify protected routes fail closed during a backend outage");
+  const unavailableWeb = bg("node", ["build"], {
+    cwd: join(target, "apps/web"),
+    env: {
+      ...process.env,
+      PORT: env.OUTAGE_WEB_PORT,
+      ORIGIN: outageWebURL,
+      BACKEND_INTERNAL_URL: "http://127.0.0.1:1",
+    },
+  });
+  await waitFor(`${outageWebURL}/`, "outage verification web");
+  const publicDuringOutage = await fetch(`${outageWebURL}/`, { redirect: "manual" });
+  if (publicDuringOutage.status !== 200) {
+    throw new Error(`public route returned ${publicDuringOutage.status} during backend outage`);
+  }
+  const protectedDuringOutage = await fetch(`${outageWebURL}/admin`, {
+    redirect: "manual",
+    headers: { cookie: "better-auth.session_token=preserve-during-outage" },
+  });
+  if (protectedDuringOutage.status !== 503) {
+    throw new Error(`protected route returned ${protectedDuringOutage.status} instead of 503 during backend outage`);
+  }
+  if (protectedDuringOutage.headers.has("location")) {
+    throw new Error("protected route redirected during backend outage");
+  }
+  if (protectedDuringOutage.headers.has("set-cookie")) {
+    throw new Error("protected route modified the session cookie during backend outage");
+  }
+  stop(unavailableWeb);
 
   step("start api + web");
   bg("node", [join(target, "infra/docker/sms-sink.mjs")], { cwd: target, env: { ...process.env, PORT: smsSinkPort } });

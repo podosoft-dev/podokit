@@ -1,8 +1,11 @@
 import { redirect } from "@sveltejs/kit";
 import type { LayoutServerLoad } from "./$types";
 import type { Capabilities } from "@podosoft/podokit-api-client";
+import { requireBackendAvailable } from "$lib/server/guards";
 
 export const load: LayoutServerLoad = async ({ locals, fetch }) => {
+  requireBackendAvailable(locals);
+
   let capabilities: Capabilities = {
     twoFactor: false,
     providers: [],
