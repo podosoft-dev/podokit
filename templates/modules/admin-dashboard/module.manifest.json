@@ -17,6 +17,7 @@
     "apps/web/src/lib/i18n/catalogs/app/**"
   ],
   "managedOverrides": [
+    "apps/web/src/lib/components/ui/input/input.svelte",
     "apps/web/src/routes/(app)/+layout.server.ts",
     "apps/web/src/routes/(app)/admin/account/+page.server.ts",
     "apps/web/src/routes/(app)/admin/audit/+page.server.ts",
@@ -51,13 +52,13 @@
       "file": "apps/web/src/routes/+page.svelte",
       "marker": "// podokit:end:landing-imports",
       "optional": true,
-      "text": "import { page } from \"$app/state\";\n  import AccountMenu from \"$lib/components/account-menu.svelte\";"
+      "text": "import { page } from \"$app/state\";\n  import AccountMenu from \"$lib/components/account-menu.svelte\";\n  import LanguageSwitch from \"$lib/components/language-switch.svelte\";\n  import ThemeToggle from \"$lib/components/theme-toggle.svelte\";"
     },
     {
       "file": "apps/web/src/routes/+page.svelte",
       "marker": "<!-- podokit:end:landing-actions -->",
       "optional": true,
-      "text": "<header class=\"flex items-center justify-end p-4\">\n  <AccountMenu user={page.data.user ?? null} />\n</header>"
+      "text": "<header class=\"flex items-center justify-end gap-2 p-4\">\n  <LanguageSwitch />\n  <ThemeToggle />\n  <AccountMenu user={page.data.user ?? null} />\n</header>"
     },
     {
       "file": "apps/api/src/auth/auth.ts",

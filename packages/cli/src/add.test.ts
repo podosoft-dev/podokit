@@ -491,6 +491,10 @@ describe("addModule (auth / better-auth)", () => {
     const landingPage = readFileSync(join(project, "apps/web/src/routes/+page.svelte"), "utf8");
     expect(landingPage).toContain("API health");
     expect(landingPage).toContain('import AccountMenu from "$lib/components/account-menu.svelte";');
+    expect(landingPage).toContain('import LanguageSwitch from "$lib/components/language-switch.svelte";');
+    expect(landingPage).toContain('import ThemeToggle from "$lib/components/theme-toggle.svelte";');
+    expect(landingPage).toContain("<LanguageSwitch />");
+    expect(landingPage).toContain("<ThemeToggle />");
     expect(landingPage).toContain("<AccountMenu user={page.data.user ?? null} />");
     expect(readFileSync(join(project, "apps/web/src/lib/components/site-runtime.svelte"), "utf8")).toContain("applyTheme");
     const hooks = readFileSync(join(project, "apps/web/src/hooks.server.ts"), "utf8");
@@ -545,6 +549,9 @@ describe("addModule (auth / better-auth)", () => {
     expect(readManifest(project)?.managedOverrides).toContain(
       "apps/web/src/routes/(app)/admin/users/+page.server.ts",
     );
+    expect(readManifest(project)?.managedOverrides).toContain(
+      "apps/web/src/lib/components/ui/input/input.svelte",
+    );
     expect(
       readFilesLock(project)?.files[
         ".claude/skills/podokit-configure-auth/SKILL.md"
@@ -553,6 +560,11 @@ describe("addModule (auth / better-auth)", () => {
     expect(
       readFilesLock(project)?.files[
         "apps/web/src/routes/(app)/admin/users/+page.server.ts"
+      ]?.tier,
+    ).toBe("managed");
+    expect(
+      readFilesLock(project)?.files[
+        "apps/web/src/lib/components/ui/input/input.svelte"
       ]?.tier,
     ).toBe("managed");
     expect(readFilesLock(project)?.files["apps/web/src/routes/+layout.server.ts"]?.tier).toBe(
