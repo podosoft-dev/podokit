@@ -1,6 +1,12 @@
 import type { Pool } from "pg";
 import { decryptSecret } from "./secret";
-import { type AuthConfig, type OAuthProviderConfig, envAuthConfig, SUPPORTED_PROVIDER_IDS } from "./auth-config";
+import {
+  type AuthConfig,
+  type OAuthProviderConfig,
+  envAuthConfig,
+  resolveSessionIdleTimeoutMinutes,
+  SUPPORTED_PROVIDER_IDS,
+} from "./auth-config";
 
 // Reads admin-managed auth config from the auth_config table (DB-first, env
 // fallback per field) behind a short TTL cache — the same pooled-read pattern as
@@ -21,6 +27,12 @@ function bool(v: unknown, fallback: boolean): boolean {
 export function createConfigStore(pool: Pool) {
   let cache: Row[] = [];
   let fetchedAt = 0;
+
+  /** Drop the local TTL snapshot after an in-process configuration write. */
+  function invalidate(): void {
+    cache = [];
+    fetchedAt = 0;
+  }
 
   async function rows(): Promise<Row[]> {
     if (fetchedAt !== 0 && Date.now() - fetchedAt < TTL_MS) return cache;
@@ -89,6 +101,9 @@ export function createConfigStore(pool: Pool) {
       allowDelete: server ? bool(server.config.allowDelete, env.allowDelete) : env.allowDelete,
       hibp: server ? bool(server.config.hibp, env.hibp) : env.hibp,
       auditLog: server ? bool(server.config.auditLog, env.auditLog) : env.auditLog,
+      sessionIdleTimeoutMinutes: server
+        ? resolveSessionIdleTimeoutMinutes(server.config.sessionIdleTimeoutMinutes, env.sessionIdleTimeoutMinutes)
+        : env.sessionIdleTimeoutMinutes,
     };
   }
 
@@ -134,6 +149,7 @@ export function createConfigStore(pool: Pool) {
     allowDelete: boolean;
     passwordBreachCheck: boolean;
     auditLog: boolean;
+    sessionIdleTimeoutMinutes: number | null;
   }> {
     const cfg = await load();
     return {
@@ -145,8 +161,9 @@ export function createConfigStore(pool: Pool) {
       allowDelete: cfg.allowDelete,
       passwordBreachCheck: cfg.hibp,
       auditLog: cfg.auditLog,
+      sessionIdleTimeoutMinutes: cfg.sessionIdleTimeoutMinutes,
     };
   }
 
-  return { currentVersion, load, smtpConfig, capabilitiesSnapshot };
+  return { currentVersion, load, smtpConfig, capabilitiesSnapshot, invalidate };
 }

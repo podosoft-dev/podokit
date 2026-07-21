@@ -2,7 +2,17 @@ import { BadRequestException, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { AuthConfigRow } from "./auth-config.entity";
-import { encryptSecret, envAuthConfig, socialKey, SUPPORTED_PROVIDER_IDS, SUPPORTED_SOCIAL_PROVIDERS } from "@podosoft/podokit-auth";
+import {
+  DEFAULT_SESSION_LIFETIME_SECONDS,
+  encryptSecret,
+  envAuthConfig,
+  isSessionIdleTimeoutMinutes,
+  resolveSessionIdleTimeoutMinutes,
+  socialKey,
+  SUPPORTED_PROVIDER_IDS,
+  SUPPORTED_SOCIAL_PROVIDERS,
+} from "@podosoft/podokit-auth";
+import { refreshAuthNow } from "../auth/auth-provider";
 
 /** One configured social provider as shown to the admin (no secret — just a
  *  `hasSecret` flag). */
@@ -16,7 +26,14 @@ export type AuthConfigView = {
   /** Catalog of addable providers (id + display label) for the "add provider" picker. */
   catalog: ReadonlyArray<{ id: string; label: string }>;
   smtp: { enabled: boolean; host: string; port: number; secure: boolean; user: string; from: string; hasSecret: boolean };
-  server: { requireEmailVerification: boolean; requireSignupApproval: boolean; allowDelete: boolean; hibp: boolean; auditLog: boolean };
+  server: {
+    requireEmailVerification: boolean;
+    requireSignupApproval: boolean;
+    allowDelete: boolean;
+    hibp: boolean;
+    auditLog: boolean;
+    sessionIdleTimeoutMinutes: number | null;
+  };
 };
 
 type ProviderUpdate = { enabled?: boolean; clientId?: string; clientSecret?: string; redirectURI?: string; delete?: boolean };
@@ -24,7 +41,14 @@ export type AuthConfigUpdate = {
   /** Per-provider upsert (keyed by provider id); `{ delete: true }` removes it. */
   social?: Record<string, ProviderUpdate>;
   smtp?: { enabled?: boolean; host?: string; port?: number; secure?: boolean; user?: string; pass?: string; from?: string };
-  server?: { requireEmailVerification?: boolean; requireSignupApproval?: boolean; allowDelete?: boolean; hibp?: boolean; auditLog?: boolean };
+  server?: {
+    requireEmailVerification?: boolean;
+    requireSignupApproval?: boolean;
+    allowDelete?: boolean;
+    hibp?: boolean;
+    auditLog?: boolean;
+    sessionIdleTimeoutMinutes?: number | null;
+  };
 };
 
 @Injectable()
@@ -59,6 +83,7 @@ export class AuthConfigService {
       allowDelete?: boolean;
       hibp?: boolean;
       auditLog?: boolean;
+      sessionIdleTimeoutMinutes?: number | null;
     };
     return {
       social,
@@ -78,6 +103,10 @@ export class AuthConfigService {
         allowDelete: serverC.allowDelete ?? env.allowDelete,
         hibp: serverC.hibp ?? env.hibp,
         auditLog: serverC.auditLog ?? env.auditLog,
+        sessionIdleTimeoutMinutes: resolveSessionIdleTimeoutMinutes(
+          serverC.sessionIdleTimeoutMinutes,
+          env.sessionIdleTimeoutMinutes,
+        ),
       },
     };
   }
@@ -90,6 +119,10 @@ export class AuthConfigService {
     }
     if (dto.smtp) await this.upsertSmtp(dto.smtp);
     if (dto.server) await this.upsertServer(dto.server);
+    await refreshAuthNow();
+    if (dto.server?.sessionIdleTimeoutMinutes !== undefined) {
+      await this.resetSessionExpirations(dto.server.sessionIdleTimeoutMinutes);
+    }
     return this.describe();
   }
 
@@ -116,12 +149,31 @@ export class AuthConfigService {
   }
 
   private async upsertServer(u: NonNullable<AuthConfigUpdate["server"]>): Promise<void> {
+    if (u.sessionIdleTimeoutMinutes !== undefined && !isSessionIdleTimeoutMinutes(u.sessionIdleTimeoutMinutes)) {
+      throw new BadRequestException("Session idle timeout must be null or an integer from 5 to 10080 minutes");
+    }
     const row = (await this.repo.findOneBy({ key: "server" })) ?? this.repo.create({ key: "server", enabled: true, config: {}, secret: null });
     const config = { ...(row.config as Record<string, unknown>) };
     for (const f of ["requireEmailVerification", "requireSignupApproval", "allowDelete", "hibp", "auditLog"] as const) {
       if (u[f] !== undefined) config[f] = u[f];
     }
+    if (u.sessionIdleTimeoutMinutes !== undefined) {
+      config.sessionIdleTimeoutMinutes = u.sessionIdleTimeoutMinutes;
+    }
     row.config = config;
     await this.repo.save(row);
+  }
+
+  private async resetSessionExpirations(minutes: number | null): Promise<void> {
+    const lifetimeSeconds = minutes === null
+      ? DEFAULT_SESSION_LIFETIME_SECONDS
+      : minutes * 60;
+    await this.repo.manager.query(
+      `UPDATE "session"
+       SET "expiresAt" = CURRENT_TIMESTAMP + ($1 * INTERVAL '1 second'),
+           "updatedAt" = CURRENT_TIMESTAMP
+       WHERE "expiresAt" > CURRENT_TIMESTAMP`,
+      [lifetimeSeconds],
+    );
   }
 }

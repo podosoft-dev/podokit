@@ -137,7 +137,7 @@ podo add blog
 
 The **`admin-dashboard`** module adds a full admin console on top of `auth`:
 user & session management, an audit log, and a Settings page where OAuth
-providers, SMTP, provider-independent sign-up approval, and server toggles are
+providers, SMTP, provider-independent sign-up approval, automatic logout, and server toggles are
 configured at runtime (encrypted in the DB, applied without a restart). Pending
 registrations are approved from `/admin/users`, and the generated
 `admin:bootstrap` command creates or verifies the first administrator without

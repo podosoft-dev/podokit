@@ -3,6 +3,8 @@ import { ready } from "../helpers/hydration";
 
 // admin storageState (project default)
 
+const base = process.env.E2E_BASE_URL ?? "http://localhost:5001";
+
 async function saveGeneral(page: Page): Promise<void> {
   const saved = page.waitForResponse(
     (response) => response.url().endsWith("/api/site/settings") && response.request().method() === "PUT",
@@ -89,4 +91,72 @@ test("settings: the require-two-factor toggle is available", async ({ page }) =>
   // admin session.
   await expect(page.getByRole("switch", { name: "Require two-factor" })).toBeVisible();
   await expect(page.getByRole("switch", { name: "Sign-up approval" })).toBeVisible();
+  await expect(page.getByRole("switch", { name: "Automatic logout" })).toBeVisible();
+});
+
+test("inactive browser sessions are signed out automatically @smoke", async ({ browser, page: adminPage }) => {
+  // Idle sign-out revokes the active server session. Use a dedicated login so
+  // this test cannot invalidate the shared admin storageState used by later specs.
+  const context = await browser.newContext({ baseURL: base });
+  const page = await context.newPage();
+  const email = `idle-admin-${Date.now()}@example.com`;
+  let signOutRequests = 0;
+  let userId = "";
+  try {
+    const created = await adminPage.request.post("/api/auth/admin/create-user", {
+      headers: { origin: base },
+      data: { email, password: "Podokit3e-Str0ng!pw", name: "Idle Admin", role: "admin" },
+    });
+    expect(created.ok()).toBeTruthy();
+    userId = ((await created.json()).user?.id ?? "") as string;
+    expect(userId).toBeTruthy();
+
+    const signIn = await context.request.post("/api/auth/sign-in/email", {
+      headers: { origin: base },
+      data: { email, password: "Podokit3e-Str0ng!pw" },
+    });
+    expect(signIn.ok()).toBeTruthy();
+
+    const configured = await context.request.put("/api/account/auth-config", {
+      data: { server: { sessionIdleTimeoutMinutes: 5 } },
+    });
+    expect(configured.ok()).toBeTruthy();
+    await page.route("**/api/auth/sign-out", async (route) => {
+      signOutRequests += 1;
+      await route.fulfill({ status: 200, contentType: "application/json", body: '{"success":true}' });
+    });
+    await page.clock.install();
+
+    try {
+      await ready(page, "/admin");
+      await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+    } finally {
+      // Keep the loaded page policy at five minutes while restoring the shared
+      // DB policy before the isolated session is revoked.
+      const restored = await context.request.put("/api/account/auth-config", {
+        data: { server: { sessionIdleTimeoutMinutes: null } },
+      });
+      expect(restored.ok()).toBeTruthy();
+    }
+
+    const removed = await adminPage.request.post("/api/auth/admin/remove-user", {
+      headers: { origin: base },
+      data: { userId },
+    });
+    expect(removed.ok()).toBeTruthy();
+    userId = "";
+
+    await page.clock.fastForward(5 * 60_000 + 1_000);
+    await expect.poll(() => signOutRequests).toBe(1);
+    await expect(page).toHaveURL(/\/login\?reason=idle$/);
+    await expect(page.getByTestId("session-timeout-message")).toBeVisible();
+  } finally {
+    if (userId) {
+      await adminPage.request.post("/api/auth/admin/remove-user", {
+        headers: { origin: base },
+        data: { userId },
+      });
+    }
+    await context.close();
+  }
 });

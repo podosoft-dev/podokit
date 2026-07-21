@@ -6,12 +6,8 @@ import { ApiTags } from "@nestjs/swagger";
 import { FEATURE_FLAGS, SettingsService, type FeatureFlag } from "../settings/settings.service";
 import { ROLE_NAMES } from "../auth/permissions";
 import { auth } from "../auth/auth";
-import { pool } from "../auth/db";
-import { createConfigStore } from "@podosoft/podokit-auth";
+import { authConfigStore } from "../auth/auth-config-store";
 import type { Capabilities } from "@podosoft/podokit-contracts";
-
-// Reads OAuth/server-toggle state (DB-first, env fallback) for capabilities.
-const configStore = createConfigStore(pool);
 
 function isAdmin(session: UserSession): boolean {
   const role = session.user?.role;
@@ -45,7 +41,7 @@ export class AccountController {
     const flags = this.settings.flags();
     // OAuth providers + server-enforced toggles are DB-backed (env fallback) and
     // applied live, so read them from the config store rather than process.env.
-    const snapshot = await configStore.capabilitiesSnapshot();
+    const snapshot = await authConfigStore.capabilitiesSnapshot();
     return {
       twoFactor: flags.twoFactor,
       magicLink: flags.magicLink,
@@ -63,6 +59,7 @@ export class AccountController {
       signupApprovalRequired: snapshot.requireSignupApproval,
       passwordBreachCheck: snapshot.passwordBreachCheck,
       auditLog: snapshot.auditLog,
+      sessionIdleTimeoutMinutes: snapshot.sessionIdleTimeoutMinutes,
       roles: ROLE_NAMES,
     };
   }

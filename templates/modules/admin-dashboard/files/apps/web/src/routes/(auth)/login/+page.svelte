@@ -226,6 +226,11 @@
     <Card.Description>{i18n.t.auth.signInDesc}</Card.Description>
   </Card.Header>
   <Card.Content>
+    {#if data.idleLogout}
+      <Alert.Root data-testid="session-timeout-message" class="mb-4">
+        <Alert.Description>{i18n.t.auth.idleLogout}</Alert.Description>
+      </Alert.Root>
+    {/if}
     {#if error}
       <Alert.Root data-testid="auth-error" variant="destructive" class="mb-4">
         <Alert.Description>

@@ -66,3 +66,33 @@ test("settings: open and save the SMTP dialog", async ({ page }) => {
       .catch(() => undefined);
   }
 });
+
+test("settings: configure automatic logout", async ({ page }) => {
+  await page.request.put("/api/account/auth-config", {
+    data: { server: { sessionIdleTimeoutMinutes: null } },
+  });
+  await ready(page, "/admin/settings");
+  await page.getByRole("tab", { name: "Authentication" }).click();
+
+  const toggle = page.getByRole("switch", { name: "Automatic logout" });
+  await expect(toggle).not.toBeChecked();
+  await toggle.click();
+  await expect(toggle).toBeChecked();
+
+  const card = page
+    .getByText("Automatic logout", { exact: true })
+    .locator('xpath=ancestor::div[@data-slot="card"]');
+  await card.getByRole("button", { name: "Configure" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Idle time (minutes)").fill("45");
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByText("45 min", { exact: true })).toBeVisible();
+
+  const saved = await (await page.request.get("/api/account/auth-config")).json();
+  expect(saved.server.sessionIdleTimeoutMinutes).toBe(45);
+  const caps = await (await page.request.get("/api/account/capabilities")).json();
+  expect(caps.sessionIdleTimeoutMinutes).toBe(45);
+
+  await toggle.click();
+  await expect(toggle).not.toBeChecked();
+});

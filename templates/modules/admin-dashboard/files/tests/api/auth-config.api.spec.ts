@@ -83,6 +83,46 @@ test("auth-config is admin-only and never leaks secrets @smoke", async ({ playwr
   await user.dispose();
 });
 
+test("automatic logout validates and applies a sliding session lifetime", async ({ playwright }) => {
+  const admin = await adminCtx(playwright);
+  const freshAdmin = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+
+  try {
+    expect(
+      (await admin.put("/api/account/auth-config", {
+        data: { server: { sessionIdleTimeoutMinutes: 4 } },
+      })).status(),
+    ).toBe(400);
+
+    const enabled = await admin.put("/api/account/auth-config", {
+      data: { server: { sessionIdleTimeoutMinutes: 30 } },
+    });
+    expect(enabled.ok()).toBeTruthy();
+    expect((await enabled.json()).server.sessionIdleTimeoutMinutes).toBe(30);
+
+    const caps = await (await admin.get("/api/account/capabilities")).json();
+    expect(caps.sessionIdleTimeoutMinutes).toBe(30);
+
+    const signIn = await freshAdmin.post("/api/auth/sign-in/email", {
+      data: { email: ADMIN.email, password: ADMIN.password },
+    });
+    expect(signIn.ok()).toBeTruthy();
+    expect(signIn.headers()["set-cookie"]).toMatch(/Max-Age=1800(?:;|,)/i);
+
+    const sessions = (await (await admin.get("/api/auth/list-sessions")).json()) as Array<{
+      expiresAt: string;
+    }>;
+    const latestExpiry = Math.max(...sessions.map((session) => new Date(session.expiresAt).getTime()));
+    expect(latestExpiry).toBeLessThanOrEqual(Date.now() + 30 * 60_000 + 10_000);
+  } finally {
+    await admin.put("/api/account/auth-config", {
+      data: { server: { sessionIdleTimeoutMinutes: null } },
+    });
+    await freshAdmin.dispose();
+    await admin.dispose();
+  }
+});
+
 test("new registrations require approval when the policy is enabled", async ({ playwright }) => {
   const admin = await adminCtx(playwright);
   const anon = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
