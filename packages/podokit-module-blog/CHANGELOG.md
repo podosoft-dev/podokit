@@ -1,5 +1,11 @@
 # @podosoft/podokit-module-blog
 
+## 0.4.0
+
+### Minor Changes
+
+- [#115](https://github.com/podosoft-dev/podokit/pull/115) [`8a19cc6`](https://github.com/podosoft-dev/podokit/commit/8a19cc6a93caf293debf80be646ded4b2a6b6690) Thanks [@korone00](https://github.com/korone00)! - Start posts as private drafts, add author visibility controls and cover image uploads, and preserve the original publication time when posts are hidden and shown again.
+
 ## Unreleased
 
 ### Minor Changes

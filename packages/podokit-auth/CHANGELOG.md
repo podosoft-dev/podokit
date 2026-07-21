@@ -1,5 +1,11 @@
 # @podosoft/podokit-auth
 
+## 0.3.0
+
+### Minor Changes
+
+- [#114](https://github.com/podosoft-dev/podokit/pull/114) [`b05637f`](https://github.com/podosoft-dev/podokit/commit/b05637f68518080cf88bca87a79a8b9aae1aee25) Thanks [@korone00](https://github.com/korone00)! - Add a live automatic-logout policy with validated idle durations, sliding Better Auth session expiration, existing-session updates, cross-tab browser inactivity handling, and localized admin controls.
+
 ## 0.2.0
 
 ### Minor Changes

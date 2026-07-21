@@ -1,6 +1,6 @@
 {
   "name": "@podosoft/podokit-contracts",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Shared PodoKit contracts: capability flags, the REST error envelope, and stable error codes used by both the NestJS backend and the SvelteKit frontend.",
   "license": "Apache-2.0",
   "repository": {
