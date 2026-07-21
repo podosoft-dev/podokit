@@ -322,10 +322,16 @@ nightly and can be dispatched manually.
 3. Pushes a `vX.Y.Z` tag (conventionally the `@podosoft/podokit` CLI version).
    This triggers [`.github/workflows/release.yml`](../.github/workflows/release.yml),
    which publishes each package at its current `package.json` version to npm
-   (skipping any version already on the registry, so it is idempotent).
+   (skipping any version already on the registry, so it is idempotent). After
+   every package succeeds, the same workflow publishes a GitHub Release for the
+   existing tag with generated release notes. An existing GitHub Release is also
+   skipped, so rerunning the workflow remains safe.
 
 The tag push is the single, explicit publish gate — merging PRs, even the Version
-Packages PR, never publishes on its own.
+Packages PR, never publishes on its own. A release is complete only when the
+Release workflow succeeds, every intended npm version is visible, and
+`gh release view vX.Y.Z` resolves to the same tag shown as the latest release on
+GitHub. A pushed tag by itself is not a GitHub Release.
 
 > **Running `npm run version` locally** (rarely needed — CI maintains the PR): the
 > GitHub changelog formatter queries the GitHub API, so set `GITHUB_TOKEN` (e.g.

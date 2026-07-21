@@ -7,6 +7,7 @@ import test from "node:test";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ci = readFileSync(resolve(repoRoot, ".github/workflows/ci.yml"), "utf8");
 const e2e = readFileSync(resolve(repoRoot, ".github/workflows/e2e.yml"), "utf8");
+const release = readFileSync(resolve(repoRoot, ".github/workflows/release.yml"), "utf8");
 const version = readFileSync(resolve(repoRoot, ".github/workflows/version.yml"), "utf8");
 
 test("cancels superseded CI runs for the same workflow and ref", () => {
@@ -33,4 +34,16 @@ test("uses package-only verification for the generated Changesets PR", () => {
   assert.match(version, /actions: write/);
   assert.match(version, /gh workflow run ci\.yml --ref changeset-release\/main/);
   assert.match(version, /gh workflow run e2e\.yml --ref changeset-release\/main -f mode=package-smoke/);
+});
+
+test("publishes a GitHub Release only after npm packages succeed", () => {
+  assert.match(release, /permissions:\s+contents: write/);
+  const createRelease = release.indexOf("name: Create GitHub release");
+  const publishSteps = [...release.matchAll(/^\s+- name: Publish .+$/gm)];
+  assert.ok(publishSteps.length > 0);
+  assert.ok(publishSteps.every((step) => (step.index ?? -1) < createRelease));
+  assert.match(release, /gh release view "\$GITHUB_REF_NAME"/);
+  assert.match(release, /gh release create "\$GITHUB_REF_NAME"/);
+  assert.match(release, /--verify-tag/);
+  assert.match(release, /--generate-notes/);
 });
