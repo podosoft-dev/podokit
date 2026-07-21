@@ -17,7 +17,9 @@ WORKDIR /app
 COPY package.json ./
 COPY apps/api/package.json ./apps/api/package.json
 COPY apps/web/package.json ./apps/web/package.json
-RUN npm install
+ARG PODOKIT_NPM_REGISTRY=""
+RUN if [ -n "$PODOKIT_NPM_REGISTRY" ]; then npm config set registry "$PODOKIT_NPM_REGISTRY"; fi \
+  && npm install
 
 # Baked source (kept in sync during development by `docker compose watch`).
 COPY . .

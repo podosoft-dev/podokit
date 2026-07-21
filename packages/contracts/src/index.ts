@@ -49,6 +49,29 @@ export const SIGNUP_APPROVAL_REQUIRED = "SIGNUP_APPROVAL_REQUIRED" as const;
 /** Stable better-auth error code returned when public registration is closed. */
 export const PUBLIC_SIGNUP_DISABLED = "PUBLIC_SIGNUP_DISABLED" as const;
 
+/** Shared upload limits for a user's profile image. The API enforces these
+ * values and the account UI displays them before a file is selected. */
+export const PROFILE_IMAGE_POLICY = {
+  maxBytes: 2 * 1024 * 1024,
+  maxWidth: 2048,
+  maxHeight: 2048,
+  mimeTypes: ["image/png", "image/jpeg", "image/webp"],
+} as const;
+
+export type ProfileImageMimeType = (typeof PROFILE_IMAGE_POLICY.mimeTypes)[number];
+
+/** Stable profile-image error codes used by both the API and account UI. */
+export const PROFILE_IMAGE_REQUIRED = "PROFILE_IMAGE_REQUIRED" as const;
+export const PROFILE_IMAGE_TYPE_INVALID = "PROFILE_IMAGE_TYPE_INVALID" as const;
+export const PROFILE_IMAGE_TOO_LARGE = "PROFILE_IMAGE_TOO_LARGE" as const;
+export const PROFILE_IMAGE_DIMENSIONS_INVALID = "PROFILE_IMAGE_DIMENSIONS_INVALID" as const;
+export const PROFILE_IMAGE_NOT_FOUND = "PROFILE_IMAGE_NOT_FOUND" as const;
+
+/** Response returned after uploading or removing the current user's image. */
+export interface ProfileImageResponse {
+  image: string | null;
+}
+
 /** The body of the standard REST error envelope. */
 export interface ErrorBody {
   /** Stable, language-independent code the frontend branches on. */

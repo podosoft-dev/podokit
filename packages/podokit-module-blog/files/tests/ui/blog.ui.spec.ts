@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { adminState, userState } from "../helpers/accounts";
+import { USER, adminState, userState } from "../helpers/accounts";
 import { ready } from "../helpers/hydration";
 
 const base = process.env.E2E_BASE_URL ?? "http://localhost:5001";
@@ -16,6 +16,15 @@ test("blog list renders pagination-ready content @smoke", async ({ page }) => {
 
 test.describe("signed-in blog author", () => {
   test.use({ storageState: userState });
+
+  test("shows the signed-in account menu on blog pages", async ({ page }) => {
+    await ready(page, "/blog");
+    await page.getByTestId("account-menu").click();
+    const label = page.getByRole("menu").locator('[data-slot="dropdown-menu-label"]');
+    await expect(label.getByText(USER.name, { exact: true })).toBeVisible();
+    await expect(label.getByText(USER.email, { exact: true })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: /account|계정/i })).toBeVisible();
+  });
 
   test("renders the same safe Markdown before and after publishing", async ({
     page,

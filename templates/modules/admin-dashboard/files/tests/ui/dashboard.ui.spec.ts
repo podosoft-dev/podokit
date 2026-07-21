@@ -10,6 +10,16 @@ test("overview shows the signed-in admin @smoke", async ({ page }) => {
   await expect(page.getByRole("main").getByText(ADMIN.email)).toBeVisible();
 });
 
+test("landing shows the signed-in account menu", async ({ page }) => {
+  await ready(page, "/");
+  await page.getByTestId("account-menu").click();
+  const label = page.getByRole("menu").locator('[data-slot="dropdown-menu-label"]');
+  await expect(label.getByText(ADMIN.name, { exact: true })).toBeVisible();
+  await expect(label.getByText(ADMIN.email, { exact: true })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Account" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Sign out" })).toBeVisible();
+});
+
 test("sidebar navigates to sessions and account @smoke", async ({ page }) => {
   await ready(page, "/admin");
   await page.getByRole("link", { name: "Sessions" }).click();

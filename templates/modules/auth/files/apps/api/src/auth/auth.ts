@@ -11,6 +11,7 @@ import { apiKey } from "@better-auth/api-key";
 import { passkey } from "@better-auth/passkey";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { SIGNUP_APPROVAL_REQUIRED } from "@podosoft/podokit-contracts";
+import { runUserDeletedHandlers } from "./user-delete-handlers";
 // podokit:begin:auth-imports
 // podokit:end:auth-imports
 
@@ -259,7 +260,10 @@ export function buildAuth(config: AuthConfig) {
         },
       },
       // Self-service account deletion — admin-toggleable (auth_config), applied live.
-      deleteUser: { enabled: config.allowDelete },
+      deleteUser: {
+        enabled: config.allowDelete,
+        afterDelete: runUserDeletedHandlers,
+      },
     },
     databaseHooks,
     // podokit:begin:auth-options

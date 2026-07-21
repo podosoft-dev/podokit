@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   ApiError,
+  PROFILE_IMAGE_POLICY,
   PUBLIC_SIGNUP_DISABLED,
   SIGNUP_APPROVAL_REQUIRED,
   createApiClient,
@@ -19,6 +20,9 @@ describe("createApiClient", () => {
   });
   it("exports the closed public sign-up error code", () => {
     expect(PUBLIC_SIGNUP_DISABLED).toBe("PUBLIC_SIGNUP_DISABLED");
+  });
+  it("re-exports the profile-image policy", () => {
+    expect(PROFILE_IMAGE_POLICY.maxBytes).toBe(2_097_152);
   });
   it("builds request URLs from baseUrl + apiBasePath", async () => {
     const fetch = vi.fn(async () => jsonResponse({ ok: true }));
@@ -45,6 +49,19 @@ describe("createApiClient", () => {
     expect(init?.method).toBe("POST");
     expect(init?.body).toBe(JSON.stringify({ title: "hi" }));
     expect((init?.headers as Record<string, string>)["content-type"]).toBe("application/json");
+  });
+
+  it("sends FormData without overriding its content type", async () => {
+    const fetch = vi.fn(async () => jsonResponse({ image: "/api/profile-images/example.png" }, 201));
+    const client = createApiClient({ fetch });
+    const form = new FormData();
+    form.set("file", new Blob(["image"], { type: "image/png" }), "avatar.png");
+    await client.postForm("/account/profile-image", form);
+    const [, init] = fetch.mock.calls[0]!;
+    expect(init?.method).toBe("POST");
+    expect(init?.body).toBe(form);
+    expect(init?.headers).toBeUndefined();
+    expect(init?.credentials).toBe("include");
   });
 
   it("throws ApiError parsed from the standard error envelope", async () => {

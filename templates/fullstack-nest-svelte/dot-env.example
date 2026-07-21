@@ -13,6 +13,8 @@ POSTGRES_DB=podokit
 # Web -> API boundary (server-side only; not exposed to the browser)
 BACKEND_INTERNAL_URL=http://localhost:5002
 CORS_ORIGIN=http://localhost:5001
+# adapter-node request limit; leave room for a 2 MiB multipart upload
+BODY_SIZE_LIMIT=3M
 
 # ── Optional / development ───────────────────────────────────────────
 # Redis — only needed by cache/queue modules (redis, bullmq, rate-limit,

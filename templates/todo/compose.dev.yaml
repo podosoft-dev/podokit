@@ -41,6 +41,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
+      args:
+        PODOKIT_NPM_REGISTRY: ${PODOKIT_NPM_REGISTRY:-}
     command: npm run dev -w {{projectName}}-web -- --host 0.0.0.0
     working_dir: /app
     env_file: .env.docker
@@ -64,6 +66,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
+      args:
+        PODOKIT_NPM_REGISTRY: ${PODOKIT_NPM_REGISTRY:-}
     init: true
     command: npm run dev -w {{projectName}}-api
     working_dir: /app
@@ -87,6 +91,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
+      args:
+        PODOKIT_NPM_REGISTRY: ${PODOKIT_NPM_REGISTRY:-}
     init: true
     command: npm run dev:worker -w {{projectName}}-api
     working_dir: /app

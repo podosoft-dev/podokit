@@ -23,9 +23,10 @@ node scripts/dev-app.mjs /tmp/myapp --template todo --no-build
 1. builds the monorepo (skip with `--no-build`),
 2. generates the app with the local CLI,
 3. rewrites the web app's `@podosoft/podokit-api-client` dependency to
-   `file:<repo>/packages/api-client` (re-packed on every install),
+   `file:<repo>/packages/api-client` and installs it with `--install-links`
+   (packed like a registry dependency instead of left as a symlink),
 4. applies any `--add` modules,
-5. runs `npm install`.
+5. runs `npm install --install-links`.
 
 ## Iterating on the api-client
 
@@ -34,8 +35,21 @@ After editing `packages/api-client`:
 ```bash
 npm run build -w @podosoft/podokit-api-client   # in the monorepo
 # then, in the generated app:
-npm install                                     # picks up the new local build
+npm install --install-links                     # picks up the new local build
 ```
+
+Containerized reference apps can resolve unpublished packages from a local
+registry during image builds by setting `PODOKIT_NPM_REGISTRY`. The registry
+must listen on an address reachable from containers (for example,
+`0.0.0.0:4873`, not only `127.0.0.1`). On Docker Desktop, use the host alias
+visible inside the build container, for example:
+
+```bash
+PODOKIT_NPM_REGISTRY=http://host.docker.internal:4873 podo dev watch
+```
+
+Leave the variable unset for the normal npm registry. Never put registry tokens
+in this build argument; use it only with a read-open local development registry.
 
 ## Running the generated app
 

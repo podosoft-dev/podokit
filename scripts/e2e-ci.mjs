@@ -274,7 +274,13 @@ async function main() {
   bg("node", ["dist/main-worker"], { cwd: join(target, "apps/api"), env: pgEnv });
   bg("node", ["build"], {
     cwd: join(target, "apps/web"),
-    env: { ...process.env, PORT: env.WEB_PORT, ORIGIN: webURL, BACKEND_INTERNAL_URL: `http://localhost:${env.API_PORT}` },
+    env: {
+      ...process.env,
+      PORT: env.WEB_PORT,
+      ORIGIN: webURL,
+      BACKEND_INTERNAL_URL: `http://localhost:${env.API_PORT}`,
+      BODY_SIZE_LIMIT: "3M",
+    },
   });
   await waitFor(`${webURL}/login`, "web");
 

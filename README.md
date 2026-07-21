@@ -98,8 +98,8 @@ This repo is an npm workspace. Published packages:
 
 - `packages/cli` — the `@podosoft/podokit` CLI (`podo`)
 - `packages/template-engine` — `@podosoft/podokit-template-engine`: token rendering, in-memory assembly, fenced-region wiring, and 3-way merge
-- `packages/api-client` — `@podosoft/podokit-api-client`: typed API client the generated frontend uses (better-auth + error-envelope request layer)
-- `packages/contracts` — `@podosoft/podokit-contracts`: the `Capabilities`, error envelope, and `AppException` shared by backend and frontend
+- `packages/api-client` — `@podosoft/podokit-api-client`: typed API client the generated frontend uses (better-auth + JSON/multipart error-envelope request layer)
+- `packages/contracts` — `@podosoft/podokit-contracts`: capabilities, upload policies, the error envelope, and `AppException` shared by backend and frontend
 - `packages/podokit-auth` — `@podosoft/podokit-auth`: the DB-backed auth configuration pipeline (encrypted secrets, config store)
 - `packages/podokit-module-blog` — `@podosoft/podokit-module-blog`: draft-first publishing, visibility controls, image uploads, comments, ownership, and admin management as an external updateable module
 - `templates/` — project templates copied by the CLI
@@ -136,12 +136,13 @@ podo add blog
 ```
 
 The **`admin-dashboard`** module adds a full admin console on top of `auth`:
-user & session management, an audit log, and a Settings page where OAuth
+user & session management, self-service profile-image uploads, an audit log, and a Settings page where OAuth
 providers, SMTP, provider-independent sign-up approval, automatic logout, and server toggles are
 configured at runtime (encrypted in the DB, applied without a restart). Pending
 registrations are approved from `/admin/users`, and the generated
 `admin:bootstrap` command creates or verifies the first administrator without
-using the public sign-up page. The separate `auth:configure` command automates
+using the public sign-up page. Its shared avatar menu is installed on the starter
+landing page and reused by the default blog layout. The separate `auth:configure` command automates
 applying provider/SMTP credentials. Both workflows keep passwords and provider
 secrets out of source files and logs; see [the module guide](docs/modules.md#admin-dashboard).
 
