@@ -3,7 +3,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
-  import * as Select from "$lib/components/ui/select";
+  import { Switch } from "$lib/components/ui/switch";
   import * as Tabs from "$lib/components/ui/tabs";
   import { Textarea } from "$lib/components/ui/textarea";
   import BlogProse from "./blog-prose.svelte";
@@ -14,7 +14,6 @@
   interface Props {
     value: BlogDraft;
     labels: BlogEditorLabels;
-    admin?: boolean;
     submitting?: boolean;
     onsubmit: (draft: BlogDraft) => void | Promise<void>;
     oncancel?: () => void;
@@ -23,7 +22,6 @@
   let {
     value = $bindable(),
     labels,
-    admin = false,
     submitting = false,
     onsubmit,
     oncancel,
@@ -31,8 +29,11 @@
   let editorTab = $state("write");
   let bodyRef = $state<HTMLTextAreaElement | null>(null);
   let imageInputRef = $state<HTMLInputElement | null>(null);
+  let coverInputRef = $state<HTMLInputElement | null>(null);
   let uploadingImage = $state(false);
+  let uploadingCover = $state(false);
   let imageError = $state("");
+  let coverError = $state("");
 
   function updateTags(event: Event): void {
     const input = event.currentTarget as HTMLInputElement;
@@ -89,6 +90,23 @@
       input.value = "";
     }
   }
+
+  async function uploadCover(event: Event): Promise<void> {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    uploadingCover = true;
+    coverError = "";
+    try {
+      const uploaded = await blogClient.uploadImage(file);
+      value.coverImage = uploaded.url;
+    } catch {
+      coverError = labels.imageUploadFailed;
+    } finally {
+      uploadingCover = false;
+      input.value = "";
+    }
+  }
 </script>
 
 <form class="space-y-6" onsubmit={submit}>
@@ -111,22 +129,55 @@
     </div>
     <div class="space-y-2 sm:col-span-2">
       <Label for="blog-cover">{labels.coverImage}</Label>
-      <Input id="blog-cover" type="url" bind:value={value.coverImage} maxlength={1000} />
-    </div>
-    {#if admin}
-      <div class="space-y-2">
-        <Label for="blog-status">{labels.status}</Label>
-        <Select.Root type="single" bind:value={value.status}>
-          <Select.Trigger id="blog-status" class="w-full">
-            {value.status === "published" ? labels.published : labels.draft}
-          </Select.Trigger>
-          <Select.Content>
-            <Select.Item value="draft">{labels.draft}</Select.Item>
-            <Select.Item value="published">{labels.published}</Select.Item>
-          </Select.Content>
-        </Select.Root>
+      <Input id="blog-cover" type="text" bind:value={value.coverImage} maxlength={1000} />
+      <Input
+        id="blog-cover-file"
+        type="file"
+        accept="image/png,image/jpeg,image/gif,image/webp,image/avif"
+        class="sr-only"
+        bind:ref={coverInputRef}
+        onchange={uploadCover}
+      />
+      <div class="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={uploadingCover}
+          onclick={() => coverInputRef?.click()}
+        >
+          <ImagePlus class="size-4" aria-hidden="true" />
+          {uploadingCover ? labels.uploadingImage : labels.uploadCover}
+        </Button>
+        {#if value.coverImage}
+          <Button type="button" size="sm" variant="ghost" onclick={() => (value.coverImage = "")}>
+            {labels.removeCover}
+          </Button>
+        {/if}
       </div>
-    {/if}
+      {#if coverError}
+        <p class="text-destructive text-sm" role="alert">{coverError}</p>
+      {/if}
+      {#if value.coverImage}
+        <img
+          src={value.coverImage}
+          alt={value.title || labels.coverImage}
+          class="max-h-64 w-full rounded-lg border object-cover"
+        />
+      {/if}
+    </div>
+    <div class="flex items-center justify-between gap-4 rounded-lg border p-4 sm:col-span-2">
+      <div class="space-y-1">
+        <Label for="blog-visibility">{labels.showPost}</Label>
+        <p class="text-muted-foreground text-sm">{labels.showPostHelp}</p>
+      </div>
+      <Switch
+        id="blog-visibility"
+        aria-label={labels.showPost}
+        checked={value.status === "published"}
+        onCheckedChange={(checked) => (value.status = checked === true ? "published" : "draft")}
+      />
+    </div>
   </div>
 
   <div class="space-y-2">

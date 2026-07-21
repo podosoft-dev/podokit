@@ -44,7 +44,7 @@ export interface BlogDraft {
   body: string;
   coverImage: string;
   tags: string[];
-  status?: BlogPostStatus;
+  status: BlogPostStatus;
 }
 
 export interface BlogEditorLabels {
@@ -65,6 +65,10 @@ export interface BlogEditorLabels {
   uploadingImage: string;
   imageHelp: string;
   imageUploadFailed: string;
+  showPost: string;
+  showPostHelp: string;
+  uploadCover: string;
+  removeCover: string;
 }
 
 export interface BlogImageUpload {
@@ -80,6 +84,7 @@ export function emptyBlogDraft(): BlogDraft {
     body: "",
     coverImage: "",
     tags: [],
+    status: "draft",
   };
 }
 

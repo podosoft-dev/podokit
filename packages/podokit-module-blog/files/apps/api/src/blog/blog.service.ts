@@ -56,6 +56,19 @@ export class BlogService {
     return this.page(items, query.page, query.pageSize, total);
   }
 
+  async listMine(
+    query: BlogPageDto,
+    actor: BlogActor,
+  ): Promise<Paginated<BlogPost>> {
+    const [items, total] = await this.posts.findAndCount({
+      where: { authorId: actor.id },
+      order: { updatedAt: "DESC" },
+      skip: (query.page - 1) * query.pageSize,
+      take: query.pageSize,
+    });
+    return this.page(items, query.page, query.pageSize, total);
+  }
+
   async getPublishedBySlug(slug: string): Promise<BlogPost> {
     const post = await this.posts.findOne({ where: { slug, status: "published" } });
     if (!post) throw new AppException("BLOG_POST_NOT_FOUND", "Blog post not found.", 404);
@@ -68,8 +81,25 @@ export class BlogService {
     return post;
   }
 
+  async getManageableBySlug(
+    slug: string,
+    actor: BlogActor,
+  ): Promise<BlogPost> {
+    const post = await this.posts.findOne({ where: { slug } });
+    if (!post) {
+      throw new AppException(
+        "BLOG_POST_NOT_FOUND",
+        "Blog post not found.",
+        404,
+      );
+    }
+    this.assertOwner(post.authorId, actor, "BLOG_POST_FORBIDDEN");
+    return post;
+  }
+
   async create(dto: CreateBlogPostDto, actor: BlogActor): Promise<BlogPost> {
     const slug = await this.availableSlug(dto.slug || dto.title);
+    const status = dto.status ?? "draft";
     return this.posts.save(
       this.posts.create({
         ...dto,
@@ -80,27 +110,14 @@ export class BlogService {
         authorId: actor.id,
         author: actor.name,
         authorImage: actor.image,
-        status: "published",
-        publishedAt: new Date(),
+        status,
+        publishedAt: status === "published" ? new Date() : null,
       }),
     );
   }
 
   async adminCreate(dto: AdminCreateBlogPostDto, actor: BlogActor): Promise<BlogPost> {
-    const slug = await this.availableSlug(dto.slug || dto.title);
-    return this.posts.save(
-      this.posts.create({
-        ...dto,
-        slug,
-        excerpt: dto.excerpt.trim(),
-        body: dto.body.trim(),
-        tags: this.cleanTags(dto.tags),
-        authorId: actor.id,
-        author: actor.name,
-        authorImage: actor.image,
-        publishedAt: dto.status === "published" ? new Date() : null,
-      }),
-    );
+    return this.create(dto, actor);
   }
 
   async update(id: string, dto: UpdateBlogPostDto, actor: BlogActor): Promise<BlogPost> {
@@ -111,18 +128,7 @@ export class BlogService {
 
   async adminUpdate(id: string, dto: AdminUpdateBlogPostDto): Promise<BlogPost> {
     const post = await this.getById(id);
-    const wasPublished = post.status === "published";
-    if (dto.status !== undefined) post.status = dto.status;
-    const saved = await this.savePost(post, dto);
-    if (!wasPublished && saved.status === "published" && !saved.publishedAt) {
-      saved.publishedAt = new Date();
-      return this.posts.save(saved);
-    }
-    if (saved.status === "draft") {
-      saved.publishedAt = null;
-      return this.posts.save(saved);
-    }
-    return saved;
+    return this.savePost(post, dto);
   }
 
   async remove(id: string, actor: BlogActor): Promise<void> {
@@ -179,6 +185,12 @@ export class BlogService {
     if (dto.body !== undefined) post.body = dto.body.trim();
     if (dto.coverImage !== undefined) post.coverImage = dto.coverImage;
     if (dto.tags !== undefined) post.tags = this.cleanTags(dto.tags);
+    if (dto.status !== undefined) {
+      post.status = dto.status;
+      if (dto.status === "published" && !post.publishedAt) {
+        post.publishedAt = new Date();
+      }
+    }
     return this.posts.save(post);
   }
 

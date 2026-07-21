@@ -52,8 +52,11 @@ podo add blog --adopt
 ### `blog` (external package)
 
 Authenticated Markdown publishing with image attachments, paginated public posts,
-flat comments, author ownership, and admin management. Regular users publish immediately and can
-edit or delete only their own posts and comments; admins can manage all content.
+flat comments, author ownership, and admin management. Posts start as private
+drafts. Authors manage drafts and published posts at `/blog/mine`, use **Show post**
+to control public visibility, and can edit or delete only their own posts and
+comments; admins can manage all content. Hiding and showing an existing post keeps
+its first publication time and public list position.
 
 ```bash
 npm install --save-dev @podosoft/podokit-module-blog
@@ -77,6 +80,7 @@ application-owned.
 storage, then inserts a Markdown image at the current cursor. The resulting
 `/api/blog/images/:id` URL is public, stable, and cacheable, unlike a presigned
 file-upload URL. SVG is excluded from inline blog uploads.
+The editor also uploads and previews one cover image for each post.
 
 ### `auth` (better-auth)
 

@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "name": "blog",
-  "description": "Authenticated blog publishing with Markdown image uploads, preview, pagination, comments, author ownership, and admin management.",
+  "description": "Draft-first blog publishing with visibility controls, Markdown and cover image uploads, preview, pagination, comments, author ownership, and admin management.",
   "requires": [
     "admin-dashboard",
     "rate-limit",
@@ -58,13 +58,13 @@
       "file": "AGENTS.md",
       "marker": "<!-- podokit:end:agents-modules -->",
       "optional": true,
-      "text": "### blog\n- Public reads are paginated under `/blog`; authenticated users publish immediately and can manage their own posts and comments. Admins can manage all content under `/admin/blog`.\n- Keep public route wrappers app-owned for visual design and SEO. Reusable types, loaders, editor, and API behavior live under managed `$lib/blog/` and `apps/api/src/blog/`.\n"
+      "text": "### blog\n- Public reads are paginated under `/blog`; authenticated users create private drafts by default and manage them under `/blog/mine`. The Show post switch controls public visibility without changing the first publication time. Admins can manage all content under `/admin/blog`.\n- Keep public route wrappers app-owned for visual design and SEO. Reusable types, loaders, editor, and API behavior live under managed `$lib/blog/` and `apps/api/src/blog/`.\n"
     }
   ],
   "instructions": [
     "Install dependencies: npm install",
     "Run migrations: npm run migration:run -w <app>-api",
-    "Open /blog to read and write posts, attach images, or /admin/blog to manage all content.",
+    "Open /blog to read posts, /blog/mine to manage your drafts and published posts, or /admin/blog to manage all content.",
     "After upgrading this package, run podo update and then podo update --apply."
   ]
 }

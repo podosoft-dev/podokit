@@ -14,7 +14,12 @@
 <main class="mx-auto w-full max-w-4xl px-6 py-12 sm:py-20">
   <header class="flex items-end justify-between gap-6 border-b pb-8">
     <div><h1 class="text-4xl font-semibold tracking-tight">{i18n.t.blog.title}</h1></div>
-    {#if data.user}<Button href="/blog/write">{i18n.t.blog.newPost}</Button>{/if}
+    {#if data.user}
+      <div class="flex flex-wrap justify-end gap-2">
+        <Button variant="outline" href="/blog/mine">{i18n.t.blog.myPosts}</Button>
+        <Button href="/blog/write">{i18n.t.blog.newPost}</Button>
+      </div>
+    {/if}
   </header>
 
   {#if data.posts.items.length === 0}

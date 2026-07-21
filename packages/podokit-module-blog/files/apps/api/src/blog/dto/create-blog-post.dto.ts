@@ -1,12 +1,14 @@
 import {
   ArrayMaxSize,
   IsArray,
+  IsIn,
   IsOptional,
   IsString,
-  IsUrl,
   Length,
+  Matches,
   MaxLength,
 } from "class-validator";
+import type { BlogPostStatus } from "../blog-post.entity";
 
 export class CreateBlogPostDto {
   @IsString()
@@ -28,7 +30,7 @@ export class CreateBlogPostDto {
   body!: string;
 
   @IsOptional()
-  @IsUrl({ require_tld: false })
+  @Matches(/^(?:https?:\/\/|\/api\/blog\/images\/)[^\s]+$/)
   @MaxLength(1000)
   coverImage?: string | null;
 
@@ -38,4 +40,8 @@ export class CreateBlogPostDto {
   @IsString({ each: true })
   @MaxLength(50, { each: true })
   tags: string[] = [];
+
+  @IsOptional()
+  @IsIn(["draft", "published"])
+  status?: BlogPostStatus;
 }

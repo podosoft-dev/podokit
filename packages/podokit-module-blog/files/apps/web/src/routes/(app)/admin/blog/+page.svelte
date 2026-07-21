@@ -38,6 +38,8 @@
     cancel: i18n.t.blog.cancel, addImage: i18n.t.blog.addImage,
     uploadingImage: i18n.t.blog.uploadingImage, imageHelp: i18n.t.blog.imageHelp,
     imageUploadFailed: i18n.t.blog.imageUploadFailed,
+    showPost: i18n.t.blog.showPost, showPostHelp: i18n.t.blog.showPostHelp,
+    uploadCover: i18n.t.blog.uploadCover, removeCover: i18n.t.blog.removeCover,
   });
 
   function openCreate(): void {
@@ -108,7 +110,7 @@
 <Dialog.Root bind:open={dialogOpen}>
   <Dialog.Content class="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
     <Dialog.Header><Dialog.Title>{editingId ? i18n.t.blog.editPost : i18n.t.blog.newPost}</Dialog.Title></Dialog.Header>
-    <BlogEditor bind:value={draft} {labels} admin submitting={saving} onsubmit={save} oncancel={() => (dialogOpen = false)} />
+    <BlogEditor bind:value={draft} {labels} submitting={saving} onsubmit={save} oncancel={() => (dialogOpen = false)} />
   </Dialog.Content>
 </Dialog.Root>
 

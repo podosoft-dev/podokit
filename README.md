@@ -101,7 +101,7 @@ This repo is an npm workspace. Published packages:
 - `packages/api-client` — `@podosoft/podokit-api-client`: typed API client the generated frontend uses (better-auth + error-envelope request layer)
 - `packages/contracts` — `@podosoft/podokit-contracts`: the `Capabilities`, error envelope, and `AppException` shared by backend and frontend
 - `packages/podokit-auth` — `@podosoft/podokit-auth`: the DB-backed auth configuration pipeline (encrypted secrets, config store)
-- `packages/podokit-module-blog` — `@podosoft/podokit-module-blog`: authenticated publishing, comments, ownership, and admin management as an external updateable module
+- `packages/podokit-module-blog` — `@podosoft/podokit-module-blog`: draft-first publishing, visibility controls, image uploads, comments, ownership, and admin management as an external updateable module
 - `templates/` — project templates copied by the CLI
 - `examples/` — how to generate example apps
 
