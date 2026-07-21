@@ -21,6 +21,25 @@ function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function replaceDependencyRange(source, name, currentRange, nextRange) {
+  const key = escapeRegExp(JSON.stringify(name));
+  const value = escapeRegExp(JSON.stringify(currentRange));
+  const pattern = new RegExp(`(${key}\\s*:\\s*)${value}`, "g");
+  let replacements = 0;
+  const updated = source.replace(pattern, (_match, prefix) => {
+    replacements += 1;
+    return `${prefix}${JSON.stringify(nextRange)}`;
+  });
+  if (replacements === 0) {
+    throw new Error(`Could not locate ${name}@${currentRange} in template manifest source`);
+  }
+  return updated;
+}
+
 export function caretRangeAccepts(range, version) {
   const rangeMatch = /^\^(\d+)\.(\d+)\.(\d+)$/.exec(range);
   const versionMatch = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
@@ -56,8 +75,9 @@ export function syncTemplateDependencyRanges(repoRoot) {
 
   const updatedFiles = [];
   for (const path of jsonFiles(resolve(repoRoot, "templates"))) {
-    const manifest = readJson(path);
-    let changed = false;
+    let source = readFileSync(path, "utf8");
+    const manifest = JSON.parse(source);
+    const updates = new Map();
 
     for (const field of DEPENDENCY_FIELDS) {
       const dependencies = manifest[field];
@@ -66,14 +86,21 @@ export function syncTemplateDependencyRanges(repoRoot) {
       for (const [name, range] of Object.entries(dependencies)) {
         const version = packageVersions.get(name);
         if (version && typeof range === "string" && !caretRangeAccepts(range, version)) {
-          dependencies[name] = `^${version}`;
-          changed = true;
+          updates.set(`${name}\0${range}`, { name, currentRange: range, nextRange: `^${version}` });
         }
       }
     }
 
-    if (changed) {
-      writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
+    if (updates.size > 0) {
+      for (const update of updates.values()) {
+        source = replaceDependencyRange(
+          source,
+          update.name,
+          update.currentRange,
+          update.nextRange,
+        );
+      }
+      writeFileSync(path, source);
       updatedFiles.push(relative(repoRoot, path));
     }
   }

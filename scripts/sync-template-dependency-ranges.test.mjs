@@ -38,9 +38,19 @@ test("updates incompatible PodoKit ranges in generated app and module manifests"
         external: "^4.0.0",
       },
     });
-    writeJson(join(repoRoot, "templates/modules/auth/module.manifest.json"), {
-      dependencies: { "@podosoft/podokit-contracts": "~0.2.0" },
-    });
+    const moduleManifestPath = join(repoRoot, "templates/modules/auth/module.manifest.json");
+    mkdirSync(dirname(moduleManifestPath), { recursive: true });
+    writeFileSync(
+      moduleManifestPath,
+      [
+        "{",
+        '  "description": "Auth \\u2014 configuration",',
+        '  "requires": ["mailer"],',
+        '  "dependencies": { "@podosoft/podokit-contracts": "~0.2.0" }',
+        "}",
+        "",
+      ].join("\n"),
+    );
 
     assert.deepEqual(syncTemplateDependencyRanges(repoRoot), [
       "templates/app/package.json",
@@ -51,10 +61,12 @@ test("updates incompatible PodoKit ranges in generated app and module manifests"
       "@podosoft/podokit-api-client": "^0.6.0",
       external: "^4.0.0",
     });
-    assert.deepEqual(
-      readJson(join(repoRoot, "templates/modules/auth/module.manifest.json")).dependencies,
-      { "@podosoft/podokit-contracts": "^0.3.0" },
-    );
+    assert.deepEqual(readJson(moduleManifestPath).dependencies, {
+      "@podosoft/podokit-contracts": "^0.3.0",
+    });
+    const updatedModuleSource = readFileSync(moduleManifestPath, "utf8");
+    assert.match(updatedModuleSource, /Auth \\u2014 configuration/);
+    assert.match(updatedModuleSource, /"requires": \["mailer"\]/);
     assert.deepEqual(syncTemplateDependencyRanges(repoRoot), []);
   } finally {
     rmSync(repoRoot, { recursive: true, force: true });
