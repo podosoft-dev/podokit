@@ -4,7 +4,7 @@ import { clearMailpit, mailpitReachable, waitForLink, waitForOtp } from "../help
 const base = process.env.E2E_BASE_URL ?? "http://localhost:5001";
 const origin = { origin: base };
 
-test("email one-time code signs a user in @smoke", async ({ playwright }) => {
+test("email one-time code signs a user in", async ({ playwright }) => {
   test.skip(!(await mailpitReachable()), "Mailpit not available");
   const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const caps = await (await ctx.get("/api/account/capabilities")).json();
@@ -22,7 +22,7 @@ test("email one-time code signs a user in @smoke", async ({ playwright }) => {
   await ctx.dispose();
 });
 
-test("organization invitation can be sent and accepted @smoke", async ({ playwright }) => {
+test("organization invitation can be sent and accepted", async ({ playwright }) => {
   const owner = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const caps = await (await owner.get("/api/account/capabilities")).json();
   test.skip(!caps?.organization, "organizations not enabled");
@@ -49,7 +49,7 @@ test("organization invitation can be sent and accepted @smoke", async ({ playwri
   await owner.dispose();
 });
 
-test("magic link signs a user in @smoke", async ({ playwright }) => {
+test("magic link signs a user in", async ({ playwright }) => {
   test.skip(!(await mailpitReachable()), "Mailpit not available");
   const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const caps = await (await ctx.get("/api/account/capabilities")).json();

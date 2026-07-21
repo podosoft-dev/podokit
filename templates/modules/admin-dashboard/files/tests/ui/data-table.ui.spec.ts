@@ -3,7 +3,7 @@ import { ready } from "../helpers/hydration";
 
 // Sorting via the shared DataTable. Users is server-sorted (manual), audit is
 // client-sorted — both drive the same clickable headers + aria-sort.
-test("users table sorts by a column header (server) @smoke", async ({ page }) => {
+test("users table sorts by a column header (server)", async ({ page }) => {
   await ready(page, "/admin/users");
   const header = page.getByRole("columnheader", { name: /Name/ });
   // Click the sort button *inside* the header — a bare name match collides with

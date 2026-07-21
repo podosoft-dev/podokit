@@ -4,7 +4,7 @@ import { ready } from "../helpers/hydration";
 // Full passkey round trip on a throwaway account — never touches the shared admin.
 test.use({ storageState: { cookies: [], origins: [] } });
 
-test("register a passkey and sign in with it @smoke", async ({ page, baseURL }) => {
+test("register a passkey and sign in with it", async ({ page, baseURL }) => {
   const origin = { origin: baseURL ?? "" };
   // A virtual authenticator answers both the register (create) and sign-in (get)
   // WebAuthn ceremonies without hardware.

@@ -3,7 +3,7 @@ import { ready } from "../helpers/hydration";
 
 // admin storageState (project default)
 
-test("settings: add and remove a social login provider @smoke", async ({ page }) => {
+test("settings: add and remove a social login provider", async ({ page }) => {
   const dialog = page.getByRole("dialog");
   const addBtn = dialog.getByRole("button", { name: "Add provider" });
   const openConfigure = async (): Promise<void> => {
@@ -47,7 +47,7 @@ test("settings: add and remove a social login provider @smoke", async ({ page })
   }
 });
 
-test("settings: open and save the SMTP dialog @smoke", async ({ page }) => {
+test("settings: open and save the SMTP dialog", async ({ page }) => {
   await ready(page, "/admin/settings");
   await page.getByRole("tab", { name: "Authentication" }).click();
   await page.getByRole("button", { name: "SMTP settings" }).click();

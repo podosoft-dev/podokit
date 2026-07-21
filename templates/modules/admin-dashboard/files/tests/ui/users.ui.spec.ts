@@ -3,7 +3,7 @@ import { ready } from "../helpers/hydration";
 
 const base = process.env.E2E_BASE_URL ?? "http://localhost:5001";
 
-test("admin can create a user with a custom role @smoke", async ({ page }) => {
+test("admin can create a user with a custom role", async ({ page }) => {
   await ready(page, "/admin/users");
   await page.getByRole("button", { name: "Add user" }).click();
   const role = page.locator("#c-role");
@@ -24,7 +24,7 @@ test("admin can create a user with a custom role @smoke", async ({ page }) => {
   await expect(page.getByRole("cell", { name: email })).toBeVisible();
 });
 
-test("admin sees the user list and can search @smoke", async ({ page }) => {
+test("admin sees the user list and can search", async ({ page }) => {
   await ready(page, "/admin/users");
   await expect(page.getByRole("heading", { name: "Users" })).toBeVisible();
   // Search by exact address — robust to pagination as the user count grows.
@@ -37,7 +37,7 @@ test("admin sees the user list and can search @smoke", async ({ page }) => {
   await expect(page.getByRole("cell", { name: "admin@example.com" })).toHaveCount(0);
 });
 
-test("user list shows the joined column @smoke", async ({ page }) => {
+test("user list shows the joined column", async ({ page }) => {
   await ready(page, "/admin/users");
   await expect(page.getByRole("columnheader", { name: "Joined" })).toBeVisible();
 });
@@ -52,7 +52,7 @@ test("row menu exposes admin actions", async ({ page }) => {
   await expect(page.getByRole("menuitem", { name: "Impersonate" })).toBeVisible();
 });
 
-test("admin can approve a pending registration from the user list @smoke", async ({ page }) => {
+test("admin can approve a pending registration from the user list", async ({ page }) => {
   const email = `pending-ui-${Date.now()}@example.com`;
   const created = await page.request.post("/api/auth/admin/create-user", {
     headers: { origin: base },

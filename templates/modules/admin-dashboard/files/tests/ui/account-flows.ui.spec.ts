@@ -22,7 +22,7 @@ async function loginFresh(page: import("@playwright/test").Page, playwright: imp
   await expect(page).toHaveURL(/\/admin\/account/);
 }
 
-test("account: register and verify a phone number @smoke", async ({ page, playwright }) => {
+test("account: register and verify a phone number", async ({ page, playwright }) => {
   test.skip(!(await smsSinkReachable()), "sms sink unreachable");
   await loginFresh(page, playwright, `acc-ph-${Date.now()}@example.com`);
   const phoneInput = page.locator("#phone");
@@ -38,14 +38,14 @@ test("account: register and verify a phone number @smoke", async ({ page, playwr
   await expect(page.getByText("Phone verified")).toBeVisible();
 });
 
-test("account: change email address @smoke", async ({ page, playwright }) => {
+test("account: change email address", async ({ page, playwright }) => {
   await loginFresh(page, playwright, `acc-em-${Date.now()}@example.com`);
   await page.locator("#email").fill(`changed-${Date.now()}@example.com`);
   await page.getByRole("button", { name: "Change email" }).click();
   await expect(page.getByText(/Email address updated|approve the change/)).toBeVisible();
 });
 
-test("account: delete my own account @smoke", async ({ page, playwright }) => {
+test("account: delete my own account", async ({ page, playwright }) => {
   const admin = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   await admin.post("/api/auth/sign-in/email", { data: { email: "admin@example.com", password: PW } });
   try {

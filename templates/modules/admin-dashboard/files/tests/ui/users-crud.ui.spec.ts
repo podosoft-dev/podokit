@@ -51,7 +51,7 @@ test("create rejects mismatched passwords", async ({ page }) => {
   await expect(dialog.getByText("Passwords do not match")).toBeVisible();
 });
 
-test("manage: edit profile name @smoke", async ({ page }) => {
+test("manage: edit profile name", async ({ page }) => {
   await ready(page, "/admin/users");
   const email = `ui-edit-${Date.now()}@example.com`;
   await seedUser(page, email);

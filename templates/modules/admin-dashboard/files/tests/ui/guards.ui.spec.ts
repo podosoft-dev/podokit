@@ -10,7 +10,7 @@ test.describe("unauthenticated", () => {
     }
   });
 
-  test("private and authentication routes prevent search indexing @smoke", async ({ request }) => {
+  test("private and authentication routes prevent search indexing", async ({ request }) => {
     for (const route of ["/admin", "/account", "/login", "/api/account/me"]) {
       const response = await request.get(route, { maxRedirects: 0 });
       expect(response.headers()["x-robots-tag"]).toBe("noindex, nofollow");
@@ -32,7 +32,7 @@ test.describe("normal user (non-admin)", () => {
     expect((await page.goto("/admin/settings"))?.status()).toBe(403);
   });
 
-  test("account is available without the admin shell @smoke", async ({ page }) => {
+  test("account is available without the admin shell", async ({ page }) => {
     await page.goto("/account");
     await expect(page.getByRole("heading", { name: "Account" })).toBeVisible();
     await expect(page.getByLabel("Name", { exact: true })).toBeVisible();

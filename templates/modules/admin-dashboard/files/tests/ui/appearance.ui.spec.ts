@@ -12,7 +12,7 @@ async function openAppearance(page: import("@playwright/test").Page): Promise<vo
   }).toPass();
 }
 
-test("appearance: has its own tab with theme controls @smoke", async ({ page }) => {
+test("appearance: has its own tab with theme controls", async ({ page }) => {
   await openAppearance(page);
   await expect(page.getByRole("heading", { name: "Featured themes" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Default", exact: true })).toBeVisible();

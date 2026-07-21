@@ -4,24 +4,29 @@
 // the API + web, and run the shipped Playwright suite. This is the (B) "Outer"
 // loop — the exact install/generate path a user runs. See docs/testing.md.
 //
-// Usage: node scripts/e2e-ci.mjs [--smoke] [--keep]
+// Usage: node scripts/e2e-ci.mjs [--smoke | --package-smoke] [--keep]
 // Env (with CI-friendly defaults): REGISTRY_PORT, API_PORT, WEB_PORT,
 //   OUTAGE_WEB_PORT,
 //   POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB,
-//   APP_DIR, KEEP.
+//   APP_DIR, E2E_NPM_CACHE, KEEP.
 import { spawn, execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir, homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  createPhaseTimer,
+  npmInstallArguments,
+  playwrightArguments,
+  resolveE2eOptions,
+} from "./e2e-ci-lib.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
-const smoke = args.includes("--smoke");
-const keep = args.includes("--keep") || process.env.KEEP === "1";
-// --grep <pattern>: run only matching tests (faster feedback on one feature).
-const grepIdx = args.indexOf("--grep");
-const grep = grepIdx !== -1 ? args[grepIdx + 1] : process.env.GREP;
+const options = resolveE2eOptions(args);
+const smoke = options.mode === "smoke";
+const packageSmoke = options.mode === "package-smoke";
+const { grep, keep } = options;
 
 const env = {
   REGISTRY_PORT: process.env.REGISTRY_PORT ?? "4873",
@@ -104,7 +109,8 @@ process.on("SIGINT", () => {
   process.exit(1);
 });
 
-const step = (m) => console.log(`\n── ${m}`);
+const timer = createPhaseTimer();
+const step = (message) => timer.start(message);
 
 async function main() {
   step("build the monorepo");
@@ -146,7 +152,7 @@ async function main() {
 
   step("install (resolving @podosoft/* from the registry)");
   writeFileSync(join(target, ".npmrc"), `registry=${registry}\n//localhost:${env.REGISTRY_PORT}/:_authToken=e2e\n`);
-  run("npm", ["install", "--no-audit", "--no-fund"], { cwd: target });
+  run("npm", npmInstallArguments(process.env.E2E_NPM_CACHE), { cwd: target });
 
   step("write .env");
   writeFileSync(
@@ -224,35 +230,37 @@ async function main() {
   step("build web");
   run("npm", ["run", "build", "-w", "app-web"], { cwd: target });
 
-  step("verify protected routes fail closed during a backend outage");
-  const unavailableWeb = bg("node", ["build"], {
-    cwd: join(target, "apps/web"),
-    env: {
-      ...process.env,
-      PORT: env.OUTAGE_WEB_PORT,
-      ORIGIN: outageWebURL,
-      BACKEND_INTERNAL_URL: "http://127.0.0.1:1",
-    },
-  });
-  await waitFor(`${outageWebURL}/`, "outage verification web");
-  const publicDuringOutage = await fetch(`${outageWebURL}/`, { redirect: "manual" });
-  if (publicDuringOutage.status !== 200) {
-    throw new Error(`public route returned ${publicDuringOutage.status} during backend outage`);
+  if (!packageSmoke) {
+    step("verify protected routes fail closed during a backend outage");
+    const unavailableWeb = bg("node", ["build"], {
+      cwd: join(target, "apps/web"),
+      env: {
+        ...process.env,
+        PORT: env.OUTAGE_WEB_PORT,
+        ORIGIN: outageWebURL,
+        BACKEND_INTERNAL_URL: "http://127.0.0.1:1",
+      },
+    });
+    await waitFor(`${outageWebURL}/`, "outage verification web");
+    const publicDuringOutage = await fetch(`${outageWebURL}/`, { redirect: "manual" });
+    if (publicDuringOutage.status !== 200) {
+      throw new Error(`public route returned ${publicDuringOutage.status} during backend outage`);
+    }
+    const protectedDuringOutage = await fetch(`${outageWebURL}/admin`, {
+      redirect: "manual",
+      headers: { cookie: "better-auth.session_token=preserve-during-outage" },
+    });
+    if (protectedDuringOutage.status !== 503) {
+      throw new Error(`protected route returned ${protectedDuringOutage.status} instead of 503 during backend outage`);
+    }
+    if (protectedDuringOutage.headers.has("location")) {
+      throw new Error("protected route redirected during backend outage");
+    }
+    if (protectedDuringOutage.headers.has("set-cookie")) {
+      throw new Error("protected route modified the session cookie during backend outage");
+    }
+    stop(unavailableWeb);
   }
-  const protectedDuringOutage = await fetch(`${outageWebURL}/admin`, {
-    redirect: "manual",
-    headers: { cookie: "better-auth.session_token=preserve-during-outage" },
-  });
-  if (protectedDuringOutage.status !== 503) {
-    throw new Error(`protected route returned ${protectedDuringOutage.status} instead of 503 during backend outage`);
-  }
-  if (protectedDuringOutage.headers.has("location")) {
-    throw new Error("protected route redirected during backend outage");
-  }
-  if (protectedDuringOutage.headers.has("set-cookie")) {
-    throw new Error("protected route modified the session cookie during backend outage");
-  }
-  stop(unavailableWeb);
 
   step("start api + web");
   bg("node", [join(target, "infra/docker/sms-sink.mjs")], { cwd: target, env: { ...process.env, PORT: smsSinkPort } });
@@ -270,11 +278,22 @@ async function main() {
   });
   await waitFor(`${webURL}/login`, "web");
 
-  step(`run e2e${smoke ? " (smoke)" : ""}`);
+  if (packageSmoke) {
+    const apiHealth = await fetch(`http://localhost:${env.API_PORT}/health`);
+    if (!apiHealth.ok) throw new Error(`api health check returned ${apiHealth.status}`);
+    const loginPage = await fetch(`${webURL}/login`);
+    if (!loginPage.ok) throw new Error(`web login check returned ${loginPage.status}`);
+    timer.finish();
+    console.log("\n✓ faithful package smoke passed");
+    return;
+  }
+
+  step("install Playwright Chromium");
   run("npx", ["playwright", "install", "--with-deps", "chromium"], { cwd: join(target, "tests") });
+  step(`run Playwright${smoke ? " smoke" : " full suite"}`);
   // --grep wins when given (run just one feature's specs); otherwise --smoke runs
   // the @smoke subset, and the default runs everything.
-  const testArgs = ["playwright", "test", ...(grep ? ["--grep", grep] : smoke ? ["--grep", "@smoke"] : [])];
+  const testArgs = playwrightArguments(options);
   // A developer may already have an unrelated Mailpit bound to the default
   // port. Only expose Mailpit to the generated tests when SMTP is also wired to
   // it; otherwise email specs must skip instead of reading from the wrong sink.
@@ -292,6 +311,7 @@ async function main() {
     },
   });
 
+  timer.finish();
   console.log("\n✓ faithful e2e passed");
 }
 
@@ -301,6 +321,7 @@ main()
     process.exitCode = 1;
   })
   .finally(() => {
+    timer.finish();
     // The background children (Verdaccio, api, web) inherit stdio and keep the
     // event loop alive, so the run never exits on its own. Kill them and exit
     // explicitly — otherwise CI hangs until the job timeout.

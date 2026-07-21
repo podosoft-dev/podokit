@@ -12,7 +12,7 @@ test("account/me is 401 when unauthenticated @smoke", async ({ request }) => {
   expect(res.status()).toBe(401);
 });
 
-test("rejects a breached password on sign-up @smoke", async ({ playwright }) => {
+test("rejects a breached password on sign-up", async ({ playwright }) => {
   const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   await ctx.post("/api/auth/sign-in/email", { data: { email: ADMIN.email, password: ADMIN.password } });
   const caps = await (await ctx.get("/api/account/capabilities")).json();
@@ -25,7 +25,7 @@ test("rejects a breached password on sign-up @smoke", async ({ playwright }) => 
   await ctx.dispose();
 });
 
-test("phone number: verify with the code delivered to the SMS sink @smoke", async ({ playwright }) => {
+test("phone number: verify with the code delivered to the SMS sink", async ({ playwright }) => {
   const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const caps = await (await ctx.get("/api/account/capabilities")).json();
   test.skip(!caps?.phoneNumber, "phone number not enabled");
@@ -74,7 +74,7 @@ test("two-factor: enable with a real TOTP code and require it at sign-in @smoke"
   await ctx2.dispose();
 });
 
-test("two-factor: a backup code completes sign-in and is single-use @smoke", async ({ playwright }) => {
+test("two-factor: a backup code completes sign-in and is single-use", async ({ playwright }) => {
   const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const caps = await (await ctx.get("/api/account/capabilities")).json();
   test.skip(!caps?.twoFactor, "two-factor not enabled");
@@ -110,7 +110,7 @@ test("two-factor: a backup code completes sign-in and is single-use @smoke", asy
   await ctx3.dispose();
 });
 
-test("two-factor: regenerating backup codes invalidates the old set @smoke", async ({ playwright }) => {
+test("two-factor: regenerating backup codes invalidates the old set", async ({ playwright }) => {
   const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const caps = await (await ctx.get("/api/account/capabilities")).json();
   test.skip(!caps?.twoFactor, "two-factor not enabled");
@@ -142,7 +142,7 @@ test("two-factor: regenerating backup codes invalidates the old set @smoke", asy
   await ctxNew.dispose();
 });
 
-test("require-2fa: gates an un-enrolled user until they enrol @smoke", async ({ playwright }) => {
+test("require-2fa: gates an un-enrolled user until they enrol", async ({ playwright }) => {
   const admin = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const caps = await (await admin.get("/api/account/capabilities")).json();
   test.skip(!caps?.twoFactor, "two-factor not enabled");
@@ -180,7 +180,7 @@ test("require-2fa: gates an un-enrolled user until they enrol @smoke", async ({ 
   }
 });
 
-test("multi-session holds several accounts and switches between them @smoke", async ({ playwright }) => {
+test("multi-session holds several accounts and switches between them", async ({ playwright }) => {
   const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const caps = await (await ctx.get("/api/account/capabilities")).json();
   test.skip(!caps?.multiSession, "multi-session not enabled");
@@ -201,7 +201,7 @@ test("multi-session holds several accounts and switches between them @smoke", as
   await ctx.dispose();
 });
 
-test("a user can sign in with a username @smoke", async ({ playwright }) => {
+test("a user can sign in with a username", async ({ playwright }) => {
   const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const caps = await (await ctx.get("/api/account/capabilities")).json();
   test.skip(!caps?.username, "username not enabled");
@@ -219,7 +219,7 @@ test("a user can sign in with a username @smoke", async ({ playwright }) => {
   await ctx2.dispose();
 });
 
-test("bearer token authenticates API requests without a cookie @smoke", async ({ playwright }) => {
+test("bearer token authenticates API requests without a cookie", async ({ playwright }) => {
   const email = `bearer-${Date.now()}@example.com`;
   const pw = "Podokit3e-Str0ng!pw";
   const signup = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
@@ -241,7 +241,7 @@ test("bearer token authenticates API requests without a cookie @smoke", async ({
   await api.dispose();
 });
 
-test("a user can create, list and revoke a personal API key @smoke", async ({ playwright }) => {
+test("a user can create, list and revoke a personal API key", async ({ playwright }) => {
   const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const caps = await (await ctx.get("/api/account/capabilities")).json();
   test.skip(!caps?.apiKey, "api keys not enabled");
@@ -310,7 +310,7 @@ test("a user can create, list and delete an organization @smoke", async ({ playw
   await ctx.dispose();
 });
 
-test("an organization can have a parent and manager members @smoke", async ({ playwright }) => {
+test("an organization can have a parent and manager members", async ({ playwright }) => {
   const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const caps = await (await ctx.get("/api/account/capabilities")).json();
   test.skip(!caps?.organization, "organizations not enabled");

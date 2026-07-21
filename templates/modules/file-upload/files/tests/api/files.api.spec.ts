@@ -23,7 +23,7 @@ test("file upload: multipart upload returns a key and url @smoke", async ({ play
   await ctx.dispose();
 });
 
-test("file upload: a request with no file is a 400 @smoke", async ({ playwright }) => {
+test("file upload: a request with no file is a 400", async ({ playwright }) => {
   const ctx = await session(playwright);
   const res = await ctx.post("/api/files", { multipart: { notfile: "x" } });
   expect(res.status()).toBe(400);

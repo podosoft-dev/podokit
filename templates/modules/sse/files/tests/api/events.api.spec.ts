@@ -10,7 +10,7 @@ async function session(playwright: import("@playwright/test").PlaywrightWorkerAr
   return ctx;
 }
 
-test("sse: publish accepts a message @smoke", async ({ playwright }) => {
+test("sse: publish accepts a message", async ({ playwright }) => {
   const ctx = await session(playwright);
   const pub = await ctx.post("/api/events", { data: { message: `hi-${Date.now()}` } });
   expect(pub.ok()).toBeTruthy();

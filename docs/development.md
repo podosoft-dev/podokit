@@ -175,8 +175,9 @@ E2E_BASE_URL=http://localhost:5001 npx playwright test ui/settings.ui.spec.ts
 
 Non-injected template files mirror live; when you change an injection target
 (`auth.ts`, `app.module.ts`, a manifest `inject`) regenerate this one app with
-`dev-app.mjs`. Run the full Verdaccio e2e (`scripts/e2e-ci.mjs --smoke`) once per
-batch of changes, as the pre-PR gate — see [testing.md](./testing.md).
+`dev-app.mjs`. Run the Verdaccio smoke (`scripts/e2e-ci.mjs --smoke`) once when the
+PR is ready for review; draft pushes use the fast CI loop — see
+[testing.md](./testing.md).
 The mirror renders `projectName` and `packageManager` from the generated app's
 `.podokit/manifest.json`; it must never copy unresolved template placeholders.
 
@@ -290,6 +291,12 @@ per-package `CHANGELOG.md`, and update internal dependency ranges — so a
 range-crossing bump (e.g. a dependency going `0.1.x` → `0.2.0`, outside `^0.1.0`)
 updates dependents automatically. This PR just sits there, growing, publishing
 nothing.
+
+The version PR uses `scripts/e2e-ci.mjs --package-smoke`: packages are published
+to the local Verdaccio registry and consumed by a freshly generated app through
+install, migration, build, startup, and health checks. The browser feature suite is
+not repeated because it already ran on the source PR; the full matrix still runs
+nightly and can be dispatched manually.
 
 > The workflow opens that PR with the default `GITHUB_TOKEN`, which needs the
 > setting **"Allow GitHub Actions to create and approve pull requests"** ON (org

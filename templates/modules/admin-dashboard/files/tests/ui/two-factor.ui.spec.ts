@@ -17,7 +17,7 @@ async function openHydratedLogin(page: Page, redirect?: string): Promise<void> {
 
 // A disposable account (never the shared admin/user) so enabling 2FA here can't
 // invalidate the seeded sessions the other auth specs rely on.
-test("two-factor: sign in with a backup code from the login page @smoke", async ({ page, playwright }) => {
+test("two-factor: sign in with a backup code from the login page", async ({ page, playwright }) => {
   const api = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const caps = await (await api.get("/api/account/capabilities")).json();
   test.skip(!caps?.twoFactor, "two-factor not enabled");
@@ -55,7 +55,7 @@ test("two-factor: sign in with a backup code from the login page @smoke", async 
   await expect(page).toHaveURL(/\/admin\/account/);
 });
 
-test("require-2fa: a new sign-up is forced through the enrolment page @smoke", async ({ page, playwright }) => {
+test("require-2fa: a new sign-up is forced through the enrolment page", async ({ page, playwright }) => {
   const admin = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const caps = await (await admin.get("/api/account/capabilities")).json();
   test.skip(!caps?.twoFactor, "two-factor not enabled");
@@ -106,7 +106,7 @@ test("require-2fa: a new sign-up is forced through the enrolment page @smoke", a
   }
 });
 
-test("account: regenerate backup codes shows a fresh set @smoke", async ({ page, playwright }) => {
+test("account: regenerate backup codes shows a fresh set", async ({ page, playwright }) => {
   const api = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const caps = await (await api.get("/api/account/capabilities")).json();
   test.skip(!caps?.twoFactor, "two-factor not enabled");
