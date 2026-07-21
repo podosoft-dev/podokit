@@ -16,6 +16,7 @@
 		files = $bindable(),
 		class: className,
 		"data-slot": dataSlot = "input",
+		onchange,
 		...restProps
 	}: Props = $props();
 </script>
@@ -30,7 +31,7 @@
 		)}
 		type="file"
 		bind:files
-		bind:value
+		{onchange}
 		{...restProps}
 	/>
 {:else}
@@ -43,6 +44,7 @@
 		)}
 		{type}
 		bind:value
+		{onchange}
 		{...restProps}
 	/>
 {/if}

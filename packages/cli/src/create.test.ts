@@ -127,6 +127,13 @@ describe("create (integration against templates)", () => {
     expect(existsSync(join(target, "apps", "web", "src", "routes", "api", "todos"))).toBe(false);
     const apiPkg = JSON.parse(readFileSync(join(target, "apps", "api", "package.json"), "utf8")) as { name: string };
     expect(apiPkg.name).toBe("app-api");
+    const input = readFileSync(
+      join(target, "apps", "web", "src", "lib", "components", "ui", "input", "input.svelte"),
+      "utf8",
+    );
+    expect(input).toContain("\t\tonchange,");
+    expect(input.match(/\{onchange\}/g)).toHaveLength(2);
+    expect(input).toContain("\t\tbind:files\n\t\t{onchange}");
 
     for (const workspace of ["api", "web"]) {
       const dockerfile = readFileSync(join(target, "apps", workspace, "Dockerfile"), "utf8");

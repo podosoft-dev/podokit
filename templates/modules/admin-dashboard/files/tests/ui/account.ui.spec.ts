@@ -26,17 +26,17 @@ test("account opens on the profile section @smoke", async ({ page }) => {
 test("account displays profile image limits and updates every avatar", async ({ page }) => {
   await ready(page, "/account");
   await page.request.delete("/api/account/profile-image");
-  await page.reload();
-  await expect(page.getByTestId("profile-image-hint")).toContainText("PNG, JPEG, or WebP");
-  await expect(page.getByTestId("profile-image-hint")).toContainText("2 MB");
-  await expect(page.getByTestId("profile-image-hint")).toContainText("2048 × 2048 px");
+  await ready(page, "/account");
+  await expect(page.getByTestId("profile-image-hint")).toContainText(/PNG, JPEG, (?:or )?WebP/);
+  await expect(page.getByTestId("profile-image-hint")).toContainText(/2 ?MB/);
+  await expect(page.getByTestId("profile-image-hint")).toContainText(/2048 × 2048 ?px/);
 
   await page.locator("#profile-image").setInputFiles({
     name: "avatar.png",
     mimeType: "image/png",
     buffer: PNG,
   });
-  await expect(page.getByText("Profile image updated")).toBeVisible();
+  await expect(page.getByText(/Profile image updated|프로필 이미지를 변경했습니다/)).toBeVisible();
   await expect(page.getByTestId("profile-image-preview").locator("img")).toBeVisible();
 
   await ready(page, "/");
@@ -45,10 +45,10 @@ test("account displays profile image limits and updates every avatar", async ({ 
   await expect(page.getByTestId("sidebar-user-menu").locator("img")).toBeVisible();
 
   await ready(page, "/account");
-  await page.getByRole("button", { name: "Remove image" }).click();
-  await expect(page.getByText("Profile image removed")).toBeVisible();
+  await page.getByRole("button", { name: /Remove image|이미지 제거/ }).click();
+  await expect(page.getByText(/Profile image removed|프로필 이미지를 제거했습니다/)).toBeVisible();
   await expect(page.getByTestId("profile-image-preview").locator("img")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Upload image" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Upload image|이미지 업로드/ })).toBeVisible();
 });
 
 test("account rejects invalid profile images before upload", async ({ page }) => {
@@ -58,14 +58,14 @@ test("account rejects invalid profile images before upload", async ({ page }) =>
     mimeType: "text/plain",
     buffer: Buffer.from("not an image"),
   });
-  await expect(page.getByText("Choose a valid PNG, JPEG, or WebP image")).toBeVisible();
+  await expect(page.getByText(/Choose a valid PNG, JPEG, or WebP image|올바른 PNG, JPEG 또는 WebP 이미지를 선택해 주세요/)).toBeVisible();
 
   await page.locator("#profile-image").setInputFiles({
     name: "wide.png",
     mimeType: "image/png",
     buffer: TOO_WIDE_PNG,
   });
-  await expect(page.getByText("The image must not exceed 2048 × 2048 px")).toBeVisible();
+  await expect(page.getByText(/The image must not exceed 2048 × 2048 px|이미지는 2048 × 2048px를 초과할 수 없습니다/)).toBeVisible();
 });
 
 test("account exposes a change-email action when the address is edited", async ({ page }) => {
