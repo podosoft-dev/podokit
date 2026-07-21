@@ -9,6 +9,15 @@ on:
   schedule:
     - cron: "0 3 * * *"
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Verification scope
+        required: false
+        default: full
+        type: choice
+        options:
+          - full
+          - package-smoke
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
 
@@ -130,19 +139,25 @@ jobs:
           restore-keys: |
             e2e-generated-npm-${{ runner.os }}-
       - name: Cache Playwright browsers
-        if: github.event_name != 'pull_request' || github.head_ref != 'changeset-release/main'
+        if: >-
+          (github.event_name != 'pull_request' || github.head_ref != 'changeset-release/main') &&
+          (github.event_name != 'workflow_dispatch' || inputs.mode != 'package-smoke')
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - name: Verify version package installation
-        if: github.event_name == 'pull_request' && github.head_ref == 'changeset-release/main'
+        if: >-
+          (github.event_name == 'pull_request' && github.head_ref == 'changeset-release/main') ||
+          (github.event_name == 'workflow_dispatch' && inputs.mode == 'package-smoke')
         run: node scripts/e2e-ci.mjs --package-smoke
       - name: Run pull request smoke
         if: github.event_name == 'pull_request' && github.head_ref != 'changeset-release/main'
         run: node scripts/e2e-ci.mjs --smoke
       - name: Run full faithful e2e
-        if: github.event_name != 'pull_request'
+        if: >-
+          github.event_name != 'pull_request' &&
+          (github.event_name != 'workflow_dispatch' || inputs.mode == 'full')
         run: node scripts/e2e-ci.mjs
       - name: Upload Playwright report
         if: always()
