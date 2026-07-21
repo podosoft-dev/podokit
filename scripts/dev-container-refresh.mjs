@@ -2,7 +2,7 @@
 // Refresh a CONTAINERIZED dev app (e.g. admin-demo) with the latest templates,
 // end to end — the repetitive, error-prone dance done in one command:
 //   1. read the app's installed modules from .podokit/manifest.json
-//   2. back up .env.docker (instance secret / hostname / CORS / ADMIN_EMAILS)
+//   2. back up .env.docker and .podokit/dev.json (instance config)
 //   3. docker compose down
 //   4. regenerate with dev-app.mjs --published (container-friendly, avoids the
 //      host file:-link dangling-symlink issue — docs/pitfalls.md P-008)
@@ -15,11 +15,11 @@
 // Usage: node scripts/dev-container-refresh.mjs <appDir> [--add extra,mods]
 //   Modules default to the app's current set; --add appends more (e.g. a new module).
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, readFileSync, mkdtempSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { externalPackageSpec, planRefreshModules } from "./dev-container-refresh-lib.mjs";
+import { externalPackageSpec, planRefreshModules, refreshHost } from "./dev-container-refresh-lib.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
@@ -61,9 +61,12 @@ const backupDir = mkdtempSync(join(tmpdir(), "podokit-refresh-"));
 const envDocker = join(appDir, ".env.docker");
 const hasEnv = existsSync(envDocker);
 if (hasEnv) copyFileSync(envDocker, join(backupDir, ".env.docker"));
+const devConfig = join(appDir, ".podokit/dev.json");
+const hasDevConfig = existsSync(devConfig);
+if (hasDevConfig) copyFileSync(devConfig, join(backupDir, "dev.json"));
 // read the public host from CORS_ORIGIN for the health check
 const corsLine = hasEnv ? (readFileSync(envDocker, "utf8").match(/^CORS_ORIGIN=(.*)$/m)?.[1] ?? "") : "";
-const host = corsLine.replace(/^https?:\/\//, "").trim() || "app.localhost";
+const host = refreshHost(corsLine);
 console.log(`Instance host: ${host}`);
 
 // 3) compose down
@@ -92,6 +95,11 @@ try {
   if (hasEnv) {
     copyFileSync(join(backupDir, ".env.docker"), envDocker);
     console.log("- restored .env.docker");
+  }
+  if (hasDevConfig) {
+    mkdirSync(dirname(devConfig), { recursive: true });
+    copyFileSync(join(backupDir, "dev.json"), devConfig);
+    console.log("- restored .podokit/dev.json");
   }
 }
 

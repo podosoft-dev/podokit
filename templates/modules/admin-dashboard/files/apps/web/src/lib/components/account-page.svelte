@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { goto } from "$app/navigation";
+  import { goto, invalidateAll } from "$app/navigation";
   import QRCode from "qrcode";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -14,7 +14,17 @@
   import { getI18n, fmt, formatDateTime } from "$lib/i18n";
   import { untrack } from "svelte";
   import type { SessionUser } from "../../app.d.ts";
-  import type { Capabilities } from "@podosoft/podokit-api-client";
+  import UserAvatar from "./user-avatar.svelte";
+  import {
+    ApiError,
+    PROFILE_IMAGE_DIMENSIONS_INVALID,
+    PROFILE_IMAGE_POLICY,
+    PROFILE_IMAGE_REQUIRED,
+    PROFILE_IMAGE_TOO_LARGE,
+    PROFILE_IMAGE_TYPE_INVALID,
+    type Capabilities,
+    type ProfileImageResponse,
+  } from "@podosoft/podokit-api-client";
 
   let {
     data,
@@ -45,6 +55,15 @@
   let name = $state(untrack(() => data.user.name));
   let username = $state(untrack(() => data.user.username ?? ""));
   let savingProfile = $state(false);
+  let profileImage = $state<string | null>(untrack(() => data.user.image ?? null));
+  let profileImageInput = $state<HTMLInputElement | null>(null);
+  let profileImageBusy = $state(false);
+  const profileImageAccept = PROFILE_IMAGE_POLICY.mimeTypes.join(",");
+  const profileImageHint = fmt(i18n.t.account.profileImageHint, {
+    size: PROFILE_IMAGE_POLICY.maxBytes / 1024 / 1024,
+    width: PROFILE_IMAGE_POLICY.maxWidth,
+    height: PROFILE_IMAGE_POLICY.maxHeight,
+  });
   const nameChanged = $derived(
     (name.trim() !== "" && name !== data.user.name) || (caps.username && username !== (data.user.username ?? "")),
   );
@@ -58,6 +77,93 @@
     savingProfile = false;
     if (error) toast.error(error.message ?? i18n.t.account.saveFailed);
     else toast.success(i18n.t.account.saved);
+  }
+
+  function profileImageErrorMessage(code: string): string {
+    switch (code) {
+      case PROFILE_IMAGE_REQUIRED:
+        return i18n.t.account.profileImageRequired;
+      case PROFILE_IMAGE_TOO_LARGE:
+        return i18n.t.account.profileImageTooLarge;
+      case PROFILE_IMAGE_DIMENSIONS_INVALID:
+        return i18n.t.account.profileImageDimensionsInvalid;
+      case PROFILE_IMAGE_TYPE_INVALID:
+        return i18n.t.account.profileImageTypeInvalid;
+      default:
+        return i18n.t.account.profileImageFailed;
+    }
+  }
+
+  function imageDimensions(file: File): Promise<{ width: number; height: number }> {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const image = new Image();
+      image.onload = () => {
+        URL.revokeObjectURL(url);
+        resolve({ width: image.naturalWidth, height: image.naturalHeight });
+      };
+      image.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("Invalid image"));
+      };
+      image.src = url;
+    });
+  }
+
+  async function validateProfileImageSelection(file: File): Promise<string | null> {
+    if (!(PROFILE_IMAGE_POLICY.mimeTypes as readonly string[]).includes(file.type)) {
+      return PROFILE_IMAGE_TYPE_INVALID;
+    }
+    if (file.size > PROFILE_IMAGE_POLICY.maxBytes) return PROFILE_IMAGE_TOO_LARGE;
+    try {
+      const dimensions = await imageDimensions(file);
+      if (
+        dimensions.width > PROFILE_IMAGE_POLICY.maxWidth
+        || dimensions.height > PROFILE_IMAGE_POLICY.maxHeight
+      ) {
+        return PROFILE_IMAGE_DIMENSIONS_INVALID;
+      }
+    } catch {
+      return PROFILE_IMAGE_TYPE_INVALID;
+    }
+    return null;
+  }
+
+  async function uploadProfileImage(event: Event): Promise<void> {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+    const validationCode = await validateProfileImageSelection(file);
+    if (validationCode) return void toast.error(profileImageErrorMessage(validationCode));
+
+    profileImageBusy = true;
+    try {
+      const form = new FormData();
+      form.set("file", file, file.name);
+      const response = await api.postForm<ProfileImageResponse>("/account/profile-image", form);
+      profileImage = response.image;
+      toast.success(i18n.t.account.profileImageUpdated);
+      await invalidateAll();
+    } catch (error: unknown) {
+      toast.error(profileImageErrorMessage(error instanceof ApiError ? error.code : ""));
+    } finally {
+      profileImageBusy = false;
+    }
+  }
+
+  async function removeProfileImage(): Promise<void> {
+    profileImageBusy = true;
+    try {
+      const response = await api.del<ProfileImageResponse>("/account/profile-image");
+      profileImage = response.image;
+      toast.success(i18n.t.account.profileImageRemoved);
+      await invalidateAll();
+    } catch (error: unknown) {
+      toast.error(profileImageErrorMessage(error instanceof ApiError ? error.code : ""));
+    } finally {
+      profileImageBusy = false;
+    }
   }
 
   // Phone number — register + verify with an SMS code (dev delivery is a stub).
@@ -404,6 +510,53 @@
         <Card.Root>
           <Card.Header><Card.Title>{i18n.t.account.profile}</Card.Title></Card.Header>
           <Card.Content>
+            <div class="mb-6 flex max-w-md items-center gap-4 border-b pb-6">
+              <div data-testid="profile-image-preview">
+                <UserAvatar user={{ ...data.user, image: profileImage }} class="size-20 shrink-0" />
+              </div>
+              <div class="min-w-0 flex-1 space-y-2">
+                <Label for="profile-image">{i18n.t.account.profileImage}</Label>
+                <p id="profile-image-hint" class="text-muted-foreground text-xs" data-testid="profile-image-hint">
+                  {profileImageHint}
+                </p>
+                <Input
+                  id="profile-image"
+                  type="file"
+                  accept={profileImageAccept}
+                  class="sr-only"
+                  aria-describedby="profile-image-hint"
+                  disabled={profileImageBusy}
+                  bind:ref={profileImageInput}
+                  onchange={uploadProfileImage}
+                />
+                <div class="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={profileImageBusy}
+                    onclick={() => profileImageInput?.click()}
+                  >
+                    {profileImageBusy
+                      ? i18n.t.account.profileImageUploading
+                      : profileImage
+                        ? i18n.t.account.profileImageReplace
+                        : i18n.t.account.profileImageUpload}
+                  </Button>
+                  {#if profileImage}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={profileImageBusy}
+                      onclick={removeProfileImage}
+                    >
+                      {i18n.t.account.profileImageRemove}
+                    </Button>
+                  {/if}
+                </div>
+              </div>
+            </div>
             <form class="flex max-w-md flex-col gap-4" onsubmit={saveProfile}>
               <div class="flex flex-col gap-2">
                 <Label for="name">{i18n.t.account.name}</Label>

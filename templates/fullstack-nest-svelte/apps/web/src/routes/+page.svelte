@@ -3,6 +3,8 @@
   import * as Card from "$lib/components/ui/card";
   import { api } from "$lib/api";
   import { ApiError } from "@podosoft/podokit-api-client";
+  // podokit:begin:landing-imports
+  // podokit:end:landing-imports
 
   type Health = { status: string } | { error: string };
 
@@ -16,6 +18,9 @@
     }
   }
 </script>
+
+<!-- podokit:begin:landing-actions -->
+<!-- podokit:end:landing-actions -->
 
 <main class="mx-auto flex min-h-full max-w-2xl flex-col gap-6 p-8">
   <div>

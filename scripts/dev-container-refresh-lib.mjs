@@ -26,3 +26,14 @@ export function planRefreshModules(installedModules, addFlag = "") {
 export function externalPackageSpec(module) {
   return module.moduleVersion ? `${module.packageName}@${module.moduleVersion}` : module.packageName;
 }
+
+export function refreshHost(corsOrigin, fallback = "app.localhost") {
+  const firstOrigin = corsOrigin.split(",")[0]?.trim();
+  if (!firstOrigin) return fallback;
+
+  try {
+    return new URL(firstOrigin).host || fallback;
+  } catch {
+    return firstOrigin.replace(/^https?:\/\//, "").trim() || fallback;
+  }
+}

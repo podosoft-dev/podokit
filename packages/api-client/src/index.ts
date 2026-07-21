@@ -30,8 +30,18 @@ export type { Capabilities } from "@podosoft/podokit-contracts";
 
 /** Stable authentication policy error codes re-exported for browser clients. */
 export {
+  PROFILE_IMAGE_DIMENSIONS_INVALID,
+  PROFILE_IMAGE_NOT_FOUND,
+  PROFILE_IMAGE_POLICY,
+  PROFILE_IMAGE_REQUIRED,
+  PROFILE_IMAGE_TOO_LARGE,
+  PROFILE_IMAGE_TYPE_INVALID,
   PUBLIC_SIGNUP_DISABLED,
   SIGNUP_APPROVAL_REQUIRED,
+} from "@podosoft/podokit-contracts";
+export type {
+  ProfileImageMimeType,
+  ProfileImageResponse,
 } from "@podosoft/podokit-contracts";
 
 /** Error thrown when the API returns the standard error envelope or a non-2xx status. */
@@ -71,8 +81,10 @@ function toApiError(data: unknown, response: Response): ApiError {
  *
  * - `client.auth` is the better-auth client (email/password, sessions, and the
  *   admin plugin: `client.auth.admin.listUsers()`, `banUser`, `setRole`, ...).
- * - `client.get/post/put/patch/del` call the app's REST endpoints and parse the
- *   standard error envelope, throwing {@link ApiError} on failure.
+ * - `client.get/post/put/patch/del` call the app's JSON REST endpoints and parse
+ *   the standard error envelope, throwing {@link ApiError} on failure.
+ * - `client.postForm` sends multipart `FormData` without overriding the browser's
+ *   boundary-aware content type.
  */
 export function createApiClient(options: ApiClientOptions = {}) {
   const baseUrl = options.baseUrl ?? "";
@@ -136,6 +148,20 @@ export function createApiClient(options: ApiClientOptions = {}) {
     return data as T;
   }
 
+  async function formRequest<T>(method: string, path: string, body: FormData): Promise<T> {
+    const response = await doFetch(`${baseUrl}${apiBasePath}${path}`, {
+      method,
+      credentials,
+      body,
+    });
+    const text = await response.text();
+    const data: unknown = text ? JSON.parse(text) : undefined;
+    if (!response.ok) {
+      throw toApiError(data, response);
+    }
+    return data as T;
+  }
+
   return {
     /** The better-auth client (auth + admin plugin), created on first access. */
     get auth(): ReturnType<typeof makeAuthClient> {
@@ -148,6 +174,7 @@ export function createApiClient(options: ApiClientOptions = {}) {
     put: <T>(path: string, body?: unknown): Promise<T> => request<T>("PUT", path, body),
     patch: <T>(path: string, body?: unknown): Promise<T> => request<T>("PATCH", path, body),
     del: <T>(path: string): Promise<T> => request<T>("DELETE", path),
+    postForm: <T>(path: string, body: FormData): Promise<T> => formRequest<T>("POST", path, body),
   };
 }
 

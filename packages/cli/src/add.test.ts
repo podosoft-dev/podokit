@@ -488,7 +488,10 @@ describe("addModule (auth / better-auth)", () => {
     // Public routes remain app-owned, while the managed runtime applies global
     // branding and theme settings through the starter layout's stable slot.
     expect(result.preserved).toEqual(expect.arrayContaining(["apps/web/src/routes/+page.svelte"]));
-    expect(readFileSync(join(project, "apps/web/src/routes/+page.svelte"), "utf8")).toContain("API health");
+    const landingPage = readFileSync(join(project, "apps/web/src/routes/+page.svelte"), "utf8");
+    expect(landingPage).toContain("API health");
+    expect(landingPage).toContain('import AccountMenu from "$lib/components/account-menu.svelte";');
+    expect(landingPage).toContain("<AccountMenu user={page.data.user ?? null} />");
     expect(readFileSync(join(project, "apps/web/src/lib/components/site-runtime.svelte"), "utf8")).toContain("applyTheme");
     const hooks = readFileSync(join(project, "apps/web/src/hooks.server.ts"), "utf8");
     expect(hooks).toContain("event.route.id === null");
@@ -524,9 +527,17 @@ describe("addModule (auth / better-auth)", () => {
     // env
     expect(readFileSync(join(project, ".env.example"), "utf8")).toContain("ADMIN_EMAILS");
     const apiPkg = JSON.parse(readFileSync(join(project, "apps/api/package.json"), "utf8")) as {
+      dependencies: Record<string, string>;
+      devDependencies: Record<string, string>;
       scripts: Record<string, string>;
     };
+    expect(apiPkg.dependencies["image-size"]).toBe("^2.0.2");
+    expect(apiPkg.devDependencies["@types/multer"]).toBe("^1.4.12");
     expect(apiPkg.scripts["admin:bootstrap"]).toBe("node scripts/bootstrap-admin.mjs");
+    expect(existsSync(join(project, "apps/api/src/profile-image/profile-image.module.ts"))).toBe(true);
+    expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).toContain(
+      "ProfileImageModule,",
+    );
     expect(existsSync(join(project, "apps/api/scripts/bootstrap-admin.mjs"))).toBe(true);
     expect(readManifest(project)?.managedOverrides).toContain(
       ".claude/skills/podokit-configure-auth/**",

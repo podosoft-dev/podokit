@@ -9,6 +9,9 @@ SvelteKit frontend must agree on, in one place so they cannot drift:
 - `AppException` — backend exception carrying a stable `code`.
 - `SIGNUP_APPROVAL_REQUIRED` — the stable pending-registration error code.
 - `PUBLIC_SIGNUP_DISABLED` — the stable closed-registration error code.
+- `PROFILE_IMAGE_POLICY` / `ProfileImageResponse` — the shared profile-image
+  limits and upload/remove response.
+- `PROFILE_IMAGE_*` — stable profile-image validation and lookup error codes.
 
 Pure types and small classes, zero runtime dependencies.
 

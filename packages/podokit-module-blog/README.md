@@ -25,6 +25,15 @@ podo update
 podo update --apply
 ```
 
+Route wrappers remain application-owned and are not overwritten by `podo
+update`. When upgrading from 0.3.x to 0.4.x, update each owned `BlogEditor`
+wrapper to pass `showPost`, `showPostHelp`, `uploadCover`, and `removeCover` in
+its `BlogEditorLabels`. Remove the former `admin` prop from the admin wrapper.
+The corresponding strings arrive in the managed blog catalog. The current seed
+also adds `routes/blog/+layout.svelte`, which renders the shared `AccountMenu` in
+the top-right corner. Existing customized blog layouts should place the same
+managed component in their site header instead of duplicating its menu logic.
+
 Posts start as drafts for every authenticated author. The **Show post** switch
 includes a post in public lists and detail pages; turning it off hides the post
 without changing its first publication time or list position. Authors can find

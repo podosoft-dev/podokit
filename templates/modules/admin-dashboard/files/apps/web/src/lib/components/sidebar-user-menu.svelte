@@ -22,7 +22,7 @@
 <Sidebar.Menu>
   <Sidebar.MenuItem>
     <DropdownMenu.Root>
-      <DropdownMenu.Trigger>
+      <DropdownMenu.Trigger data-testid="sidebar-user-menu">
         {#snippet child({ props })}
           <Sidebar.MenuButton {...props} size="lg" class="data-[state=open]:bg-sidebar-accent">
             <UserAvatar {user} class="size-8" />

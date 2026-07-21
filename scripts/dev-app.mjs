@@ -87,8 +87,11 @@ if (!usePublished) {
 }
 
 console.log("• npm install…");
-run("npm", ["install", "--no-audit", "--no-fund"], target);
+// Pack file: dependencies like registry packages instead of symlinking them.
+// Vite treats linked CommonJS packages as source and requires them to be ESM;
+// install-links keeps the local validation path faithful to an npm install.
+run("npm", ["install", "--install-links", "--no-audit", "--no-fund"], target);
 
 console.log(`\nDone. Local dev app at ${target}`);
 console.log("After editing api-client:  npm run build -w @podosoft/podokit-api-client  (in the monorepo),");
-console.log(`then re-run npm install in ${target} to pick up the change.`);
+console.log(`then re-run npm install --install-links in ${target} to pick up the change.`);

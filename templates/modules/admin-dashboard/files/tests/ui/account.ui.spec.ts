@@ -2,6 +2,15 @@ import { expect, test } from "@playwright/test";
 import { ready } from "../helpers/hydration";
 import { ADMIN } from "../helpers/accounts";
 
+const PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAIAAAADAQMAAACDJEzCAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAAGUExURWYzmf///129H+IAAAABYktHRAH/Ai3eAAAAB3RJTUUH6gcVCSUTzXBDTwAAACV0RVh0ZGF0ZTpjcmVhdGUAMjAyNi0wNy0yMVQwOTozNzoxOSswMDowMOuehLIAAAAldEVYdGRhdGU6bW9kaWZ5ADIwMjYtMDctMjFUMDk6Mzc6MTkrMDA6MDCawzwOAAAAKHRFWHRkYXRlOnRpbWVzdGFtcAAyMDI2LTA3LTIxVDA5OjM3OjE5KzAwOjAwzdYd0QAAAAtJREFUCNdjYAABAAAGAAFm9MlsAAAAAElFTkSuQmCC",
+  "base64",
+);
+const TOO_WIDE_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAACAEAAAABAQMAAACfGLePAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAAGUExURWYzmf///129H+IAAAABYktHRAH/Ai3eAAAAB3RJTUUH6gcVCScoTk3I6QAAACV0RVh0ZGF0ZTpjcmVhdGUAMjAyNi0wNy0yMVQwOTozOTo0MCswMDowMCgv/7YAAAAldEVYdGRhdGU6bW9kaWZ5ADIwMjYtMDctMjFUMDk6Mzk6NDArMDA6MDBZckcKAAAAKHRFWHRkYXRlOnRpbWVzdGFtcAAyMDI2LTA3LTIxVDA5OjM5OjQwKzAwOjAwDmdm1QAAAAxJREFUGNNjYBjpAAABAgABRf+HpwAAAABJRU5ErkJggg==",
+  "base64",
+);
+
 // admin storageState (project default)
 test("account opens on the profile section @smoke", async ({ page }) => {
   await ready(page, "/admin/account");
@@ -12,6 +21,51 @@ test("account opens on the profile section @smoke", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Save changes" })).toBeDisabled();
   await page.getByLabel("Name", { exact: true }).fill(`Admin Preview ${Date.now()}`);
   await expect(page.getByRole("button", { name: "Save changes" })).toBeEnabled();
+});
+
+test("account displays profile image limits and updates every avatar", async ({ page }) => {
+  await ready(page, "/account");
+  await page.request.delete("/api/account/profile-image");
+  await page.reload();
+  await expect(page.getByTestId("profile-image-hint")).toContainText("PNG, JPEG, or WebP");
+  await expect(page.getByTestId("profile-image-hint")).toContainText("2 MB");
+  await expect(page.getByTestId("profile-image-hint")).toContainText("2048 × 2048 px");
+
+  await page.locator("#profile-image").setInputFiles({
+    name: "avatar.png",
+    mimeType: "image/png",
+    buffer: PNG,
+  });
+  await expect(page.getByText("Profile image updated")).toBeVisible();
+  await expect(page.getByTestId("profile-image-preview").locator("img")).toBeVisible();
+
+  await ready(page, "/");
+  await expect(page.getByTestId("account-menu").locator("img")).toBeVisible();
+  await ready(page, "/admin");
+  await expect(page.getByTestId("sidebar-user-menu").locator("img")).toBeVisible();
+
+  await ready(page, "/account");
+  await page.getByRole("button", { name: "Remove image" }).click();
+  await expect(page.getByText("Profile image removed")).toBeVisible();
+  await expect(page.getByTestId("profile-image-preview").locator("img")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Upload image" })).toBeVisible();
+});
+
+test("account rejects invalid profile images before upload", async ({ page }) => {
+  await ready(page, "/admin/account");
+  await page.locator("#profile-image").setInputFiles({
+    name: "avatar.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("not an image"),
+  });
+  await expect(page.getByText("Choose a valid PNG, JPEG, or WebP image")).toBeVisible();
+
+  await page.locator("#profile-image").setInputFiles({
+    name: "wide.png",
+    mimeType: "image/png",
+    buffer: TOO_WIDE_PNG,
+  });
+  await expect(page.getByText("The image must not exceed 2048 × 2048 px")).toBeVisible();
 });
 
 test("account exposes a change-email action when the address is edited", async ({ page }) => {

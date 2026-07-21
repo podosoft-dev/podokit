@@ -140,6 +140,8 @@ describe("create (integration against templates)", () => {
           "COPY --from=build /app/apps/api/scripts ./apps/api/scripts",
         );
         expect(existsSync(join(target, "apps/api/scripts/.keep"))).toBe(true);
+      } else {
+        expect(dockerfile).toContain("ENV BODY_SIZE_LIMIT=3M");
       }
     }
     const rootPkg = JSON.parse(readFileSync(join(target, "package.json"), "utf8")) as {
@@ -179,6 +181,7 @@ describe("create (integration against templates)", () => {
     expect(compose).not.toContain("VITE_HMR_CLIENT_PORT");
     expect(compose).toContain("ADDRESS_HEADER=x-forwarded-for");
     expect(compose).toContain("XFF_DEPTH=1");
+    expect(compose.match(/PODOKIT_NPM_REGISTRY: \$\{PODOKIT_NPM_REGISTRY:-\}/g)).toHaveLength(3);
     expect(compose).not.toMatch(/\n\s+-\s+"5432:5432"/);
     expect(compose).not.toMatch(/\n\s+-\s+"5001:5001"/);
 
@@ -191,6 +194,9 @@ describe("create (integration against templates)", () => {
     expect(compose).toMatch(/profiles: \[queue\]/);
     expect(compose).toMatch(/profiles: \[cache\]/);
     expect(compose).toMatch(/profiles: \[storage\]/);
+    const devDockerfile = readFileSync(join(target, "Dockerfile.dev"), "utf8");
+    expect(devDockerfile).toContain('ARG PODOKIT_NPM_REGISTRY=""');
+    expect(devDockerfile).toContain('npm config set registry "$PODOKIT_NPM_REGISTRY"');
 
     // web proxies /api to the api container by service name (Traefik only routes web)
     expect(readFileSync(join(target, ".env.docker"), "utf8")).toContain("BACKEND_INTERNAL_URL=http://api:5002");
@@ -218,6 +224,7 @@ describe("create (integration against templates)", () => {
     const k3sConfig = readFileSync(join(target, "infra", "k3s", "configmap.yaml"), "utf8");
     expect(k3sConfig).toContain('ADDRESS_HEADER: "x-forwarded-for"');
     expect(k3sConfig).toContain('XFF_DEPTH: "1"');
+    expect(k3sConfig).toContain('BODY_SIZE_LIMIT: "3M"');
 
     // AI-free of tiers: the dev scaffolding is owned so updates never clobber it
     const lock = readFileSync(join(target, ".podokit", "files.lock"), "utf8");

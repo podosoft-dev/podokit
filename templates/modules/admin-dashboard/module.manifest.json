@@ -1,6 +1,6 @@
 {
   "name": "admin-dashboard",
-  "description": "Admin dashboard UI (SvelteKit + shadcn-svelte): login/signup/password-reset, a sidebar shell, and user + session management via the better-auth admin plugin. Requires auth.",
+  "description": "Admin dashboard UI (SvelteKit + shadcn-svelte): authentication pages, account and profile-image management, a sidebar shell, and user + session management via the better-auth admin plugin. Requires auth.",
   "requires": [
     "auth",
     "object-storage-s3"
@@ -10,8 +10,7 @@
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
-    "@types/qrcode": "^1.5.5",
-    "@types/multer": "^1.4.12"
+    "@types/qrcode": "^1.5.5"
   },
   "ownedGlobs": [
     "apps/web/src/lib/i18n/locales/**",
@@ -32,6 +31,12 @@
   ],
   "packageOverlays": {
     "api": {
+      "dependencies": {
+        "image-size": "^2.0.2"
+      },
+      "devDependencies": {
+        "@types/multer": "^1.4.12"
+      },
       "scripts": {
         "admin:bootstrap": "node scripts/bootstrap-admin.mjs"
       }
@@ -42,6 +47,18 @@
     "ADMIN_EMAILS=admin@example.com"
   ],
   "inject": [
+    {
+      "file": "apps/web/src/routes/+page.svelte",
+      "marker": "// podokit:end:landing-imports",
+      "optional": true,
+      "text": "import { page } from \"$app/state\";\n  import AccountMenu from \"$lib/components/account-menu.svelte\";"
+    },
+    {
+      "file": "apps/web/src/routes/+page.svelte",
+      "marker": "<!-- podokit:end:landing-actions -->",
+      "optional": true,
+      "text": "<header class=\"flex items-center justify-end p-4\">\n  <AccountMenu user={page.data.user ?? null} />\n</header>"
+    },
     {
       "file": "apps/api/src/auth/auth.ts",
       "marker": "// podokit:end:auth-imports",
@@ -66,7 +83,7 @@
       "file": "AGENTS.md",
       "marker": "<!-- podokit:end:agents-modules -->",
       "optional": true,
-      "text": "### admin-dashboard\n- Admin console lives at `/admin/*` (users, sessions, organizations, audit, settings, account). Set `ADMIN_EMAILS`, then create or verify the initial account with `npm run admin:bootstrap -w <app>-api`; never commit or persist `ADMIN_BOOTSTRAP_PASSWORD`. When sign-up approval is enabled, self-registered users stay pending until an administrator approves them on `/admin/users`; administrator-created users bypass the queue.\n- Custom protected server layouts must call `requireBackendAvailable(locals)` from `$lib/server/guards` before redirecting anonymous users. This preserves sessions and returns 503 when authentication or maintenance policy cannot be checked.\n- **Every list/table MUST use the shared `$lib/components/data-table.svelte` (`DataTable`)** \u2014 it gives sortable headers + a footer pagination. Add search/filters with `$lib/components/table-toolbar.svelte`. Never assemble `Table.Root`/`Table.Header`/`Table.Body` by hand.\n"
+      "text": "### admin-dashboard\n- Admin console lives at `/admin/*` (users, sessions, organizations, audit, settings, account). Set `ADMIN_EMAILS`, then create or verify the initial account with `npm run admin:bootstrap -w <app>-api`; never commit or persist `ADMIN_BOOTSTRAP_PASSWORD`. When sign-up approval is enabled, self-registered users stay pending until an administrator approves them on `/admin/users`; administrator-created users bypass the queue.\n- Signed-in users can upload, replace, or remove their profile image from `/account` or `/admin/account`. Keep the shared policy visible in custom account UI: PNG, JPEG, or WebP; at most 2 MB and 2048 by 2048 pixels. Use the managed `/api/account/profile-image` endpoints instead of writing directly to storage or `user.image`.\n- Custom protected server layouts must call `requireBackendAvailable(locals)` from `$lib/server/guards` before redirecting anonymous users. This preserves sessions and returns 503 when authentication or maintenance policy cannot be checked.\n- **Every list/table MUST use the shared `$lib/components/data-table.svelte` (`DataTable`)** \u2014 it gives sortable headers + a footer pagination. Add search/filters with `$lib/components/table-toolbar.svelte`. Never assemble `Table.Root`/`Table.Header`/`Table.Body` by hand.\n"
     },
     {
       "file": "apps/api/src/app.module.ts",
@@ -75,15 +92,25 @@
     },
     {
       "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:end:imports",
+      "text": "import { ProfileImageModule } from \"./profile-image/profile-image.module\";"
+    },
+    {
+      "file": "apps/api/src/app.module.ts",
       "marker": "// podokit:end:module-imports",
       "text": "SiteSettingsModule,"
+    },
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:end:module-imports",
+      "text": "ProfileImageModule,"
     }
   ],
   "instructions": [
     "Set ADMIN_EMAILS in .env (comma-separated). After building and migrating, inject ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_PASSWORD for one command only, then run npm run admin:bootstrap -w <app>-api. The command creates a verified, approved admin or safely verifies an existing one.",
     "Re-run the auth migration to add the admin and sign-up approval columns:  npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts",
     "Remove ADMIN_BOOTSTRAP_PASSWORD from the environment after bootstrap. Keep ADMIN_EMAILS so matching future sign-ups are promoted consistently.",
-    "Admin pages: /admin/users (list, approve pending registrations, ban, set role, revoke sessions). Signed-in users manage their profile and security at /account; /admin/account remains available in the admin shell. Admin, account, authentication, maintenance, and API responses include X-Robots-Tag: noindex, nofollow by default.",
+    "Admin pages: /admin/users (list, approve pending registrations, ban, set role, revoke sessions). Signed-in users manage their profile, profile image, and security at /account; /admin/account remains available in the admin shell. Profile images accept PNG, JPEG, and WebP up to 2 MB and 2048 by 2048 pixels. Admin, account, authentication, maintenance, and API responses include X-Robots-Tag: noindex, nofollow by default.",
     "Password reset emails go through the mailer module (installed automatically with auth); in dev without SMTP they are logged to the API console. Configure SMTP in admin settings or via SMTP_* env for production."
   ]
 }

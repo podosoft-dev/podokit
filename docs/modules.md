@@ -490,7 +490,7 @@ OAuth, SMTP, and sign-up approval configuration.
 - **/admin/organizations** (admin only) — organizations, members, and invitations.
 - **/admin/audit** (admin only) — the audit log of security-relevant actions.
 - **/admin/settings** (admin only) — enable/disable sign-in methods and configure OAuth providers, SMTP, sign-up approval, automatic logout, and other server toggles at runtime (see below), plus the **Appearance** tab for the runtime theme (see "Appearance").
-- **/account** — the signed-in user's profile, password, 2FA, passkeys, API keys, and sessions without the admin shell.
+- **/account** — the signed-in user's profile and profile image, password, 2FA, passkeys, API keys, and sessions without the admin shell.
 - **/admin/account** — the same account controls inside the admin shell, retained for existing links and applications.
 
 Admin, account, authentication, maintenance, and API routes send
@@ -503,9 +503,43 @@ domain are specific to each application.
 Use the managed `$lib/components/account-menu.svelte` in a public header to show
 a sign-in action to guests and an avatar menu to signed-in users. The avatar menu
 links to `/account` and adds the admin dashboard entry only for administrators.
+The module injects this menu into the starter landing page. The default blog
+route layout also renders it, so signed-in identity and account actions remain
+available outside the admin shell.
 The sign-in link carries the current same-site page as a validated return target;
 successful login and public-page logout return there instead of forcing `/admin`.
 Direct login and admin-sidebar logout fall back to `/`.
+
+#### Profile images
+
+Signed-in users can upload, replace, or remove their own image from `/account` or
+`/admin/account`. The account screen displays the server-enforced policy before
+selection: **PNG, JPEG, or WebP; at most 2 MB; width and height at most 2048 px**.
+Images keep their original bytes and aspect ratio; the shared avatar component
+renders them with a circular center crop.
+
+The module stores image objects through `object-storage-s3` (auto-added) and keeps
+the resulting versioned path in better-auth's `user.image`. The bucket stays
+private; `GET /api/profile-images/:fileName` serves the UUID path with immutable
+cache headers. Replacing, removing, or self-deleting the account removes managed
+objects on a best-effort basis. Existing external/social avatar URLs are never
+deleted.
+
+The generated adapter-node container and Kubernetes config set
+`BODY_SIZE_LIMIT=3M`. This leaves room for multipart framing while the API
+continues to enforce the 2 MiB file limit and return stable validation codes.
+Set the same value when running the built web server outside the generated
+deployment files.
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/account/profile-image` | Upload or replace the current user's image (`multipart/form-data`, field `file`). |
+| `DELETE` | `/api/account/profile-image` | Remove the current user's image. |
+| `GET` | `/api/profile-images/:fileName` | Read a stored profile image; public because avatars may appear on public content. |
+
+Use `PROFILE_IMAGE_POLICY` and `ProfileImageResponse` from
+`@podosoft/podokit-api-client` when building a custom account screen. Branch on
+the exported `PROFILE_IMAGE_*` error codes rather than backend messages.
 
 Users & the runtime Settings page:
 
