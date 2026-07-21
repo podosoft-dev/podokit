@@ -1,5 +1,17 @@
 # @podosoft/podokit
 
+## 0.13.0
+
+### Minor Changes
+
+- [#114](https://github.com/podosoft-dev/podokit/pull/114) [`b05637f`](https://github.com/podosoft-dev/podokit/commit/b05637f68518080cf88bca87a79a8b9aae1aee25) Thanks [@korone00](https://github.com/korone00)! - Add a live automatic-logout policy with validated idle durations, sliding Better Auth session expiration, existing-session updates, cross-tab browser inactivity handling, and localized admin controls.
+
+### Patch Changes
+
+- [#112](https://github.com/podosoft-dev/podokit/pull/112) [`2940f05`](https://github.com/podosoft-dev/podokit/commit/2940f0590e6d64b16b2dcdd49413789f5acb2143) Thanks [@korone00](https://github.com/korone00)! - Align the generated admin dashboard navigation test with the public account route
+  and keep `@smoke` focused on critical cross-module paths while the default suite
+  retains full coverage.
+
 ## 0.12.4
 
 ### Patch Changes

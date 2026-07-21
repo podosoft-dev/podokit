@@ -1,6 +1,6 @@
 {
   "name": "@podosoft/podokit-auth",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "PodoKit's DB-backed auth configuration pipeline: envelope-encrypted secrets, the AuthConfig model, and a config store on top of better-auth.",
   "license": "Apache-2.0",
   "repository": {
