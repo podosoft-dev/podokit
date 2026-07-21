@@ -9,7 +9,7 @@ const origin = { origin: base };
 // The reset flow is for signed-out users — run without the seeded session.
 test.use({ storageState: anonState });
 
-test("forgot password: request, open the emailed link, set a new password, sign in @smoke", async ({ page, playwright }) => {
+test("forgot password: request, open the emailed link, set a new password, sign in", async ({ page, playwright }) => {
   test.skip(!(await mailpitReachable()), "Mailpit not available");
   const email = `ui-reset-${Date.now()}@example.com`;
   const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });

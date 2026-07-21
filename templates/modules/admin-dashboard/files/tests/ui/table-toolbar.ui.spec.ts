@@ -3,7 +3,7 @@ import { ready } from "../helpers/hydration";
 
 // The shared toolbar: filters + search both commit on the Search button; the
 // search field itself is selectable (Email, Name, ...).
-test("users toolbar searches only when Search is pressed @smoke", async ({ page }) => {
+test("users toolbar searches only when Search is pressed", async ({ page }) => {
   await ready(page, "/admin/users");
   const main = page.getByRole("main");
   await page.locator("#toolbar-search").fill("admin@example.com");

@@ -16,7 +16,7 @@ async function adminCtx(playwright: import("@playwright/test").PlaywrightWorkerA
   return ctx;
 }
 
-test("admin can enable Google OAuth from the DB and it applies without a restart @smoke", async ({ playwright }) => {
+test("admin can enable Google OAuth from the DB and it applies without a restart", async ({ playwright }) => {
   const admin = await adminCtx(playwright);
   await admin.put("/api/account/auth-config", { data: { social: { google: { enabled: false } } } }); // clean start
   const anon = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
@@ -50,7 +50,7 @@ test("admin can enable Google OAuth from the DB and it applies without a restart
   await admin.dispose();
 });
 
-test("admin can add and remove a social provider dynamically @smoke", async ({ playwright }) => {
+test("admin can add and remove a social provider dynamically", async ({ playwright }) => {
   const admin = await adminCtx(playwright);
   // The catalog offers providers beyond the two legacy env-backed ones.
   const catalog = (await (await admin.get("/api/account/auth-config")).json()).catalog as Array<{ id: string }>;
@@ -83,7 +83,7 @@ test("auth-config is admin-only and never leaks secrets @smoke", async ({ playwr
   await user.dispose();
 });
 
-test("new registrations require approval when the policy is enabled @smoke", async ({ playwright }) => {
+test("new registrations require approval when the policy is enabled", async ({ playwright }) => {
   const admin = await adminCtx(playwright);
   const anon = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const password = "Podokit3e-Str0ng!pw";
@@ -162,7 +162,7 @@ test("new registrations require approval when the policy is enabled @smoke", asy
   }
 });
 
-test("closed public sign-up blocks new OAuth users but preserves existing sign-in @smoke", async ({ playwright }) => {
+test("closed public sign-up blocks new OAuth users but preserves existing sign-in", async ({ playwright }) => {
   const admin = await adminCtx(playwright);
   const anon = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const password = "Podokit3e-Str0ng!pw";

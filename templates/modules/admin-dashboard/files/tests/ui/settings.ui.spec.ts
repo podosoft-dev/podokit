@@ -12,7 +12,7 @@ async function saveGeneral(page: Page): Promise<void> {
   await expect(page.getByText("General settings saved.").last()).toBeVisible();
 }
 
-test("settings has General and Authentication tabs @smoke", async ({ page }) => {
+test("settings has General and Authentication tabs", async ({ page }) => {
   await ready(page, "/admin/settings");
   await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "General" })).toBeVisible();
@@ -21,13 +21,13 @@ test("settings has General and Authentication tabs @smoke", async ({ page }) => 
   await expect(page.getByLabel("Site name")).toBeVisible();
 });
 
-test("general settings: shows the favicon uploader @smoke", async ({ page }) => {
+test("general settings: shows the favicon uploader", async ({ page }) => {
   await ready(page, "/admin/settings");
   await expect(page.getByText("Browser icon (favicon)")).toBeVisible();
   await expect(page.locator('input[type="file"]')).toBeVisible();
 });
 
-test("general settings: edit the site name, save, and apply live @smoke", async ({ page }) => {
+test("general settings: edit the site name, save, and apply live", async ({ page }) => {
   await ready(page, "/admin/settings");
   const name = page.getByLabel("Site name");
   const original = await name.inputValue();
@@ -40,7 +40,7 @@ test("general settings: edit the site name, save, and apply live @smoke", async 
   await saveGeneral(page);
 });
 
-test("settings lists the auth features under the Authentication tab @smoke", async ({ page }) => {
+test("settings lists the auth features under the Authentication tab", async ({ page }) => {
   await ready(page, "/admin/settings");
   await page.getByRole("tab", { name: "Authentication" }).click();
   await expect(page.getByText("Email & password")).toBeVisible();
@@ -51,7 +51,7 @@ test("settings lists the auth features under the Authentication tab @smoke", asy
   await expect(page.getByText("Enabled", { exact: true }).first()).toBeVisible();
 });
 
-test("sidebar: back-to-home link returns to the landing page @smoke", async ({ page }) => {
+test("sidebar: back-to-home link returns to the landing page", async ({ page }) => {
   await ready(page, "/admin/settings");
   // the home link lives in the sidebar footer, above the user menu
   await page.getByRole("link", { name: "Back to home" }).click();
@@ -60,7 +60,7 @@ test("sidebar: back-to-home link returns to the landing page @smoke", async ({ p
   await expect(page.locator("main").first()).toBeVisible();
 });
 
-test("settings is reachable from the sidebar @smoke", async ({ page }) => {
+test("settings is reachable from the sidebar", async ({ page }) => {
   await ready(page, "/admin");
   await page.getByRole("link", { name: "Settings" }).click();
   await expect(page).toHaveURL(/\/admin\/settings/);
@@ -81,7 +81,7 @@ test("admin can toggle a feature flag and it applies live @smoke", async ({ page
   await expect(toggle).toBeChecked();
 });
 
-test("settings: the require-two-factor toggle is available @smoke", async ({ page }) => {
+test("settings: the require-two-factor toggle is available", async ({ page }) => {
   await ready(page, "/admin/settings");
   await page.getByRole("tab", { name: "Authentication" }).click();
   // The policy toggle renders under Authentication; its enforcement is covered by

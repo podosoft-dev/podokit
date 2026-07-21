@@ -43,7 +43,7 @@ test("general: empty locale displays the application default", async ({ page }) 
   }
 });
 
-test("general: footer text and links render on public pages @smoke", async ({ page, browser }) => {
+test("general: footer text and links render on public pages", async ({ page, browser }) => {
   await ready(page, "/admin/settings");
   const origin = new URL(page.url()).origin;
   const footer = page.getByLabel("Footer text");
@@ -78,7 +78,7 @@ test("general: footer text and links render on public pages @smoke", async ({ pa
   }
 });
 
-test("general: maintenance mode holds non-admins on the maintenance page @smoke", async ({ page, browser }) => {
+test("general: maintenance mode holds non-admins on the maintenance page", async ({ page, browser }) => {
   await ready(page, "/admin/settings");
   const origin = new URL(page.url()).origin;
   await page.getByRole("switch", { name: "Maintenance mode" }).click();
@@ -102,7 +102,7 @@ test("general: maintenance mode holds non-admins on the maintenance page @smoke"
   }
 });
 
-test("general: closing sign-up redirects /signup and hides the link @smoke", async ({ page, browser }) => {
+test("general: closing sign-up redirects /signup and hides the link", async ({ page, browser }) => {
   await ready(page, "/admin/settings");
   const origin = new URL(page.url()).origin;
   await page.getByRole("switch", { name: "Allow public sign-up" }).click();

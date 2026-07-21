@@ -14,7 +14,7 @@ test("account opens on the profile section @smoke", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Save changes" })).toBeEnabled();
 });
 
-test("account exposes a change-email action when the address is edited @smoke", async ({ page }) => {
+test("account exposes a change-email action when the address is edited", async ({ page }) => {
   await ready(page, "/admin/account");
   const email = page.getByLabel("Email");
   await expect(email).toHaveValue("admin@example.com");
@@ -27,14 +27,14 @@ test("account exposes a change-email action when the address is edited @smoke", 
   await expect(page.getByRole("button", { name: "Change email" })).toHaveCount(0);
 });
 
-test("account shows a username field when enabled @smoke", async ({ page }) => {
+test("account shows a username field when enabled", async ({ page }) => {
   await ready(page, "/admin/account");
   const username = page.getByLabel("Username", { exact: true });
   test.skip((await username.count()) === 0, "username not enabled");
   await expect(username).toBeVisible();
 });
 
-test("account can create and revoke an API key when enabled @smoke", async ({ page }) => {
+test("account can create and revoke an API key when enabled", async ({ page }) => {
   await ready(page, "/admin/account");
   const nav = page.getByRole("button", { name: "API keys" });
   test.skip((await nav.count()) === 0, "api keys not enabled");
@@ -52,7 +52,7 @@ test("account can create and revoke an API key when enabled @smoke", async ({ pa
   await expect(page.getByText("Key revoked")).toBeVisible();
 });
 
-test("account can register and remove a passkey when enabled @smoke", async ({ page }) => {
+test("account can register and remove a passkey when enabled", async ({ page }) => {
   await ready(page, "/admin/account");
   await page.getByRole("button", { name: "Security" }).click();
   const addBtn = page.getByRole("button", { name: "Add passkey" });
@@ -74,7 +74,7 @@ test("account can register and remove a passkey when enabled @smoke", async ({ p
   await expect(page.getByText("Passkey removed")).toBeVisible();
 });
 
-test("account shows a phone field when enabled @smoke", async ({ page }) => {
+test("account shows a phone field when enabled", async ({ page }) => {
   await ready(page, "/admin/account");
   const phone = page.getByLabel("Phone number", { exact: true });
   test.skip((await phone.count()) === 0, "phone number not enabled");
@@ -111,7 +111,7 @@ test("account nav shows the core sections", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Sessions" })).toBeVisible();
 });
 
-test("two-factor setup shows a scannable QR code when enabled @smoke", async ({ page }) => {
+test("two-factor setup shows a scannable QR code when enabled", async ({ page }) => {
   await ready(page, "/admin/account");
   await page.getByRole("button", { name: "Security" }).click();
   const heading = page.getByText("Two-factor authentication");

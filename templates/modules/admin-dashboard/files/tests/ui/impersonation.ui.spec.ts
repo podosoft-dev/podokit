@@ -4,7 +4,7 @@ import { USER } from "../helpers/accounts";
 
 // admin storageState (project default)
 
-test("admin can impersonate a user and stop @smoke", async ({ page }) => {
+test("admin can impersonate a user and stop", async ({ page }) => {
   await ready(page, "/admin/users");
   await page.locator("#toolbar-search").fill(USER.email);
   await page.getByRole("button", { name: "Search", exact: true }).click();

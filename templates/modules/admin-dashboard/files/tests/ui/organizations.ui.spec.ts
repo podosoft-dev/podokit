@@ -19,7 +19,7 @@ test("admin can create an organization @smoke", async ({ page }) => {
   await expect(page.getByText("Organization deleted").first()).toBeVisible();
 });
 
-test("create an org with a non-ascii name, a parent, and a manager @smoke", async ({ page }) => {
+test("create an org with a non-ascii name, a parent, and a manager", async ({ page }) => {
   await ready(page, "/admin/organizations");
   const newBtn = page.getByRole("button", { name: "New organization" });
   test.skip((await newBtn.count()) === 0, "organizations not enabled");
@@ -54,7 +54,7 @@ test("create an org with a non-ascii name, a parent, and a manager @smoke", asyn
   await expect(page.getByText("Organization deleted").first()).toBeVisible();
 });
 
-test("organization manage: remove a member, invite one, and cancel the invite @smoke", async ({ page }) => {
+test("organization manage: remove a member, invite one, and cancel the invite", async ({ page }) => {
   await ready(page, "/admin/organizations");
   const newBtn = page.getByRole("button", { name: "New organization" });
   test.skip((await newBtn.count()) === 0, "organizations not enabled");

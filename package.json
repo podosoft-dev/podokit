@@ -21,6 +21,7 @@
     "test:scripts": "node --test scripts/*.test.mjs",
     "e2e": "node scripts/e2e-ci.mjs",
     "e2e:smoke": "node scripts/e2e-ci.mjs --smoke",
+    "e2e:package-smoke": "node scripts/e2e-ci.mjs --package-smoke",
     "changeset": "changeset",
     "version": "changeset version && npm install --package-lock-only"
   },

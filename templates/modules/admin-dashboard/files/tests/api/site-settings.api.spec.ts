@@ -11,7 +11,7 @@ async function adminCtx(playwright: import("@playwright/test").PlaywrightWorkerA
   return ctx;
 }
 
-test("theme settings: valid preset/radius/accent round-trip @smoke", async ({ playwright }) => {
+test("theme settings: valid preset/radius/accent round-trip", async ({ playwright }) => {
   const admin = await adminCtx(playwright);
   const put = await admin.put("/api/site/settings", {
     data: { themePreset: "slate", themeRadius: "0.75", brandColor: "#2563eb" },
@@ -29,7 +29,7 @@ test("theme settings: valid preset/radius/accent round-trip @smoke", async ({ pl
   await anon.dispose();
 });
 
-test("theme settings: valid per-token overrides accepted @smoke", async ({ playwright }) => {
+test("theme settings: valid per-token overrides accepted", async ({ playwright }) => {
   const admin = await adminCtx(playwright);
   const overrides = JSON.stringify({ light: { primary: "#123456" }, dark: { background: "#0a0a0a" } });
   const put = await admin.put("/api/site/settings", { data: { themeOverrides: overrides } });

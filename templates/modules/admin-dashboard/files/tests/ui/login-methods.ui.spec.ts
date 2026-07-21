@@ -8,7 +8,7 @@ test.use({ storageState: anonState });
 const base = process.env.E2E_BASE_URL ?? "http://localhost:5001";
 const origin = { origin: base };
 
-test("login: magic link shows a sent confirmation @smoke", async ({ page, playwright }) => {
+test("login: magic link shows a sent confirmation", async ({ page, playwright }) => {
   const api = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const caps = await (await api.get("/api/account/capabilities")).json();
   await api.dispose();
@@ -20,7 +20,7 @@ test("login: magic link shows a sent confirmation @smoke", async ({ page, playwr
   await expect(page.getByTestId("magic-link-sent")).toBeVisible();
 });
 
-test("login: an emailed one-time code signs a user in @smoke", async ({ page, playwright }) => {
+test("login: an emailed one-time code signs a user in", async ({ page, playwright }) => {
   const api = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const caps = await (await api.get("/api/account/capabilities")).json();
   test.skip(!caps?.emailOtp, "email otp disabled");

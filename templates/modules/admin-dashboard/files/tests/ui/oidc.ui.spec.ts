@@ -10,7 +10,7 @@ const REDIRECT = "http://localhost:9999/callback";
 // (with PKCE) that validates the client and hands off to the consent page. The
 // back-channel token exchange is driven by an OIDC client SDK / real RP — see
 // docs/modules.md for the manual round-trip checklist.
-test("OIDC provider: discovery, JWKS, client registration, authorize handoff @smoke", async ({ page, baseURL }) => {
+test("OIDC provider: discovery, JWKS, client registration, authorize handoff", async ({ page, baseURL }) => {
   const headers = { origin: baseURL ?? "" };
   await page.request.put("/api/account/settings", { data: { oidcProvider: true }, headers });
   await expect

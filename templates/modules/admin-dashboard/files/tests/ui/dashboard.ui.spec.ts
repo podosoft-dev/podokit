@@ -10,7 +10,7 @@ test("overview shows the signed-in admin @smoke", async ({ page }) => {
   await expect(page.getByRole("main").getByText(ADMIN.email)).toBeVisible();
 });
 
-test("sidebar navigates to sessions and account", async ({ page }) => {
+test("sidebar navigates to sessions and account @smoke", async ({ page }) => {
   await ready(page, "/admin");
   await page.getByRole("link", { name: "Sessions" }).click();
   await expect(page).toHaveURL(/\/admin\/sessions/);

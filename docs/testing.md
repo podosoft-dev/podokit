@@ -30,8 +30,8 @@ mistakes, so each is named explicitly.
 
 | | (A) Inner — internal dev | (B) Outer — faithful gate | (C) Shipped — developer |
 | --- | --- | --- | --- |
-| Who | PodoKit maintainer | CI + pre-commit gate | End developer (after `podo create`) |
-| When | While building a module/template | Before commit/release; nightly | After they install |
+| Who | PodoKit maintainer | CI + merge/release gate | End developer (after `podo create`) |
+| When | While building a module/template | Ready PRs, release packaging, nightly | After they install |
 | App source | local `file:`-linked, via `dev-app.mjs` | real `npx create` from **Verdaccio** | real `npx create` from **npm** |
 | Speed loop | `dev-watch` live mirror + `@playwright/cli` | full generate → migrate → run | n/a (they run it) |
 | Runs | `npm run test:e2e` in the linked app | `npm run test:e2e` in the generated app | `npm run test:e2e` |
@@ -46,8 +46,8 @@ mistakes, so each is named explicitly.
 - **(C) Shipped** is simply the `tests/` workspace that lands in a user's app; running
   it is `npm run test:e2e`. (B) guarantees it works.
 
-> Rule (also in CLAUDE.md): author and iterate in (A); the final check before
-> commit/release is always (B). Do not mix the two.
+> Rule (also in CLAUDE.md): author and iterate in (A); use the appropriate (B)
+> mode before merge/release. Do not run the full Outer loop after every local edit.
 
 ## Running the tests (C — and the shape of A/B)
 
@@ -112,9 +112,15 @@ check.
 
 ```bash
 node scripts/e2e-ci.mjs                         # full suite
-node scripts/e2e-ci.mjs --smoke                 # @smoke subset (what PRs run)
+node scripts/e2e-ci.mjs --smoke                 # risk-based @smoke subset for ready PRs
+node scripts/e2e-ci.mjs --package-smoke         # publish/install/build/start, no browser suite
 node scripts/e2e-ci.mjs --grep "magic link"     # only matching specs (fast feedback on one feature)
 ```
+
+The package-smoke mode is the Changesets version-PR gate. Version and internal
+dependency range changes still travel through the real local registry, generated
+app installation, migrations, builds, and health checks, but do not repeat feature
+browser scenarios that already ran on the source PR.
 
 Optional service-backed specs run only when their corresponding runtime is
 explicitly configured. In particular, an unrelated Mailpit already listening on
@@ -131,7 +137,7 @@ shortens a run — it mainly sharpens the signal. Split verification into three 
 |---|---|---|---|
 | 1 | every edit | `svelte-check` on the standing app's web; `nest build` on a regenerated app when injection targets changed | seconds |
 | 2 | before each feature commit | run just that feature's spec against the **standing verification app**: `E2E_BASE_URL=http://localhost:<web-port> npx playwright test <spec>` | seconds–1 min |
-| 3 | once per batch, before the PR | the full Outer: `node scripts/e2e-ci.mjs --smoke` (one feature only: `--grep "<pattern>"`) | ~6 min |
+| 3 | once when a PR is ready for review | the Outer smoke: `node scripts/e2e-ci.mjs --smoke` (one feature only: `--grep "<pattern>"`) | minutes |
 
 Standing verification app rules:
 
@@ -152,6 +158,29 @@ and verifies that public `/` still renders, protected `/admin` returns 503 witho
 redirect, and no session cookie is modified. `KEEP=1` preserves the app for inspection.
 
 This is the CI job [`.github/workflows/e2e.yml`](../.github/workflows/e2e.yml):
-PostgreSQL service with a health check, Playwright browser cache, report + trace
-artifacts (`if: always()`); triggered nightly (cron), on demand (`workflow_dispatch`),
-and on PRs (the `--smoke` subset). `concurrency` cancels superseded runs.
+PostgreSQL service with a health check, generated-app npm and Playwright browser
+caches, report + trace artifacts (`if: always()`). The full suite runs nightly and
+on demand. Draft and irrelevant PRs keep a successful skipped e2e job, ready PRs
+run the reviewed `@smoke` subset, and the generated Changesets PR runs
+`--package-smoke`. Job-level gating keeps required-check behavior predictable;
+`concurrency` cancels superseded runs. Every Outer run prints per-phase timings so
+future optimization is based on measured publish, install, build, startup, and test
+costs.
+
+The ready-PR subset intentionally stays small and risk-based. It covers scaffold
+health, authentication and authorization boundaries, one representative path for
+each backing-service module, critical admin settings, and recent regressions. The
+complete feature matrix remains in the nightly suite. The tests currently share a
+single backend and database, so the admin overlay deliberately keeps one worker;
+do not add sharding until test data and mutable settings are isolated. Running the
+whole Outer setup once per shard would duplicate its dominant setup cost.
+
+## CI feedback policy
+
+- Push small commits freely. The fast CI workflow is the normal feedback loop.
+- Open work-in-progress changes as draft PRs; expensive e2e begins when the PR is
+  marked ready for review.
+- New commits cancel obsolete runs for the same workflow and ref.
+- Keep the latest ready-PR smoke green before merge.
+- Keep the full fresh-install and Playwright matrix in nightly/manual verification.
+- Validate generated version changes with package-smoke before publishing.
