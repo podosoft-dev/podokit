@@ -286,16 +286,20 @@ changeset files sit in `.changeset/` and pile up as PRs merge.
 **2. The Version Packages PR.** Every push to `main` runs
 [`.github/workflows/version.yml`](../.github/workflows/version.yml), which keeps a
 single **"Version Packages"** PR up to date. It runs `npm run version`
-(`changeset version` + a lockfile sync) to bump each affected package, write its
-per-package `CHANGELOG.md`, and update internal dependency ranges — so a
-range-crossing bump (e.g. a dependency going `0.1.x` → `0.2.0`, outside `^0.1.0`)
-updates dependents automatically. This PR just sits there, growing, publishing
-nothing.
+(`changeset version` + template dependency synchronization + a lockfile sync) to
+bump each affected package, write its per-package `CHANGELOG.md`, and update both
+workspace and generated-template dependency ranges. A range-crossing bump (for
+example, `0.1.x` → `0.2.0`, outside `^0.1.0`) therefore updates generated apps and
+module manifests as well as workspace dependents. This PR just sits there,
+growing, publishing nothing.
 
-The version PR uses `scripts/e2e-ci.mjs --package-smoke`: packages are published
-to the local Verdaccio registry and consumed by a freshly generated app through
-install, migration, build, startup, and health checks. The browser feature suite is
-not repeated because it already ran on the source PR; the full matrix still runs
+The Version workflow explicitly dispatches CI and
+`scripts/e2e-ci.mjs --package-smoke` for the generated branch. Explicit dispatch
+is necessary because GitHub suppresses recursive workflow runs for branches
+updated with the default `GITHUB_TOKEN`. Packages are published to the local
+Verdaccio registry and consumed by a freshly generated app through install,
+migration, build, startup, and health checks. The browser feature suite is not
+repeated because it already ran on the source PR; the full matrix still runs
 nightly and can be dispatched manually.
 
 > The workflow opens that PR with the default `GITHUB_TOKEN`, which needs the

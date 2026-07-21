@@ -16,6 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
 
@@ -39,6 +40,7 @@ jobs:
           cache: npm
       - run: npm ci --no-audit --no-fund
       - name: Open or update the Version Packages PR
+        id: changesets
         uses: changesets/action@v1
         with:
           version: npm run version
@@ -46,3 +48,13 @@ jobs:
           commit: "chore: version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # GITHUB_TOKEN branch pushes do not recursively trigger pull_request
+      # workflows. Explicit dispatch keeps the generated PR verified without a
+      # long browser suite or a separate PAT.
+      - name: Verify the generated version branch
+        if: steps.changesets.outputs.hasChangesets == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run ci.yml --ref changeset-release/main
+          gh workflow run e2e.yml --ref changeset-release/main -f mode=package-smoke
