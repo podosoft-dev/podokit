@@ -1,5 +1,11 @@
 # @podosoft/podokit-module-blog
 
+## 0.5.0
+
+### Minor Changes
+
+- [#119](https://github.com/podosoft-dev/podokit/pull/119) [`cd7e13b`](https://github.com/podosoft-dev/podokit/commit/cd7e13b7a93b4fea7588ffed87c82ac5be8073ee) Thanks [@korone00](https://github.com/korone00)! - Show the shared signed-in account menu across blog pages and document the owned route-wrapper changes required when upgrading from 0.3.x to 0.4.x.
+
 ## 0.4.0
 
 ### Minor Changes

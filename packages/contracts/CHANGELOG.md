@@ -1,5 +1,11 @@
 # @podosoft/podokit-contracts
 
+## 0.4.0
+
+### Minor Changes
+
+- [#119](https://github.com/podosoft-dev/podokit/pull/119) [`cd7e13b`](https://github.com/podosoft-dev/podokit/commit/cd7e13b7a93b4fea7588ffed87c82ac5be8073ee) Thanks [@korone00](https://github.com/korone00)! - Add self-service profile-image upload, replacement, removal, shared validation limits, multipart API client support, and a reusable signed-in account menu for generated landing pages.
+
 ## 0.3.0
 
 ### Minor Changes
