@@ -9,7 +9,10 @@ test("settings: add and remove a social login provider", async ({ page }) => {
   const openConfigure = async (): Promise<void> => {
     await page.waitForLoadState("networkidle");
     await page.getByRole("tab", { name: "Authentication" }).click();
-    await page.getByRole("button", { name: "Configure" }).click();
+    const socialCard = page
+      .getByText("Social login", { exact: true })
+      .locator('xpath=ancestor::div[@data-slot="card"]');
+    await socialCard.getByRole("button", { name: "Configure" }).click();
   };
 
   await ready(page, "/admin/settings");
