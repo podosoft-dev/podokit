@@ -1,6 +1,6 @@
 {
   "name": "@podosoft/podokit-module-blog",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "PodoKit blog module with draft-first publishing, visibility controls, image uploads, comments, pagination, and admin management.",
   "license": "Apache-2.0",
   "repository": {
