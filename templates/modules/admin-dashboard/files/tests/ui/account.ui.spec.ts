@@ -160,7 +160,7 @@ test("account security and sessions sub-navigation", async ({ page }) => {
 
 test("account nav shows the core sections", async ({ page }) => {
   await ready(page, "/admin/account");
-  await expect(page.getByRole("button", { name: "Profile" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Profile", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Security" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Sessions" })).toBeVisible();
 });
