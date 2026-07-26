@@ -1,5 +1,11 @@
 # @podosoft/podokit
 
+## 0.15.0
+
+### Minor Changes
+
+- [#127](https://github.com/podosoft-dev/podokit/pull/127) [`f174097`](https://github.com/podosoft-dev/podokit/commit/f1740974d833bdf00ef6e9dba37daf834c77fd8f) Thanks [@korone00](https://github.com/korone00)! - Add application-owned Playwright projects, reusable product-shell identity menus, and responsive DataTable column helpers. Keep generated admin tests repeatable by cleaning up disposable users and pinning their UI locale, and stop `podo update` from restoring explicitly ejected files after applications relocate them.
+
 ## 0.14.0
 
 ### Minor Changes
