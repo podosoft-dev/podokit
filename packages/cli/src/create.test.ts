@@ -257,6 +257,12 @@ describe("create (integration against templates)", () => {
     expect(existsSync(join(target, "apps", "web", "src", "lib", "utils.ts"))).toBe(true);
     // e2e tests workspace ships with the app
     expect(existsSync(join(target, "tests", "playwright.config.ts"))).toBe(true);
+    expect(existsSync(join(target, "tests", "playwright.extensions.ts"))).toBe(true);
+    expect(readFileSync(join(target, "tests", "playwright.config.ts"), "utf8")).toContain(
+      "loadPlaywrightProjects(coreProjects)",
+    );
+    const manifest = readFileSync(join(target, ".podokit", "manifest.json"), "utf8");
+    expect(manifest).toContain("tests/playwright.projects.cjs");
     const gitignore = readFileSync(join(target, ".gitignore"), "utf8");
     expect(gitignore).toContain("playwright/.auth/");
     expect(gitignore).toContain("test-results/");

@@ -14,6 +14,7 @@ import { join, resolve } from "node:path";
 import { create } from "./create";
 import { addModule } from "./add";
 import { assembleProject } from "./assemble";
+import { eject } from "./eject";
 import { planUpdate, applyUpdate, summarize } from "./update";
 import { readFilesLock } from "./lockfile";
 
@@ -93,6 +94,68 @@ describe("planUpdate (dry-run)", () => {
     const plan = planUpdate(dir, REPO_TEMPLATES);
     const change = plan.changes.find((c) => c.path === "apps/web/src/routes/+page.svelte");
     expect(change?.action).toBe("skip");
+  });
+
+  it("does not restore an explicitly ejected route loader after it is relocated", () => {
+    const dir = join(tmp(), "app");
+    create({
+      name: "app",
+      template: "fullstack-nest-svelte",
+      templatesDir: REPO_TEMPLATES,
+      targetDir: dir,
+    });
+    addModule({
+      projectRoot: dir,
+      module: "admin-dashboard",
+      modulesDir: join(REPO_TEMPLATES, "modules"),
+    });
+
+    const originalLoader = "apps/web/src/routes/account/+page.server.ts";
+    const originalPage = "apps/web/src/routes/account/+page.svelte";
+    const relocatedDir = "apps/web/src/routes/(shell)/account";
+    const relocatedLoader = `${relocatedDir}/+page.server.ts`;
+    const relocatedPage = `${relocatedDir}/+page.svelte`;
+    expect(eject(dir, [originalLoader]).ejected).toEqual([originalLoader]);
+    mkdirSync(join(dir, relocatedDir), { recursive: true });
+    renameSync(join(dir, originalLoader), join(dir, relocatedLoader));
+    renameSync(join(dir, originalPage), join(dir, relocatedPage));
+
+    const plan = planUpdate(dir, REPO_TEMPLATES);
+    expect(plan.changes.find((change) => change.path === originalLoader)).toMatchObject({
+      action: "skip",
+      tier: "owned",
+      note: "explicitly owned — missing or relocated; not restored",
+    });
+
+    const result = applyUpdate(dir, REPO_TEMPLATES);
+    expect(result.written).not.toContain(originalLoader);
+    expect(existsSync(join(dir, originalLoader))).toBe(false);
+    expect(existsSync(join(dir, relocatedLoader))).toBe(true);
+    expect(existsSync(join(dir, relocatedPage))).toBe(true);
+    expect(planUpdate(dir, REPO_TEMPLATES).changes.find(
+      (change) => change.path === originalLoader,
+    )?.action).toBe("skip");
+  });
+
+  it("adopts an optional Playwright project extension as owned", () => {
+    const dir = join(tmp(), "app");
+    create({
+      name: "app",
+      template: "fullstack-nest-svelte",
+      templatesDir: REPO_TEMPLATES,
+      targetDir: dir,
+    });
+    const extension = "tests/playwright.projects.cjs";
+    const content = 'module.exports = [{ name: "mobile" }];\n';
+    writeFileSync(join(dir, extension), content);
+
+    const result = applyUpdate(dir, REPO_TEMPLATES);
+    expect(result.written).not.toContain(extension);
+    expect(readFileSync(join(dir, extension), "utf8")).toBe(content);
+    expect(readFilesLock(dir)?.files[extension]?.tier).toBe("owned");
+    expect(planUpdate(dir, REPO_TEMPLATES).changes.find(
+      (change) => change.path === extension,
+    )?.action).toBe("skip");
   });
 });
 

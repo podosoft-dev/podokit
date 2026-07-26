@@ -30,3 +30,16 @@ test("audit table sorts client-side", async ({ page }) => {
   await page.getByRole("button", { name: "When" }).click(); // default desc -> asc
   await expect(page.getByRole("columnheader", { name: /When/ })).toHaveAttribute("aria-sort", "ascending");
 });
+
+test("users table keeps responsive headers and cells aligned", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await ready(page, "/admin/users");
+  const table = page.getByRole("table", { name: "Users" });
+  const visibleHeaders = table.locator("thead th:visible");
+  const visibleCells = table.locator("tbody tr").first().locator("td:visible");
+
+  await expect(table.getByRole("columnheader", { name: "Role" })).toBeHidden();
+  await expect(table.getByRole("columnheader", { name: "Status" })).toBeHidden();
+  await expect(table.getByRole("columnheader", { name: "Joined" })).toBeHidden();
+  expect(await visibleHeaders.count()).toBe(await visibleCells.count());
+});

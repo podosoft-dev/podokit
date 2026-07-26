@@ -229,6 +229,7 @@ Define columns and render each row's cells with a `row` snippet:
 <script lang="ts">
   import * as Table from "$lib/components/ui/table";
   import DataTable, { type DataTableColumn, type SortState } from "$lib/components/data-table.svelte";
+  import { cn } from "$lib/utils";
 
   let rows = $state<Item[]>([]);
   let page = $state(1);
@@ -236,19 +237,36 @@ Define columns and render each row's cells with a `row` snippet:
 
   const columns: DataTableColumn<Item>[] = [
     { key: "name", label: "Name", sortable: true },
-    { key: "createdAt", label: "Created", sortable: true },
+    { key: "createdAt", label: "Created", sortable: true, hideBelow: "md" },
     { key: "actions", label: "", class: "w-10" }, // non-sortable
   ];
 </script>
 
-<DataTable {columns} {rows} getKey={(r) => r.id} bind:sort bind:page perPage={10} label={`${rows.length} items`}>
-  {#snippet row(r)}
-    <Table.Cell>{r.name}</Table.Cell>
-    <Table.Cell>{r.createdAt}</Table.Cell>
-    <Table.Cell><!-- actions --></Table.Cell>
+<DataTable
+  {columns}
+  {rows}
+  getKey={(r) => r.id}
+  bind:sort
+  bind:page
+  perPage={10}
+  ariaLabel="Items"
+  label={`${rows.length} items`}
+>
+  {#snippet row(r, { cellClass })}
+    <Table.Cell class={cellClass("name")}>{r.name}</Table.Cell>
+    <Table.Cell class={cn(cellClass("createdAt"), "text-muted-foreground")}>{r.createdAt}</Table.Cell>
+    <Table.Cell class={cellClass("actions")}><!-- actions --></Table.Cell>
   {/snippet}
 </DataTable>
 ```
+
+For responsive tables, set `hideBelow` to `sm`, `md`, `lg`, or `xl` and apply
+the row context's `cellClass(columnKey)` to the matching cell. The header and
+cell then share the same static Tailwind class, so hiding a column cannot shift
+the remaining cells. Existing one-argument row snippets remain valid when no
+responsive column behavior is needed. Give each table an `ariaLabel` when a
+page or dialog can contain more than one table; tests should scope pagination
+and row assertions to that table.
 
 Two modes:
 
@@ -261,6 +279,16 @@ Two modes:
 
 Pagination is handled inside the table's `tfoot` via `TablePagination`; don't add
 a separate pager outside the table.
+
+## Mobile safe areas
+
+The generated viewport is deliberately safe by default:
+`width=device-width, initial-scale=1`. Add `viewport-fit=cover` only when an
+application-owned layout intentionally renders edge to edge and also applies
+`env(safe-area-inset-top)`, `env(safe-area-inset-right)`,
+`env(safe-area-inset-bottom)`, and `env(safe-area-inset-left)` padding where
+needed. Enabling cover without those layout rules can place controls under a
+notch or home indicator.
 
 ## Search & filters (TableToolbar)
 

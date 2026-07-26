@@ -164,21 +164,34 @@ export function planUpdate(projectRoot: string, templatesDir: string): UpdatePla
     const newText = treeText(newTree, path);
     const disk = diskContent(projectRoot, path);
 
-    // A newer module can explicitly take responsibility for a path that older
-    // projects classified under a broad owned glob (notably generated skills).
-    const managedByTarget = managedOverrides.some((glob) => matchGlob(path, glob));
-    const ownedByTarget = ownedGlobs.some((glob) => matchGlob(path, glob));
-    const tier: Tier = managedByTarget
-      ? "managed"
-      : ownedByTarget
-        ? "owned"
-        : locked?.tier ??
-        (newText !== null
-          ? classifyTier(path, newText, ownedGlobs, managedOverrides)
-          : "managed");
+    // Use the same ownership precedence as lockfile classification. In
+    // particular, an exact path recorded by `podo eject` must keep winning over
+    // a module's managed override, while managed overrides may still reclaim a
+    // path covered only by a broad owned glob.
+    const controlledByTarget =
+      managedOverrides.some((glob) => matchGlob(path, glob)) ||
+      ownedGlobs.some((glob) => matchGlob(path, glob));
+    const classified = classifyTier(
+      path,
+      newText ?? disk ?? "",
+      ownedGlobs,
+      managedOverrides,
+    );
+    const tier: Tier = controlledByTarget ? classified : locked?.tier ?? classified;
 
     if (tier === "owned") {
-      changes.push({ path, tier, action: "skip", note: "owned — never modified" });
+      const explicitlyOwned = ownedGlobs.some(
+        (glob) => !glob.includes("*") && matchGlob(path, glob),
+      );
+      changes.push({
+        path,
+        tier,
+        action: "skip",
+        note:
+          explicitlyOwned && disk === null && newText !== null
+            ? "explicitly owned — missing or relocated; not restored"
+            : "owned — never modified",
+      });
       continue;
     }
 

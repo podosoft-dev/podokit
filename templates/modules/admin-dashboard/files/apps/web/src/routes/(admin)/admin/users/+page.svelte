@@ -16,6 +16,7 @@
   import { toast } from "svelte-sonner";
   import { api } from "$lib/api";
   import { getI18n, fmt, formatDateTime } from "$lib/i18n";
+  import { cn } from "$lib/utils";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
@@ -58,9 +59,15 @@
   const columns = $derived<DataTableColumn<Row>[]>([
     { key: "name", label: i18n.t.users.name, sortable: true },
     { key: "email", label: i18n.t.users.email, sortable: true },
-    { key: "role", label: i18n.t.users.role, sortable: true },
-    { key: "status", label: i18n.t.users.status },
-    { key: "createdAt", label: i18n.t.users.joined, sortable: true, value: (u) => (u.createdAt ? new Date(u.createdAt).getTime() : 0) },
+    { key: "role", label: i18n.t.users.role, sortable: true, hideBelow: "md" },
+    { key: "status", label: i18n.t.users.status, hideBelow: "lg" },
+    {
+      key: "createdAt",
+      label: i18n.t.users.joined,
+      sortable: true,
+      hideBelow: "lg",
+      value: (u) => (u.createdAt ? new Date(u.createdAt).getTime() : 0),
+    },
     { key: "actions", label: "", class: "w-10" },
   ]);
   const filters = $derived<ToolbarFilter[]>([
@@ -380,13 +387,14 @@
     bind:sort
     bind:page
     perPage={PAGE_SIZE}
+    ariaLabel={i18n.t.users.title}
     label={fmt(i18n.t.users.total, { count: filtered.length })}
   >
-    {#snippet row(user)}
-      <Table.Cell class="font-medium">{user.name}</Table.Cell>
-      <Table.Cell class="text-muted-foreground">{user.email}</Table.Cell>
-      <Table.Cell><Badge variant={user.role === "admin" ? "default" : "secondary"}>{user.role ?? "user"}</Badge></Table.Cell>
-      <Table.Cell>
+    {#snippet row(user, { cellClass })}
+      <Table.Cell class={cn(cellClass("name"), "font-medium")}>{user.name}</Table.Cell>
+      <Table.Cell class={cn(cellClass("email"), "text-muted-foreground")}>{user.email}</Table.Cell>
+      <Table.Cell class={cellClass("role")}><Badge variant={user.role === "admin" ? "default" : "secondary"}>{user.role ?? "user"}</Badge></Table.Cell>
+      <Table.Cell class={cellClass("status")}>
         <div class="flex flex-wrap gap-1">
           {#if user.signupApproved === false}
             <Badge variant="secondary">{i18n.t.users.pendingApproval}</Badge>
@@ -400,8 +408,8 @@
           {/if}
         </div>
       </Table.Cell>
-      <Table.Cell class="text-muted-foreground">{user.createdAt ? formatDateTime(user.createdAt) : "—"}</Table.Cell>
-      <Table.Cell>
+      <Table.Cell class={cn(cellClass("createdAt"), "text-muted-foreground")}>{user.createdAt ? formatDateTime(user.createdAt) : "—"}</Table.Cell>
+      <Table.Cell class={cellClass("actions")}>
         <DropdownMenu.Root>
           <DropdownMenu.Trigger>
             {#snippet child({ props })}

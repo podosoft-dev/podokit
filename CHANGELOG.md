@@ -7,6 +7,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- **Extensible mobile and product-shell UI primitives.** Generated applications
+  can add owned Playwright browser/device projects without editing the managed
+  config, render the shared account menu with visible identity outside the admin
+  sidebar, and keep responsive DataTable headers and cells aligned with shared
+  breakpoint classes.
 - **Admin-only route-group separation and safe module path migrations.**
   `admin-dashboard` now reserves `(admin)` and `admin-sidebar.svelte` for the
   admin-only `/admin/*` console while leaving the protected, shell-free `(app)`
@@ -103,6 +108,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (ui + api) tests included. No DB migration (uses the existing `app_setting` store).
 
 ### Fixed
+- **Repeatable inherited admin tests and relocated ejects.** Generated UI
+  storage state now pins the English catalog used by accessible-name locators,
+  so the suite does not inherit an application's configured default language.
+  The setup creates its authentication-state directory on first use, and
+  teardown exits cleanly when setup could not capture a baseline.
+  Disposable-user fixtures reuse that authenticated context instead of creating
+  another login that can revoke it under a single-session policy. Generated
+  user management specs now remove every disposable user and build pagination
+  from isolated data. `podo update` also preserves explicitly ejected files
+  after an application moves or deletes the original path instead of restoring
+  a conflicting generated route.
 - **The General Settings language selector shows the application default.** An
   empty stored locale now resolves to the generated application's default locale
   instead of rendering a blank select trigger, and the form waits for the

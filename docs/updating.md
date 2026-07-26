@@ -137,6 +137,12 @@ later `podo add` or `podo update` rebuilds the file tiers. It still shows up in
 `podo diff`, but `podo update` will skip it from then on. Unlike a one-way
 project eject, this is per-file and reversible.
 
+If an application later moves or deletes that exact file, `podo update` reports
+`explicitly owned — missing or relocated; not restored` and does not recreate
+the original path. This is particularly important for SvelteKit route loaders:
+an ejected loader moved into another route group must not reappear at its old
+URL and create a duplicate route.
+
 ### Module-owned paths
 
 A module can declare paths it ships as **owned** up front, via `ownedGlobs` in
@@ -160,6 +166,10 @@ never silently replaced. The exception is recorded in
 `.podokit/manifest.json` and removed with the module. A file-level
 `podo eject <path>` still wins over a broad managed override when an application
 chooses to own that generated workflow permanently.
+
+Optional application configuration can also be reserved as an exact owned path.
+For example, `tests/playwright.projects.cjs` adds browser or device projects
+without editing the managed `tests/playwright.config.ts`.
 
 ## Overriding providers — `app.extensions.ts`
 

@@ -1,10 +1,15 @@
 import { defineConfig, devices } from "@playwright/test";
+import { loadPlaywrightProjects } from "./playwright.extensions";
 
 // The suite runs against a live stack: web on E2E_BASE_URL (proxying /api/* to
 // the API). Start it first (see docs/testing.md) — locally via the dev harness,
 // in CI via scripts/e2e-ci.mjs. Two projects: `api` (request-only, backend e2e)
 // and `ui` (chromium, pages). Files are routed by suffix (*.api/*.ui.spec.ts).
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5001";
+const coreProjects = [
+  { name: "api", testMatch: /.*\.api\.spec\.ts/ },
+  { name: "ui", testMatch: /.*\.ui\.spec\.ts/, use: { ...devices["Desktop Chrome"] } },
+];
 
 export default defineConfig({
   testDir: ".",
@@ -18,8 +23,5 @@ export default defineConfig({
     trace: "on-first-retry",
     screenshot: "only-on-failure",
   },
-  projects: [
-    { name: "api", testMatch: /.*\.api\.spec\.ts/ },
-    { name: "ui", testMatch: /.*\.ui\.spec\.ts/, use: { ...devices["Desktop Chrome"] } },
-  ],
+  projects: [...coreProjects, ...loadPlaywrightProjects(coreProjects)],
 });

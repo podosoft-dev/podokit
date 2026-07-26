@@ -85,8 +85,56 @@ The first run installs the Playwright browser: `npx playwright install chromium`
 (run inside `tests/`). Specs ending in `*.api.spec.ts` run in the request-only `api`
 project; `*.ui.spec.ts` run in the chromium `ui` project. When the app has the
 admin-dashboard module, a `setup` project seeds admin + user sessions via the API and
-saves `storageState` the other projects reuse. See [development.md](./development.md)
-for the local harness (`dev-app.mjs`, `dev-watch.mjs`).
+saves `storageState` the other projects reuse. The saved browser state pins the
+English catalog used by generated accessible-name locators instead of inheriting
+the application's configured site locale. Setup creates the ignored
+`tests/playwright/.auth` directory on first use. It also snapshots the users that
+existed before the suite; the paired `cleanup` project removes users created by
+the run after every dependent browser/API project finishes. Individual
+user-management specs use a disposable-user fixture as well, so failures do not
+pollute later tests in the same run. That fixture reuses the browser context's
+authenticated request client and supplies the target `Origin`; it must not create
+a second admin login because single-session policies can revoke the UI session.
+See [development.md](./development.md) for the local harness (`dev-app.mjs`,
+`dev-watch.mjs`).
+
+### Adding application-owned browser or device projects
+
+Keep `tests/playwright.config.ts` managed so PodoKit can update its core `api`,
+`setup`, and `ui` projects. Add optional projects in the owned
+`tests/playwright.projects.cjs` file instead; the managed config validates and
+merges that exported array:
+
+```js
+const { devices } = require("@playwright/test");
+
+/** @type {NonNullable<import("@playwright/test").TestConfig["projects"]>} */
+module.exports = [
+  {
+    name: "mobile-chromium",
+    testMatch: /.*\.ui\.spec\.ts/,
+    dependencies: ["setup"],
+    use: {
+      ...devices["Pixel 7"],
+      storageState: "playwright/.auth/admin.json",
+    },
+  },
+  {
+    name: "mobile-webkit",
+    testMatch: /.*\.ui\.spec\.ts/,
+    dependencies: ["setup"],
+    use: {
+      ...devices["iPhone 15"],
+      storageState: "playwright/.auth/admin.json",
+    },
+  },
+];
+```
+
+For a project without `admin-dashboard`, omit `dependencies` and
+`storageState`. `npm run test:e2e` includes every extension project; use
+`npx playwright test --project=mobile-webkit` to run one explicitly. Project
+names must be non-empty and must not duplicate a core or extension project.
 
 ## (A) Authoring loop — maintainers
 

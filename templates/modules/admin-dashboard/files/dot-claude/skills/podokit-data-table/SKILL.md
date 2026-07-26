@@ -13,19 +13,20 @@ put pagination outside the table.
 ```svelte
 <script lang="ts">
   import DataTable from "$lib/components/data-table.svelte";
+  import { cn } from "$lib/utils";
   const columns = [
     { key: "name", label: "Name", sortable: true },
     { key: "email", label: "Email", sortable: true },
-    { key: "role", label: "Role", sortable: true },     // action/status columns: no `sortable`
+    { key: "role", label: "Role", sortable: true, hideBelow: "md" },
   ];
   let { rows } = $props();   // Svelte 5 runes only
 </script>
 
-<DataTable {columns} {rows} label="{rows.length} users">
-  {#snippet row(item)}
-    <Table.Cell>{item.name}</Table.Cell>
-    <Table.Cell>{item.email}</Table.Cell>
-    <Table.Cell>{item.role}</Table.Cell>
+<DataTable {columns} {rows} ariaLabel="Users" label="{rows.length} users">
+  {#snippet row(item, { cellClass })}
+    <Table.Cell class={cellClass("name")}>{item.name}</Table.Cell>
+    <Table.Cell class={cellClass("email")}>{item.email}</Table.Cell>
+    <Table.Cell class={cn(cellClass("role"), "text-muted-foreground")}>{item.role}</Table.Cell>
   {/snippet}
 </DataTable>
 ```
@@ -34,6 +35,10 @@ put pagination outside the table.
 - **Server data** (huge lists): use `manualSort` + `manualPagination` + `total`
   + `onChange` (re-fetch with `sortBy`/`sortDirection`/`page`).
 - Nested/derived sort keys: give the column a `value` accessor.
+- Responsive columns: set `hideBelow` to `sm`, `md`, `lg`, or `xl`, then apply
+  `cellClass(columnKey)` to the matching `Table.Cell`. Never repeat the
+  responsive class by hand; the shared class keeps headers and cells aligned.
+- Give each table an `ariaLabel` and scope Playwright locators to that table.
 - No footer needed: `perPage={0}`.
 - **Search & filters**: put the shared `table-toolbar.svelte` (`TableToolbar`)
   above the DataTable. Filters + search apply together on the Search button/Enter
