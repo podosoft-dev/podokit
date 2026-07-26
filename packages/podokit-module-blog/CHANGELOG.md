@@ -1,5 +1,13 @@
 # @podosoft/podokit-module-blog
 
+## 0.5.0
+
+### Minor Changes
+
+- [#123](https://github.com/podosoft-dev/podokit/pull/123) [`4525328`](https://github.com/podosoft-dev/podokit/commit/4525328016cb3af38f5520ea41e170f6fe59cef6) Thanks [@korone00](https://github.com/korone00)! - Separate the generated admin-only console into the `(admin)` route group, keep `(app)` available for protected product pages, and migrate existing admin routes safely during `podo update`.
+
+- [#119](https://github.com/podosoft-dev/podokit/pull/119) [`cd7e13b`](https://github.com/podosoft-dev/podokit/commit/cd7e13b7a93b4fea7588ffed87c82ac5be8073ee) Thanks [@korone00](https://github.com/korone00)! - Show the shared signed-in account menu across blog pages and document the owned route-wrapper changes required when upgrading from 0.3.x to 0.4.x.
+
 ## 0.4.0
 
 ### Minor Changes
