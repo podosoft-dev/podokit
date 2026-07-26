@@ -326,7 +326,8 @@ async function main(argv: string[]): Promise<void> {
       if (args.apply) {
         const result = applyUpdate(process.cwd(), templatesDir, { oldTemplatesDir: args.from });
         process.stdout.write(
-          `Applied: ${result.written.length} written, ${result.removed.length} removed, ` +
+          `Applied: ${result.written.length} written, ${result.moved.length} moved, ` +
+            `${result.removed.length} removed, ` +
             `${result.merged.length} merged, ${result.conflicts.length} conflict.\n`,
         );
         if (result.conflicts.length) {
@@ -348,10 +349,12 @@ async function main(argv: string[]): Promise<void> {
         process.stdout.write("Everything is up to date.\n");
       } else {
         for (const c of shown) {
-          process.stdout.write(`  ${c.action.padEnd(9)} ${c.path}  (${c.note})\n`);
+          const path = c.fromPath ? `${c.fromPath} -> ${c.path}` : c.path;
+          process.stdout.write(`  ${c.action.padEnd(9)} ${path}  (${c.note})\n`);
         }
         process.stdout.write(
-          `\n${counts.update} update, ${counts.add} add, ${counts.remove} remove, ${counts.conflict} conflict. ` +
+          `\n${counts.update} update, ${counts.add} add, ${counts.move} move, ` +
+            `${counts.remove} remove, ${counts.conflict} conflict. ` +
             `Dry-run — nothing was written. Re-run with --apply to write (use --from <dir> for a 3-way merge).\n`,
         );
       }

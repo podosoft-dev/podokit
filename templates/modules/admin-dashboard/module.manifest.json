@@ -1,6 +1,7 @@
 {
+  "manifestVersion": 2,
   "name": "admin-dashboard",
-  "description": "Admin dashboard UI (SvelteKit + shadcn-svelte): authentication pages, account and profile-image management, a sidebar shell, and user + session management via the better-auth admin plugin. Requires auth.",
+  "description": "Admin console UI (SvelteKit + shadcn-svelte): the `(admin)` route group and `admin-sidebar.svelte` are reserved for `/admin/*`; put protected product pages in `(app)` or their own guarded layout. Requires auth.",
   "requires": [
     "auth",
     "object-storage-s3"
@@ -19,12 +20,13 @@
   "managedOverrides": [
     "apps/web/src/lib/components/ui/input/input.svelte",
     "apps/web/src/routes/(app)/+layout.server.ts",
-    "apps/web/src/routes/(app)/admin/account/+page.server.ts",
-    "apps/web/src/routes/(app)/admin/audit/+page.server.ts",
-    "apps/web/src/routes/(app)/admin/organizations/+page.server.ts",
-    "apps/web/src/routes/(app)/admin/sessions/+page.server.ts",
-    "apps/web/src/routes/(app)/admin/settings/+page.server.ts",
-    "apps/web/src/routes/(app)/admin/users/+page.server.ts",
+    "apps/web/src/routes/(admin)/+layout.server.ts",
+    "apps/web/src/routes/(admin)/admin/account/+page.server.ts",
+    "apps/web/src/routes/(admin)/admin/audit/+page.server.ts",
+    "apps/web/src/routes/(admin)/admin/organizations/+page.server.ts",
+    "apps/web/src/routes/(admin)/admin/sessions/+page.server.ts",
+    "apps/web/src/routes/(admin)/admin/settings/+page.server.ts",
+    "apps/web/src/routes/(admin)/admin/users/+page.server.ts",
     "apps/web/src/routes/(auth)/login/+page.server.ts",
     "apps/web/src/routes/(auth)/signup/+page.server.ts",
     "apps/web/src/routes/account/+page.server.ts",
@@ -46,6 +48,39 @@
   "env": [
     "# admin-dashboard: emails auto-promoted to the admin role on sign-up (comma-separated)",
     "ADMIN_EMAILS=admin@example.com"
+  ],
+  "migrations": [
+    {
+      "id": "admin-route-group",
+      "moves": [
+        {
+          "from": "apps/web/src/routes/(app)/+layout.svelte",
+          "to": "apps/web/src/routes/(admin)/+layout.svelte"
+        },
+        {
+          "from": "apps/web/src/routes/(app)/admin",
+          "to": "apps/web/src/routes/(admin)/admin"
+        },
+        {
+          "from": "apps/web/src/lib/components/app-sidebar.svelte",
+          "to": "apps/web/src/lib/components/admin-sidebar.svelte"
+        }
+      ],
+      "replacements": [
+        {
+          "path": "apps/web/src/routes/(admin)/+layout.svelte",
+          "from": "AppSidebar",
+          "to": "AdminSidebar",
+          "expected": 2
+        },
+        {
+          "path": "apps/web/src/routes/(admin)/+layout.svelte",
+          "from": "$lib/components/app-sidebar.svelte",
+          "to": "$lib/components/admin-sidebar.svelte",
+          "expected": 1
+        }
+      ]
+    }
   ],
   "inject": [
     {
@@ -84,7 +119,7 @@
       "file": "AGENTS.md",
       "marker": "<!-- podokit:end:agents-modules -->",
       "optional": true,
-      "text": "### admin-dashboard\n- Admin console lives at `/admin/*` (users, sessions, organizations, audit, settings, account). Set `ADMIN_EMAILS`, then create or verify the initial account with `npm run admin:bootstrap -w <app>-api`; never commit or persist `ADMIN_BOOTSTRAP_PASSWORD`. When sign-up approval is enabled, self-registered users stay pending until an administrator approves them on `/admin/users`; administrator-created users bypass the queue.\n- Signed-in users can upload, replace, or remove their profile image from `/account` or `/admin/account`. Keep the shared policy visible in custom account UI: PNG, JPEG, or WebP; at most 2 MB and 2048 by 2048 pixels. Use the managed `/api/account/profile-image` endpoints instead of writing directly to storage or `user.image`.\n- Custom protected server layouts must call `requireBackendAvailable(locals)` from `$lib/server/guards` before redirecting anonymous users. This preserves sessions and returns 503 when authentication or maintenance policy cannot be checked.\n- **Every list/table MUST use the shared `$lib/components/data-table.svelte` (`DataTable`)** \u2014 it gives sortable headers + a footer pagination. Add search/filters with `$lib/components/table-toolbar.svelte`. Never assemble `Table.Root`/`Table.Header`/`Table.Body` by hand.\n"
+      "text": "### admin-dashboard\n- The `(admin)` route group and `admin-sidebar.svelte` are the admin-console shell for `/admin/*` only. Put signed-in product pages in `(app)` or in a separate route group with its own layout; do not place them under `(admin)`.\n- Admin console lives at `/admin/*` (users, sessions, organizations, audit, settings, account). Set `ADMIN_EMAILS`, then create or verify the initial account with `npm run admin:bootstrap -w <app>-api`; never commit or persist `ADMIN_BOOTSTRAP_PASSWORD`. When sign-up approval is enabled, self-registered users stay pending until an administrator approves them on `/admin/users`; administrator-created users bypass the queue.\n- Signed-in users can upload, replace, or remove their profile image from `/account` or `/admin/account`. Keep the shared policy visible in custom account UI: PNG, JPEG, or WebP; at most 2 MB and 2048 by 2048 pixels. Use the managed `/api/account/profile-image` endpoints instead of writing directly to storage or `user.image`.\n- Custom protected server layouts must call `requireBackendAvailable(locals)` from `$lib/server/guards` before redirecting anonymous users. This preserves sessions and returns 503 when authentication or maintenance policy cannot be checked.\n- **Every list/table MUST use the shared `$lib/components/data-table.svelte` (`DataTable`)** \u2014 it gives sortable headers + a footer pagination. Add search/filters with `$lib/components/table-toolbar.svelte`. Never assemble `Table.Root`/`Table.Header`/`Table.Body` by hand.\n"
     },
     {
       "file": "apps/api/src/app.module.ts",

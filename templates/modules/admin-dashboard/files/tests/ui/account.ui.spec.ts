@@ -23,6 +23,15 @@ test("account opens on the profile section @smoke", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Save changes" })).toBeEnabled();
 });
 
+test("protected app routes do not inherit the admin shell @smoke", async ({ page }) => {
+  await ready(page, "/accept-invitation/not-a-real-invitation");
+  await expect(page.getByText("Organization invitation", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("sidebar-brand")).toHaveCount(0);
+
+  await ready(page, "/admin");
+  await expect(page.getByTestId("sidebar-brand")).toBeVisible();
+});
+
 test("account displays profile image limits and updates every avatar", async ({ page }) => {
   await ready(page, "/account");
   await page.request.delete("/api/account/profile-image");

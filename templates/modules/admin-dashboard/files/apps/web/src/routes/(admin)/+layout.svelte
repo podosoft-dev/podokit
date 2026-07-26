@@ -3,7 +3,7 @@
   import * as Sidebar from "$lib/components/ui/sidebar";
   import { Separator } from "$lib/components/ui/separator";
   import { Button } from "$lib/components/ui/button";
-  import AppSidebar from "$lib/components/app-sidebar.svelte";
+  import AdminSidebar from "$lib/components/admin-sidebar.svelte";
   import ThemeToggle from "$lib/components/theme-toggle.svelte";
   import LanguageSwitch from "$lib/components/language-switch.svelte";
   import { Toaster } from "$lib/components/ui/sonner";
@@ -27,7 +27,7 @@
 </script>
 
 <Sidebar.Provider>
-  <AppSidebar user={data.user} capabilities={data.capabilities} />
+  <AdminSidebar user={data.user} capabilities={data.capabilities} />
   <Sidebar.Inset>
     {#if data.impersonating}
       <div class="bg-primary text-primary-foreground flex items-center justify-between gap-2 px-4 py-2 text-sm">

@@ -21,7 +21,7 @@
   ],
   "ownedGlobs": [
     "apps/web/src/routes/blog/**",
-    "apps/web/src/routes/(app)/admin/blog/**"
+    "apps/web/src/routes/(admin)/admin/blog/**"
   ],
   "inject": [
     {

@@ -15,7 +15,7 @@ import { hashContent } from "@podosoft/podokit-template-engine";
  * ADR-0009 (update mechanism) and ADR-0010 (ownership model).
  */
 
-export const LOCK_SCHEMA_VERSION = 1;
+export const LOCK_SCHEMA_VERSION = 2;
 
 /** File ownership tier. See ADR-0010. */
 export type Tier = "managed" | "assembled" | "owned";
@@ -30,12 +30,15 @@ export interface ManifestModule {
   packageName?: string;
   /** Installed external-module version last applied to this project. */
   moduleVersion?: string;
+  /** Module-local update migrations already applied to this project. */
+  appliedMigrations?: string[];
 }
 
 export interface ManifestModuleInput {
   name: string;
   packageName?: string;
   moduleVersion?: string;
+  appliedMigrations?: string[];
 }
 
 export interface PodokitManifest {
@@ -141,12 +144,18 @@ export function readManifest(projectRoot: string): PodokitManifest | null {
 
 export function writeManifest(projectRoot: string, manifest: PodokitManifest): void {
   mkdirSync(podokitDir(projectRoot), { recursive: true });
-  writeFileSync(manifestPath(projectRoot), `${JSON.stringify(manifest, null, 2)}\n`);
+  writeFileSync(
+    manifestPath(projectRoot),
+    `${JSON.stringify({ ...manifest, schemaVersion: LOCK_SCHEMA_VERSION }, null, 2)}\n`,
+  );
 }
 
 export function writeFilesLock(projectRoot: string, lock: FilesLock): void {
   mkdirSync(podokitDir(projectRoot), { recursive: true });
-  writeFileSync(filesLockPath(projectRoot), `${JSON.stringify(lock, null, 2)}\n`);
+  writeFileSync(
+    filesLockPath(projectRoot),
+    `${JSON.stringify({ ...lock, schemaVersion: LOCK_SCHEMA_VERSION }, null, 2)}\n`,
+  );
 }
 
 /** Read the PodoKit CLI's own version to stamp into the manifest. */
@@ -332,6 +341,7 @@ export function recordModules(
       addedWith: stampedWith,
       packageName: module.packageName,
       moduleVersion: module.moduleVersion,
+      appliedMigrations: module.appliedMigrations,
     });
     known.add(module.name);
   }

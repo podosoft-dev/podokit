@@ -1,5 +1,14 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, cpSync, mkdirSync } from "node:fs";
+import {
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+  readFileSync,
+  existsSync,
+  cpSync,
+  mkdirSync,
+  renameSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { create } from "./create";
@@ -11,12 +20,13 @@ import { readFilesLock } from "./lockfile";
 const REPO_TEMPLATES = resolve(process.cwd(), "..", "..", "templates");
 const ADMIN_DASHBOARD_MANAGED_ROUTE_LOADERS = [
   "apps/web/src/routes/(app)/+layout.server.ts",
-  "apps/web/src/routes/(app)/admin/account/+page.server.ts",
-  "apps/web/src/routes/(app)/admin/audit/+page.server.ts",
-  "apps/web/src/routes/(app)/admin/organizations/+page.server.ts",
-  "apps/web/src/routes/(app)/admin/sessions/+page.server.ts",
-  "apps/web/src/routes/(app)/admin/settings/+page.server.ts",
-  "apps/web/src/routes/(app)/admin/users/+page.server.ts",
+  "apps/web/src/routes/(admin)/+layout.server.ts",
+  "apps/web/src/routes/(admin)/admin/account/+page.server.ts",
+  "apps/web/src/routes/(admin)/admin/audit/+page.server.ts",
+  "apps/web/src/routes/(admin)/admin/organizations/+page.server.ts",
+  "apps/web/src/routes/(admin)/admin/sessions/+page.server.ts",
+  "apps/web/src/routes/(admin)/admin/settings/+page.server.ts",
+  "apps/web/src/routes/(admin)/admin/users/+page.server.ts",
   "apps/web/src/routes/(auth)/login/+page.server.ts",
   "apps/web/src/routes/(auth)/signup/+page.server.ts",
   "apps/web/src/routes/account/+page.server.ts",
@@ -196,6 +206,226 @@ describe("applyUpdate", () => {
     return dir;
   }
 
+  function legacyAdminTemplatesCopy(): string {
+    const templates = oldTemplatesCopy();
+    const moduleRoot = join(templates, "modules/admin-dashboard");
+    const filesRoot = join(moduleRoot, "files");
+    const routesRoot = join(filesRoot, "apps/web/src/routes");
+    const componentsRoot = join(filesRoot, "apps/web/src/lib/components");
+
+    mkdirSync(join(routesRoot, "(app)"), { recursive: true });
+    renameSync(join(routesRoot, "(admin)/+layout.svelte"), join(routesRoot, "(app)/+layout.svelte"));
+    renameSync(join(routesRoot, "(admin)/admin"), join(routesRoot, "(app)/admin"));
+    rmSync(join(routesRoot, "(admin)/+layout.server.ts"));
+    rmSync(join(routesRoot, "(admin)"), { recursive: true });
+    renameSync(
+      join(componentsRoot, "admin-sidebar.svelte"),
+      join(componentsRoot, "app-sidebar.svelte"),
+    );
+
+    const legacyLayoutPath = join(routesRoot, "(app)/+layout.svelte");
+    writeFileSync(
+      legacyLayoutPath,
+      readFileSync(legacyLayoutPath, "utf8")
+        .replaceAll("AdminSidebar", "AppSidebar")
+        .replace("admin-sidebar.svelte", "app-sidebar.svelte"),
+    );
+
+    const manifestPath = join(moduleRoot, "module.manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+      manifestVersion?: number;
+      managedOverrides: string[];
+      migrations?: unknown[];
+    };
+    manifest.manifestVersion = 1;
+    delete manifest.migrations;
+    manifest.managedOverrides = manifest.managedOverrides
+      .filter((path) => path !== "apps/web/src/routes/(admin)/+layout.server.ts")
+      .map((path) => path.replace("routes/(admin)/admin/", "routes/(app)/admin/"));
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    return templates;
+  }
+
+  function legacyAdminProject(): string {
+    const templates = legacyAdminTemplatesCopy();
+    const project = join(tmp(), "legacy-admin-app");
+    create({
+      name: "legacy-admin-app",
+      template: "fullstack-nest-svelte",
+      templatesDir: templates,
+      targetDir: project,
+    });
+    addModule({
+      projectRoot: project,
+      module: "admin-dashboard",
+      modulesDir: join(templates, "modules"),
+    });
+    return project;
+  }
+
+  it("moves the admin shell while preserving the product route group", () => {
+    const project = legacyAdminProject();
+    const oldAdminRoot = join(project, "apps/web/src/routes/(app)/admin");
+    const oldLayout = join(project, "apps/web/src/routes/(app)/+layout.svelte");
+    mkdirSync(join(oldAdminRoot, "reports"), { recursive: true });
+    writeFileSync(join(oldAdminRoot, "reports/+page.svelte"), "<h1>Custom admin report</h1>\n");
+    mkdirSync(join(project, "apps/web/src/routes/(app)/dashboard"), { recursive: true });
+    writeFileSync(
+      join(project, "apps/web/src/routes/(app)/dashboard/+page.svelte"),
+      "<h1>Product dashboard</h1>\n",
+    );
+    writeFileSync(oldLayout, `${readFileSync(oldLayout, "utf8")}\n<!-- local shell edit -->\n`);
+
+    const plan = planUpdate(project, REPO_TEMPLATES);
+    expect(
+      plan.changes.find(
+        (change) =>
+          change.fromPath === "apps/web/src/routes/(app)/admin/reports/+page.svelte",
+      ),
+    ).toMatchObject({
+      action: "move",
+      path: "apps/web/src/routes/(admin)/admin/reports/+page.svelte",
+    });
+    expect(
+      plan.changes.some(
+        (change) => change.fromPath === "apps/web/src/routes/(app)/dashboard/+page.svelte",
+      ),
+    ).toBe(false);
+
+    const result = applyUpdate(project, REPO_TEMPLATES);
+    expect(result.conflicts).toEqual([]);
+    expect(result.moved).toContainEqual({
+      from: "apps/web/src/routes/(app)/admin/reports/+page.svelte",
+      to: "apps/web/src/routes/(admin)/admin/reports/+page.svelte",
+    });
+    expect(existsSync(join(project, "apps/web/src/routes/(app)/+layout.server.ts"))).toBe(true);
+    expect(existsSync(join(project, "apps/web/src/routes/(app)/+layout.svelte"))).toBe(false);
+    expect(existsSync(join(project, "apps/web/src/routes/(app)/accept-invitation"))).toBe(true);
+    expect(existsSync(join(project, "apps/web/src/routes/(app)/dashboard/+page.svelte"))).toBe(true);
+    expect(
+      readFileSync(join(project, "apps/web/src/routes/(admin)/+layout.svelte"), "utf8"),
+    ).toContain("local shell edit");
+    expect(
+      readFileSync(join(project, "apps/web/src/routes/(admin)/+layout.svelte"), "utf8"),
+    ).toContain('AdminSidebar from "$lib/components/admin-sidebar.svelte"');
+    expect(
+      readFileSync(
+        join(project, "apps/web/src/routes/(admin)/admin/reports/+page.svelte"),
+        "utf8",
+      ),
+    ).toContain("Custom admin report");
+    expect(existsSync(join(project, "apps/web/src/lib/components/admin-sidebar.svelte"))).toBe(
+      true,
+    );
+    expect(existsSync(join(project, "apps/web/src/lib/components/app-sidebar.svelte"))).toBe(
+      false,
+    );
+
+    const manifest = JSON.parse(
+      readFileSync(join(project, ".podokit/manifest.json"), "utf8"),
+    ) as {
+      schemaVersion: number;
+      modules: { name: string; appliedMigrations?: string[] }[];
+      managedOverrides: string[];
+    };
+    expect(manifest.schemaVersion).toBe(2);
+    expect(readFilesLock(project)?.schemaVersion).toBe(2);
+    expect(
+      manifest.modules.find((module) => module.name === "admin-dashboard")
+        ?.appliedMigrations,
+    ).toContain("admin-route-group");
+    expect(manifest.managedOverrides).toContain(
+      "apps/web/src/routes/(admin)/admin/users/+page.server.ts",
+    );
+    expect(manifest.managedOverrides).not.toContain(
+      "apps/web/src/routes/(app)/admin/users/+page.server.ts",
+    );
+    expect(summarize(planUpdate(project, REPO_TEMPLATES)).move).toBe(0);
+  });
+
+  it("aborts the admin route migration when a destination exists", () => {
+    const project = legacyAdminProject();
+    const collision = join(project, "apps/web/src/routes/(admin)/admin/users/+page.svelte");
+    mkdirSync(join(collision, ".."), { recursive: true });
+    writeFileSync(collision, "<h1>Existing destination</h1>\n");
+
+    const plan = planUpdate(project, REPO_TEMPLATES);
+    expect(plan.changes.some((change) => change.action === "conflict")).toBe(true);
+    expect(() => applyUpdate(project, REPO_TEMPLATES)).toThrow(
+      /destination already exists/,
+    );
+    expect(
+      existsSync(join(project, "apps/web/src/routes/(app)/admin/users/+page.svelte")),
+    ).toBe(true);
+    expect(readFileSync(collision, "utf8")).toContain("Existing destination");
+  });
+
+  it("requires external modules to adopt a migrated route prefix first", () => {
+    const project = legacyAdminProject();
+    const packageRoot = join(
+      project,
+      "node_modules/@podosoft/podokit-module-legacy-admin",
+    );
+    const oldExtension = "apps/web/src/routes/(app)/admin/extension/+page.svelte";
+    mkdirSync(join(packageRoot, "files", oldExtension, ".."), { recursive: true });
+    writeFileSync(
+      join(packageRoot, "package.json"),
+      JSON.stringify({
+        name: "@podosoft/podokit-module-legacy-admin",
+        version: "0.1.0",
+      }),
+    );
+    writeFileSync(
+      join(packageRoot, "module.manifest.json"),
+      JSON.stringify({
+        manifestVersion: 1,
+        name: "legacy-admin",
+        description: "Legacy admin extension",
+        targetApp: "web",
+      }),
+    );
+    writeFileSync(join(packageRoot, "files", oldExtension), "<h1>Extension</h1>\n");
+    addModule({
+      projectRoot: project,
+      module: "@podosoft/podokit-module-legacy-admin",
+      modulesDir: join(REPO_TEMPLATES, "modules"),
+    });
+
+    const blocked = planUpdate(project, REPO_TEMPLATES);
+    expect(
+      blocked.changes.find(
+        (change) =>
+          change.action === "conflict" &&
+          change.note.includes("upgrade external modules before updating"),
+      ),
+    ).toBeDefined();
+    expect(() => applyUpdate(project, REPO_TEMPLATES)).toThrow(
+      /upgrade external modules before updating/,
+    );
+    expect(existsSync(join(project, oldExtension))).toBe(true);
+
+    const newExtension = oldExtension.replace(
+      "routes/(app)/admin/",
+      "routes/(admin)/admin/",
+    );
+    mkdirSync(join(packageRoot, "files", newExtension, ".."), { recursive: true });
+    renameSync(
+      join(packageRoot, "files", oldExtension),
+      join(packageRoot, "files", newExtension),
+    );
+    rmSync(join(packageRoot, "files/apps/web/src/routes/(app)"), {
+      recursive: true,
+    });
+
+    const result = applyUpdate(project, REPO_TEMPLATES);
+    expect(result.moved).toContainEqual({
+      from: oldExtension,
+      to: newExtension,
+    });
+    expect(existsSync(join(project, newExtension))).toBe(true);
+    expect(existsSync(join(project, oldExtension))).toBe(false);
+  });
+
   it("promotes newly declared module-owned paths during update", () => {
     const oldTemplates = oldTemplatesCopy();
     const newTemplates = oldTemplatesCopy();
@@ -296,7 +526,7 @@ describe("applyUpdate", () => {
 
     const oldUsersLoaderPath = join(
       oldTemplates,
-      "modules/admin-dashboard/files/apps/web/src/routes/(app)/admin/users/+page.server.ts",
+      "modules/admin-dashboard/files/apps/web/src/routes/(admin)/admin/users/+page.server.ts",
     );
     writeFileSync(
       oldUsersLoaderPath,
@@ -319,7 +549,7 @@ describe("applyUpdate", () => {
       modulesDir: join(oldTemplates, "modules"),
     });
 
-    const usersLoader = "apps/web/src/routes/(app)/admin/users/+page.server.ts";
+    const usersLoader = "apps/web/src/routes/(admin)/admin/users/+page.server.ts";
     expect(readFilesLock(project)?.files[usersLoader]?.tier).toBe("owned");
     expect(readFilesLock(project)?.files["apps/web/src/routes/+layout.server.ts"]?.tier).toBe(
       "owned",
@@ -361,7 +591,7 @@ describe("applyUpdate", () => {
     delete oldManifest.managedOverrides;
     writeFileSync(oldManifestPath, `${JSON.stringify(oldManifest, null, 2)}\n`);
 
-    const usersLoader = "apps/web/src/routes/(app)/admin/users/+page.server.ts";
+    const usersLoader = "apps/web/src/routes/(admin)/admin/users/+page.server.ts";
     const oldUsersLoaderPath = join(oldTemplates, "modules/admin-dashboard/files", usersLoader);
     writeFileSync(
       oldUsersLoaderPath,

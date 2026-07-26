@@ -458,6 +458,14 @@ from an email listed in `ADMIN_EMAILS`, or verifies the same account safely when
 rerun. All API access goes through the typed ApiClient; routes are guarded
 server-side.
 
+The generated `routes/(admin)` group and
+`$lib/components/admin-sidebar.svelte` form the admin-only console shell for
+`/admin/*`; its parent loader rejects non-admin users. The separate
+`routes/(app)` group keeps the shared backend and two-factor checks but adds no
+visual shell, so applications can place signed-in product pages there. A
+different protected group must call
+`requireBackendAvailable(locals)` before authentication redirects.
+
 ```bash
 npx @podosoft/podokit add admin-dashboard   # also adds auth
 npm install
@@ -718,7 +726,9 @@ Add your own org fields/roles the same way: extend `additionalFields` and the
 This keeps the core lean and lets modules — including third-party ones — ship and
 version independently. A package module is just a `module.manifest.json` (with a
 `manifestVersion`) plus a `files/` overlay, resolved and applied exactly like a
-bundled one; the CLI rejects a manifest that needs a newer PodoKit. A module's
+bundled one; the CLI rejects a manifest that needs a newer PodoKit. Manifest v2
+can also declare idempotent path `migrations` for file or directory moves and
+verified text replacements. A module's
 legacy `dependencies`, `devDependencies`, and `scripts` fields apply to its
 `targetApp`. Modules spanning several workspace apps can add the same sections
 under `packageOverlays.<app>`; `podo add`, `update`, and `remove` apply them
@@ -732,7 +742,7 @@ and **settings tab** by injecting into the registry
 `apps/web/src/lib/admin/registry.svelte.ts` at its `// podokit:begin/end:admin-nav`
 and `:admin-settings` markers. The sidebar and the settings page render from these
 arrays, so the admin menu grows and shrinks with the installed module set — no
-edits to `app-sidebar.svelte` or the settings page. A nav entry is
+edits to `admin-sidebar.svelte` or the settings page. A nav entry is
 `{ href, key, icon, adminOnly? }` (with `key` an i18n `nav` key the module also
 adds); a settings tab is `{ value, label, component }`.
 

@@ -6,7 +6,7 @@ import type { Messages } from "$lib/i18n/messages";
 
 // Module-driven admin menu registry. Modules append their sidebar nav entries and
 // settings tabs at the markers below via `podo add` injection, so the admin menu
-// grows and shrinks with the installed module set — no edits to app-sidebar or
+// grows and shrinks with the installed module set — no edits to admin-sidebar or
 // the settings page. Empty until a module registers.
 
 /** A sidebar nav entry contributed by a module: a link, a label resolved from the

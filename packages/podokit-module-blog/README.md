@@ -34,6 +34,11 @@ also adds `routes/blog/+layout.svelte`, which renders the shared `AccountMenu` i
 the top-right corner. Existing customized blog layouts should place the same
 managed component in their site header instead of duplicating its menu logic.
 
+The admin wrapper lives under `routes/(admin)/admin/blog`. When upgrading
+alongside the admin-dashboard route-group migration, update this package before
+running `podo update`; the CLI then moves the owned wrapper with the rest of the
+admin route tree without overwriting local changes.
+
 Posts start as drafts for every authenticated author. The **Show post** switch
 includes a post in public lists and detail pages; turning it off hides the post
 without changing its first publication time or list position. Authors can find
