@@ -1,14 +1,34 @@
 <script lang="ts" module>
+  import { cn } from "$lib/utils";
+
+  export type DataTableBreakpoint = "sm" | "md" | "lg" | "xl";
   export type DataTableColumn<Row> = {
     key: string;
     label: string;
     sortable?: boolean;
     class?: string;
+    hideBelow?: DataTableBreakpoint;
     // Value used for client-side sorting (defaults to row[key]). Use for nested
     // or derived fields, e.g. (s) => s.user.email.
     value?: (row: Row) => string | number | boolean | Date | null | undefined;
   };
   export type SortState = { key: string; dir: "asc" | "desc" };
+  export type DataTableRowContext = {
+    cellClass: (columnKey: string) => string | undefined;
+  };
+
+  const HIDE_BELOW_CLASS: Record<DataTableBreakpoint, string> = {
+    sm: "max-sm:hidden",
+    md: "max-md:hidden",
+    lg: "max-lg:hidden",
+    xl: "max-xl:hidden",
+  };
+
+  export function getDataTableColumnClass<Row>(
+    column: DataTableColumn<Row>,
+  ): string | undefined {
+    return cn(column.class, column.hideBelow ? HIDE_BELOW_CLASS[column.hideBelow] : undefined);
+  }
 
   // Shared page size for all admin tables — sized so a desktop viewport shows a
   // full list at a glance (rather than the old 5-row pages). Change it here to
@@ -33,9 +53,10 @@
   type Props = {
     columns: DataTableColumn<Row>[];
     rows: Row[];
-    row: Snippet<[Row]>; // renders the <Table.Cell>s for one row
+    row: Snippet<[Row, DataTableRowContext]>; // renders the <Table.Cell>s for one row
     getKey?: (row: Row, index: number) => string | number;
     empty?: string;
+    ariaLabel?: string;
     sort?: SortState | null;
     manualSort?: boolean;
     page?: number;
@@ -51,6 +72,7 @@
     row,
     getKey = (_r, i) => i,
     empty = "No data.",
+    ariaLabel,
     sort = $bindable(null),
     manualSort = false,
     page = $bindable(1),
@@ -70,6 +92,13 @@
     if (!manualPagination) page = 1;
     onChange?.({ sort, page });
   }
+
+  function cellClass(columnKey: string): string | undefined {
+    const column = columns.find((candidate) => candidate.key === columnKey);
+    return column ? getDataTableColumnClass(column) : undefined;
+  }
+
+  const rowContext: DataTableRowContext = { cellClass };
 
   function cmp(a: unknown, b: unknown): number {
     if (a == null && b == null) return 0;
@@ -95,12 +124,12 @@
 </script>
 
 <div class="rounded-md border">
-  <Table.Root>
+  <Table.Root aria-label={ariaLabel}>
     <Table.Header>
       <Table.Row>
         {#each columns as col (col.key)}
           <Table.Head
-            class={col.class}
+            class={getDataTableColumnClass(col)}
             aria-sort={sort?.key === col.key ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
           >
             {#if col.sortable}
@@ -121,7 +150,7 @@
     </Table.Header>
     <Table.Body>
       {#each view as r, i (getKey(r, i))}
-        <Table.Row>{@render row(r)}</Table.Row>
+        <Table.Row>{@render row(r, rowContext)}</Table.Row>
       {:else}
         <Table.Row>
           <Table.Cell colspan={columns.length} class="text-muted-foreground py-8 text-center">{empty}</Table.Cell>

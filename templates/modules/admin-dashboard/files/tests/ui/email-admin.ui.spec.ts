@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../helpers/disposable-users";
 import { ready } from "../helpers/hydration";
 import { clearMailpit, mailpitReachable, waitForLink } from "../helpers/mailpit";
 
@@ -17,14 +17,11 @@ test("verification badges stay hidden when the feature is off", async ({ page })
 });
 
 // Admin can trigger a password-reset email for a user (not verification-gated).
-test("admin sends a password reset email to a user", async ({ page }) => {
+test("admin sends a password reset email to a user", async ({ page, disposableUsers }) => {
   test.skip(!(await mailpitReachable()), "Mailpit not available");
   await ready(page, "/admin/users");
   const email = `admin-reset-${Date.now()}@example.com`;
-  await page.request.post("/api/auth/admin/create-user", {
-    headers: { origin: base },
-    data: { email, password: "Podokit3e-Str0ng!pw", name: "AR", role: "user" },
-  });
+  await disposableUsers.create({ email, name: "AR" });
   await clearMailpit();
   await page.locator("#toolbar-search").fill(email);
   await page.getByRole("button", { name: "Search", exact: true }).click();

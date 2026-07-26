@@ -511,6 +511,10 @@ domain are specific to each application.
 Use the managed `$lib/components/account-menu.svelte` in a public header to show
 a sign-in action to guests and an avatar menu to signed-in users. The avatar menu
 links to `/account` and adds the admin dashboard entry only for administrators.
+For a product-shell footer outside `Sidebar.Provider`, use
+`<AccountMenu {user} variant="identity" side="top" />` to show the avatar, name,
+and email with the same account and sign-out actions. The managed
+`sidebar-user-menu.svelte` remains specific to the collapsible admin sidebar.
 The module injects this menu into the starter landing page. The default blog
 route layout also renders it, so signed-in identity and account actions remain
 available outside the admin shell.

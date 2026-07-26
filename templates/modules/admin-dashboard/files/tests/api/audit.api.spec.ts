@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../helpers/disposable-users";
 import { ADMIN, USER } from "../helpers/accounts";
 
 const base = process.env.E2E_BASE_URL ?? "http://localhost:5001";
@@ -13,7 +13,7 @@ async function signedIn(
   return ctx;
 }
 
-test("audit log records auth/admin actions", async ({ playwright }) => {
+test("audit log records auth/admin actions", async ({ playwright, disposableUsers }) => {
   const admin = await signedIn(playwright, ADMIN);
   const probe = await admin.get("/api/audit-logs");
   test.skip(probe.status() === 404, "audit-log module not installed");
@@ -24,7 +24,7 @@ test("audit log records auth/admin actions", async ({ playwright }) => {
     data: { email, password: "Podokit3e-Str0ng!pw", name: "Audit", role: "user" },
   });
   expect(created.ok()).toBeTruthy();
-  const userId = (await created.json())?.user?.id as string;
+  const userId = await disposableUsers.trackResponse(created);
 
   const res = await admin.get("/api/audit-logs");
   expect(res.ok()).toBeTruthy();
@@ -34,6 +34,7 @@ test("audit log records auth/admin actions", async ({ playwright }) => {
   expect(entry?.actorEmail, "audit entry records the acting admin").toBe(ADMIN.email);
 
   await admin.post("/api/auth/admin/remove-user", { data: { userId } });
+  disposableUsers.forget(userId);
   await admin.dispose();
 });
 
@@ -47,11 +48,14 @@ test("the audit log is admin-only", async ({ playwright }) => {
   await user.dispose();
 });
 
-test("sending a verification email is audited", async ({ playwright }) => {
+test("sending a verification email is audited", async ({ playwright, disposableUsers }) => {
   const admin = await signedIn(playwright, ADMIN);
   test.skip((await admin.get("/api/audit-logs")).status() === 404, "audit-log module not installed");
   const email = `verif-audit-${Date.now()}@example.com`;
-  await admin.post("/api/auth/admin/create-user", { data: { email, password: "Podokit3e-Str0ng!pw", name: "VA", role: "user" } });
+  const created = await admin.post("/api/auth/admin/create-user", {
+    data: { email, password: "Podokit3e-Str0ng!pw", name: "VA", role: "user" },
+  });
+  await disposableUsers.trackResponse(created);
   await admin.post("/api/auth/send-verification-email", { data: { email, callbackURL: `${base}/admin` } });
   const entries = (await (await admin.get("/api/audit-logs")).json()) as Array<{ action: string; targetLabel: string | null }>;
   expect(entries.some((e) => e.action === "auth.verification_sent"), "verification send should be audited").toBeTruthy();
@@ -60,7 +64,7 @@ test("sending a verification email is audited", async ({ playwright }) => {
 
 // Audit logging is a DB-backed on/off toggle (auth_config `server`, applied live).
 // Runs after the recording tests and restores the flag so nothing else is affected.
-test("audit logging honours the DB on/off toggle @smoke", async ({ playwright }) => {
+test("audit logging honours the DB on/off toggle @smoke", async ({ playwright, disposableUsers }) => {
   const admin = await signedIn(playwright, ADMIN);
   test.skip((await admin.get("/api/audit-logs")).status() === 404, "audit-log module not installed");
   const auditLog = async () => (await (await admin.get("/api/account/capabilities")).json()).auditLog as boolean;
@@ -68,8 +72,12 @@ test("audit logging honours the DB on/off toggle @smoke", async ({ playwright })
     ((await (await admin.get("/api/audit-logs")).json()) as Array<{ action: string; targetLabel: string | null }>).some(
       (e) => e.action === "user.create" && e.targetLabel === label,
     );
-  const createUser = async (email: string) =>
-    (await (await admin.post("/api/auth/admin/create-user", { data: { email, password: "Podokit3e-Str0ng!pw", name: "T", role: "user" } })).json())?.user?.id as string;
+  const createUser = async (email: string): Promise<string> => {
+    const response = await admin.post("/api/auth/admin/create-user", {
+      data: { email, password: "Podokit3e-Str0ng!pw", name: "T", role: "user" },
+    });
+    return disposableUsers.trackResponse(response);
+  };
 
   try {
     // OFF → the action is not recorded. Wait past the config-store cache TTL so the
@@ -81,6 +89,7 @@ test("audit logging honours the DB on/off toggle @smoke", async ({ playwright })
     const offId = await createUser(offEmail);
     expect(await recorded(offEmail), "no audit entry while disabled").toBe(false);
     await admin.post("/api/auth/admin/remove-user", { data: { userId: offId } });
+    disposableUsers.forget(offId);
 
     // ON → recording resumes.
     await admin.put("/api/account/auth-config", { data: { server: { auditLog: true } } });
@@ -90,6 +99,7 @@ test("audit logging honours the DB on/off toggle @smoke", async ({ playwright })
     const onId = await createUser(onEmail);
     expect(await recorded(onEmail), "audit entry recorded once re-enabled").toBe(true);
     await admin.post("/api/auth/admin/remove-user", { data: { userId: onId } });
+    disposableUsers.forget(onId);
   } finally {
     await admin.put("/api/account/auth-config", { data: { server: { auditLog: true } } });
     await admin.dispose();

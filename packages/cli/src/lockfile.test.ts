@@ -65,6 +65,15 @@ describe("classifyTier", () => {
       ".claude/skills/podokit-configure-auth/**",
     ])).toBe("owned");
   });
+  it("keeps optional Playwright project extensions application-owned", () => {
+    expect(
+      classifyTier(
+        "tests/playwright.projects.cjs",
+        "module.exports = [];",
+        DEFAULT_OWNED_GLOBS,
+      ),
+    ).toBe("owned");
+  });
 });
 
 describe("walkFiles", () => {

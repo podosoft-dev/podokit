@@ -101,6 +101,9 @@ podo update --apply  # apply it: clean updates are written, your edits are 3-way
 
 Files you own (routes, your components, shadcn UI) are never touched. See the
 [updating guide](https://github.com/podosoft-dev/podokit/blob/main/docs/updating.md).
+An exact path handed over with `podo eject` remains owned even if a module also
+declares it managed; if you later move or delete that file, update reports the
+missing owned path instead of recreating it.
 
 ## What you get (`fullstack-nest-svelte`)
 

@@ -499,6 +499,37 @@ describe("addModule (auth / better-auth)", () => {
     expect(landingPage).toContain("<LanguageSwitch />");
     expect(landingPage).toContain("<ThemeToggle />");
     expect(landingPage).toContain("<AccountMenu user={page.data.user ?? null} />");
+    const accountMenu = readFileSync(
+      join(project, "apps/web/src/lib/components/account-menu.svelte"),
+      "utf8",
+    );
+    expect(accountMenu).toContain('variant?: "avatar" | "identity"');
+    expect(accountMenu).toContain('variant === "identity"');
+    expect(accountMenu).not.toContain('from "$lib/components/ui/sidebar"');
+    const playwrightConfig = readFileSync(join(project, "tests/playwright.config.ts"), "utf8");
+    expect(playwrightConfig).toContain("loadPlaywrightProjects(coreProjects)");
+    expect(playwrightConfig).toContain('teardown: "cleanup"');
+    const seedSetup = readFileSync(join(project, "tests/seed.setup.ts"), "utf8");
+    expect(seedSetup).toContain('name: "locale"');
+    expect(seedSetup).toContain('value: "en"');
+    expect(seedSetup).toContain("mkdirSync(dirname(adminState), { recursive: true })");
+    const disposableUsers = readFileSync(
+      join(project, "tests/helpers/disposable-users.ts"),
+      "utf8",
+    );
+    expect(disposableUsers).toContain("async ({ context }, use)");
+    expect(disposableUsers).toContain("const request = context.request");
+    expect(disposableUsers).toContain("headers: origin");
+    expect(disposableUsers).not.toContain("signInAdmin");
+    const usersCrudSpec = readFileSync(
+      join(project, "tests/ui/users-crud.ui.spec.ts"),
+      "utf8",
+    );
+    expect(usersCrudSpec).toContain(
+      'getByRole("navigation", { name: "pagination" }).first()',
+    );
+    const seedTeardown = readFileSync(join(project, "tests/seed.teardown.ts"), "utf8");
+    expect(seedTeardown).toContain("if (!existsSync(userBaselineState)) return");
     expect(readFileSync(join(project, "apps/web/src/lib/components/site-runtime.svelte"), "utf8")).toContain("applyTheme");
     const hooks = readFileSync(join(project, "apps/web/src/hooks.server.ts"), "utf8");
     expect(hooks).toContain("event.route.id === null");

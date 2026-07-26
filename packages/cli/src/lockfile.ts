@@ -121,6 +121,8 @@ export const DEFAULT_OWNED_GLOBS = [
   ".env.docker",
   "infra/traefik/**",
   ".podokit/dev.json",
+  // Optional application-owned Playwright device/browser projects.
+  "tests/playwright.projects.cjs",
 ];
 
 const TEXT_EXT = /\.(json|md|ts|tsx|js|mjs|cjs|css|html|yml|yaml|txt|env|svelte|gitignore|example)$/i;

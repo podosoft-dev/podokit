@@ -7,12 +7,30 @@
   import LayoutDashboardIcon from "@lucide/svelte/icons/layout-dashboard";
   import LogOutIcon from "@lucide/svelte/icons/log-out";
   import UserIcon from "@lucide/svelte/icons/user";
+  import ChevronsUpDownIcon from "@lucide/svelte/icons/chevrons-up-down";
   import { api } from "$lib/api";
   import { getI18n } from "$lib/i18n";
+  import { cn } from "$lib/utils";
   import type { SessionUser } from "../../app.d.ts";
   import UserAvatar from "./user-avatar.svelte";
 
-  let { user }: { user: SessionUser | null } = $props();
+  type MenuSide = "top" | "right" | "bottom" | "left";
+  type MenuAlign = "start" | "center" | "end";
+  type Props = {
+    user: SessionUser | null;
+    variant?: "avatar" | "identity";
+    side?: MenuSide;
+    align?: MenuAlign;
+    class?: string;
+  };
+
+  let {
+    user,
+    variant = "avatar",
+    side = "bottom",
+    align = "end",
+    class: className,
+  }: Props = $props();
   const i18n = getI18n();
   const loginHref = $derived(withAuthRedirect("/login", currentPath(page.url)));
 
@@ -27,12 +45,25 @@
   <DropdownMenu.Root>
     <DropdownMenu.Trigger
       data-testid="account-menu"
-      class="hover:bg-muted focus-visible:border-ring focus-visible:ring-ring/50 inline-flex size-8 items-center justify-center rounded-full outline-none focus-visible:ring-3"
+      class={cn(
+        "hover:bg-muted focus-visible:border-ring focus-visible:ring-ring/50 outline-none focus-visible:ring-3",
+        variant === "avatar"
+          ? "inline-flex size-8 items-center justify-center rounded-full"
+          : "flex w-full items-center gap-2 rounded-md p-2 text-left",
+        className,
+      )}
       aria-label={i18n.t.nav.account}
     >
       <UserAvatar {user} class="size-8" />
+      {#if variant === "identity"}
+        <div class="min-w-0 flex-1 text-sm leading-tight">
+          <span class="block truncate font-medium">{user.name}</span>
+          <span class="text-muted-foreground block truncate text-xs">{user.email}</span>
+        </div>
+        <ChevronsUpDownIcon class="size-4 shrink-0" />
+      {/if}
     </DropdownMenu.Trigger>
-    <DropdownMenu.Content align="end" class="w-56">
+    <DropdownMenu.Content {align} {side} class="w-56">
       <DropdownMenu.Label>
         <span class="block truncate font-medium">{user.name}</span>
         <span class="text-muted-foreground block truncate text-xs font-normal">{user.email}</span>
@@ -47,5 +78,5 @@
     </DropdownMenu.Content>
   </DropdownMenu.Root>
 {:else}
-  <Button data-testid="sign-in-link" href={loginHref} variant="ghost">{i18n.t.auth.signIn}</Button>
+  <Button data-testid="sign-in-link" href={loginHref} variant="ghost" class={className}>{i18n.t.auth.signIn}</Button>
 {/if}

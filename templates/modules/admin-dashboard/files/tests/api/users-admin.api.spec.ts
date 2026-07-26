@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../helpers/disposable-users";
 import { ADMIN, USER } from "../helpers/accounts";
 
 const base = process.env.E2E_BASE_URL ?? "http://localhost:5001";
@@ -13,7 +13,7 @@ async function signedIn(
   return ctx;
 }
 
-test("admin can create a user, set its password, and remove it", async ({ playwright }) => {
+test("admin can create a user, set its password, and remove it", async ({ playwright, disposableUsers }) => {
   const admin = await signedIn(playwright, ADMIN);
   const email = `api-crud-${Date.now()}@example.com`;
 
@@ -21,7 +21,7 @@ test("admin can create a user, set its password, and remove it", async ({ playwr
     data: { email, password: "Podokit3e-Str0ng!pw", name: "API CRUD", role: "user" },
   });
   expect(created.ok()).toBeTruthy();
-  const id = (await created.json())?.user?.id as string;
+  const id = await disposableUsers.trackResponse(created);
   expect(id).toBeTruthy();
 
   const setPw = await admin.post("/api/auth/admin/set-user-password", {
@@ -37,6 +37,7 @@ test("admin can create a user, set its password, and remove it", async ({ playwr
 
   const removed = await admin.post("/api/auth/admin/remove-user", { data: { userId: id } });
   expect(removed.ok()).toBeTruthy();
+  disposableUsers.forget(id);
   await admin.dispose();
 });
 
@@ -49,13 +50,13 @@ test("a normal user cannot create users (403)", async ({ playwright }) => {
   await user.dispose();
 });
 
-test("admin can list and revoke a user's sessions", async ({ playwright }) => {
+test("admin can list and revoke a user's sessions", async ({ playwright, disposableUsers }) => {
   const admin = await signedIn(playwright, ADMIN);
   const email = `api-sess-${Date.now()}@example.com`;
   const created = await admin.post("/api/auth/admin/create-user", {
     data: { email, password: "Podokit3e-Str0ng!pw", name: "API Sess", role: "user" },
   });
-  const userId = (await created.json())?.user?.id as string;
+  const userId = await disposableUsers.trackResponse(created);
 
   // the user signs in -> creates a session
   const theirs = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
@@ -69,14 +70,18 @@ test("admin can list and revoke a user's sessions", async ({ playwright }) => {
   const revoked = await admin.post("/api/auth/admin/revoke-user-sessions", { data: { userId } });
   expect(revoked.ok()).toBeTruthy();
   await admin.post("/api/auth/admin/remove-user", { data: { userId } });
+  disposableUsers.forget(userId);
   await admin.dispose();
 });
 
-test("revokeOtherSessions keeps the current session valid", async ({ playwright }) => {
+test("revokeOtherSessions keeps the current session valid", async ({ playwright, disposableUsers }) => {
   // Use a throwaway account so we don't revoke the shared USER's ui storageState.
   const admin = await signedIn(playwright, ADMIN);
   const email = `api-revoke-others-${Date.now()}@example.com`;
-  await admin.post("/api/auth/admin/create-user", { data: { email, password: "Podokit3e-Str0ng!pw", name: "RO", role: "user" } });
+  const created = await admin.post("/api/auth/admin/create-user", {
+    data: { email, password: "Podokit3e-Str0ng!pw", name: "RO", role: "user" },
+  });
+  await disposableUsers.trackResponse(created);
   await admin.dispose();
 
   const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
@@ -109,13 +114,13 @@ test("account capabilities reports optional-feature flags", async ({ playwright 
   await ctx.dispose();
 });
 
-test("admin can update a user and impersonate them", async ({ playwright }) => {
+test("admin can update a user and impersonate them", async ({ playwright, disposableUsers }) => {
   const admin = await signedIn(playwright, ADMIN);
   const email = `api-edit-${Date.now()}@example.com`;
   const created = await admin.post("/api/auth/admin/create-user", {
     data: { email, password: "Podokit3e-Str0ng!pw", name: "Edit Me", role: "user" },
   });
-  const userId = (await created.json())?.user?.id as string;
+  const userId = await disposableUsers.trackResponse(created);
 
   const updated = await admin.post("/api/auth/admin/update-user", { data: { userId, data: { name: "Updated" } } });
   expect(updated.ok()).toBeTruthy();
@@ -131,5 +136,6 @@ test("admin can update a user and impersonate them", async ({ playwright }) => {
   await imp.dispose();
 
   await admin.post("/api/auth/admin/remove-user", { data: { userId } });
+  disposableUsers.forget(userId);
   await admin.dispose();
 });

@@ -1,9 +1,9 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../helpers/disposable-users";
 import { ready } from "../helpers/hydration";
 
 const base = process.env.E2E_BASE_URL ?? "http://localhost:5001";
 
-test("admin can create a user with a custom role", async ({ page }) => {
+test("admin can create a user with a custom role", async ({ page, disposableUsers }) => {
   await ready(page, "/admin/users");
   await page.getByRole("button", { name: "Add user" }).click();
   const role = page.locator("#c-role");
@@ -16,7 +16,13 @@ test("admin can create a user with a custom role", async ({ page }) => {
   // pick the Moderator role from the select
   await role.click();
   await page.getByRole("option", { name: "Moderator" }).click();
+  const created = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/auth/admin/create-user") &&
+      response.request().method() === "POST",
+  );
   await page.getByRole("button", { name: "Create", exact: true }).click();
+  await disposableUsers.trackResponse(await created);
   await expect(page.getByText("User created")).toBeVisible();
   // it appears in the list, filterable by the Moderator role
   await page.locator("#toolbar-search").fill(email);
@@ -52,43 +58,27 @@ test("row menu exposes admin actions", async ({ page }) => {
   await expect(page.getByRole("menuitem", { name: "Impersonate" })).toBeVisible();
 });
 
-test("admin can approve a pending registration from the user list", async ({ page }) => {
+test("admin can approve a pending registration from the user list", async ({ page, disposableUsers }) => {
   const email = `pending-ui-${Date.now()}@example.com`;
-  const created = await page.request.post("/api/auth/admin/create-user", {
-    headers: { origin: base },
-    data: { email, password: "Podokit3e-Str0ng!pw", name: "Pending UI", role: "user" },
-  });
-  expect(created.ok()).toBeTruthy();
-  const userId = ((await created.json()).user?.id ?? "") as string;
+  const userId = await disposableUsers.create({ email, name: "Pending UI" });
+  expect(
+    (await page.request.post("/api/auth/admin/update-user", {
+      headers: { origin: base },
+      data: { userId, data: { signupApproved: false } },
+    })).ok(),
+  ).toBeTruthy();
 
-  try {
-    expect(userId).toBeTruthy();
-    expect(
-      (await page.request.post("/api/auth/admin/update-user", {
-        headers: { origin: base },
-        data: { userId, data: { signupApproved: false } },
-      })).ok(),
-    ).toBeTruthy();
-
-    await ready(page, "/admin/users");
-    await page.locator("#toolbar-search").fill(email);
-    await page.getByRole("button", { name: "Search", exact: true }).click();
-    const row = page.getByRole("row", { name: new RegExp(email) });
-    await expect(row.getByText("Pending approval")).toBeVisible();
-    await row.getByRole("button").click();
-    const response = page.waitForResponse(
-      (res) => res.url().endsWith("/api/auth/admin/update-user") && res.request().method() === "POST",
-    );
-    await page.getByRole("menuitem", { name: "Approve sign-up" }).click();
-    expect((await response).ok()).toBeTruthy();
-    await expect(page.getByText("Sign-up approved")).toBeVisible();
-    await expect(row.getByText("Active")).toBeVisible();
-  } finally {
-    if (userId) {
-      await page.request.post("/api/auth/admin/remove-user", {
-        headers: { origin: base },
-        data: { userId },
-      });
-    }
-  }
+  await ready(page, "/admin/users");
+  await page.locator("#toolbar-search").fill(email);
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  const row = page.getByRole("row", { name: new RegExp(email) });
+  await expect(row.getByText("Pending approval")).toBeVisible();
+  await row.getByRole("button").click();
+  const response = page.waitForResponse(
+    (res) => res.url().endsWith("/api/auth/admin/update-user") && res.request().method() === "POST",
+  );
+  await page.getByRole("menuitem", { name: "Approve sign-up" }).click();
+  expect((await response).ok()).toBeTruthy();
+  await expect(page.getByText("Sign-up approved")).toBeVisible();
+  await expect(row.getByText("Active")).toBeVisible();
 });
