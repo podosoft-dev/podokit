@@ -107,11 +107,13 @@ test("keeps the ready-PR smoke suite within its reviewed risk budget", () => {
     .join("\n");
   const smokeCount = source.match(/@smoke/g)?.length ?? 0;
 
-  assert.equal(smokeCount, 30);
+  assert.equal(smokeCount, 32);
   for (const requiredScenario of [
     "GET /health is public and ok @smoke",
     "two-factor: enable with a real TOTP code and require it at sign-in @smoke",
     "protected route redirects to login @smoke",
+    "protected app routes do not inherit the admin shell @smoke",
+    "admin route group is forbidden to non-admin users @smoke",
     "sidebar navigates to sessions and account @smoke",
     "inactive browser sessions are signed out automatically @smoke",
     "redis cache: set, get, and miss @smoke",

@@ -59,8 +59,25 @@ Starter root layouts render the managed
 behavior such as branding and runtime themes through that component without
 replacing application-owned route layouts or public pages.
 
-The dry-run prints a per-file plan (`update` / `add` / `remove` / `conflict`) so
-there are no surprises.
+The dry-run prints a per-file plan (`update` / `add` / `move` / `remove` /
+`conflict`) so there are no surprises.
+
+### Module path migrations
+
+Module manifests can declare one-time path migrations when a generated file or
+route group must be renamed. `podo update` expands directory moves in the
+dry-run, preserves locally edited bytes, applies only exact declared text
+replacements, and records the migration ID after a successful apply. It also
+updates matching lockfile paths, `managedOverrides`, and explicit `ownedGlobs`.
+
+The move preflight is atomic: if a destination already exists, a replacement
+does not match its declared count, or an installed external module still ships
+the legacy path, the migration stops before writing anything. Upgrade external
+module packages first, resolve the reported collision, and rerun the dry-run.
+
+The admin-dashboard migration moves its admin-only console shell and all
+`/admin/*` route files from `(app)` to `(admin)`, including application-owned admin pages.
+Non-admin product routes remain in `(app)` and no longer inherit admin chrome.
 
 ### Updating external package modules
 

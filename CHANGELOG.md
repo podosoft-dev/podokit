@@ -7,6 +7,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- **Admin-only route-group separation and safe module path migrations.**
+  `admin-dashboard` now reserves `(admin)` and `admin-sidebar.svelte` for the
+  admin-only `/admin/*` console while leaving the protected, shell-free `(app)`
+  group for product pages. Manifest v2 migrations let `podo update` move generated files
+  and whole route trees without dropping application-owned admin pages, with an
+  atomic collision preflight, exact text rewrites, lock/glob remapping, and
+  idempotent application records. The external blog module follows the new
+  admin route path, and generated agent plus MCP guidance explains the boundary.
 - **Shared portless development gateway.** `podo dev watch|exec|logs|ps|down|url`
   runs generated stacks behind one user-level, socket-free Traefik gateway on
   loopback port 80. Each project owns a stable `*.localhost` hostname through

@@ -7,7 +7,14 @@ export type { CreateOptions, CreateResult } from "./create";
 export { TEMPLATES, DEFAULT_TEMPLATE, TEMPLATE_NAMES, isKnownTemplate } from "./templates";
 export type { TemplateInfo } from "./templates";
 export { listModules, addModule } from "./add";
-export type { ModuleManifest, AddOptions, AddResult } from "./add";
+export type {
+  ModuleManifest,
+  ModuleMigration,
+  ModulePathMove,
+  ModuleTextReplacement,
+  AddOptions,
+  AddResult,
+} from "./add";
 export { status, diff, doctor, SUPPORTED_FRAMEWORKS } from "./inspect";
 export type { StatusReport, DoctorFinding } from "./inspect";
 export { planUpdate, summarize } from "./update";

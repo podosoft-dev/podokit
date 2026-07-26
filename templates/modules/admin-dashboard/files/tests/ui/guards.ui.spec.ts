@@ -23,13 +23,10 @@ test.describe("unauthenticated", () => {
 
 test.describe("normal user (non-admin)", () => {
   test.use({ storageState: userState });
-  test("admin-only nav is hidden and admin routes are forbidden", async ({ page }) => {
-    await page.goto("/admin");
-    await expect(page.getByRole("link", { name: "Users" })).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "Sessions" })).toHaveCount(0);
-    expect((await page.goto("/admin/users"))?.status()).toBe(403);
-    expect((await page.goto("/admin/sessions"))?.status()).toBe(403);
-    expect((await page.goto("/admin/settings"))?.status()).toBe(403);
+  test("admin route group is forbidden to non-admin users @smoke", async ({ page }) => {
+    for (const route of ["/admin", "/admin/users", "/admin/sessions", "/admin/settings"]) {
+      expect((await page.goto(route))?.status()).toBe(403);
+    }
   });
 
   test("account is available without the admin shell", async ({ page }) => {

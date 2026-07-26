@@ -145,6 +145,9 @@ using the public sign-up page. Its shared avatar menu is installed on the starte
 landing page and reused by the default blog layout. The separate `auth:configure` command automates
 applying provider/SMTP credentials. Both workflows keep passwords and provider
 secrets out of source files and logs; see [the module guide](docs/modules.md#admin-dashboard).
+The generated `(admin)` route group and `admin-sidebar.svelte` are reserved for
+the `/admin/*` console. Put signed-in product pages in the shell-free `(app)`
+group or in an application-owned protected layout.
 
 ![PodoKit admin dashboard — Settings, social login](docs/images/admin-settings-social.png)
 

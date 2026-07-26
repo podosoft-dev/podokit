@@ -19,6 +19,12 @@ import {
 } from "./lockfile";
 import { NotAProjectError } from "./inspect";
 import { readModuleManifest, resolveModule } from "./add";
+import {
+  applyModuleMigrations,
+  collectPendingMigrations,
+  migrateConfiguredPath,
+  planModuleMigrations,
+} from "./module-migrations";
 
 /**
  * `podo update` planner. For now it produces a dry-run plan only: it assembles
@@ -27,10 +33,20 @@ import { readModuleManifest, resolveModule } from "./add";
  * merging) is a later step (see ADR-0009).
  */
 
-export type Action = "update" | "merge" | "conflict" | "add" | "remove" | "skip" | "up-to-date";
+export type Action =
+  | "update"
+  | "merge"
+  | "conflict"
+  | "add"
+  | "move"
+  | "remove"
+  | "skip"
+  | "up-to-date";
 
 export interface FileChange {
   path: string;
+  /** Previous path when this change is an update migration move. */
+  fromPath?: string;
   tier: Tier;
   action: Action;
   /** Why the action was chosen (for the report). */
@@ -111,11 +127,39 @@ export function planUpdate(projectRoot: string, templatesDir: string): UpdatePla
     manifest.managedOverrides,
   );
   const ownedGlobs = targetOwnedGlobs(projectRoot, templatesDir, manifest.modules, manifest.ownedGlobs);
+  const pendingMigrations = collectPendingMigrations(
+    projectRoot,
+    templatesDir,
+    manifest.modules,
+  );
+  const migrationPlan = planModuleMigrations(
+    projectRoot,
+    newTree,
+    lock,
+    pendingMigrations,
+  );
 
-  const changes: FileChange[] = [];
+  const changes: FileChange[] = migrationPlan.moves.map((move) => ({
+    path: move.to,
+    fromPath: move.from,
+    tier: move.tier,
+    action: "move",
+    note: "module path migration",
+  }));
+  for (const conflict of migrationPlan.conflicts) {
+    changes.push({
+      path: "module migration",
+      tier: "managed",
+      action: "conflict",
+      note: conflict,
+    });
+  }
+  const movedSources = new Set(migrationPlan.moves.map((move) => move.from));
+  const movedTargets = new Set(migrationPlan.moves.map((move) => move.to));
   const paths = new Set<string>([...newTree.keys(), ...Object.keys(lock.files)]);
 
   for (const path of [...paths].sort()) {
+    if (movedSources.has(path) || movedTargets.has(path)) continue;
     const locked = lock.files[path];
     const newText = treeText(newTree, path);
     const disk = diskContent(projectRoot, path);
@@ -192,6 +236,8 @@ export interface ApplyOptions {
 
 export interface ApplyResult {
   written: string[];
+  /** Files relocated by module update migrations. */
+  moved: { from: string; to: string }[];
   removed: string[];
   /** Files 3-way merged cleanly. */
   merged: string[];
@@ -353,6 +399,28 @@ export function applyUpdate(
     manifest.managedOverrides,
   );
   const ownedGlobs = targetOwnedGlobs(projectRoot, templatesDir, modules, manifest.ownedGlobs);
+  const pendingMigrations = collectPendingMigrations(projectRoot, templatesDir, modules);
+  const migrationPlan = planModuleMigrations(
+    projectRoot,
+    newTree,
+    previousLock,
+    pendingMigrations,
+  );
+  if (migrationPlan.conflicts.length) {
+    throw new Error(
+      `Cannot apply module path migration:\n${migrationPlan.conflicts
+        .map((conflict) => `  - ${conflict}`)
+        .join("\n")}`,
+    );
+  }
+  const migratedOwnedGlobs = [
+    ...new Set(ownedGlobs.map((glob) => migrateConfiguredPath(glob, pendingMigrations))),
+  ];
+  const migratedManagedOverrides = [
+    ...new Set(
+      managedOverrides.map((glob) => migrateConfiguredPath(glob, pendingMigrations)),
+    ),
+  ];
   const needsMergeBase = plan.changes.some((change) => change.action === "conflict");
   let oldTree: VfsTree | null = null;
   if (options.oldTemplatesDir && needsMergeBase) {
@@ -375,7 +443,13 @@ export function applyUpdate(
     }
   }
 
-  const result: ApplyResult = { written: [], removed: [], merged: [], conflicts: [] };
+  const result: ApplyResult = {
+    written: [],
+    moved: applyModuleMigrations(projectRoot, migrationPlan),
+    removed: [],
+    merged: [],
+    conflicts: [],
+  };
 
   for (const change of plan.changes) {
     const newText = treeText(newTree, change.path);
@@ -409,25 +483,40 @@ export function applyUpdate(
       projectRoot,
       newTree,
       previousLock,
-      ownedGlobs,
-      managedOverrides,
+      migratedOwnedGlobs,
+      migratedManagedOverrides,
     ),
   );
   const modulesDir = join(templatesDir, "modules");
+  const appliedMigrations = new Map<string, string[]>();
+  for (const pending of pendingMigrations) {
+    const ids = appliedMigrations.get(pending.module) ?? [];
+    ids.push(pending.migration.id);
+    appliedMigrations.set(pending.module, ids);
+  }
   const refreshedModules = manifest.modules.map((module) => {
     const resolved = resolveModule(module.packageName ?? module.name, modulesDir, projectRoot);
-    return resolved?.packageName
-      ? {
-          ...module,
-          packageName: resolved.packageName,
-          moduleVersion: resolved.moduleVersion,
-        }
-      : module;
+    const applied = [
+      ...new Set([
+        ...(module.appliedMigrations ?? []),
+        ...(appliedMigrations.get(module.name) ?? []),
+      ]),
+    ];
+    return {
+      ...module,
+      ...(resolved?.packageName
+        ? {
+            packageName: resolved.packageName,
+            moduleVersion: resolved.moduleVersion,
+          }
+        : {}),
+      ...(applied.length ? { appliedMigrations: applied } : {}),
+    };
   });
   writeManifest(projectRoot, {
     ...manifest,
-    ownedGlobs,
-    managedOverrides,
+    ownedGlobs: migratedOwnedGlobs,
+    managedOverrides: migratedManagedOverrides,
     modules: refreshedModules,
     podokitVersion: podokitVersion(),
   });
@@ -441,6 +530,7 @@ export function summarize(plan: UpdatePlan): Record<Action, number> {
     merge: 0,
     conflict: 0,
     add: 0,
+    move: 0,
     remove: 0,
     skip: 0,
     "up-to-date": 0,

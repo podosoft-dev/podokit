@@ -482,8 +482,11 @@ describe("addModule (auth / better-auth)", () => {
     // web overlay
     expect(existsSync(join(project, "apps/web/src/hooks.server.ts"))).toBe(true);
     expect(existsSync(join(project, "apps/web/src/routes/(auth)/login/+page.svelte"))).toBe(true);
-    expect(existsSync(join(project, "apps/web/src/routes/(app)/+layout.svelte"))).toBe(true);
-    expect(existsSync(join(project, "apps/web/src/lib/components/app-sidebar.svelte"))).toBe(true);
+    expect(existsSync(join(project, "apps/web/src/routes/(admin)/+layout.svelte"))).toBe(true);
+    expect(existsSync(join(project, "apps/web/src/routes/(app)/+layout.server.ts"))).toBe(true);
+    expect(existsSync(join(project, "apps/web/src/routes/(app)/+layout.svelte"))).toBe(false);
+    expect(existsSync(join(project, "apps/web/src/lib/components/admin-sidebar.svelte"))).toBe(true);
+    expect(existsSync(join(project, "apps/web/src/lib/components/app-sidebar.svelte"))).toBe(false);
     expect(existsSync(join(project, "apps/web/src/lib/components/ui/sidebar/index.ts"))).toBe(true);
     // Public routes remain app-owned, while the managed runtime applies global
     // branding and theme settings through the starter layout's stable slot.
@@ -547,7 +550,7 @@ describe("addModule (auth / better-auth)", () => {
       ".claude/skills/podokit-configure-auth/**",
     );
     expect(readManifest(project)?.managedOverrides).toContain(
-      "apps/web/src/routes/(app)/admin/users/+page.server.ts",
+      "apps/web/src/routes/(admin)/admin/users/+page.server.ts",
     );
     expect(readManifest(project)?.managedOverrides).toContain(
       "apps/web/src/lib/components/ui/input/input.svelte",
@@ -559,7 +562,7 @@ describe("addModule (auth / better-auth)", () => {
     ).toBe("managed");
     expect(
       readFilesLock(project)?.files[
-        "apps/web/src/routes/(app)/admin/users/+page.server.ts"
+        "apps/web/src/routes/(admin)/admin/users/+page.server.ts"
       ]?.tier,
     ).toBe("managed");
     expect(
@@ -569,6 +572,13 @@ describe("addModule (auth / better-auth)", () => {
     ).toBe("managed");
     expect(readFilesLock(project)?.files["apps/web/src/routes/+layout.server.ts"]?.tier).toBe(
       "owned",
+    );
+    expect(
+      readManifest(project)?.modules.find((module) => module.name === "admin-dashboard")
+        ?.appliedMigrations,
+    ).toContain("admin-route-group");
+    expect(readFileSync(join(project, "AGENTS.md"), "utf8")).toContain(
+      "The `(admin)` route group and `admin-sidebar.svelte` are the admin-console shell",
     );
   });
 

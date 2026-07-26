@@ -66,6 +66,9 @@ describe("podokit-mcp server", () => {
     const r = (await client.callTool({ name: "list_modules", arguments: {} })) as TextResult;
     expect(r.content[0].text).toContain("auth:");
     expect(r.content[0].text).toContain("admin-dashboard:");
+    expect(r.content[0].text).toContain(
+      "the `(admin)` route group and `admin-sidebar.svelte` are reserved for `/admin/*`",
+    );
   });
 
   it("search_docs finds a matching section", async () => {

@@ -28,7 +28,34 @@ interface Injection {
 
 /** Highest `module.manifest.json` schema version this CLI understands. A package
  *  module declaring a higher version is rejected rather than mis-applied. */
-export const SUPPORTED_MANIFEST_VERSION = 1;
+export const SUPPORTED_MANIFEST_VERSION = 2;
+
+export interface ModulePathMove {
+  /** Project-relative file or directory path from an older module layout. */
+  from: string;
+  /** Project-relative destination. Existing files are never overwritten. */
+  to: string;
+}
+
+export interface ModuleTextReplacement {
+  /** Destination path after all migration moves have been applied. */
+  path: string;
+  /** Exact text expected in the existing generated file. */
+  from: string;
+  /** Replacement text written while preserving every other local edit. */
+  to: string;
+  /** Required number of matches. A mismatch aborts the migration atomically. */
+  expected: number;
+}
+
+export interface ModuleMigration {
+  /** Stable module-local identifier recorded after a successful apply. */
+  id: string;
+  /** File or directory moves performed as one atomic migration. */
+  moves: ModulePathMove[];
+  /** Optional exact rewrites needed after a move, such as renamed imports. */
+  replacements?: ModuleTextReplacement[];
+}
 
 export interface ModuleManifest {
   /** Manifest schema version. Absent (bundled modules) means "same as the CLI". */
@@ -57,6 +84,8 @@ export interface ModuleManifest {
   /** Module files that remain update-managed even when a broad default glob
    *  (for example `.claude/**`) would otherwise classify them as owned. */
   managedOverrides?: string[];
+  /** Idempotent path migrations applied by `podo update --apply`. */
+  migrations?: ModuleMigration[];
 }
 
 export interface PackageOverlay {
@@ -400,10 +429,12 @@ function applyModule(
 }
 
 function moduleRecord(module: ResolvedModule): ManifestModuleInput {
+  const migrations = readModuleManifest(module.dir).migrations ?? [];
   return {
     name: module.name,
     packageName: module.packageName,
     moduleVersion: module.moduleVersion,
+    appliedMigrations: migrations.map((migration) => migration.id),
   };
 }
 
