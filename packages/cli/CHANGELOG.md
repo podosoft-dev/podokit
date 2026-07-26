@@ -1,5 +1,19 @@
 # @podosoft/podokit
 
+## 0.14.0
+
+### Minor Changes
+
+- [#121](https://github.com/podosoft-dev/podokit/pull/121) [`820a4c5`](https://github.com/podosoft-dev/podokit/commit/820a4c5eb7c5553f749591e4e25dfc9318d77c3f) Thanks [@korone00](https://github.com/korone00)! - Show the shared language and light/dark theme controls beside the signed-in account menu on generated landing pages.
+
+- [#123](https://github.com/podosoft-dev/podokit/pull/123) [`4525328`](https://github.com/podosoft-dev/podokit/commit/4525328016cb3af38f5520ea41e170f6fe59cef6) Thanks [@korone00](https://github.com/korone00)! - Separate the generated admin-only console into the `(admin)` route group, keep `(app)` available for protected product pages, and migrate existing admin routes safely during `podo update`.
+
+- [#119](https://github.com/podosoft-dev/podokit/pull/119) [`cd7e13b`](https://github.com/podosoft-dev/podokit/commit/cd7e13b7a93b4fea7588ffed87c82ac5be8073ee) Thanks [@korone00](https://github.com/korone00)! - Add self-service profile-image upload, replacement, removal, shared validation limits, multipart API client support, and a reusable signed-in account menu for generated landing pages.
+
+### Patch Changes
+
+- [#121](https://github.com/podosoft-dev/podokit/pull/121) [`820a4c5`](https://github.com/podosoft-dev/podokit/commit/820a4c5eb7c5553f749591e4e25dfc9318d77c3f) Thanks [@korone00](https://github.com/korone00)! - Use the file-list binding without a conflicting value binding and forward change events explicitly from the generated shared input component so file upload controls work reliably.
+
 ## 0.13.0
 
 ### Minor Changes
