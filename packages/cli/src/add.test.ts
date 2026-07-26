@@ -378,10 +378,18 @@ describe("addModule (auth / better-auth)", () => {
   it("does not re-add an already-present required module", () => {
     const project = generate("fullstack-nest-svelte");
     addModule({ projectRoot: project, module: "object-storage-s3", modulesDir: MODULES });
+    const appModulePath = join(project, "apps/api/src/app.module.ts");
+    const storageImport = 'import { StorageModule } from "./storage/storage.module";';
+    writeFileSync(
+      appModulePath,
+      readFileSync(appModulePath, "utf8").replace(storageImport, "// intentionally customized"),
+    );
     const result = addModule({ projectRoot: project, module: "file-upload", modulesDir: MODULES });
     expect(result.added).not.toContain("object-storage-s3");
-    // storage wiring still appears exactly once
-    const appModule = readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8");
+    // The manifest is authoritative: a missing or customized first injection
+    // must not cause a dependency add to re-overlay the installed module.
+    const appModule = readFileSync(appModulePath, "utf8");
+    expect(appModule).not.toContain(storageImport);
     expect(appModule.match(/StorageModule,/g)?.length).toBe(1);
   });
 

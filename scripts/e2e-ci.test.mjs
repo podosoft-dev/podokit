@@ -21,6 +21,7 @@ const outerTestRoots = [
   "templates/modules/object-storage-s3/files/tests",
   "templates/modules/api-key-auth/files/tests",
   "templates/modules/job-progress/files/tests",
+  "packages/podokit-module-analytics/files/tests",
 ];
 
 function specFiles(directory) {
@@ -80,6 +81,20 @@ test("uses a dedicated generated-app npm download cache when configured", () => 
     "--cache",
     "/tmp/e2e-npm",
   ]);
+});
+
+test("publishes and installs external analytics in the faithful generated app", () => {
+  const source = readFileSync(join(repoRoot, "scripts/e2e-ci.mjs"), "utf8");
+  const packageName = "@podosoft/podokit-module-analytics";
+  const declaration = source.indexOf(`packageName: "${packageName}"`);
+  const publish = source.indexOf("for (const pkg of PACKAGES)");
+  const install = source.indexOf('"--save-dev"');
+  const add = source.indexOf('external.name');
+
+  assert.ok(declaration >= 0);
+  assert.ok(publish > declaration);
+  assert.ok(install > publish);
+  assert.ok(add > install);
 });
 
 test("records named phase durations and a total", () => {

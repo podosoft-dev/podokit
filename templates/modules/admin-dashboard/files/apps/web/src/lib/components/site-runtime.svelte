@@ -4,6 +4,10 @@
   import { site, type SiteSettings } from "$lib/site.svelte";
   import { applyTheme, themeConfigFromSettings } from "$lib/site/apply-theme";
   import SessionIdleTimeout from "$lib/components/session-idle-timeout.svelte";
+  // Optional modules add global runtime components here without taking
+  // ownership of the application's root layout.
+  // podokit:begin:site-runtime-imports
+  // podokit:end:site-runtime-imports
 
   const loadedSite = $derived(
     (page.data as { site?: Partial<SiteSettings> | null }).site,
@@ -42,3 +46,5 @@
 
 <ModeWatcher />
 <SessionIdleTimeout timeoutMinutes={sessionIdleTimeoutMinutes} />
+<!-- podokit:begin:site-runtime-components -->
+<!-- podokit:end:site-runtime-components -->

@@ -45,6 +45,12 @@ const registry = `http://localhost:${env.REGISTRY_PORT}`;
 const webURL = `http://localhost:${env.WEB_PORT}`;
 const outageWebURL = `http://localhost:${env.OUTAGE_WEB_PORT}`;
 const appDir = process.env.APP_DIR ? resolve(process.env.APP_DIR) : mkdtempSync(join(tmpdir(), "podokit-e2e-"));
+const EXTERNAL_MODULES = [
+  {
+    name: "analytics",
+    packageName: "@podosoft/podokit-module-analytics",
+  },
+];
 // Publish order: contracts first (api-client depends on it), then the rest.
 const PACKAGES = [
   "@podosoft/podokit-contracts",
@@ -52,6 +58,7 @@ const PACKAGES = [
   "@podosoft/podokit-template-engine",
   "@podosoft/podokit-api-client",
   "@podosoft/podokit",
+  ...EXTERNAL_MODULES.map(({ packageName }) => packageName),
 ];
 
 const children = [];
@@ -148,6 +155,27 @@ async function main() {
   // every other spec in the shared app.
   for (const mod of ["redis", "bullmq", "sse", "file-upload", "api-key-auth", "job-progress"]) {
     run("npx", ["--yes", "@podosoft/podokit", "add", mod], { cwd: target, env: npmEnv });
+  }
+  for (const external of EXTERNAL_MODULES) {
+    run(
+      "npm",
+      [
+        "install",
+        "--save-dev",
+        external.packageName,
+        "--registry",
+        registry,
+        "--userconfig",
+        npmrc,
+        "--no-audit",
+        "--no-fund",
+      ],
+      { cwd: target, env: npmEnv },
+    );
+    run("npx", ["--yes", "@podosoft/podokit", "add", external.name], {
+      cwd: target,
+      env: npmEnv,
+    });
   }
 
   step("install (resolving @podosoft/* from the registry)");

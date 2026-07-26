@@ -256,8 +256,13 @@ function appendEnv(projectRoot: string, lines: string[]): void {
   writeFileSync(file, `${current}${separator}\n${missing.join("\n")}\n`);
 }
 
-/** Heuristic: is `module` already applied to the project? */
+/** Prefer the generation manifest as the authoritative installed-module list.
+ * Fall back to the legacy wiring heuristic only for projects without one. */
 function isApplied(projectRoot: string, modulesDir: string, module: string): boolean {
+  const projectManifest = readProjectManifest(projectRoot);
+  if (projectManifest) {
+    return projectManifest.modules.some((entry) => entry.name === module);
+  }
   const moduleDir = resolveModuleDir(module, modulesDir, projectRoot);
   if (!moduleDir) return false;
   const manifest = readModuleManifest(moduleDir);

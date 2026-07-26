@@ -102,6 +102,7 @@ This repo is an npm workspace. Published packages:
 - `packages/contracts` — `@podosoft/podokit-contracts`: capabilities, upload policies, the error envelope, and `AppException` shared by backend and frontend
 - `packages/podokit-auth` — `@podosoft/podokit-auth`: the DB-backed auth configuration pipeline (encrypted secrets, config store)
 - `packages/podokit-module-blog` — `@podosoft/podokit-module-blog`: draft-first publishing, visibility controls, image uploads, comments, ownership, and admin management as an external updateable module
+- `packages/podokit-module-analytics` — `@podosoft/podokit-module-analytics`: provider-neutral collection, consent, encrypted configuration, and aggregate administrator reports with GA4 as the first provider
 - `templates/` — project templates copied by the CLI
 - `examples/` — how to generate example apps
 
@@ -133,6 +134,13 @@ External package modules use the same workflow after installation. For example:
 ```bash
 npm install --save-dev @podosoft/podokit-module-blog
 podo add blog
+```
+
+For privacy-aware visitor measurement and administrator reports:
+
+```bash
+npm install --save-dev @podosoft/podokit-module-analytics
+podo add analytics
 ```
 
 The **`admin-dashboard`** module adds a full admin console on top of `auth`:

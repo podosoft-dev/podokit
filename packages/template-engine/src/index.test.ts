@@ -103,6 +103,15 @@ describe("removeAtMarker", () => {
     const inserted = insertAtMarker(withMarker, "// podokit:end:module-imports", "AuthModule,");
     expect(removeAtMarker(inserted, "AuthModule,")).toBe(withMarker);
   });
+  it("removes a multi-line injection as one block", () => {
+    const withMarker = ["imports:", "  // podokit:end:imports"].join("\n");
+    const injected = insertAtMarker(
+      withMarker,
+      "// podokit:end:imports",
+      'import A from "./a";\nimport B from "./b";',
+    );
+    expect(removeAtMarker(injected, 'import A from "./a";\nimport B from "./b";')).toBe(withMarker);
+  });
 });
 
 describe("fenced regions", () => {

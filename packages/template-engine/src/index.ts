@@ -116,16 +116,22 @@ export function insertAtMarker(content: string, marker: string, text: string): s
 }
 
 /**
- * Remove the first line equal to `text` (trimmed), the inverse of
- * {@link insertAtMarker}. No-op if the line is absent (idempotent). Used by
- * `podo remove` and by update when recomputing a region from scratch.
+ * Remove the first line or contiguous line block equal to `text` (each line
+ * trimmed), the inverse of {@link insertAtMarker}. No-op if the block is absent
+ * (idempotent). Used by `podo remove` and by update when recomputing a region
+ * from scratch.
  */
 export function removeAtMarker(content: string, text: string): string {
-  const needle = text.trim();
+  const needle = text
+    .trim()
+    .split("\n")
+    .map((line) => line.trim());
   const lines = content.split("\n");
-  const index = lines.findIndex((line) => line.trim() === needle);
+  const index = lines.findIndex((_, start) =>
+    needle.every((line, offset) => lines[start + offset]?.trim() === line),
+  );
   if (index === -1) return content;
-  lines.splice(index, 1);
+  lines.splice(index, needle.length);
   return lines.join("\n");
 }
 

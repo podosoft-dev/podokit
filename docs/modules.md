@@ -82,6 +82,55 @@ storage, then inserts a Markdown image at the current cursor. The resulting
 file-upload URL. SVG is excluded from inline blog uploads.
 The editor also uploads and previews one cover image for each post.
 
+### `analytics` (external package)
+
+Provider-neutral, privacy-aware web analytics with Google Analytics 4 as the
+first provider. The module adds anonymous page and application event collection,
+advanced Consent Mode v2, encrypted administrator configuration, aggregate
+traffic and key-event reports, and a realtime 30-minute visitor view. It never
+stores raw visitor events in the application database.
+
+```bash
+npm install --save-dev @podosoft/podokit-module-analytics
+podo add analytics
+npm install
+npm run migration:run -w <app>-api
+```
+
+Administrators enter a GA4 measurement ID, numeric property ID, and a
+least-privilege service-account JSON credential under **Settings → Analytics**.
+The credential is write-only in the browser and encrypted at rest with the key
+derived from `BETTER_AUTH_SECRET`. Grant the service account Viewer access to the
+GA4 property and enable the Google Analytics Data API in its Google Cloud
+project. Test the connection before enabling collection. Reports are available
+at `/admin/analytics`; successful report responses are cached for five minutes
+and realtime responses for 60 seconds.
+
+The browser runtime starts analytics and advertising consent denied. Accepting
+grants only analytics storage; advertising storage, user data, and
+personalization remain denied. Advanced mode means Google can still receive
+cookieless pings after a visitor declines, so applications must explain that in
+their privacy notice and keep the consent-settings control visible.
+
+PodoKit does not send authenticated user IDs, names, or email addresses. It
+measures public and signed-in product routes, excludes admin, auth, account,
+maintenance, and error routes, and strips query strings and fragments. Customize
+sensitive application paths in the owned
+`apps/web/src/lib/analytics.config.ts`. Track product goals through the
+provider-neutral helper:
+
+```ts
+import { trackAnalyticsEvent } from "$lib/analytics";
+
+trackAnalyticsEvent("generate_lead", { method: "contact_form" });
+```
+
+Mark product-goal events as key events in the GA4 property so the aggregate
+key-event metrics include them.
+
+Disable GA4 enhanced measurement's history-based page changes because the
+SvelteKit runtime sends one manual `page_view` for each navigation.
+
 ### `auth` (better-auth)
 
 Full authentication built on [better-auth](https://better-auth.com): email/password
@@ -766,6 +815,8 @@ It is deliberately conservative:
   reported, rather than deleted — remove it by hand if you want it gone.
 - **Shared files are kept.** A file another installed module also ships (and the
   deps/env another module still declares) is preserved.
+- **Edited owned files stay owned.** Module-owned globs are removed with the
+  module unless another module or a preserved edited file still needs them.
 
 Database tables a module created are **not** dropped — removing the code leaves
 your data intact. Drop them yourself with a migration if you no longer need them.

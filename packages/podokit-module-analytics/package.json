@@ -1,0 +1,20 @@
+{
+  "name": "@podosoft/podokit-module-analytics",
+  "version": "0.0.0",
+  "description": "Provider-neutral web analytics for PodoKit with GA4 collection, consent, and admin reporting.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/podosoft-dev/podokit.git",
+    "directory": "packages/podokit-module-analytics"
+  },
+  "files": [
+    "files",
+    "module.manifest.json",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

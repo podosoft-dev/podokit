@@ -7,6 +7,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- **External analytics module.** New
+  `@podosoft/podokit-module-analytics` package adds provider-neutral page and
+  application event collection with GA4 as the first provider, advanced Consent
+  Mode v2, encrypted administrator configuration, traffic and key-event reports,
+  and realtime visitors. The generated runtime excludes sensitive routes and
+  never sends account identifiers, while a new `SiteRuntime` injection seam
+  lets optional modules install browser-wide behavior without editing an
+  application-owned root layout. The faithful generated-app Outer path publishes
+  and installs the external package so release gates cover its shipped output.
 - **Extensible mobile and product-shell UI primitives.** Generated applications
   can add owned Playwright browser/device projects without editing the managed
   config, render the shared account menu with visible identity outside the admin
@@ -108,6 +117,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (ui + api) tests included. No DB migration (uses the existing `app_setting` store).
 
 ### Fixed
+- **Safe dependency detection during module add.** The project manifest is now
+  authoritative for installed requirements, so adding an external module cannot
+  re-overlay an existing customized dependency and erase other modules'
+  registry or localization injections.
+- **Complete external-module removal.** `podo remove` now reverses multi-line
+  injection blocks and drops module-owned globs when no preserved edit or other
+  module still needs them, preventing stale imports and ownership rules after an
+  optional module is removed.
 - **Repeatable inherited admin tests and relocated ejects.** Generated UI
   storage state now pins the English catalog used by accessible-name locators,
   so the suite does not inherit an application's configured default language.
