@@ -19,6 +19,15 @@ export function normalizeClientIp(address: string | undefined): string | undefin
   return address;
 }
 
+export function resolveClientIp(getClientAddress: () => string): string | undefined {
+  try {
+    return normalizeClientIp(getClientAddress());
+  } catch {
+    // An absent or shorter-than-configured proxy chain is not a trusted source.
+    return undefined;
+  }
+}
+
 export async function proxyRequest(
   request: Request,
   targetUrl: string,

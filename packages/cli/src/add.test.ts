@@ -690,6 +690,14 @@ describe("addModule (auth / better-auth)", () => {
     const result = addModule({ projectRoot: project, module: "admin-dashboard", modulesDir: MODULES });
 
     expect(result.added).toContain("auth");
+    const backendProxy = readFileSync(
+      join(project, "apps/web/src/lib/server/backend-proxy.ts"),
+      "utf8",
+    );
+    expect(backendProxy).toContain("export function resolveClientIp");
+    expect(
+      readFileSync(join(project, "apps/web/src/lib/server/api.ts"), "utf8"),
+    ).toContain("resolveClientIp(event.getClientAddress)");
     // web overlay
     expect(existsSync(join(project, "apps/web/src/hooks.server.ts"))).toBe(true);
     expect(existsSync(join(project, "apps/web/src/routes/(auth)/login/+page.svelte"))).toBe(true);

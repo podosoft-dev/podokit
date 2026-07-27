@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "svelte-check --tsconfig ./tsconfig.json",
-    "test": "echo \"unit: add vitest; e2e: npm run test:e2e (see tests/)\" && exit 0"
+    "test": "node --test src/lib/server/*.test.mjs"
   },
   "dependencies": {
     "@internationalized/date": "^3.12.2",

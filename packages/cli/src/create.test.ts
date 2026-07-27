@@ -221,8 +221,29 @@ describe("create (integration against templates)", () => {
     );
     expect(backendProxy).toContain("request.arrayBuffer()");
     expect(backendProxy).not.toContain("request.text()");
+    expect(backendProxy).toContain("export function resolveClientIp");
+    expect(backendProxy).toContain("return undefined");
+    const backendProxyTest = join(
+      target,
+      "apps",
+      "web",
+      "src",
+      "lib",
+      "server",
+      "backend-proxy.test.mjs",
+    );
+    expect(existsSync(backendProxyTest)).toBe(true);
+    expect(() =>
+      execFileSync(process.execPath, ["--test", backendProxyTest], { stdio: "pipe" }),
+    ).not.toThrow();
     const serverApi = readFileSync(join(target, "apps", "web", "src", "lib", "server", "api.ts"), "utf8");
     expect(serverApi).toContain('headers.set("x-forwarded-for", clientIp)');
+    expect(serverApi).toContain("resolveClientIp(event.getClientAddress)");
+    const apiProxyRoute = readFileSync(
+      join(target, "apps", "web", "src", "routes", "api", "[...path]", "+server.ts"),
+      "utf8",
+    );
+    expect(apiProxyRoute).toContain("resolveClientIp(getClientAddress)");
     const traefikConfig = readFileSync(join(target, "infra", "traefik", "dynamic.yml"), "utf8");
     expect(traefikConfig).toContain("http://web:5001");
     expect(traefikConfig).toContain("middlewares: [compression]");
