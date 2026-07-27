@@ -1,5 +1,11 @@
 # @podosoft/podokit
 
+## 0.16.3
+
+### Patch Changes
+
+- [#135](https://github.com/podosoft-dev/podokit/pull/135) [`092d932`](https://github.com/podosoft-dev/podokit/commit/092d932de128192809772df002c2456891d208a9) Thanks [@korone00](https://github.com/korone00)! - Label object storage initialization Jobs so deployment lifecycle selectors find them.
+
 ## 0.16.2
 
 ### Patch Changes
