@@ -1,5 +1,13 @@
 # @podosoft/podokit
 
+## 0.16.4
+
+### Patch Changes
+
+- [#137](https://github.com/podosoft-dev/podokit/pull/137) [`d6033e5`](https://github.com/podosoft-dev/podokit/commit/d6033e513b1b90224c0a06b4deb3767d62ecd4c0) Thanks [@korone00](https://github.com/korone00)! - Allow deployment profiles to override the exact API migration command while preserving the existing default.
+
+- [#137](https://github.com/podosoft-dev/podokit/pull/137) [`d6033e5`](https://github.com/podosoft-dev/podokit/commit/d6033e513b1b90224c0a06b4deb3767d62ecd4c0) Thanks [@korone00](https://github.com/korone00)! - Keep generated SvelteKit proxies available when the trusted proxy address chain is absent or shorter than configured.
+
 ## 0.16.3
 
 ### Patch Changes
