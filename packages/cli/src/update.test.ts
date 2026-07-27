@@ -513,6 +513,97 @@ describe("applyUpdate", () => {
     expect(manifest.ownedGlobs).toContain(ownedFile);
   });
 
+  it("adds module requirements introduced by target templates", () => {
+    const oldTemplates = oldTemplatesCopy();
+    const newTemplates = oldTemplatesCopy();
+    const featureFile = "apps/api/src/update-feature.ts";
+    const dependencyFile = "apps/api/src/update-dependency.ts";
+
+    for (const templates of [oldTemplates, newTemplates]) {
+      const featureRoot = join(templates, "modules/update-feature");
+      const dependencyRoot = join(templates, "modules/update-dependency");
+      mkdirSync(join(featureRoot, "files/apps/api/src"), { recursive: true });
+      mkdirSync(join(dependencyRoot, "files/apps/api/src"), { recursive: true });
+      writeFileSync(
+        join(featureRoot, "module.manifest.json"),
+        `${JSON.stringify({
+          name: "update-feature",
+          description: "Update feature",
+          targetApp: "api",
+        }, null, 2)}\n`,
+      );
+      writeFileSync(
+        join(dependencyRoot, "module.manifest.json"),
+        `${JSON.stringify({
+          name: "update-dependency",
+          description: "Update dependency",
+          targetApp: "api",
+        }, null, 2)}\n`,
+      );
+      writeFileSync(
+        join(featureRoot, "files", featureFile),
+        'export { updateDependency } from "./update-dependency";\n',
+      );
+      writeFileSync(
+        join(dependencyRoot, "files", dependencyFile),
+        "export const updateDependency = true;\n",
+      );
+    }
+
+    const targetManifestPath = join(
+      newTemplates,
+      "modules/update-feature/module.manifest.json",
+    );
+    const targetManifest = JSON.parse(
+      readFileSync(targetManifestPath, "utf8"),
+    ) as Record<string, unknown>;
+    targetManifest.requires = ["update-dependency"];
+    writeFileSync(targetManifestPath, `${JSON.stringify(targetManifest, null, 2)}\n`);
+
+    const project = join(tmp(), "app");
+    create({
+      name: "app",
+      template: "fullstack-nest-svelte",
+      templatesDir: oldTemplates,
+      targetDir: project,
+    });
+    addModule({
+      projectRoot: project,
+      module: "update-feature",
+      modulesDir: join(oldTemplates, "modules"),
+    });
+    expect(existsSync(join(project, dependencyFile))).toBe(false);
+
+    const plan = planUpdate(project, newTemplates);
+    expect(plan.modules).toEqual(["update-dependency", "update-feature"]);
+    expect(plan.changes.find((change) => change.path === dependencyFile)?.action).toBe(
+      "add",
+    );
+
+    const result = applyUpdate(project, newTemplates, {
+      oldTemplatesDir: oldTemplates,
+    });
+    expect(result.written).toContain(dependencyFile);
+    expect(readFileSync(join(project, featureFile), "utf8")).toContain(
+      "update-dependency",
+    );
+    const manifest = JSON.parse(
+      readFileSync(join(project, ".podokit/manifest.json"), "utf8"),
+    ) as {
+      modules: { name: string; order: number }[];
+    };
+    expect(manifest.modules.map((module) => module.name)).toEqual([
+      "update-dependency",
+      "update-feature",
+    ]);
+    expect(manifest.modules.map((module) => module.order)).toEqual([0, 1]);
+    expect(
+      planUpdate(project, newTemplates).changes.find(
+        (change) => change.path === dependencyFile,
+      )?.action,
+    ).toBe("up-to-date");
+  });
+
   it("promotes newly declared default-owned paths during update", () => {
     const dir = join(tmp(), "app");
     create({ name: "app", template: "fullstack-nest-svelte", templatesDir: REPO_TEMPLATES, targetDir: dir });
