@@ -47,9 +47,11 @@ interface RunnerOptions {
 
 function deploymentRunner(options: RunnerOptions = {}): {
   calls: Array<{ command: string; args: string[] }>;
+  leaseTimestamps: Array<{ acquireTime: string; renewTime: string }>;
   runner: CommandRunner;
 } {
   const calls: Array<{ command: string; args: string[] }> = [];
+  const leaseTimestamps: Array<{ acquireTime: string; renewTime: string }> = [];
   let holderIdentity = "";
   const runner: CommandRunner = (command, args) => {
     calls.push({ command, args: [...args] });
@@ -115,9 +117,17 @@ spec:
       }
       const manifestPath = args[args.indexOf("-f") + 1]!;
       const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
-        spec: { holderIdentity: string };
+        spec: {
+          holderIdentity: string;
+          acquireTime: string;
+          renewTime: string;
+        };
       };
       holderIdentity = manifest.spec.holderIdentity;
+      leaseTimestamps.push({
+        acquireTime: manifest.spec.acquireTime,
+        renewTime: manifest.spec.renewTime,
+      });
       return { status: 0, stdout: "lease.coordination.k8s.io/lock created", stderr: "" };
     }
     if (args.includes("lease") && args.includes("jsonpath={.spec.holderIdentity}")) {
@@ -188,7 +198,7 @@ spec:
     }
     return { status: 0, stdout: "", stderr: "" };
   };
-  return { calls, runner };
+  return { calls, leaseTimestamps, runner };
 }
 
 function successfulFetcher() {
@@ -213,7 +223,7 @@ afterEach(() => {
 describe("deployment mutations", () => {
   it("holds a Lease across dependencies, migration, application, and verification", async () => {
     const root = initializedProject();
-    const { calls, runner } = deploymentRunner();
+    const { calls, leaseTimestamps, runner } = deploymentRunner();
     const plan = planDeployment(root, "production", "v1.2.3", runner);
     const fetcher = successfulFetcher();
 
@@ -228,6 +238,12 @@ describe("deployment mutations", () => {
 
     expect(status.deployments).toHaveLength(2);
     expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(leaseTimestamps).toEqual([
+      {
+        acquireTime: expect.stringMatching(/\.\d{6}Z$/),
+        renewTime: expect.stringMatching(/\.\d{6}Z$/),
+      },
+    ]);
     const mutationCalls = calls.slice(
       calls.findIndex(({ args }) => args.includes("create") && args.includes("-f")),
     );
