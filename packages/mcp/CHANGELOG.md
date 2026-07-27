@@ -1,5 +1,26 @@
 # @podosoft/podokit-mcp
 
+## 0.2.0
+
+### Minor Changes
+
+- [#129](https://github.com/podosoft-dev/podokit/pull/129) [`7698c8a`](https://github.com/podosoft-dev/podokit/commit/7698c8a803908b9cf7efd093e0d8bf78e0d6db9a) Thanks [@korone00](https://github.com/korone00)! - Add guarded Kubernetes deployment profiles, deterministic Helm render and plan
+  operations, exact-image migrations, confirmation-hash apply and rollback,
+  deployment status and verification, plus read-only MCP inspection tools and a
+  generated deployment skill.
+
+  Add authenticated Redis connection settings, multi-replica Redis SSE delivery,
+  extensible readiness checks, shared distributed rate limiting with a single
+  managed application identity extension point, explicit adoption of existing
+  Redis and rate-limit implementations, and production k3s ingress and readiness
+  corrections. Development commands now activate Compose profiles required by the
+  installed module graph.
+
+### Patch Changes
+
+- Updated dependencies [[`7698c8a`](https://github.com/podosoft-dev/podokit/commit/7698c8a803908b9cf7efd093e0d8bf78e0d6db9a), [`7698c8a`](https://github.com/podosoft-dev/podokit/commit/7698c8a803908b9cf7efd093e0d8bf78e0d6db9a)]:
+  - @podosoft/podokit@0.16.0
+
 ## 0.1.9
 
 ### Patch Changes

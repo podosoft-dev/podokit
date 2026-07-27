@@ -1,5 +1,40 @@
 # @podosoft/podokit
 
+## 0.16.0
+
+### Minor Changes
+
+- [#129](https://github.com/podosoft-dev/podokit/pull/129) [`7698c8a`](https://github.com/podosoft-dev/podokit/commit/7698c8a803908b9cf7efd093e0d8bf78e0d6db9a) Thanks [@korone00](https://github.com/korone00)! - Add an external analytics module with provider-neutral events, GA4 collection
+  and aggregate reports, advanced consent mode, encrypted administrator
+  configuration, and a managed site-runtime injection point.
+
+  Publish and install the external analytics package in the faithful generated-app
+  Outer path so its package contents, injections, migrations, and shipped tests
+  participate in release-gate validation.
+
+  Make `podo remove` fully reverse multi-line module injections and discard
+  module-owned globs when no preserved edited file or other module still needs
+  them. Treat the project manifest as authoritative when resolving already
+  installed dependencies so adding an external module cannot re-overlay a
+  customized required module.
+
+- [#129](https://github.com/podosoft-dev/podokit/pull/129) [`7698c8a`](https://github.com/podosoft-dev/podokit/commit/7698c8a803908b9cf7efd093e0d8bf78e0d6db9a) Thanks [@korone00](https://github.com/korone00)! - Add guarded Kubernetes deployment profiles, deterministic Helm render and plan
+  operations, exact-image migrations, confirmation-hash apply and rollback,
+  deployment status and verification, plus read-only MCP inspection tools and a
+  generated deployment skill.
+
+  Add authenticated Redis connection settings, multi-replica Redis SSE delivery,
+  extensible readiness checks, shared distributed rate limiting with a single
+  managed application identity extension point, explicit adoption of existing
+  Redis and rate-limit implementations, and production k3s ingress and readiness
+  corrections. Development commands now activate Compose profiles required by the
+  installed module graph.
+
+### Patch Changes
+
+- Updated dependencies [[`7698c8a`](https://github.com/podosoft-dev/podokit/commit/7698c8a803908b9cf7efd093e0d8bf78e0d6db9a)]:
+  - @podosoft/podokit-template-engine@0.4.2
+
 ## 0.15.0
 
 ### Minor Changes

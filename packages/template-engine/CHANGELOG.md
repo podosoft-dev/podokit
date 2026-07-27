@@ -1,8 +1,8 @@
-# @podosoft/podokit-module-analytics
+# @podosoft/podokit-template-engine
 
-## 0.1.0
+## 0.4.2
 
-### Minor Changes
+### Patch Changes
 
 - [#129](https://github.com/podosoft-dev/podokit/pull/129) [`7698c8a`](https://github.com/podosoft-dev/podokit/commit/7698c8a803908b9cf7efd093e0d8bf78e0d6db9a) Thanks [@korone00](https://github.com/korone00)! - Add an external analytics module with provider-neutral events, GA4 collection
   and aggregate reports, advanced consent mode, encrypted administrator
