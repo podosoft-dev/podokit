@@ -1,5 +1,11 @@
 # @podosoft/podokit
 
+## 0.16.2
+
+### Patch Changes
+
+- [#133](https://github.com/podosoft-dev/podokit/pull/133) [`e68d849`](https://github.com/podosoft-dev/podokit/commit/e68d849eab52ee41a3aa96f3b84b0334a28ab041) Thanks [@korone00](https://github.com/korone00)! - Nest explicit storage class names correctly in rendered persistent volume claims.
+
 ## 0.16.1
 
 ### Patch Changes
