@@ -1,6 +1,6 @@
 {
   "name": "@podosoft/podokit-module-analytics",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Provider-neutral web analytics for PodoKit with GA4 collection, consent, and admin reporting.",
   "license": "Apache-2.0",
   "repository": {
