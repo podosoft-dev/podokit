@@ -69,6 +69,7 @@ Useful commands:
 - `podo remove <module>` — un-apply a module (inverse of add; refuses if another module needs it, keeps files you edited).
 - `podo status` / `podo diff` — see your local edits vs. what PodoKit generated.
 - `podo update` — pull in template/module improvements (3-way merges your edits; never touches owned files).
+- `podo deploy` — plan, apply, verify, or roll back an immutable Kubernetes release. Use `.agents/skills/podokit-deploy`.
 
 ## Commit conventions
 

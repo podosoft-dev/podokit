@@ -81,6 +81,14 @@ npx @podosoft/podokit add auth              # better-auth: email/password, sessi
 npx @podosoft/podokit add admin-dashboard   # a full admin console (also adds auth)
 ```
 
+External modules use the same command after their package is installed. For
+example, add privacy-aware GA4 collection and administrator reports with:
+
+```bash
+npm install --save-dev @podosoft/podokit-module-analytics
+npx @podosoft/podokit add analytics
+```
+
 See [modules.md](modules.md) for the full list.
 
 After adding `admin-dashboard`, set `ADMIN_EMAILS`, build and migrate the API,

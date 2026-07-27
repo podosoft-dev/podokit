@@ -28,20 +28,36 @@ describe("podokit-mcp server", () => {
   });
 
   it("registers the expected tools", async () => {
-    const names = (await client.listTools()).tools.map((t) => t.name).sort();
+    const tools = (await client.listTools()).tools;
+    const names = tools.map((t) => t.name).sort();
     expect(names).toEqual(
       [
         "add_module",
         "check_versions",
         "create_project",
+        "deployment_doctor",
+        "deployment_profiles",
+        "deployment_status",
         "list_local_edits",
         "list_modules",
         "list_templates",
+        "initialize_deployment_profile",
+        "preview_deployment",
         "preview_update",
         "project_status",
         "search_docs",
+        "verify_deployment",
       ].sort(),
     );
+    expect(names).not.toContain("apply_deployment");
+    expect(names).not.toContain("rollback_deployment");
+    expect(
+      tools.find((tool) => tool.name === "preview_deployment")?.annotations?.readOnlyHint,
+    ).toBe(true);
+    expect(
+      tools.find((tool) => tool.name === "initialize_deployment_profile")?.annotations
+        ?.readOnlyHint,
+    ).toBe(false);
   });
 
   it("create_project scaffolds a project from scratch", async () => {
@@ -60,6 +76,34 @@ describe("podokit-mcp server", () => {
     const r = (await client.callTool({ name: "list_templates", arguments: {} })) as TextResult;
     expect(r.content[0].text).toContain("fullstack-nest-svelte");
     expect(r.content[0].text).toContain("base");
+  });
+
+  it("initializes and lists a repository-local deployment profile", async () => {
+    const target = mkdtempSync(join(tmpdir(), "mcp-deploy-")) + "/app";
+    tmpDirs.push(target);
+    await client.callTool({
+      name: "create_project",
+      arguments: { name: "app", template: "fullstack-nest-svelte", targetDir: target },
+    });
+    const initialized = (await client.callTool({
+      name: "initialize_deployment_profile",
+      arguments: {
+        profile: "production",
+        context: "production",
+        clusterFingerprint: `sha256:${"a".repeat(64)}`,
+        host: "app.example.com",
+        projectDir: target,
+      },
+    })) as TextResult;
+    expect(initialized.isError ?? false).toBe(false);
+    expect(existsSync(join(target, ".podokit", "deploy", "production.json"))).toBe(true);
+
+    const listed = (await client.callTool({
+      name: "deployment_profiles",
+      arguments: { projectDir: target },
+    })) as TextResult;
+    expect(listed.content[0].text).toContain("context=production");
+    expect(listed.content[0].text).toContain("namespace=app");
   });
 
   it("list_modules returns the available modules", async () => {

@@ -10,6 +10,8 @@ import {
 import { modulePackageOverlays, resolveModuleDir, type ModuleManifest } from "./add";
 import {
   computeFilesLock,
+  DEFAULT_OWNED_GLOBS,
+  matchGlob,
   readFilesLock,
   readManifest,
   writeFilesLock,
@@ -155,6 +157,16 @@ export function removeModule(options: RemoveOptions): RemoveResult {
   const targetManagedOverrides = new Set(targetManifest.managedOverrides ?? []);
   manifest.managedOverrides = (manifest.managedOverrides ?? []).filter(
     (glob) => !targetManagedOverrides.has(glob) || sharedManagedOverrides.has(glob),
+  );
+  const defaultOwnedGlobs = new Set(DEFAULT_OWNED_GLOBS);
+  const sharedOwnedGlobs = new Set(others.flatMap((other) => other.manifest.ownedGlobs ?? []));
+  const targetOwnedGlobs = new Set(targetManifest.ownedGlobs ?? []);
+  manifest.ownedGlobs = manifest.ownedGlobs.filter(
+    (glob) =>
+      !targetOwnedGlobs.has(glob) ||
+      defaultOwnedGlobs.has(glob) ||
+      sharedOwnedGlobs.has(glob) ||
+      keptEdited.some((path) => matchGlob(path, glob)),
   );
   writeManifest(projectRoot, manifest);
   writeFilesLock(

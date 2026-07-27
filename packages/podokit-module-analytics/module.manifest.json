@@ -1,0 +1,87 @@
+{
+  "manifestVersion": 2,
+  "name": "analytics",
+  "description": "Provider-neutral web analytics with GA4 collection, advanced consent mode, encrypted administrator configuration, aggregate reports, and realtime visitors.",
+  "requires": ["admin-dashboard", "audit-log"],
+  "targetApp": "web",
+  "managedGlobs": [
+    "apps/api/src/analytics/**",
+    "apps/api/src/migrations/1760000000000-InitAnalyticsModule.ts",
+    "apps/web/src/lib/analytics.ts",
+    "apps/web/src/lib/analytics/**",
+    "apps/web/src/lib/components/analytics-runtime.svelte",
+    "apps/web/src/lib/components/settings/analytics-settings.svelte",
+    "apps/web/src/lib/components/ui/textarea/**",
+    "apps/web/src/lib/i18n/catalogs/analytics/**",
+    "apps/web/src/routes/(admin)/admin/analytics/**",
+    "tests/api/analytics.api.spec.ts",
+    "tests/ui/analytics.ui.spec.ts"
+  ],
+  "ownedGlobs": ["apps/web/src/lib/analytics.config.ts"],
+  "managedOverrides": [
+    "apps/web/src/routes/(admin)/admin/analytics/+page.server.ts",
+    "apps/web/src/routes/(admin)/admin/analytics/+page.svelte"
+  ],
+  "packageOverlays": {
+    "api": {
+      "dependencies": {
+        "@google-analytics/data": "^6.1.0"
+      }
+    }
+  },
+  "inject": [
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:end:imports",
+      "text": "import { AnalyticsModule } from \"./analytics/analytics.module\";"
+    },
+    {
+      "file": "apps/api/src/app.module.ts",
+      "marker": "// podokit:end:module-imports",
+      "text": "AnalyticsModule,"
+    },
+    {
+      "file": "apps/web/src/lib/i18n/messages.ts",
+      "marker": "// podokit:end:message-types",
+      "text": "  analytics: (typeof import(\"./catalogs/analytics/en.json\"))[\"analytics\"];"
+    },
+    {
+      "file": "apps/web/src/lib/admin/registry.svelte.ts",
+      "marker": "// podokit:end:admin-nav-imports",
+      "text": "import ChartNoAxesCombinedIcon from \"@lucide/svelte/icons/chart-no-axes-combined\";\nimport AnalyticsSettings from \"$lib/components/settings/analytics-settings.svelte\";"
+    },
+    {
+      "file": "apps/web/src/lib/admin/registry.svelte.ts",
+      "marker": "// podokit:end:admin-nav-entries",
+      "text": "  { href: \"/admin/analytics\", label: (t) => t.analytics.nav, icon: ChartNoAxesCombinedIcon, adminOnly: true },"
+    },
+    {
+      "file": "apps/web/src/lib/admin/registry.svelte.ts",
+      "marker": "// podokit:end:admin-settings",
+      "text": "  { value: \"analytics\", label: (t) => t.analytics.settings.tab, component: AnalyticsSettings },"
+    },
+    {
+      "file": "apps/web/src/lib/components/site-runtime.svelte",
+      "marker": "// podokit:end:site-runtime-imports",
+      "text": "import AnalyticsRuntime from \"$lib/components/analytics-runtime.svelte\";"
+    },
+    {
+      "file": "apps/web/src/lib/components/site-runtime.svelte",
+      "marker": "<!-- podokit:end:site-runtime-components -->",
+      "text": "<AnalyticsRuntime />"
+    },
+    {
+      "file": "AGENTS.md",
+      "marker": "<!-- podokit:end:agents-modules -->",
+      "optional": true,
+      "text": "### analytics\n- Analytics is configured by administrators under Settings → Analytics and reported at `/admin/analytics`. It sends anonymous aggregate GA4 data only; never pass user IDs, names, email addresses, secrets, or sensitive values to analytics events.\n- Track application goals with `trackAnalyticsEvent` from `$lib/analytics`. Public and signed-in product pages are included by default; customize sensitive routes in the owned `$lib/analytics.config.ts`.\n- Consent Mode v2 runs in advanced mode, so denied analytics storage can still produce cookieless pings. Keep the application privacy notice accurate and leave a visible way to reopen analytics consent settings.\n"
+    }
+  ],
+  "instructions": [
+    "Install dependencies: npm install",
+    "Run migrations: npm run migration:run -w <app>-api",
+    "Configure GA4 under /admin/settings, test the connection, and open /admin/analytics for reports.",
+    "Disable GA4 Enhanced measurement history-based page changes to prevent duplicate SvelteKit page views.",
+    "Document advanced consent mode in the application privacy notice: denied analytics storage can still send cookieless pings."
+  ]
+}

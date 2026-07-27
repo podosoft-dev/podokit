@@ -1,6 +1,6 @@
 {
   "name": "api-key-auth",
-  "description": "API-key auth for machine/service clients (X-API-Key), separate from user sessions. Provides an ApiKeyGuard and @ApiKeyProtected() to open a route to key holders. Requires auth.",
+  "description": "API-key auth for machine/service clients (X-API-Key), separate from user sessions. Provides an ApiKeyGuard and shared ApiKeyVerifier that compare SHA-256 key digests in constant time. Requires auth.",
   "requires": ["auth"],
   "targetApp": "api",
   "env": [

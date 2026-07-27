@@ -42,6 +42,12 @@ test("publishes a GitHub Release only after npm packages succeed", () => {
   const publishSteps = [...release.matchAll(/^\s+- name: Publish .+$/gm)];
   assert.ok(publishSteps.length > 0);
   assert.ok(publishSteps.every((step) => (step.index ?? -1) < createRelease));
+  assert.match(release, /PKG=@podosoft\/podokit-module-analytics/);
+  assert.match(
+    release,
+    /require\('\.\/packages\/podokit-module-analytics\/package\.json'\)\.version/,
+  );
+  assert.match(release, /npm publish -w "\$PKG"/);
   assert.match(release, /gh release view "\$GITHUB_REF_NAME"/);
   assert.match(release, /gh release create "\$GITHUB_REF_NAME"/);
   assert.match(release, /--verify-tag/);

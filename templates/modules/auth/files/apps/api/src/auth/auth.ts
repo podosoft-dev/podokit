@@ -12,6 +12,7 @@ import { passkey } from "@better-auth/passkey";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { SIGNUP_APPROVAL_REQUIRED } from "@podosoft/podokit-contracts";
 import { runUserDeletedHandlers } from "./user-delete-handlers";
+import { authBaseUrl, authSecret } from "./auth-environment";
 // podokit:begin:auth-imports
 // podokit:end:auth-imports
 
@@ -214,8 +215,8 @@ export function buildAuth(config: AuthConfig) {
     ...(session ? { session } : {}),
     plugins,
     hooks,
-    secret: process.env.BETTER_AUTH_SECRET ?? "change-me-in-production-min-32-characters",
-    baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:5002",
+    secret: authSecret(),
+    baseURL: authBaseUrl(),
     advanced: {
       ipAddress: {
         // The API sits behind the SvelteKit server proxy, which forwards the

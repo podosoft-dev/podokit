@@ -2,6 +2,9 @@
   "name": "bullmq",
   "description": "Background jobs with BullMQ: a demo queue, a separate worker process, and enqueue/status endpoints (needs Redis).",
   "requires": [],
+  "requiredProjectFiles": [
+    "apps/api/src/config/redis.connection.ts"
+  ],
   "targetApp": "api",
   "dependencies": {
     "@nestjs/bullmq": "^11.0.4",
@@ -12,7 +15,7 @@
     "dev:worker": "nest start --watch --builder swc --entryFile main-worker"
   },
   "env": [
-    "# bullmq uses REDIS_HOST / REDIS_PORT (already defined above)"
+    "# bullmq uses REDIS_URL or the individual Redis settings defined above"
   ],
   "inject": [
     {

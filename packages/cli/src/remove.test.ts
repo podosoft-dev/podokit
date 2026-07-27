@@ -188,4 +188,52 @@ describe("removeModule", () => {
     expect(existsSync(join(project, "apps/api/src/events"))).toBe(false);
     expect(readManifest(project).modules.map((m) => m.name)).not.toContain("sse");
   });
+
+  it("removes multi-line injections and unused module-owned globs", () => {
+    const project = generate();
+    const modulesDir = join(tmp(), "modules");
+    const fileRel = widgetModule(modulesDir, "widget", {
+      ownedGlobs: ["apps/web/src/lib/widget.config.ts"],
+      inject: [
+        {
+          file: "apps/api/src/app.module.ts",
+          marker: "// podokit:end:providers",
+          text: "// widget-import-one\n// widget-import-two",
+        },
+      ],
+    });
+    writeFile(
+      join(modulesDir, "widget", "files", "apps/web/src/lib/widget.config.ts"),
+      "export const widgetConfig = true;\n",
+    );
+
+    addModule({ projectRoot: project, module: "widget", modulesDir });
+    removeModule({ projectRoot: project, module: "widget", modulesDir });
+
+    const appModule = readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8");
+    expect(appModule).not.toContain("widget-import-one");
+    expect(appModule).not.toContain("widget-import-two");
+    expect(readManifest(project).ownedGlobs).not.toContain("apps/web/src/lib/widget.config.ts");
+    expect(existsSync(join(project, fileRel))).toBe(false);
+  });
+
+  it("keeps an owned glob when the edited module file is preserved", () => {
+    const project = generate();
+    const modulesDir = join(tmp(), "modules");
+    widgetModule(modulesDir, "widget", {
+      ownedGlobs: ["apps/web/src/lib/widget.config.ts"],
+    });
+    const config = join(project, "apps/web/src/lib/widget.config.ts");
+    writeFile(
+      join(modulesDir, "widget", "files", "apps/web/src/lib/widget.config.ts"),
+      "export const widgetConfig = true;\n",
+    );
+    addModule({ projectRoot: project, module: "widget", modulesDir });
+    writeFileSync(config, "export const widgetConfig = false;\n");
+
+    removeModule({ projectRoot: project, module: "widget", modulesDir });
+
+    expect(existsSync(config)).toBe(true);
+    expect(readManifest(project).ownedGlobs).toContain("apps/web/src/lib/widget.config.ts");
+  });
 });

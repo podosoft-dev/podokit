@@ -8,6 +8,7 @@
     "start": "node dist/main",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "jest --passWithNoTests",
+    "migrate:all": "node dist/database/migrate",
     "typeorm": "typeorm-ts-node-commonjs -d src/database/data-source.ts",
     "migration:run": "npm run typeorm -- migration:run",
     "migration:revert": "npm run typeorm -- migration:revert",

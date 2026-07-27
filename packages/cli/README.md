@@ -38,6 +38,7 @@ The `todo` template (`--template todo`) generates a working todo app (SvelteKit 
 | `podo update [--apply]` | Preview (or apply) what a version update would change |
 | `podo eject <path…>` | Take ownership of a managed file so updates skip it |
 | `podo dev <action>` | Watch, inspect, execute in, or stop a container stack behind the shared `*.localhost` gateway |
+| `podo deploy <action>` | Plan, apply, verify, or roll back an exact-image Helm release |
 
 ## Usage
 
@@ -60,6 +61,9 @@ Generated projects include agent guidance for AI coding tools — an
 [`AGENTS.md`](https://agents.md) (the open standard), a `CLAUDE.md` that imports
 it, `.cursor`/`.github` pointers, and Claude Code skills under `.claude/skills/`.
 Modules extend `AGENTS.md` as you add them. Use `--no-ai` to skip.
+
+Fullstack projects also include a deployment skill under `.agents/skills/`
+with a Claude pointer under `.claude/skills/`.
 
 Examples:
 
@@ -104,6 +108,19 @@ Files you own (routes, your components, shadcn UI) are never touched. See the
 An exact path handed over with `podo eject` remains owned even if a module also
 declares it managed; if you later move or delete that file, update reports the
 missing owned path instead of recreating it.
+
+## Deploy an immutable release
+
+```bash
+podo deploy init --profile production --context production --host app.example.com
+podo deploy doctor --profile production
+podo deploy plan --profile production --release v1.2.3 --json
+```
+
+Apply and rollback require the exact confirmation hash from a fresh plan.
+PodoKit consumes an existing namespace and Secrets, runs migrations before the
+application rollout, and exposes only the SvelteKit web proxy. See the
+[deployment guide](https://github.com/podosoft-dev/podokit/blob/main/docs/deployment.md).
 
 ## What you get (`fullstack-nest-svelte`)
 

@@ -89,6 +89,8 @@ describe("create (integration against templates)", () => {
     expect(existsSync(join(withAi, ".cursor/rules/podokit.mdc"))).toBe(true);
     expect(existsSync(join(withAi, ".github/copilot-instructions.md"))).toBe(true);
     expect(existsSync(join(withAi, ".claude/skills/podokit-nest-endpoint/SKILL.md"))).toBe(true);
+    expect(existsSync(join(withAi, ".agents/skills/podokit-deploy/SKILL.md"))).toBe(true);
+    expect(existsSync(join(withAi, ".claude/skills/podokit-deploy/SKILL.md"))).toBe(true);
     // AI files are user-owned so `podo update` never touches them
     const lock = JSON.parse(readFileSync(join(withAi, ".podokit/files.lock"), "utf8")) as {
       files: Record<string, { tier: string }>;
@@ -100,6 +102,7 @@ describe("create (integration against templates)", () => {
     expect(existsSync(join(noAi, "AGENTS.md"))).toBe(false);
     expect(existsSync(join(noAi, "CLAUDE.md"))).toBe(false);
     expect(existsSync(join(noAi, ".claude"))).toBe(false);
+    expect(existsSync(join(noAi, ".agents"))).toBe(false);
     expect(existsSync(join(noAi, ".cursor"))).toBe(false);
     // the app itself is still generated
     expect(existsSync(join(noAi, "apps/api/src/main.ts"))).toBe(true);
@@ -158,7 +161,9 @@ describe("create (integration against templates)", () => {
 
     const healthController = readFileSync(join(target, "apps", "api", "src", "health", "health.controller.ts"), "utf8");
     expect(healthController).toContain("ServiceUnavailableException");
-    expect(healthController).toContain('throw new ServiceUnavailableException({ status: "degraded", db: "down" })');
+    expect(healthController).toContain("readinessService.run()");
+    expect(existsSync(join(target, "apps", "api", "src", "health", "readiness.service.ts"))).toBe(true);
+    expect(existsSync(join(target, "apps", "api", "src", "config", "redis.connection.ts"))).toBe(true);
   });
 
   it("ships the containerized dev environment (Traefik + internal services + devcontainer)", () => {
@@ -228,6 +233,14 @@ describe("create (integration against templates)", () => {
     expect(ingress).toContain("kind: Middleware");
     expect(ingress).toContain("name: compression");
     expect(ingress).toContain("podokit-compression@kubernetescrd");
+    expect(ingress).not.toContain("name: api");
+    expect(ingress).not.toContain("path: /api");
+    expect(ingress).toContain("name: web");
+    const apiDeployment = readFileSync(
+      join(target, "infra", "k3s", "api-deployment.yaml"),
+      "utf8",
+    );
+    expect(apiDeployment).toContain("path: /health/ready");
     const k3sConfig = readFileSync(join(target, "infra", "k3s", "configmap.yaml"), "utf8");
     expect(k3sConfig).toContain('ADDRESS_HEADER: "x-forwarded-for"');
     expect(k3sConfig).toContain('XFF_DEPTH: "1"');

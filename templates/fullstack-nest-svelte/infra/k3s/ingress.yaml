@@ -18,10 +18,6 @@ spec:
     - host: example.com
       http:
         paths:
-          - path: /api
-            pathType: Prefix
-            backend:
-              service: { name: api, port: { number: 3000 } }
           - path: /
             pathType: Prefix
             backend:

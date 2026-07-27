@@ -108,6 +108,7 @@ export const DEFAULT_OWNED_GLOBS = [
   // AI agent guidance — yours to customize; update never touches it.
   "AGENTS.md",
   "CLAUDE.md",
+  ".agents/**",
   ".claude/**",
   ".cursor/**",
   ".github/copilot-instructions.md",

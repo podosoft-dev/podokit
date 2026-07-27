@@ -1,14 +1,11 @@
 import { type CanActivate, type ExecutionContext, Injectable, UnauthorizedException } from "@nestjs/common";
-import { timingSafeEqual } from "node:crypto";
 import type { Request } from "express";
+import { ApiKeyVerifier } from "./api-key-verifier";
 
 // Validates the X-API-Key header against the API_KEYS allowlist.
 @Injectable()
 export class ApiKeyGuard implements CanActivate {
-  private readonly keys = (process.env.API_KEYS ?? "")
-    .split(",")
-    .map((key) => key.trim())
-    .filter(Boolean);
+  constructor(private readonly verifier: ApiKeyVerifier) {}
 
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<Request>();
@@ -16,12 +13,7 @@ export class ApiKeyGuard implements CanActivate {
     if (!provided) {
       throw new UnauthorizedException("Missing X-API-Key");
     }
-    const supplied = Buffer.from(provided);
-    const valid = this.keys.some((key) => {
-      const expected = Buffer.from(key);
-      return expected.length === supplied.length && timingSafeEqual(expected, supplied);
-    });
-    if (!valid) {
+    if (!this.verifier.isValid(provided)) {
       throw new UnauthorizedException("Invalid API key");
     }
     return true;

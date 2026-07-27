@@ -17,6 +17,21 @@ import {
   validateLocale,
   type LocaleDirection,
 } from "./locale";
+import {
+  applyDeployment,
+  doctorDeployment,
+  getDeploymentStatus,
+  inspectClusterFingerprint,
+  planDeployment,
+  planRollback,
+  rollbackDeployment,
+  verifyDeployment,
+} from "./deploy";
+import {
+  initializeDeploymentProfile,
+  loadDeploymentProfile,
+} from "./deploy-profile";
+import { renderDeployment } from "./deploy-render";
 
 const HELP = `podo — PodoKit project generator
 
@@ -28,6 +43,7 @@ Usage:
   podo diff                List PodoKit-managed files you have edited
   podo doctor              Check framework versions against supported ranges
   podo dev <action> [...]  Run the shared, portless container development gateway
+  podo deploy <action>     Plan, apply, verify, or roll back a Kubernetes deployment
   podo locale <command>    Add, validate, activate, or list JSON locales
   podo update [--apply]    Preview (or apply) what a version update would change
   podo eject <path...>     Take ownership of managed files (update skips them)
@@ -38,6 +54,14 @@ Options:
   --pm <name>    Package manager: npm | pnpm | yarn (default: npm)
   --name <label> Display name for a locale
   --direction <direction>  Text direction: ltr | rtl (default: ltr)
+  --profile <name>         Deployment profile name
+  --release <tag>          Immutable shared API/web release tag
+  --confirm <plan-hash>    Exact deployment or rollback plan hash
+  --revision <number>      Helm revision for rollback
+  --context <name>         Explicit Kubernetes context for profile initialization
+  --cluster-fingerprint <sha256:...>  Expected cluster fingerprint (auto-detected if omitted)
+  --host <hostname>        Public hostname for profile initialization
+  --json                   Emit machine-readable JSON when supported
   --adopt        Adopt colliding paths explicitly declared managed by a module
   --no-ai        Skip AI agent guidance (AGENTS.md, CLAUDE.md, editor rules)
   -y, --yes      Skip prompts and accept defaults
@@ -50,6 +74,23 @@ Example:
   npx @podosoft/podokit create my-app
   npx @podosoft/podokit create my-app --template todo
   cd my-app && npx @podosoft/podokit add auth
+`;
+
+const DEPLOY_HELP = `podo deploy — Kubernetes and Helm deployment workflow
+
+Usage:
+  podo deploy init --profile <name> --context <context> [--host <hostname>]
+  podo deploy doctor --profile <name> [--json]
+  podo deploy render --profile <name> --release <tag> [--json]
+  podo deploy plan --profile <name> --release <tag> [--json]
+  podo deploy apply --profile <name> --release <tag> --confirm <plan-hash>
+  podo deploy status --profile <name> [--json]
+  podo deploy verify --profile <name> [--json]
+  podo deploy rollback --profile <name> --revision <number> [--confirm <plan-hash>]
+
+The namespace, referenced Secrets, ingress controller, and storage classes must
+already exist. Plan and rollback require access to the profile's exact cluster.
+Apply and rollback require confirmation of the exact plan hash.
 `;
 
 interface ParsedArgs {
@@ -67,6 +108,14 @@ interface ParsedArgs {
   positionals: string[];
   localeName?: string;
   localeDirection?: LocaleDirection;
+  profile?: string;
+  release?: string;
+  confirm?: string;
+  revision?: number;
+  context?: string;
+  clusterFingerprint?: string;
+  host?: string;
+  json: boolean;
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
@@ -76,6 +125,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     apply: false,
     adopt: false,
     ai: true,
+    json: false,
     positionals: [],
   };
   const positionals: string[] = [];
@@ -107,6 +157,26 @@ export function parseArgs(argv: string[]): ParsedArgs {
         throw new Error('--direction must be either "ltr" or "rtl".');
       }
       parsed.localeDirection = direction;
+    } else if (arg === "--profile") {
+      parsed.profile = argv[++i];
+    } else if (arg === "--release") {
+      parsed.release = argv[++i];
+    } else if (arg === "--confirm") {
+      parsed.confirm = argv[++i];
+    } else if (arg === "--revision") {
+      const revision = Number(argv[++i]);
+      if (!Number.isInteger(revision) || revision < 1) {
+        throw new Error("--revision must be a positive integer.");
+      }
+      parsed.revision = revision;
+    } else if (arg === "--context") {
+      parsed.context = argv[++i];
+    } else if (arg === "--cluster-fingerprint") {
+      parsed.clusterFingerprint = argv[++i];
+    } else if (arg === "--host") {
+      parsed.host = argv[++i];
+    } else if (arg === "--json") {
+      parsed.json = true;
     } else if (arg !== undefined && !arg.startsWith("-")) {
       positionals.push(arg);
     }
@@ -126,7 +196,7 @@ async function main(argv: string[]): Promise<void> {
   const args = parseArgs(argv);
 
   if (args.help || !args.command) {
-    process.stdout.write(HELP);
+    process.stdout.write(args.help && args.command === "deploy" ? DEPLOY_HELP : HELP);
     return;
   }
   const modulesDir = join(__dirname, "templates", "modules");
@@ -265,6 +335,120 @@ async function main(argv: string[]): Promise<void> {
       fail((err as Error).message);
     }
     return;
+  }
+
+  if (args.command === "deploy") {
+    const action = args.positionals[1] ?? "status";
+    const profileName = args.profile;
+    if (!profileName) {
+      fail("Deployment commands require --profile <name>.");
+    }
+    try {
+      if (action === "init") {
+        if (!args.context) {
+          fail("Usage: podo deploy init --profile <name> --context <context> [--host <hostname>].");
+        }
+        const clusterFingerprint =
+          args.clusterFingerprint ?? inspectClusterFingerprint(args.context);
+        const initialized = initializeDeploymentProfile(process.cwd(), profileName!, {
+          context: args.context,
+          clusterFingerprint,
+          host: args.host,
+        });
+        process.stdout.write(
+          args.json
+            ? `${JSON.stringify(initialized, null, 2)}\n`
+            : `Created deployment profile ${initialized.name} at ${initialized.path}.\n`,
+        );
+        return;
+      }
+      if (action === "doctor") {
+        const findings = doctorDeployment(process.cwd(), profileName!);
+        process.stdout.write(
+          args.json
+            ? `${JSON.stringify(findings, null, 2)}\n`
+            : `${findings.map((finding) => `${finding.ok ? "ok  " : "FAIL"} ${finding.message}`).join("\n")}\n`,
+        );
+        if (findings.some((finding) => !finding.ok)) process.exitCode = 1;
+        return;
+      }
+      if (action === "render") {
+        if (!args.release) fail("podo deploy render requires --release <tag>.");
+        const profile = loadDeploymentProfile(process.cwd(), profileName!);
+        const plan = planDeployment(process.cwd(), profileName!, args.release!);
+        const runtime = renderDeployment(
+          process.cwd(),
+          profileName!,
+          profile,
+          args.release!,
+          plan.images,
+          plan.rolloutStateDigest,
+        );
+        process.stdout.write(
+          args.json
+            ? `${JSON.stringify({ plan, runtime }, null, 2)}\n`
+            : `Rendered deployment into ${runtime.root}.\nPlan hash: ${plan.planHash}\n`,
+        );
+        return;
+      }
+      if (action === "plan") {
+        if (!args.release) fail("podo deploy plan requires --release <tag>.");
+        const plan = planDeployment(process.cwd(), profileName!, args.release!);
+        process.stdout.write(
+          args.json
+            ? `${JSON.stringify(plan, null, 2)}\n`
+            : `${plan.actions.map((entry) => `${entry.order}. ${entry.description}`).join("\n")}\nPlan hash: ${plan.planHash}\n`,
+        );
+        return;
+      }
+      if (action === "apply") {
+        if (!args.release || !args.confirm) {
+          fail("podo deploy apply requires --release <tag> --confirm <plan-hash>.");
+        }
+        const result = await applyDeployment(
+          process.cwd(),
+          profileName!,
+          args.release!,
+          args.confirm!,
+        );
+        process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+        return;
+      }
+      if (action === "status") {
+        const result = getDeploymentStatus(process.cwd(), profileName!);
+        process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+        return;
+      }
+      if (action === "verify") {
+        const result = await verifyDeployment(process.cwd(), profileName!);
+        process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+        if (!result.ok) process.exitCode = 1;
+        return;
+      }
+      if (action === "rollback") {
+        if (!args.revision) fail("podo deploy rollback requires --revision <number>.");
+        if (!args.confirm) {
+          const plan = planRollback(process.cwd(), profileName!, args.revision!);
+          process.stdout.write(
+            `${JSON.stringify(plan, null, 2)}\nRe-run with --confirm ${plan.planHash}.\n`,
+          );
+          return;
+        }
+        const result = await rollbackDeployment(
+          process.cwd(),
+          profileName!,
+          args.revision!,
+          args.confirm,
+        );
+        process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+        return;
+      }
+      fail(
+        `Unknown deploy command "${action}". Use init, doctor, render, plan, apply, status, verify, or rollback.`,
+      );
+    } catch (err) {
+      fail((err as Error).message);
+    }
   }
 
   if (args.command === "locale") {

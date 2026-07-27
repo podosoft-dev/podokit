@@ -2,8 +2,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initLockfile } from "./lockfile";
+import { initLockfile, readManifest, writeManifest } from "./lockfile";
 import {
+  installedDevProfiles,
   readDevConfig,
   renderRoute,
   renderRuntimeCompose,
@@ -74,6 +75,58 @@ describe("PodoKit development gateway", () => {
     expect(route).not.toContain("docker.sock");
     expect(compose).toContain("profiles: [podokit-legacy-proxy]");
     expect(compose).toContain("external: true");
+  });
+
+  it("activates profiles required by installed modules", () => {
+    const root = project();
+    const manifest = readManifest(root)!;
+    manifest.modules = [
+      { name: "redis", order: 0, addedWith: "0.15.0" },
+      { name: "object-storage-s3", order: 1, addedWith: "0.15.0" },
+      { name: "bullmq", order: 2, addedWith: "0.15.0" },
+      { name: "rate-limit", order: 3, addedWith: "0.15.0" },
+    ];
+    writeManifest(root, manifest);
+    expect(installedDevProfiles(root)).toEqual([
+      "cache",
+      "storage",
+      "queue",
+    ]);
+
+    const devHome = temporaryDirectory("podokit-dev-home-");
+    process.env.PODOKIT_DEV_HOME = devHome;
+    const calls: string[][] = [];
+    const runner: CommandRunner = (_command, args) => {
+      calls.push(args);
+      if (args[0] === "info") {
+        return { status: 0, stdout: "27.0.0\n", stderr: "" };
+      }
+      if (args[0] === "network" && args[1] === "inspect") {
+        return { status: 0, stdout: "present\n", stderr: "" };
+      }
+      if (args[0] === "inspect") {
+        return { status: 0, stdout: "1 true\n", stderr: "" };
+      }
+      return { status: 0, stdout: "", stderr: "" };
+    };
+
+    runDevCommand(root, "watch", ["--profile=cache"], runner);
+    const watch = calls.find((args) => args.includes("watch"));
+    expect(watch).toEqual(
+      expect.arrayContaining([
+        "--profile",
+        "storage",
+        "--profile",
+        "queue",
+        "--profile=cache",
+        "watch",
+      ]),
+    );
+    expect(
+      watch?.filter(
+        (value) => value === "cache" || value === "--profile=cache",
+      ),
+    ).toHaveLength(1);
   });
 
   it("starts one gateway, delegates compose commands, and removes the final route", () => {

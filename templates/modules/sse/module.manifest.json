@@ -1,9 +1,21 @@
 {
   "name": "sse",
-  "description": "Server-Sent Events: a /events/stream endpoint (heartbeat + published messages) and a POST /events publisher.",
+  "description": "Server-Sent Events with memory or Redis transport for multi-replica delivery.",
   "requires": [],
+  "requiredProjectFiles": [
+    "apps/api/src/config/redis.connection.ts",
+    "apps/api/src/health/readiness.service.ts"
+  ],
   "targetApp": "api",
-  "env": [],
+  "dependencies": {
+    "ioredis": "^5.4.1"
+  },
+  "env": [
+    "# Server-Sent Events transport: memory for one API replica, redis for multiple replicas",
+    "SSE_TRANSPORT=memory",
+    "SSE_REDIS_CHANNEL=podokit:events",
+    "SSE_MAX_EVENT_BYTES=65536"
+  ],
   "inject": [
     { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:imports", "text": "import { EventsModule } from \"./events/events.module\";" },
     { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:module-imports", "text": "EventsModule," }
@@ -11,6 +23,7 @@
   "instructions": [
     "Stream events:  curl -N localhost:5002/events/stream",
     "Publish a message (in another terminal):  curl -XPOST localhost:5002/events -H 'content-type: application/json' -d '{\"message\":\"hello\"}'",
-    "Inject EventsService anywhere to push updates (e.g. job progress)."
+    "Set SSE_TRANSPORT=redis for delivery across API replicas; Redis uses the shared REDIS_URL or individual Redis settings.",
+    "Inject EventsService and call publishAsync for confirmed delivery, publish for best-effort delivery, or publishLocal for events already fanned out to every replica."
   ]
 }

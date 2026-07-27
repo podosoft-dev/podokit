@@ -7,6 +7,7 @@
 // Usage: node scripts/e2e-ci.mjs [--smoke | --package-smoke] [--keep]
 // Env (with CI-friendly defaults): REGISTRY_PORT, API_PORT, WEB_PORT,
 //   OUTAGE_WEB_PORT,
+//   SECONDARY_API_PORT,
 //   POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB,
 //   APP_DIR, E2E_NPM_CACHE, KEEP.
 import { spawn, execFileSync } from "node:child_process";
@@ -35,6 +36,7 @@ const env = {
   API_PORT: process.env.API_PORT ?? "5012",
   WEB_PORT: process.env.WEB_PORT ?? "5011",
   OUTAGE_WEB_PORT: process.env.OUTAGE_WEB_PORT ?? "5013",
+  SECONDARY_API_PORT: process.env.SECONDARY_API_PORT ?? "5014",
   POSTGRES_HOST: process.env.POSTGRES_HOST ?? "localhost",
   POSTGRES_PORT: process.env.POSTGRES_PORT ?? "5432",
   POSTGRES_USER: process.env.POSTGRES_USER ?? "podokit",
@@ -45,6 +47,12 @@ const registry = `http://localhost:${env.REGISTRY_PORT}`;
 const webURL = `http://localhost:${env.WEB_PORT}`;
 const outageWebURL = `http://localhost:${env.OUTAGE_WEB_PORT}`;
 const appDir = process.env.APP_DIR ? resolve(process.env.APP_DIR) : mkdtempSync(join(tmpdir(), "podokit-e2e-"));
+const EXTERNAL_MODULES = [
+  {
+    name: "analytics",
+    packageName: "@podosoft/podokit-module-analytics",
+  },
+];
 // Publish order: contracts first (api-client depends on it), then the rest.
 const PACKAGES = [
   "@podosoft/podokit-contracts",
@@ -52,6 +60,7 @@ const PACKAGES = [
   "@podosoft/podokit-template-engine",
   "@podosoft/podokit-api-client",
   "@podosoft/podokit",
+  ...EXTERNAL_MODULES.map(({ packageName }) => packageName),
 ];
 
 const children = [];
@@ -87,6 +96,12 @@ async function waitFor(url, label, tries = 60) {
     await new Promise((r) => setTimeout(r, 1000));
   }
   throw new Error(`timed out waiting for ${label} (${url})`);
+}
+async function assertProcessRunning(child, label) {
+  await new Promise((resolve) => setTimeout(resolve, 1_000));
+  if (child.exitCode !== null || child.signalCode !== null) {
+    throw new Error(`${label} exited before becoming stable`);
+  }
 }
 function cleanup() {
   for (const c of children) {
@@ -149,6 +164,27 @@ async function main() {
   for (const mod of ["redis", "bullmq", "sse", "file-upload", "api-key-auth", "job-progress"]) {
     run("npx", ["--yes", "@podosoft/podokit", "add", mod], { cwd: target, env: npmEnv });
   }
+  for (const external of EXTERNAL_MODULES) {
+    run(
+      "npm",
+      [
+        "install",
+        "--save-dev",
+        external.packageName,
+        "--registry",
+        registry,
+        "--userconfig",
+        npmrc,
+        "--no-audit",
+        "--no-fund",
+      ],
+      { cwd: target, env: npmEnv },
+    );
+    run("npx", ["--yes", "@podosoft/podokit", "add", external.name], {
+      cwd: target,
+      env: npmEnv,
+    });
+  }
 
   step("install (resolving @podosoft/* from the registry)");
   writeFileSync(join(target, ".npmrc"), `registry=${registry}\n//localhost:${env.REGISTRY_PORT}/:_authToken=e2e\n`);
@@ -186,7 +222,19 @@ async function main() {
       // Redis (redis/bullmq/job-progress specs) and S3/MinIO (storage/file-upload
       // specs) are wired only when the CI service is present; otherwise those specs
       // self-skip. The api-key spec always has its static key.
-      ...(process.env.REDIS_HOST ? [`REDIS_HOST=${process.env.REDIS_HOST}`, `REDIS_PORT=${process.env.REDIS_PORT ?? "6379"}`] : []),
+      ...(process.env.REDIS_URL
+        ? [`REDIS_URL=${process.env.REDIS_URL}`, "SSE_TRANSPORT=redis"]
+        : process.env.REDIS_HOST
+          ? [
+              `REDIS_HOST=${process.env.REDIS_HOST}`,
+              `REDIS_PORT=${process.env.REDIS_PORT ?? "6379"}`,
+              ...(process.env.REDIS_USERNAME ? [`REDIS_USERNAME=${process.env.REDIS_USERNAME}`] : []),
+              ...(process.env.REDIS_PASSWORD ? [`REDIS_PASSWORD=${process.env.REDIS_PASSWORD}`] : []),
+              ...(process.env.REDIS_DB ? [`REDIS_DB=${process.env.REDIS_DB}`] : []),
+              ...(process.env.REDIS_TLS ? [`REDIS_TLS=${process.env.REDIS_TLS}`] : []),
+              "SSE_TRANSPORT=redis",
+            ]
+          : []),
       ...(process.env.S3_ENDPOINT
         ? ["STORAGE_PROVIDER=minio", `S3_ENDPOINT=${process.env.S3_ENDPOINT}`, `S3_REGION=${process.env.S3_REGION ?? "us-east-1"}`, `S3_BUCKET=${process.env.S3_BUCKET ?? "podokit"}`, `S3_ACCESS_KEY_ID=${process.env.S3_ACCESS_KEY_ID ?? "podokit"}`, `S3_SECRET_ACCESS_KEY=${process.env.S3_SECRET_ACCESS_KEY ?? "podokitsecret"}`, "S3_FORCE_PATH_STYLE=true"]
         : []),
@@ -214,7 +262,19 @@ async function main() {
     // Route phone-number OTPs to the local SMS sink so the phone spec can read them.
     SMS_WEBHOOK_URL: `${smsSinkURL}/sms`,
     // Backend-module runtime config (present only when the CI service is up).
-    ...(process.env.REDIS_HOST ? { REDIS_HOST: process.env.REDIS_HOST, REDIS_PORT: process.env.REDIS_PORT ?? "6379" } : {}),
+    ...(process.env.REDIS_URL
+      ? { REDIS_URL: process.env.REDIS_URL, SSE_TRANSPORT: "redis" }
+      : process.env.REDIS_HOST
+        ? {
+            REDIS_HOST: process.env.REDIS_HOST,
+            REDIS_PORT: process.env.REDIS_PORT ?? "6379",
+            ...(process.env.REDIS_USERNAME ? { REDIS_USERNAME: process.env.REDIS_USERNAME } : {}),
+            ...(process.env.REDIS_PASSWORD ? { REDIS_PASSWORD: process.env.REDIS_PASSWORD } : {}),
+            ...(process.env.REDIS_DB ? { REDIS_DB: process.env.REDIS_DB } : {}),
+            ...(process.env.REDIS_TLS ? { REDIS_TLS: process.env.REDIS_TLS } : {}),
+            SSE_TRANSPORT: "redis",
+          }
+        : {}),
     ...(process.env.S3_ENDPOINT
       ? { STORAGE_PROVIDER: "minio", S3_ENDPOINT: process.env.S3_ENDPOINT, S3_REGION: process.env.S3_REGION ?? "us-east-1", S3_BUCKET: process.env.S3_BUCKET ?? "podokit", S3_ACCESS_KEY_ID: process.env.S3_ACCESS_KEY_ID ?? "podokit", S3_SECRET_ACCESS_KEY: process.env.S3_SECRET_ACCESS_KEY ?? "podokitsecret", S3_FORCE_PATH_STYLE: "true" }
       : {}),
@@ -270,8 +330,26 @@ async function main() {
     env: { ...pgEnv, PORT: env.API_PORT, BETTER_AUTH_URL: `http://localhost:${env.API_PORT}`, CORS_ORIGIN: webURL },
   });
   await waitFor(`http://localhost:${env.API_PORT}/health`, "api");
+  const hasRedis = Boolean(process.env.REDIS_URL || process.env.REDIS_HOST);
+  if (hasRedis) {
+    bg("node", ["dist/main"], {
+      cwd: join(target, "apps/api"),
+      env: {
+        ...pgEnv,
+        PORT: env.SECONDARY_API_PORT,
+        BETTER_AUTH_URL: `http://localhost:${env.API_PORT}`,
+        CORS_ORIGIN: webURL,
+      },
+    });
+    const secondaryHealthPath = process.env.S3_ENDPOINT ? "/health/ready" : "/health";
+    await waitFor(
+      `http://localhost:${env.SECONDARY_API_PORT}${secondaryHealthPath}`,
+      "secondary api",
+    );
+  }
   // BullMQ worker (bullmq/job-progress) — separate process; harmless (idle) if Redis is absent.
-  bg("node", ["dist/main-worker"], { cwd: join(target, "apps/api"), env: pgEnv });
+  const worker = bg("node", ["dist/main-worker"], { cwd: join(target, "apps/api"), env: pgEnv });
+  await assertProcessRunning(worker, "BullMQ worker");
   bg("node", ["build"], {
     cwd: join(target, "apps/web"),
     env: {
@@ -312,6 +390,9 @@ async function main() {
       ...process.env,
       E2E_BASE_URL: webURL,
       E2E_API_URL: `http://localhost:${env.API_PORT}`,
+      ...(hasRedis
+        ? { E2E_SECONDARY_API_URL: `http://localhost:${env.SECONDARY_API_PORT}` }
+        : {}),
       MAILPIT_URL: mailpitURL,
       SMS_SINK_URL: smsSinkURL,
     },

@@ -7,6 +7,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- **Guarded Kubernetes deployment and distributed runtime primitives.**
+  `podo deploy` now initializes secret-free profiles, validates an explicit
+  cluster fingerprint, renders module-aware Helm resources, hashes plans, runs
+  migrations with the exact API image, and requires the matching confirmation
+  hash for apply or rollback. Generated agent skills and read-only MCP tools
+  expose the same profile, doctor, plan, status, and verification contract
+  without permitting remote cluster mutations. Verification origins reject
+  embedded URL credentials before they can enter plans or tool output.
+  Apply and rollback now hold a release-scoped Kubernetes Lease, reject
+  malformed successful Helm or Kubernetes responses, and roll workloads when
+  referenced Secret identities or runtime ConfigMap content changes.
+  Redis-backed SSE provides
+  cross-replica event delivery with readiness checks, authenticated Redis
+  settings are shared by queues and rate limiting. Rate-limit identities prefer
+  authenticated users, then validated API keys, then an application-provided
+  `RateLimitIdentityExtension`, then an explicitly trusted proxy address; stable
+  429 and bounded Redis-failure 503 responses include `Retry-After`. The
+  extension keeps one managed global guard, and `podo add --adopt` can explicitly
+  bring existing Redis and rate-limit implementations under module management.
+  Generated k3s ingress
+  sends all public traffic through the SvelteKit proxy.
+- **Module baseline prerequisites.** Modules can require generated-project
+  baseline files and stable source contracts, then fail before mutation with an
+  update instruction. This prevents newer Redis, SSE, queue, and storage
+  overlays from creating broken imports or incompatible option types in older
+  projects.
+- **External analytics module.** New
+  `@podosoft/podokit-module-analytics` package adds provider-neutral page and
+  application event collection with GA4 as the first provider, advanced Consent
+  Mode v2, encrypted administrator configuration, traffic and key-event reports,
+  and realtime visitors. The generated runtime excludes sensitive routes and
+  never sends account identifiers, while a new `SiteRuntime` injection seam
+  lets optional modules install browser-wide behavior without editing an
+  application-owned root layout. The faithful generated-app Outer path publishes
+  and installs the external package so release gates cover its shipped output.
 - **Extensible mobile and product-shell UI primitives.** Generated applications
   can add owned Playwright browser/device projects without editing the managed
   config, render the shared account menu with visible identity outside the admin
@@ -24,7 +59,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   runs generated stacks behind one user-level, socket-free Traefik gateway on
   loopback port 80. Each project owns a stable `*.localhost` hostname through
   `.podokit/dev.json`, hostname collisions fail early, and the final `down`
-  removes the shared gateway. Vite HMR derives its endpoint from the browser
+  removes the shared gateway. Installed modules now activate their required
+  `cache`, `storage`, and `queue` Compose profiles automatically. Vite HMR
+  derives its endpoint from the browser
   origin, so the same app works through a stable HTTPS tunnel without a special
   OAuth port. Provider-neutral guidance covers Cloudflare Named Tunnels, reserved
   ngrok domains, callback access bypasses, and separate provider clients per tier.
@@ -108,6 +145,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (ui + api) tests included. No DB migration (uses the existing `app_setting` store).
 
 ### Fixed
+- **Safe dependency detection during module add.** The project manifest is now
+  authoritative for installed requirements, so adding an external module cannot
+  re-overlay an existing customized dependency and erase other modules'
+  registry or localization injections.
+- **Complete external-module removal.** `podo remove` now reverses multi-line
+  injection blocks and drops module-owned globs when no preserved edit or other
+  module still needs them, preventing stale imports and ownership rules after an
+  optional module is removed.
 - **Repeatable inherited admin tests and relocated ejects.** Generated UI
   storage state now pins the English catalog used by accessible-name locators,
   so the suite does not inherit an application's configured default language.

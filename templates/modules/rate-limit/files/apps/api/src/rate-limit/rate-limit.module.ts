@@ -1,65 +1,124 @@
 import { Injectable, Module } from "@nestjs/common";
-import { APP_GUARD } from "@nestjs/core";
+import { APP_GUARD, Reflector } from "@nestjs/core";
 import {
+  InjectThrottlerOptions,
+  InjectThrottlerStorage,
   ThrottlerGuard,
   ThrottlerModule,
+  type ThrottlerLimitDetail,
+  type ThrottlerModuleOptions,
   type ThrottlerRequest,
+  type ThrottlerStorage,
 } from "@nestjs/throttler";
 import { ThrottlerStorageRedisService } from "@nest-lab/throttler-storage-redis";
-import Redis from "ioredis";
+import type { Request } from "express";
+import { ApiKeyVerifier } from "../api-key/api-key-verifier";
+import { AppException } from "../common/app-exception";
+import { RedisModule } from "../redis/redis.module";
+import { RedisService } from "../redis/redis.service";
+import { rateLimitConfig } from "./rate-limit.config";
+import { RateLimitIdentity } from "./rate-limit.identity";
 
-const ttlSeconds = Number(process.env.RATE_LIMIT_TTL ?? 60);
-const limit = Number(process.env.RATE_LIMIT_MAX ?? 100);
-const runtimeLimit = Number(process.env.RATE_LIMIT_RUNTIME_MAX ?? 1000);
+const config = rateLimitConfig();
 const unthrottledHealthPaths = new Set(["/health", "/health/ready"]);
 
-function forwardedClient(headers: unknown): string | undefined {
-  if (!headers || typeof headers !== "object") return undefined;
-  const value = (headers as Record<string, unknown>)["x-forwarded-for"];
-  const first = Array.isArray(value) ? value[0] : value;
-  if (typeof first !== "string") return undefined;
-  return first.split(",")[0]?.trim() || undefined;
-}
-
-// PodoKit exposes the API through its web proxy, which replaces x-forwarded-for
-// with SvelteKit's resolved client address. Track that address instead of the
-// web container so unrelated visitors do not share one global counter.
 @Injectable()
-class ProxyAwareThrottlerGuard extends ThrottlerGuard {
-  protected override handleRequest(requestProps: ThrottlerRequest): Promise<boolean> {
-    const { req } = this.getRequestResponse(requestProps.context);
+export class ProxyAwareThrottlerGuard extends ThrottlerGuard {
+  constructor(
+    @InjectThrottlerOptions() options: ThrottlerModuleOptions,
+    @InjectThrottlerStorage() storage: ThrottlerStorage,
+    reflector: Reflector,
+    private readonly identity: RateLimitIdentity,
+  ) {
+    super(options, storage, reflector);
+  }
+
+  protected override async handleRequest(
+    requestProps: ThrottlerRequest,
+  ): Promise<boolean> {
+    const { req, res } = this.getRequestResponse(requestProps.context);
     const method = typeof req.method === "string" ? req.method : "";
     const path = typeof req.path === "string" ? req.path : "";
-    if (method === "GET" && unthrottledHealthPaths.has(path)) {
-      return Promise.resolve(true);
+    if (method === "GET" && unthrottledHealthPaths.has(path)) return true;
+
+    let effective = requestProps;
+    if (path === "/api/auth" || path.startsWith("/api/auth/")) {
+      effective = {
+        ...requestProps,
+        limit: config.authLimit,
+        ttl: config.authTtlSeconds * 1000,
+        blockDuration: config.authTtlSeconds * 1000,
+      };
+    } else if (method === "GET" && path === "/site/settings") {
+      effective = { ...requestProps, limit: config.runtimeLimit };
     }
-    if (method === "GET" && path === "/site/settings") {
-      return super.handleRequest({ ...requestProps, limit: runtimeLimit });
+
+    try {
+      return await this.withStorageTimeout(super.handleRequest(effective));
+    } catch (error) {
+      if (error instanceof AppException) throw error;
+      if (typeof res.header === "function") {
+        res.header("Retry-After", config.unavailableRetryAfterSeconds);
+      }
+      throw new AppException(
+        "RATE_LIMIT_UNAVAILABLE",
+        "Request limiting is temporarily unavailable.",
+        503,
+      );
     }
-    return super.handleRequest(requestProps);
   }
 
   protected override getTracker(request: Record<string, unknown>): Promise<string> {
-    const forwarded = forwardedClient(request.headers);
-    const direct = typeof request.ip === "string" ? request.ip : "unknown";
-    return Promise.resolve(forwarded ?? direct);
+    return this.identity.resolve(request as unknown as Request, config);
+  }
+
+  protected override async throwThrottlingException(
+    _context: Parameters<ThrottlerGuard["canActivate"]>[0],
+    _detail: ThrottlerLimitDetail,
+  ): Promise<void> {
+    throw new AppException(
+      "RATE_LIMIT_EXCEEDED",
+      "Too many requests.",
+      429,
+    );
+  }
+
+  private async withStorageTimeout(operation: Promise<boolean>): Promise<boolean> {
+    let timeout: NodeJS.Timeout | undefined;
+    try {
+      return await Promise.race([
+        operation,
+        new Promise<never>((_resolve, reject) => {
+          timeout = setTimeout(
+            () => reject(new Error("Rate limit storage timeout")),
+            config.storageTimeoutMs,
+          );
+        }),
+      ]);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
   }
 }
 
-// Distributed rate limiting: the counter lives in Redis, so the limit holds
-// across API replicas. Registers a global guard (429 when exceeded).
 @Module({
   imports: [
-    ThrottlerModule.forRoot({
-      throttlers: [{ ttl: ttlSeconds * 1000, limit }],
-      storage: new ThrottlerStorageRedisService(
-        new Redis({
-          host: process.env.REDIS_HOST ?? "localhost",
-          port: Number(process.env.REDIS_PORT ?? 6379),
-        }),
-      ),
+    RedisModule,
+    ThrottlerModule.forRootAsync({
+      imports: [RedisModule],
+      inject: [RedisService],
+      useFactory: (redis: RedisService) => ({
+        throttlers: [{ ttl: config.ttlSeconds * 1000, limit: config.limit }],
+        storage: new ThrottlerStorageRedisService(redis.client),
+      }),
     }),
   ],
-  providers: [{ provide: APP_GUARD, useClass: ProxyAwareThrottlerGuard }],
+  providers: [
+    ApiKeyVerifier,
+    RateLimitIdentity,
+    ProxyAwareThrottlerGuard,
+    { provide: APP_GUARD, useExisting: ProxyAwareThrottlerGuard },
+  ],
+  exports: [RateLimitIdentity],
 })
 export class RateLimitModule {}

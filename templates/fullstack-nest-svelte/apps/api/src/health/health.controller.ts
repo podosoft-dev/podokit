@@ -1,10 +1,20 @@
 import { Controller, Get, ServiceUnavailableException } from "@nestjs/common";
 import { InjectDataSource } from "@nestjs/typeorm";
 import { DataSource } from "typeorm";
+import { ReadinessService, type ReadinessStatus } from "./readiness.service";
+
+interface ReadinessResponse {
+  status: "ready";
+  db: "up";
+  checks: Record<string, ReadinessStatus>;
+}
 
 @Controller("health")
 export class HealthController {
-  constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
+  constructor(
+    @InjectDataSource() private readonly dataSource: DataSource,
+    private readonly readinessService: ReadinessService,
+  ) {}
 
   @Get()
   liveness(): { status: string; uptime: number; timestamp: string } {
@@ -12,12 +22,17 @@ export class HealthController {
   }
 
   @Get("ready")
-  async readiness(): Promise<{ status: string; db: string }> {
+  async readiness(): Promise<ReadinessResponse> {
+    let db: ReadinessStatus = "up";
     try {
       await this.dataSource.query("SELECT 1");
-      return { status: "ready", db: "up" };
     } catch {
-      throw new ServiceUnavailableException({ status: "degraded", db: "down" });
+      db = "down";
     }
+    const checks = await this.readinessService.run();
+    if (db === "down" || Object.values(checks).includes("down")) {
+      throw new ServiceUnavailableException({ status: "degraded", db, checks });
+    }
+    return { status: "ready", db: "up", checks };
   }
 }

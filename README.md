@@ -49,6 +49,7 @@ Run without flags in a terminal and PodoKit prompts for the template and package
 | `podo update [--apply]` | Preview or apply a version update (3-way merges your edits) |
 | `podo eject <path…>` | Take ownership of a managed file |
 | `podo dev <action>` | Run container development through the shared portless `*.localhost` gateway (`npx @podosoft/podokit dev …` without a global install) |
+| `podo deploy <action>` | Plan, apply, verify, or roll back an exact-image Helm release on an existing Kubernetes cluster |
 
 ## Templates
 
@@ -102,6 +103,7 @@ This repo is an npm workspace. Published packages:
 - `packages/contracts` — `@podosoft/podokit-contracts`: capabilities, upload policies, the error envelope, and `AppException` shared by backend and frontend
 - `packages/podokit-auth` — `@podosoft/podokit-auth`: the DB-backed auth configuration pipeline (encrypted secrets, config store)
 - `packages/podokit-module-blog` — `@podosoft/podokit-module-blog`: draft-first publishing, visibility controls, image uploads, comments, ownership, and admin management as an external updateable module
+- `packages/podokit-module-analytics` — `@podosoft/podokit-module-analytics`: provider-neutral collection, consent, encrypted configuration, and aggregate administrator reports with GA4 as the first provider
 - `templates/` — project templates copied by the CLI
 - `examples/` — how to generate example apps
 
@@ -135,6 +137,13 @@ npm install --save-dev @podosoft/podokit-module-blog
 podo add blog
 ```
 
+For privacy-aware visitor measurement and administrator reports:
+
+```bash
+npm install --save-dev @podosoft/podokit-module-analytics
+podo add analytics
+```
+
 The **`admin-dashboard`** module adds a full admin console on top of `auth`:
 user & session management, self-service profile-image uploads, an audit log, and a Settings page where OAuth
 providers, SMTP, provider-independent sign-up approval, automatic logout, and server toggles are
@@ -165,6 +174,23 @@ podo update --apply  # apply it — clean updates written, your edits 3-way merg
 
 Files you own (routes, your components, shadcn UI) are never touched. See
 [docs/updating.md](docs/updating.md).
+
+## Deploy to Kubernetes
+
+PodoKit can bind an application-owned deployment profile to an explicit
+Kubernetes context, render module-aware Helm resources, run migrations with the
+exact API image, and roll out matching API/web SemVer tags:
+
+```bash
+podo deploy init --profile production --context production --host app.example.com
+podo deploy doctor --profile production
+podo deploy plan --profile production --release v1.2.3 --json
+```
+
+Applying or rolling back requires the exact hash from a freshly computed plan.
+The profile contains Secret names, never Secret values, and public Ingress
+traffic always enters through the SvelteKit web proxy. See
+[Kubernetes deployment](docs/deployment.md).
 
 ## AI coding agents
 
