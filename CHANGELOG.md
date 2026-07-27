@@ -145,6 +145,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (ui + api) tests included. No DB migration (uses the existing `app_setting` store).
 
 ### Fixed
+- **Stable analytics consent regression test.** The inherited browser test now
+  resets consent once per page session instead of clearing it again on reload,
+  so it verifies the persisted denied choice and settings control without a
+  transient hydration race.
 - **Complete module dependency updates.** `podo update` now expands the target
   version's module requirements and applies newly introduced dependencies before
   their dependants, preventing partial updates with generated imports that point
