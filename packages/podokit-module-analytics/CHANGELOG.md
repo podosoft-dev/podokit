@@ -1,5 +1,13 @@
 # @podosoft/podokit-module-analytics
 
+## 0.1.1
+
+### Patch Changes
+
+- [#131](https://github.com/podosoft-dev/podokit/pull/131) [`90a98e0`](https://github.com/podosoft-dev/podokit/commit/90a98e07bf94197622b86b67e811ed16b64aa8b9) Thanks [@korone00](https://github.com/korone00)! - Add a scrollable administrator guide for issuing and securing Google Analytics 4 credentials.
+
+- [#131](https://github.com/podosoft-dev/podokit/pull/131) [`62c951b`](https://github.com/podosoft-dev/podokit/commit/62c951b591c53a051f778661897f637beda9faa4) Thanks [@korone00](https://github.com/korone00)! - Keep the generated analytics consent persistence test from clearing its stored choice again during reload.
+
 ## 0.1.0
 
 ### Minor Changes

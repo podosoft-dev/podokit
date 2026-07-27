@@ -1,5 +1,13 @@
 # @podosoft/podokit
 
+## 0.16.1
+
+### Patch Changes
+
+- [#131](https://github.com/podosoft-dev/podokit/pull/131) [`07c7250`](https://github.com/podosoft-dev/podokit/commit/07c725084585facc176f12d97a65b8745e5615d2) Thanks [@korone00](https://github.com/korone00)! - Write Kubernetes Lease timestamps with the six fractional digits required by MicroTime.
+
+- [#131](https://github.com/podosoft-dev/podokit/pull/131) [`23c2d79`](https://github.com/podosoft-dev/podokit/commit/23c2d7942edd74c63003f6faf3efd9e71d258449) Thanks [@korone00](https://github.com/korone00)! - Apply module requirements introduced by a newer PodoKit version during `podo update` so existing projects receive complete dependency graphs instead of partial generated imports.
+
 ## 0.16.0
 
 ### Minor Changes
