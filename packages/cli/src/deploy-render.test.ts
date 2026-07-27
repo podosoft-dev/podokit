@@ -125,4 +125,25 @@ describe("deployment rollout annotations", () => {
     expect(second.dependencyManifest).toBe(first.dependencyManifest);
     expect(second.applicationManifest).toBe(first.applicationManifest);
   });
+
+  it("nests explicit storage classes under persistent volume claim specs", () => {
+    const { root, profile } = initializedProfile();
+    profile.dependencies.postgres.storageClassName = "local-path";
+    profile.dependencies.redis.storageClassName = "local-path";
+    profile.dependencies.objectStorage.storageClassName = "local-path";
+
+    const manifest = renderDeployment(
+      root,
+      "production",
+      profile,
+      "v1.2.3",
+    ).dependencyManifest;
+
+    expect(
+      manifest.match(
+        /\n {6}spec:\n {8}storageClassName: "local-path"\n {8}accessModes:/g,
+      ),
+    ).toHaveLength(3);
+    expect(manifest).not.toContain("\n      spec:\n      storageClassName:");
+  });
 });

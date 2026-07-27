@@ -68,7 +68,7 @@ ${annotations.map((annotation) => `        ${annotation}`).join("\n")}`;
 
 function storageClassLine(dependency: StatefulDependencyProfile): string {
   return dependency.storageClassName
-    ? `      storageClassName: ${quote(dependency.storageClassName)}\n`
+    ? `        storageClassName: ${quote(dependency.storageClassName)}\n`
     : "";
 }
 
