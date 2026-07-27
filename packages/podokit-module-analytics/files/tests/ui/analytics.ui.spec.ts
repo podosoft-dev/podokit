@@ -22,7 +22,10 @@ test("analytics consent starts denied and persists the cookie choice", async ({
     route.fulfill({ status: 200, contentType: "text/javascript", body: "" })
   );
   await page.addInitScript(() => {
+    const resetKey = "podokit.analytics.test-consent-reset";
+    if (sessionStorage.getItem(resetKey) === "done") return;
     localStorage.removeItem("podokit.analytics.consent.v1");
+    sessionStorage.setItem(resetKey, "done");
   });
 
   await ready(page, "/");
