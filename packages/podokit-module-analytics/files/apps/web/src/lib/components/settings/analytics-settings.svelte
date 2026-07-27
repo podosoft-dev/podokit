@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
+  import * as Dialog from "$lib/components/ui/dialog";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { Switch } from "$lib/components/ui/switch";
@@ -21,6 +22,14 @@
   let propertyId = $state("");
   let serviceAccountJson = $state("");
   let busy = $state(false);
+  let credentialGuideOpen = $state(false);
+  let credentialGuideContent = $state<HTMLElement | null>(null);
+
+  function focusCredentialGuideStart(event: Event): void {
+    event.preventDefault();
+    credentialGuideContent?.focus({ preventScroll: true });
+    credentialGuideContent?.scrollTo({ top: 0 });
+  }
 
   async function refresh(): Promise<void> {
     try {
@@ -100,6 +109,15 @@
           <Card.Description>
             {i18n.t.analytics.settings.ga4Description}
           </Card.Description>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            class="mt-3"
+            onclick={() => (credentialGuideOpen = true)}
+          >
+            {i18n.t.analytics.settings.credentialGuide.trigger}
+          </Button>
         </div>
         <Switch
           aria-label={i18n.t.analytics.settings.enabled}
@@ -193,3 +211,119 @@
     </Card.Footer>
   </Card.Root>
 </div>
+
+<Dialog.Root bind:open={credentialGuideOpen}>
+  <Dialog.Content
+    bind:ref={credentialGuideContent}
+    class="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl"
+    onOpenAutoFocus={focusCredentialGuideStart}
+  >
+    <Dialog.Header>
+      <Dialog.Title>
+        {i18n.t.analytics.settings.credentialGuide.title}
+      </Dialog.Title>
+      <Dialog.Description>
+        {i18n.t.analytics.settings.credentialGuide.description}
+      </Dialog.Description>
+    </Dialog.Header>
+
+    <ol class="ml-5 list-decimal space-y-4 text-sm">
+      <li>
+        <p class="font-medium">
+          {i18n.t.analytics.settings.credentialGuide.propertyTitle}
+        </p>
+        <p class="text-muted-foreground mt-1">
+          {i18n.t.analytics.settings.credentialGuide.propertyDescription}
+        </p>
+      </li>
+      <li>
+        <p class="font-medium">
+          {i18n.t.analytics.settings.credentialGuide.apiTitle}
+        </p>
+        <p class="text-muted-foreground mt-1">
+          {i18n.t.analytics.settings.credentialGuide.apiDescription}
+        </p>
+      </li>
+      <li>
+        <p class="font-medium">
+          {i18n.t.analytics.settings.credentialGuide.accountTitle}
+        </p>
+        <p class="text-muted-foreground mt-1">
+          {i18n.t.analytics.settings.credentialGuide.accountDescription}
+        </p>
+      </li>
+      <li>
+        <p class="font-medium">
+          {i18n.t.analytics.settings.credentialGuide.accessTitle}
+        </p>
+        <p class="text-muted-foreground mt-1">
+          {i18n.t.analytics.settings.credentialGuide.accessDescription}
+        </p>
+      </li>
+      <li>
+        <p class="font-medium">
+          {i18n.t.analytics.settings.credentialGuide.keyTitle}
+        </p>
+        <p class="text-muted-foreground mt-1">
+          {i18n.t.analytics.settings.credentialGuide.keyDescription}
+        </p>
+      </li>
+      <li>
+        <p class="font-medium">
+          {i18n.t.analytics.settings.credentialGuide.connectTitle}
+        </p>
+        <p class="text-muted-foreground mt-1">
+          {i18n.t.analytics.settings.credentialGuide.connectDescription}
+        </p>
+      </li>
+    </ol>
+
+    <div class="bg-muted rounded-md border p-3 text-sm">
+      <p class="font-medium">
+        {i18n.t.analytics.settings.credentialGuide.securityTitle}
+      </p>
+      <p class="text-muted-foreground mt-1">
+        {i18n.t.analytics.settings.credentialGuide.securityDescription}
+      </p>
+    </div>
+
+    <div class="flex flex-wrap gap-2">
+      <Button
+        href="https://developers.google.com/analytics/devguides/reporting/data/v1/quickstart"
+        target="_blank"
+        rel="noopener noreferrer"
+        size="sm"
+        variant="outline"
+      >
+        {i18n.t.analytics.settings.credentialGuide.dataApiLink}
+      </Button>
+      <Button
+        href="https://cloud.google.com/iam/docs/keys-create-delete"
+        target="_blank"
+        rel="noopener noreferrer"
+        size="sm"
+        variant="outline"
+      >
+        {i18n.t.analytics.settings.credentialGuide.serviceAccountLink}
+      </Button>
+      <Button
+        href="https://support.google.com/analytics/answer/9305587"
+        target="_blank"
+        rel="noopener noreferrer"
+        size="sm"
+        variant="outline"
+      >
+        {i18n.t.analytics.settings.credentialGuide.accessLink}
+      </Button>
+    </div>
+
+    <Dialog.Footer>
+      <Button
+        type="button"
+        onclick={() => (credentialGuideOpen = false)}
+      >
+        {i18n.t.analytics.settings.credentialGuide.close}
+      </Button>
+    </Dialog.Footer>
+  </Dialog.Content>
+</Dialog.Root>

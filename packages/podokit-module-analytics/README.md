@@ -26,6 +26,9 @@ Enable the Google Analytics Data API for the credential's Google Cloud project.
 Use a dedicated, least-privilege service account and rotate its key. The JSON
 credential is encrypted with the key derived from `BETTER_AUTH_SECRET`; changing
 that application secret without re-entering the credential makes it unreadable.
+The settings page includes a scrollable credential guide with the current
+Google Analytics and Google Cloud console steps, security notes, and links to
+the official documentation.
 
 Use **Test connection** before enabling collection. Reports appear at
 `/admin/analytics`.
