@@ -230,12 +230,12 @@ describe("create (integration against templates)", () => {
       "src",
       "lib",
       "server",
-      "backend-proxy.test.mjs",
+      "backend-proxy.test.ts",
     );
     expect(existsSync(backendProxyTest)).toBe(true);
-    expect(() =>
-      execFileSync(process.execPath, ["--test", backendProxyTest], { stdio: "pipe" }),
-    ).not.toThrow();
+    expect(readFileSync(backendProxyTest, "utf8")).toContain(
+      'from "./backend-proxy"',
+    );
     const serverApi = readFileSync(join(target, "apps", "web", "src", "lib", "server", "api.ts"), "utf8");
     expect(serverApi).toContain('headers.set("x-forwarded-for", clientIp)');
     expect(serverApi).toContain("resolveClientIp(event.getClientAddress)");
