@@ -42,10 +42,27 @@ The application-owned profile is written to `.podokit/deploy/production.json`. R
 - API/web replicas and CPU/memory resources, plus a BullMQ worker when installed
 - PostgreSQL, Redis, and object storage modes and storage sizes
 - names and required key names of existing workload Kubernetes Secrets
+- an optional API migration command override
 - non-sensitive runtime configuration
 - public verification origin, exact statuses, and optional expected JSON fields
 
 Initialization reads the installed PodoKit modules. Auth and API-key modules add their required API Secret key names, Redis-backed modules select persistent Redis, object storage selects MinIO, SSE selects Redis transport, and BullMQ adds a worker workload. Dependencies support `inCluster`, `external`, and `disabled`. External endpoints and credentials belong in the referenced API Secret, not in the profile. `runtimeConfig` rejects keys that look like passwords, tokens, private keys, or credentials, as well as URL values containing user information. The public verification origin must also be credential-free.
+
+Profiles omit `migration` by default, which runs `npm run migrate:all` in the
+exact API image. Applications with a different compiled migration entry point
+can declare a command as an argument array:
+
+```json
+{
+  "migration": {
+    "command": ["node", "dist/migrate"]
+  }
+}
+```
+
+The `migration` object accepts only `command`. The command must be a non-empty
+array of non-empty strings without newline or control characters. PodoKit emits
+each argument as a safe YAML scalar rather than evaluating a shell command.
 
 ## Plan and apply
 
@@ -88,7 +105,8 @@ Apply performs these steps:
 1. Re-run the doctor.
 2. Acquire a release-scoped Kubernetes Lease and recompute the plan while holding it.
 3. Reconcile and wait for in-cluster dependencies.
-4. Run `npm run migrate:all` with the exact API image.
+4. Run the profile migration command with the exact API image. The default is
+   `npm run migrate:all`.
 5. Roll out API, web, and any configured worker with zero unavailable replicas.
 6. Verify each configured public check's exact status and expected JSON fields, then release the Lease.
 
