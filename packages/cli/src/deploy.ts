@@ -791,12 +791,17 @@ function deploymentLockName(profile: DeployProfileV1): string {
   return `${prefix}-${suffix}-deploy-lock`;
 }
 
+function kubernetesMicroTime(date: Date): string {
+  return `${date.toISOString().slice(0, -1)}000Z`;
+}
+
 function acquireDeploymentLock(
   profile: DeployProfileV1,
   runner: CommandRunner,
 ): DeploymentLock {
   const name = deploymentLockName(profile);
   const holderIdentity = `podokit:${randomUUID()}`;
+  const timestamp = kubernetesMicroTime(new Date());
   const temporaryRoot = mkdtempSync(join(tmpdir(), "podokit-deploy-lock-"));
   const manifestPath = join(temporaryRoot, "lease.json");
   writeFileSync(
@@ -811,8 +816,8 @@ function acquireDeploymentLock(
       spec: {
         holderIdentity,
         leaseDurationSeconds: 3600,
-        acquireTime: new Date().toISOString(),
-        renewTime: new Date().toISOString(),
+        acquireTime: timestamp,
+        renewTime: timestamp,
       },
     }),
   );
