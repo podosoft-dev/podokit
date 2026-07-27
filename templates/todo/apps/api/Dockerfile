@@ -16,12 +16,12 @@ RUN npm run build --workspace=apps/api
 FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
-RUN addgroup -S app && adduser -S app -G app
+RUN addgroup -S -g 101 app && adduser -S -D -H -u 100 -G app app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=deps /app/apps/api ./apps/api
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/api/scripts ./apps/api/scripts
 WORKDIR /app/apps/api
-USER app
+USER 100:101
 EXPOSE 3000
 CMD ["node", "dist/main"]

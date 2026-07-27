@@ -21,6 +21,43 @@ export { planUpdate, summarize } from "./update";
 export type { UpdatePlan, FileChange } from "./update";
 export { readDevConfig, renderRoute, renderRuntimeCompose, resolveDevRuntime, runDevCommand } from "./dev";
 export type { CommandRunner, DevConfig, DevRuntime } from "./dev";
+export {
+  applyDeployment,
+  doctorDeployment,
+  getDeploymentStatus,
+  inspectClusterFingerprint,
+  planDeployment,
+  planRollback,
+  rollbackDeployment,
+  verifyDeployment,
+} from "./deploy";
+export type {
+  DeploymentDoctorFinding,
+  DeploymentPlan,
+  DeploymentPlanAction,
+  DeploymentStatus,
+  VerificationResult,
+} from "./deploy";
+export {
+  assertReleaseTag,
+  deploymentProfileDigest,
+  initializeDeploymentProfile,
+  listDeploymentProfiles,
+  loadDeploymentProfile,
+} from "./deploy-profile";
+export type {
+  DependencyMode,
+  DeployProfileV1,
+  DeploymentProfileSummary,
+  InitializeDeploymentProfileOptions,
+  ObjectStorageDependencyProfile,
+  RedisDependencyProfile,
+  ResourceProfile,
+  StatefulDependencyProfile,
+  WorkloadProfile,
+} from "./deploy-profile";
+export { renderDeployment } from "./deploy-render";
+export type { DeploymentRuntime } from "./deploy-render";
 
 /** Absolute path to the templates bundled in this installed package. */
 export function builtinTemplatesDir(): string {

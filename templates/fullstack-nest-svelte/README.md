@@ -33,16 +33,17 @@ npx @podosoft/podokit dev exec api npm run migration:run -w {{projectName}}-api
 npx @podosoft/podokit dev down
 ```
 
-If installed modules require extra services, use their profiles on the initial
-watch command instead:
+`dev watch` reads `.podokit/manifest.json` and automatically activates `cache`,
+`storage`, and `queue` when installed modules require Redis, MinIO, or a worker.
+You can still activate an additional Compose profile explicitly:
 
 ```bash
-npx @podosoft/podokit dev watch \
-  --profile cache --profile storage --profile queue
+npx @podosoft/podokit dev watch --profile dev
 ```
 
-Pass the same profile flags to other lifecycle commands when applicable. `dev down`
-removes this project's stack and route. If it is the final registered
+Explicit profile flags are preserved for other lifecycle commands. `dev down`
+activates all profiles while removing this project's stack and route. If it is
+the final registered
 project, it also removes the shared gateway and network. Source changes are synced
 through Compose Watch, including Vite HMR on the same portless browser origin.
 
@@ -79,8 +80,18 @@ stable HTTPS tunnel, see the PodoKit [development guide](https://github.com/podo
 
 ## Deploy
 
-Docker Compose in `infra/docker`; example k3s manifests in `infra/k3s`
-(use `secret.example.yaml` as a template — never commit real secrets).
+Docker Compose lives in `infra/docker`; the basic k3s manifests in `infra/k3s`
+route every public path through the web proxy. For a managed release on an
+existing cluster, initialize an application-owned profile:
+
+```bash
+npx @podosoft/podokit deploy init --profile production --context production --host app.example.com
+npx @podosoft/podokit deploy doctor --profile production
+npx @podosoft/podokit deploy plan --profile production --release v1.2.3
+```
+
+Use existing Kubernetes Secrets and never commit their values. See the PodoKit
+[deployment guide](https://github.com/podosoft-dev/podokit/blob/main/docs/deployment.md).
 
 Build production images from the workspace root so Docker can use the committed
 lockfile and all workspace package manifests:

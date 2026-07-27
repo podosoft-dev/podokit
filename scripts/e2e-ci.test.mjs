@@ -97,6 +97,16 @@ test("publishes and installs external analytics in the faithful generated app", 
   assert.ok(add > install);
 });
 
+test("requires dependency readiness only when object storage is configured", () => {
+  const source = readFileSync(join(repoRoot, "scripts/e2e-ci.mjs"), "utf8");
+
+  assert.match(
+    source,
+    /const secondaryHealthPath = process\.env\.S3_ENDPOINT \? "\/health\/ready" : "\/health"/,
+  );
+  assert.match(source, /\$\{env\.SECONDARY_API_PORT\}\$\{secondaryHealthPath\}/);
+});
+
 test("records named phase durations and a total", () => {
   let clock = 0;
   const output = [];

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIResponse } from "@playwright/test";
 
 const base = process.env.E2E_BASE_URL ?? "http://localhost:5001";
 const origin = { origin: base };
@@ -11,7 +11,7 @@ const origin = { origin: base };
 // Honor RATE_LIMIT_MAX when the test runner has it (a dedicated app sets a small
 // value so the window is crossed in a handful of requests); otherwise fall back
 // to the module default and allow a little headroom.
-const limit = Number(process.env.RATE_LIMIT_MAX ?? 100);
+const limit = Number(process.env.RATE_LIMIT_MAX ?? 300);
 
 test("rate limit: health probes stay available while ordinary routes return 429 @smoke", async ({
   playwright,
@@ -30,15 +30,20 @@ test("rate limit: health probes stay available while ordinary routes return 429 
   test.skip(probe.status() >= 500, "throttler storage (redis) not reachable");
 
   let seen200 = probe.status() === 200;
-  let got429 = false;
-  for (let i = 0; i < limit + 5 && !got429; i++) {
+  let limitedResponse: APIResponse | undefined;
+  for (let i = 0; i < limit + 5 && !limitedResponse; i++) {
     const response = await ctx.get("/api/cache/rate-limit-probe");
     if (response.status() === 200) seen200 = true;
-    if (response.status() === 429) got429 = true;
+    if (response.status() === 429) limitedResponse = response;
   }
   // A fresh window serves the first requests (200) and rejects once the limit is
   // crossed (429).
   expect(seen200).toBe(true);
-  expect(got429).toBe(true);
+  expect(limitedResponse?.status()).toBe(429);
+  expect(limitedResponse?.headers()["retry-after"]).toBeTruthy();
+  expect(await limitedResponse?.json()).toMatchObject({
+    success: false,
+    error: { code: "RATE_LIMIT_EXCEEDED", statusCode: 429 },
+  });
   await ctx.dispose();
 });

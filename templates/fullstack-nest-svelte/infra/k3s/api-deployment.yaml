@@ -20,5 +20,5 @@ spec:
             - configMapRef: { name: app-config }
             - secretRef: { name: app-secrets }
           readinessProbe:
-            httpGet: { path: /health, port: 3000 }
+            httpGet: { path: /health/ready, port: 3000 }
             initialDelaySeconds: 5

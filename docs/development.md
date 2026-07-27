@@ -85,7 +85,7 @@ Services are split by what they're for, using Docker Compose profiles:
 | Service | Profile | Needed for |
 |---|---|---|
 | `postgres` | *(none)* | **Runtime** — always started by `docker compose up`. |
-| `redis` | `cache` | **Runtime, conditional** — only the cache/queue modules (redis, bullmq, rate-limit, job-progress, sse). Start with `--profile cache`. |
+| `redis` | `cache` | **Runtime, conditional** — only the cache/queue modules (redis, bullmq, rate-limit, job-progress, sse). Start host dependencies with `--profile cache`. |
 | `mailpit` | `dev` | **Development/testing** — local email catcher (SMTP 1025, UI/REST 8025). |
 | `sms-sink` | `dev` | **Development/testing** — local SMS catcher; the app posts OTPs here via `SMS_WEBHOOK_URL`, tests read them over REST (port 8095). |
 | `minio` / `minio-init` | `dev` | **Development/testing** — local S3 (object-storage-s3 module overlay); in production point `S3_*` at a real service. |
@@ -109,8 +109,7 @@ replace it with `npx @podosoft/podokit`, for example
 ```bash
 cd /tmp/myapp
 podo dev watch                                                   # core stack
-# with modules that need extra services, enable their profiles:
-podo dev watch --profile cache --profile storage --profile queue
+# installed modules automatically enable cache/storage/queue as needed
 # first run only — create the tables (in the api container):
 podo dev exec api \
   npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts

@@ -13,13 +13,20 @@ import {
   builtinModulesDir,
   builtinTemplatesDir,
   create,
+  doctorDeployment,
   diff,
   doctor,
+  getDeploymentStatus,
+  initializeDeploymentProfile,
+  inspectClusterFingerprint,
+  listDeploymentProfiles,
   listModules,
+  planDeployment,
   planUpdate,
   status,
   summarize,
   TEMPLATES,
+  verifyDeployment,
 } from "@podosoft/podokit";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -37,6 +44,23 @@ function inProject<T>(projectDir: string | undefined, body: (dir: string) => T):
   }
   try {
     return body(dir);
+  } catch (err) {
+    return fail(`Failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+async function inProjectAsync<T>(
+  projectDir: string | undefined,
+  body: (dir: string) => Promise<T>,
+): Promise<T | ToolResult> {
+  const dir = projectDir || process.cwd();
+  if (!existsSync(join(dir, ".podokit"))) {
+    return fail(
+      `${dir} is not a PodoKit project (no .podokit/). Run this from a generated app, or pass projectDir.`,
+    );
+  }
+  try {
+    return await body(dir);
   } catch (err) {
     return fail(`Failed: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -150,6 +174,160 @@ server.registerTool(
         `changes: ${JSON.stringify(counts)}\n` +
         plan.changes.map((c) => `  ${c.action}\t${c.path}`).join("\n"),
     );
+  },
+);
+
+server.registerTool(
+  "initialize_deployment_profile",
+  {
+    description:
+      "Create a repository-local Kubernetes deployment profile. This only writes .podokit/deploy/<profile>.json and does not change a cluster.",
+    inputSchema: {
+      profile: z.string().describe("Profile name, for example production"),
+      context: z.string().describe("Explicit kubeconfig context to bind"),
+      clusterFingerprint: z
+        .string()
+        .optional()
+        .describe("Expected sha256 cluster fingerprint; auto-detected from the explicit context if omitted"),
+      host: z.string().optional().describe("Public DNS hostname; defaults to app.example.com"),
+      projectDir: z.string().optional(),
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
+  },
+  async ({ profile, context, clusterFingerprint, host, projectDir }) => {
+    const r = inProject(projectDir, (dir) =>
+      initializeDeploymentProfile(dir, profile, {
+        context,
+        clusterFingerprint: clusterFingerprint ?? inspectClusterFingerprint(context),
+        host,
+      }),
+    );
+    return "content" in r
+      ? r
+      : text(`Created deployment profile "${r.name}" at ${r.path}.`);
+  },
+);
+
+server.registerTool(
+  "deployment_profiles",
+  {
+    description: "List deployment profiles and their non-secret target metadata.",
+    inputSchema: projectDirSchema,
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+  },
+  async ({ projectDir }) => {
+    const r = inProject(projectDir, (dir) => listDeploymentProfiles(dir));
+    return "content" in r
+      ? r
+      : text(
+          r.length
+            ? r
+                .map(
+                  (entry) =>
+                    `- ${entry.name}: context=${entry.profile.target.context}, namespace=${entry.profile.target.namespace}, release=${entry.profile.target.release}`,
+                )
+                .join("\n")
+            : "No deployment profiles.",
+        );
+  },
+);
+
+server.registerTool(
+  "deployment_doctor",
+  {
+    description:
+      "Validate a deployment profile, cluster fingerprint, namespace, Helm, StorageClasses, and required Secret key names without returning Secret values.",
+    inputSchema: {
+      profile: z.string(),
+      projectDir: z.string().optional(),
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  },
+  async ({ profile, projectDir }) => {
+    const r = inProject(projectDir, (dir) => doctorDeployment(dir, profile));
+    return "content" in r ? r : text(JSON.stringify(r, null, 2));
+  },
+);
+
+server.registerTool(
+  "preview_deployment",
+  {
+    description:
+      "Render and hash a Kubernetes deployment plan for an immutable shared release tag. This does not change the cluster.",
+    inputSchema: {
+      profile: z.string(),
+      release: z.string().describe("Stable SemVer tag such as v1.2.3; latest is rejected"),
+      projectDir: z.string().optional(),
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  },
+  async ({ profile, release, projectDir }) => {
+    const r = inProject(projectDir, (dir) => planDeployment(dir, profile, release));
+    return "content" in r ? r : text(JSON.stringify(r, null, 2));
+  },
+);
+
+server.registerTool(
+  "deployment_status",
+  {
+    description:
+      "Read the deployed Helm revision, workload images, ready replicas, and restart totals for a deployment profile.",
+    inputSchema: {
+      profile: z.string(),
+      projectDir: z.string().optional(),
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  },
+  async ({ profile, projectDir }) => {
+    const r = inProject(projectDir, (dir) => getDeploymentStatus(dir, profile));
+    return "content" in r ? r : text(JSON.stringify(r, null, 2));
+  },
+);
+
+server.registerTool(
+  "verify_deployment",
+  {
+    description:
+      "Run the deployment profile's public HTTP verification checks. This reads external state and does not mutate it.",
+    inputSchema: {
+      profile: z.string(),
+      projectDir: z.string().optional(),
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  },
+  async ({ profile, projectDir }) => {
+    const r = await inProjectAsync(projectDir, (dir) => verifyDeployment(dir, profile));
+    return "content" in r ? r : text(JSON.stringify(r, null, 2));
   },
 );
 

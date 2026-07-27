@@ -18,6 +18,11 @@ const GATEWAY_LABEL = "io.podosoft.podokit.dev-gateway";
 const GATEWAY_NETWORK = "podokit-dev-gateway";
 const RUNTIME_COMPOSE = ".podokit/runtime/dev.compose.yaml";
 const DEV_CONFIG = ".podokit/dev.json";
+const DEV_PROFILE_BY_MODULE = new Map([
+  ["redis", "cache"],
+  ["object-storage-s3", "storage"],
+  ["bullmq", "queue"],
+]);
 
 export interface DevConfig {
   schemaVersion: 1;
@@ -134,6 +139,18 @@ export function resolveDevRuntime(projectRoot: string): DevRuntime {
     routeId: `route-${projectSlug}-${id}`,
     runtimeComposePath: join(root, RUNTIME_COMPOSE),
   };
+}
+
+export function installedDevProfiles(projectRoot: string): string[] {
+  const manifest = readManifest(projectRoot);
+  if (!manifest) return [];
+  return [
+    ...new Set(
+      manifest.modules
+        .map((module) => DEV_PROFILE_BY_MODULE.get(module.name))
+        .filter((profile): profile is string => profile !== undefined),
+    ),
+  ];
 }
 
 export function renderRuntimeCompose(runtime: DevRuntime): string {
@@ -302,9 +319,14 @@ function runCompose(runtime: DevRuntime, args: string[], runner: CommandRunner):
   }
 }
 
-function composeCommand(action: "down" | "exec" | "logs" | "ps" | "watch", args: string[]): string[] {
+function composeCommand(
+  action: "down" | "exec" | "logs" | "ps" | "watch",
+  args: string[],
+  installedProfiles: string[],
+): string[] {
   const global: string[] = [];
   const command: string[] = [];
+  const explicitProfiles = new Set<string>();
   for (let index = 0; index < args.length; index += 1) {
     const value = args[index];
     if (value === undefined) continue;
@@ -312,14 +334,21 @@ function composeCommand(action: "down" | "exec" | "logs" | "ps" | "watch", args:
       const profile = args[index + 1];
       if (!profile) throw new Error("--profile requires a value.");
       global.push(value, profile);
+      explicitProfiles.add(profile);
       index += 1;
     } else if (value.startsWith("--profile=")) {
       global.push(value);
+      explicitProfiles.add(value.slice("--profile=".length));
     } else {
       command.push(value);
     }
   }
-  const activeProfiles = action === "down" ? ["--profile", "*"] : [];
+  const activeProfiles =
+    action === "down"
+      ? ["--profile", "*"]
+      : installedProfiles
+          .filter((profile) => !explicitProfiles.has(profile))
+          .flatMap((profile) => ["--profile", profile]);
   return [...activeProfiles, ...global, action, ...command];
 }
 
@@ -336,6 +365,7 @@ export function runDevCommand(
   runner: CommandRunner = defaultRunner,
 ): void {
   const runtime = resolveDevRuntime(projectRoot);
+  const profiles = installedDevProfiles(projectRoot);
   writeRuntimeFiles(runtime);
 
   if (action === "url") {
@@ -352,7 +382,7 @@ export function runDevCommand(
       ensureGateway(runner);
       process.stdout.write(`Development URL: http://${runtime.config.hostname}\n`);
       if (runtime.config.publicUrl) process.stdout.write(`Public OAuth URL: ${runtime.config.publicUrl}\n`);
-      runCompose(runtime, composeCommand("watch", args), runner);
+      runCompose(runtime, composeCommand("watch", args, profiles), runner);
     } catch (error) {
       unregisterRoute(runtime);
       stopGatewayWhenUnused(runner);
@@ -362,14 +392,14 @@ export function runDevCommand(
   }
 
   if (action === "down") {
-    runCompose(runtime, composeCommand("down", args), runner);
+    runCompose(runtime, composeCommand("down", args, profiles), runner);
     unregisterRoute(runtime);
     stopGatewayWhenUnused(runner);
     return;
   }
 
   if (action === "exec" || action === "logs" || action === "ps") {
-    runCompose(runtime, composeCommand(action, args), runner);
+    runCompose(runtime, composeCommand(action, args, profiles), runner);
     return;
   }
 

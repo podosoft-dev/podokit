@@ -21,6 +21,10 @@ npx @podosoft/podokit add <module>
   area, such as a generated `.claude/skills/<module>/**` workflow or an exact
   route server loader that must keep receiving behavioral and security updates;
   presentation routes and the application root layout stay owned, and
+- may declare `requiredProjectFiles` and `requiredProjectContents` when an
+  overlay depends on newer generated baseline paths or source contracts; the CLI
+  checks them before mutation and asks you to run
+  `podo update --apply` when the project is stale, and
 - prints follow-up steps.
 
 ## Available modules
@@ -325,6 +329,8 @@ curl localhost:5002/storage/hello/presigned  # { url }
 - **AWS S3**: `STORAGE_PROVIDER=aws`, remove `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE=false`, real credentials, and a pre-created bucket/region.
 
 The same `@aws-sdk/client-s3` code path serves both — only configuration differs.
+The module registers a bucket probe with `/health/ready`, so an unavailable or
+unauthorized bucket removes the API pod from service without failing liveness.
 
 ### `file-upload`
 
@@ -358,13 +364,30 @@ curl -N localhost:5002/events/stream
 curl -XPOST localhost:5002/events -H 'content-type: application/json' -d '{"message":"hello"}'
 ```
 
-Pairs well with `bullmq` — inject `EventsService` into the worker to stream job progress.
+The default `SSE_TRANSPORT=memory` preserves the simple single-process behavior.
+Set `SSE_TRANSPORT=redis` and `SSE_REDIS_CHANNEL=<app>:events` for delivery
+across API replicas. The module uses the shared `REDIS_URL` or individual Redis
+settings and creates dedicated publish/subscribe connections. A Redis-configured
+application fails readiness instead of silently falling back to process-local
+delivery.
+
+`EventsService.publish()` remains best-effort for domain operations that already
+committed their state. Use `publishAsync()` when the caller must know delivery
+failed, and `publishLocal()` only for an event that another Redis channel has
+already fanned out to every API replica. Events are at-most-once invalidation
+hints; clients must reload authoritative state after reconnecting.
 
 ### `redis`
 
 A Redis client ([ioredis](https://github.com/redis/ioredis)) with `get`/`set`/`del`
 and `publish`/`subscribe`, exposed as a global `RedisService`, plus demo `/cache`
 endpoints.
+
+For production, prefer an authenticated `REDIS_URL`. `REDIS_USERNAME`,
+`REDIS_PASSWORD`, `REDIS_DB`, and `REDIS_TLS=true` are also supported with the
+individual host and port settings. The Redis module registers a readiness check,
+and rate limiting, BullMQ, SSE, and the Redis service share the same connection
+configuration without logging credentials.
 
 ```bash
 npx @podosoft/podokit add redis
@@ -441,31 +464,46 @@ curl -b cookies.txt localhost:5002/audit-logs   # [{ userId, method:"POST", path
 ### `rate-limit`
 
 Rate limiting with [`@nestjs/throttler`](https://docs.nestjs.com/security/rate-limiting)
-backed by **Redis** (added automatically), so the limit holds across API replicas.
-Adding it installs a global throttler guard; exceeding the limit returns **429**.
+backed by **Redis**, with `auth` and `api-key-auth` added automatically. Counters
+are selected by authenticated user first, then a validated `X-API-Key`, then the
+trusted-proxy client address. Every identity is domain-separated and SHA-256
+hashed before it becomes a Redis key. The limit holds across API replicas.
 The liveness and readiness endpoints (`GET /health` and `GET /health/ready`) are
 excluded so orchestrator probes cannot consume the application request quota.
 
 ```bash
-npx @podosoft/podokit add rate-limit   # also adds redis
+npx @podosoft/podokit add rate-limit   # also adds redis, auth, and api-key-auth
 npm install
 docker compose -f infra/docker/docker-compose.yml up -d
 npm run dev
 # with RATE_LIMIT_MAX low, repeated requests return 429 once the window is exceeded
 ```
 
-Tune `RATE_LIMIT_TTL` (window seconds), `RATE_LIMIT_MAX` (requests/window), and
-`RATE_LIMIT_RUNTIME_MAX` in `.env`. The runtime limit defaults to 1000 for the
-public site-settings read used by every SSR page. This keeps maintenance and
-sign-up policy available under normal page traffic while retaining a bounded,
-Redis-backed limit.
-The generated web proxy forwards its resolved client address, and the API uses
-that trusted value as the Redis counter key so visitors do not share the web
-container's counter. The generated Docker and k3s layouts configure SvelteKit
-for their single trusted Traefik hop (`ADDRESS_HEADER=x-forwarded-for`,
-`XFF_DEPTH=1`); adjust the depth if you add another trusted proxy. Keep the API
-behind this proxy. Skip a route with `@SkipThrottle()` or override it with
-`@Throttle()`.
+General requests default to 300 per 60 seconds, authentication endpoints to 20
+per 60 seconds, and the public site-settings read to 1000 per 60 seconds.
+Configure these with `RATE_LIMIT_*`. Set `RATE_LIMIT_TRUSTED_PROXY_HOPS` to the
+exact number of proxies that replace or append the configured header; keep it at
+0 when the API accepts direct traffic. Malformed or incomplete forwarding chains
+fall back to the direct peer instead of trusting attacker input.
+
+Exceeded limits return HTTP 429 with `RATE_LIMIT_EXCEEDED` and `Retry-After`.
+Redis errors or the bounded storage timeout return HTTP 503 with
+`RATE_LIMIT_UNAVAILABLE`, also with `Retry-After`. Applications with another
+validated machine-key source can provide `RateLimitIdentityExtension` from the
+owned `app.extensions.ts` file:
+
+```ts
+export const extensionProviders: Provider[] = [
+  {
+    provide: RateLimitIdentityExtension,
+    useClass: ApplicationRateLimitIdentityExtension,
+  },
+];
+```
+
+The extension returns a stable internal identity only after application-specific
+validation. Keep the one `RateLimitModule` import managed by PodoKit; do not import
+a second module from `app.extensions.ts`.
 
 ### `api-key-auth`
 
@@ -480,8 +518,9 @@ npx @podosoft/podokit add api-key-auth   # also adds auth
 curl -H 'x-api-key: key1' localhost:5002/machine/ping   # { ok: true, via: "api-key" }
 ```
 
-Protect your own machine routes with `@ApiKeyProtected()`. Keys are checked against
-the `API_KEYS` allowlist with a constant-time comparison.
+Protect your own machine routes with `@ApiKeyProtected()`. The exported
+`ApiKeyVerifier` hashes the configured allowlist and supplied key with SHA-256 before
+using a fixed-length, constant-time comparison.
 
 > **`api-key-auth` vs. personal API keys.** These solve different problems — pick by
 > who holds the key:
@@ -782,6 +821,10 @@ version independently. A package module is just a `module.manifest.json` (with a
 bundled one; the CLI rejects a manifest that needs a newer PodoKit. Manifest v2
 can also declare idempotent path `migrations` for file or directory moves and
 verified text replacements. A module's
+`requiredProjectFiles` and `requiredProjectContents` are checked before files,
+dependencies, or marker injections are changed, so an older generated project
+fails closed with an update instruction rather than receiving broken imports or
+incompatible types. A module's
 legacy `dependencies`, `devDependencies`, and `scripts` fields apply to its
 `targetApp`. Modules spanning several workspace apps can add the same sections
 under `packageOverlays.<app>`; `podo add`, `update`, and `remove` apply them

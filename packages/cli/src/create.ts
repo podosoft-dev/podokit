@@ -5,7 +5,14 @@ import { DEFAULT_TEMPLATE } from "./templates";
 import { initLockfile } from "./lockfile";
 
 /** AI agent guidance files, removed when scaffolding with `--no-ai`. */
-const AI_ARTIFACTS = ["AGENTS.md", "CLAUDE.md", ".claude", ".cursor", ".github/copilot-instructions.md"];
+const AI_ARTIFACTS = [
+  "AGENTS.md",
+  "CLAUDE.md",
+  ".agents",
+  ".claude",
+  ".cursor",
+  ".github/copilot-instructions.md",
+];
 
 export type PackageManager = "npm" | "pnpm" | "yarn";
 

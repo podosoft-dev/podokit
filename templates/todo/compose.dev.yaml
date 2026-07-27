@@ -1,16 +1,14 @@
 # Containerized development environment.
 #
-#   podo dev watch                                                # core stack
-#   podo dev watch --profile cache --profile storage \
-#     --profile queue                                             # with modules
+#   podo dev watch   # installed modules activate their required profiles
 #
 # A user-level PodoKit gateway owns loopback :80 and routes each *.localhost host
 # to this stack. The legacy per-project Traefik service is opt-in only.
 # api/postgres/redis/minio have NO published ports — they talk by service name
 # on the internal network, so this stack never collides with other projects.
 #
-# Core services (traefik, web, api, postgres) always run. Module-specific
-# services are behind profiles — enable the ones your app uses:
+# Core services (traefik, web, api, postgres) always run. PodoKit activates
+# module-specific profiles from .podokit/manifest.json:
 #   --profile cache    redis    (redis / rate-limit / bullmq modules)
 #   --profile storage  minio    (object-storage-s3 / file-upload modules)
 #   --profile queue    worker   (bullmq / job-progress modules)

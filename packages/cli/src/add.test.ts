@@ -38,6 +38,128 @@ describe("listModules", () => {
   });
 });
 
+describe("module project baseline requirements", () => {
+  it("stops before mutation when a required baseline file is missing", () => {
+    const project = generate("fullstack-nest-svelte");
+    const readiness = join(
+      project,
+      "apps/api/src/health/readiness.service.ts",
+    );
+    rmSync(readiness);
+
+    expect(() =>
+      addModule({
+        projectRoot: project,
+        module: "object-storage-s3",
+        modulesDir: MODULES,
+      }),
+    ).toThrow("Run podo update --apply");
+    expect(existsSync(join(project, "apps/api/src/storage"))).toBe(false);
+  });
+
+  it("rejects required file paths that escape the project", () => {
+    const project = generate("fullstack-nest-svelte");
+    const modulesDir = join(tmp(), "modules");
+    writeFile(
+      join(modulesDir, "unsafe", "module.manifest.json"),
+      JSON.stringify({
+        name: "unsafe",
+        description: "test",
+        targetApp: "api",
+        requiredProjectFiles: ["../outside"],
+      }),
+    );
+
+    expect(() =>
+      addModule({ projectRoot: project, module: "unsafe", modulesDir }),
+    ).toThrow("invalid required project file");
+  });
+
+  it("stops before mutation when a required baseline contract is stale", () => {
+    const project = generate("fullstack-nest-svelte");
+    const modulesDir = join(tmp(), "modules");
+    const baseline = "apps/api/src/config/runtime.ts";
+    writeFile(join(project, baseline), "export const runtime = true;\n");
+    writeFile(
+      join(modulesDir, "contractual", "module.manifest.json"),
+      JSON.stringify({
+        name: "contractual",
+        description: "test",
+        targetApp: "api",
+        requiredProjectContents: {
+          [baseline]: ["export const requiredRuntime = true;"],
+        },
+      }),
+    );
+    writeFile(
+      join(
+        modulesDir,
+        "contractual",
+        "files/apps/api/src/contractual/contractual.module.ts",
+      ),
+      "export class ContractualModule {}\n",
+    );
+
+    expect(() =>
+      addModule({ projectRoot: project, module: "contractual", modulesDir }),
+    ).toThrow("Incompatible");
+    expect(
+      existsSync(
+        join(
+          project,
+          "apps/api/src/contractual/contractual.module.ts",
+        ),
+      ),
+    ).toBe(false);
+  });
+
+  it("preflights every required module before applying any overlay", () => {
+    const project = generate("fullstack-nest-svelte");
+    const modulesDir = join(tmp(), "modules");
+    writeFile(
+      join(modulesDir, "first", "module.manifest.json"),
+      JSON.stringify({
+        name: "first",
+        description: "test",
+        targetApp: "api",
+      }),
+    );
+    writeFile(
+      join(
+        modulesDir,
+        "first",
+        "files/apps/api/src/first/first.module.ts",
+      ),
+      "export class FirstModule {}\n",
+    );
+    writeFile(
+      join(modulesDir, "second", "module.manifest.json"),
+      JSON.stringify({
+        name: "second",
+        description: "test",
+        targetApp: "api",
+        requiredProjectFiles: ["apps/api/src/missing-baseline.ts"],
+      }),
+    );
+    writeFile(
+      join(modulesDir, "parent", "module.manifest.json"),
+      JSON.stringify({
+        name: "parent",
+        description: "test",
+        targetApp: "api",
+        requires: ["first", "second"],
+      }),
+    );
+
+    expect(() =>
+      addModule({ projectRoot: project, module: "parent", modulesDir }),
+    ).toThrow("requires a newer PodoKit project baseline");
+    expect(
+      existsSync(join(project, "apps/api/src/first/first.module.ts")),
+    ).toBe(false);
+  });
+});
+
 describe("module-declared ownedGlobs", () => {
   it("merges into the manifest so the module's public path stays owned", () => {
     const project = generate("fullstack-nest-svelte");
@@ -398,7 +520,21 @@ describe("addModule (auth / better-auth)", () => {
     addModule({ projectRoot: project, module: "sse", modulesDir: MODULES });
     expect(existsSync(join(project, "apps/api/src/events/events.controller.ts"))).toBe(true);
     expect(existsSync(join(project, "apps/api/src/events/events.service.ts"))).toBe(true);
+    expect(existsSync(join(project, "apps/api/src/events/events.transport.ts"))).toBe(true);
     expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).toContain("EventsModule,");
+    const apiPkg = JSON.parse(readFileSync(join(project, "apps/api/package.json"), "utf8")) as {
+      dependencies: Record<string, string>;
+    };
+    expect(apiPkg.dependencies["ioredis"]).toBeDefined();
+    const envExample = readFileSync(join(project, ".env.example"), "utf8");
+    expect(envExample).toContain("SSE_TRANSPORT=memory");
+    expect(envExample).toContain("SSE_REDIS_CHANNEL=podokit:events");
+    const service = readFileSync(
+      join(project, "apps/api/src/events/events.service.ts"),
+      "utf8",
+    );
+    expect(service).toContain("publishAsync(data: unknown)");
+    expect(service).toContain("publishLocal(data: unknown)");
   });
 
   it("adds redis with a client and cache endpoints", () => {
@@ -410,6 +546,12 @@ describe("addModule (auth / better-auth)", () => {
     };
     expect(apiPkg.dependencies["ioredis"]).toBeDefined();
     expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).toContain("RedisModule,");
+    const redisService = readFileSync(
+      join(project, "apps/api/src/redis/redis.service.ts"),
+      "utf8",
+    );
+    expect(redisService).toContain("redisConnectionOptions(process.env");
+    expect(redisService).toContain('readiness?.register("redis"');
   });
 
   it("job-progress composes bullmq + sse + redis and wires the worker", () => {
@@ -425,6 +567,12 @@ describe("addModule (auth / better-auth)", () => {
     expect(worker).toContain("ProgressProcessor,");
     expect(worker).toContain('BullModule.registerQueue({ name: "progress" }),');
     expect(worker).toContain("RedisModule,");
+    const bridge = readFileSync(
+      join(project, "apps/api/src/progress/progress.bridge.ts"),
+      "utf8",
+    );
+    expect(bridge).toContain("events.publishLocal");
+    expect(bridge).not.toContain("events.publish({");
   });
 
   it("adds logging (nestjs-pino) with env and wiring", () => {
@@ -450,26 +598,80 @@ describe("addModule (auth / better-auth)", () => {
     expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).toContain("AuditModule,");
   });
 
-  it("rate-limit composes redis and wires a global throttler guard", () => {
+  it("rate-limit composes identity dependencies and wires a global throttler guard", () => {
     const project = generate("fullstack-nest-svelte");
     const result = addModule({ projectRoot: project, module: "rate-limit", modulesDir: MODULES });
 
     expect(result.added).toContain("redis");
+    expect(result.added).toContain("auth");
+    expect(result.added).toContain("api-key-auth");
     expect(existsSync(join(project, "apps/api/src/rate-limit/rate-limit.module.ts"))).toBe(true);
+    expect(existsSync(join(project, "apps/api/src/rate-limit/rate-limit.identity.ts"))).toBe(true);
     const apiPkg = JSON.parse(readFileSync(join(project, "apps/api/package.json"), "utf8")) as {
       dependencies: Record<string, string>;
     };
     expect(apiPkg.dependencies["@nestjs/throttler"]).toBeDefined();
     const envExample = readFileSync(join(project, ".env.example"), "utf8");
     expect(envExample).toContain("RATE_LIMIT_MAX");
+    expect(envExample).toContain("RATE_LIMIT_AUTH_MAX");
     expect(envExample).toContain("RATE_LIMIT_RUNTIME_MAX");
+    expect(envExample).toContain("RATE_LIMIT_TRUSTED_PROXY_HOPS");
     expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).toContain("RateLimitModule,");
     const rateLimitModule = readFileSync(join(project, "apps/api/src/rate-limit/rate-limit.module.ts"), "utf8");
     expect(rateLimitModule).toContain("ProxyAwareThrottlerGuard");
-    expect(rateLimitModule).toContain('request.headers');
     expect(rateLimitModule).toContain('["/health", "/health/ready"]');
     expect(rateLimitModule).toContain("unthrottledHealthPaths.has(path)");
+    expect(rateLimitModule).toContain('path.startsWith("/api/auth/")');
     expect(rateLimitModule).toContain('path === "/site/settings"');
+    expect(rateLimitModule).toContain("RATE_LIMIT_EXCEEDED");
+    expect(rateLimitModule).toContain("RATE_LIMIT_UNAVAILABLE");
+    expect(rateLimitModule).not.toContain("static register");
+    expect(rateLimitModule).toContain("ThrottlerStorageRedisService(redis.client)");
+    expect(rateLimitModule).not.toContain("new Redis");
+    const identity = readFileSync(
+      join(project, "apps/api/src/rate-limit/rate-limit.identity.ts"),
+      "utf8",
+    );
+    expect(identity).toContain("authRuntime.api.getSession");
+    expect(identity).toContain('request.header("x-api-key")');
+    expect(identity).toContain("RateLimitIdentityExtension");
+    expect(identity).toContain("additionalApiKeyIdentity");
+  });
+
+  it("adopts explicitly managed Redis and rate-limit implementations", () => {
+    const project = generate("fullstack-nest-svelte");
+    const redisPath = "apps/api/src/redis/redis.module.ts";
+    const identityPath = "apps/api/src/rate-limit/rate-limit.identity.ts";
+    writeFile(join(project, redisPath), "export const legacyRedis = true;\n");
+    writeFile(join(project, identityPath), "export const legacyIdentity = true;\n");
+
+    expect(() =>
+      addModule({ projectRoot: project, module: "rate-limit", modulesDir: MODULES }),
+    ).toThrow("already exists outside PodoKit ownership");
+
+    const adoptedProject = generate("fullstack-nest-svelte");
+    writeFile(join(adoptedProject, redisPath), "export const legacyRedis = true;\n");
+    writeFile(join(adoptedProject, identityPath), "export const legacyIdentity = true;\n");
+    const result = addModule({
+      projectRoot: adoptedProject,
+      module: "rate-limit",
+      modulesDir: MODULES,
+      adopt: true,
+    });
+
+    expect(result.adopted).toEqual(
+      expect.arrayContaining([redisPath, identityPath]),
+    );
+    expect(readFileSync(join(adoptedProject, redisPath), "utf8")).toContain(
+      "export class RedisModule",
+    );
+    expect(
+      readFileSync(join(adoptedProject, identityPath), "utf8"),
+    ).toContain("export class RateLimitIdentity");
+    expect(readFilesLock(adoptedProject)?.files[redisPath].tier).toBe("managed");
+    expect(readFilesLock(adoptedProject)?.files[identityPath].tier).toBe(
+      "managed",
+    );
   });
 
   it("api-key-auth composes auth and wires a machine controller", () => {
@@ -478,6 +680,7 @@ describe("addModule (auth / better-auth)", () => {
 
     expect(result.added).toContain("auth");
     expect(existsSync(join(project, "apps/api/src/api-key/api-key.guard.ts"))).toBe(true);
+    expect(existsSync(join(project, "apps/api/src/api-key/api-key-verifier.ts"))).toBe(true);
     expect(readFileSync(join(project, ".env.example"), "utf8")).toContain("API_KEYS");
     expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).toContain("ApiKeyModule,");
   });

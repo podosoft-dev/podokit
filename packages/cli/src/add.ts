@@ -86,6 +86,10 @@ export interface ModuleManifest {
   managedOverrides?: string[];
   /** Idempotent path migrations applied by `podo update --apply`. */
   migrations?: ModuleMigration[];
+  /** Baseline files that must already exist before this module can be applied. */
+  requiredProjectFiles?: string[];
+  /** Stable source contracts that must be present in generated baseline files. */
+  requiredProjectContents?: Record<string, string[]>;
 }
 
 export interface PackageOverlay {
@@ -203,6 +207,94 @@ function assertManifestVersion(name: string, manifest: ModuleManifest): void {
   }
 }
 
+function assertRequiredProjectFiles(
+  projectRoot: string,
+  name: string,
+  manifest: ModuleManifest,
+): void {
+  const contents = manifest.requiredProjectContents ?? {};
+  const required = [
+    ...(manifest.requiredProjectFiles ?? []),
+    ...Object.keys(contents),
+  ];
+  const invalid = required.find(
+    (path) =>
+      path.startsWith("/") ||
+      path.split("/").includes("..") ||
+      path.trim() === "",
+  );
+  if (invalid) {
+    throw new Error(
+      `Module "${name}" declares an invalid required project file: ${invalid}.`,
+    );
+  }
+  const missing = required.filter((path) => !existsSync(join(projectRoot, path)));
+  if (missing.length) {
+    throw new Error(
+      `Module "${name}" requires a newer PodoKit project baseline. Run podo update --apply, then retry. Missing: ${missing.join(", ")}.`,
+    );
+  }
+  const invalidContract = Object.entries(contents).find(
+    ([, snippets]) =>
+      !Array.isArray(snippets) ||
+      snippets.length === 0 ||
+      snippets.some(
+        (snippet) => typeof snippet !== "string" || snippet.length === 0,
+      ),
+  );
+  if (invalidContract) {
+    throw new Error(
+      `Module "${name}" declares an invalid required project content contract: ${invalidContract[0]}.`,
+    );
+  }
+  const incompatible = Object.entries(contents)
+    .filter(([path, snippets]) => {
+      const source = readFileSync(join(projectRoot, path), "utf8");
+      return snippets.some((snippet) => !source.includes(snippet));
+    })
+    .map(([path]) => path);
+  if (incompatible.length) {
+    throw new Error(
+      `Module "${name}" requires a newer PodoKit project baseline. Run podo update --apply, then retry. Incompatible: ${incompatible.join(", ")}.`,
+    );
+  }
+}
+
+function assertModuleGraphPrerequisites(
+  projectRoot: string,
+  module: string,
+  modulesDir: string,
+  visited = new Set<string>(),
+  requiredBy?: string,
+): void {
+  if (visited.has(module)) return;
+  visited.add(module);
+  const resolved = resolveModule(module, modulesDir, projectRoot);
+  if (!resolved) {
+    if (requiredBy) {
+      throw new Error(
+        `Module "${requiredBy}" requires unknown module "${module}".`,
+      );
+    }
+    const available = listModules(modulesDir, projectRoot).map((entry) => entry.name);
+    throw new Error(
+      `Unknown module "${module}".${available.length ? ` Available: ${available.join(", ")}.` : ""}`,
+    );
+  }
+  const manifest = readModuleManifest(resolved.dir);
+  assertManifestVersion(module, manifest);
+  assertRequiredProjectFiles(projectRoot, module, manifest);
+  for (const required of manifest.requires ?? []) {
+    assertModuleGraphPrerequisites(
+      projectRoot,
+      required,
+      modulesDir,
+      visited,
+      module,
+    );
+  }
+}
+
 /** List modules available to a project: the bundled ones under `modulesDir` plus,
  *  when `projectRoot` is given, any `@podosoft/podokit-module-*` packages installed
  *  in it. Bundled names take precedence on a clash. */
@@ -280,6 +372,11 @@ function isApplied(projectRoot: string, modulesDir: string, module: string): boo
  * and inject wiring at markers. Missing required modules are added first.
  */
 export function addModule(options: AddOptions): AddResult {
+  assertModuleGraphPrerequisites(
+    options.projectRoot,
+    options.module,
+    options.modulesDir,
+  );
   const previousLock = readFilesLock(options.projectRoot);
   const cleanPaths = previousLock
     ? Object.entries(previousLock.files)
@@ -340,6 +437,7 @@ function applyModule(
   const moduleDir = resolved.dir;
   const manifest = readModuleManifest(moduleDir);
   assertManifestVersion(module, manifest);
+  assertRequiredProjectFiles(projectRoot, module, manifest);
 
   const requiredApps = new Set([manifest.targetApp, ...Object.keys(manifest.packageOverlays ?? {})]);
   const missingApp = [...requiredApps].find(

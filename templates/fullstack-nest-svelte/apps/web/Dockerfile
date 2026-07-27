@@ -19,11 +19,11 @@ ENV NODE_ENV=production
 # Keep the adapter-node proxy above the 2 MiB application upload policy so the
 # API can return stable validation codes after accounting for multipart framing.
 ENV BODY_SIZE_LIMIT=3M
-RUN addgroup -S app && adduser -S app -G app
+RUN addgroup -S -g 101 app && adduser -S -D -H -u 100 -G app app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=deps /app/apps/web ./apps/web
 COPY --from=build /app/apps/web/build ./apps/web/build
 WORKDIR /app/apps/web
-USER app
+USER 100:101
 EXPOSE 3000
 CMD ["node", "build"]

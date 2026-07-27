@@ -33,16 +33,17 @@ npx @podosoft/podokit dev logs
 npx @podosoft/podokit dev down
 ```
 
-If installed modules require extra services, use their profiles on the initial
-watch command instead:
+`dev watch` reads `.podokit/manifest.json` and automatically activates `cache`,
+`storage`, and `queue` when installed modules require Redis, MinIO, or a worker.
+You can still activate an additional Compose profile explicitly:
 
 ```bash
-npx @podosoft/podokit dev watch \
-  --profile cache --profile storage --profile queue
+npx @podosoft/podokit dev watch --profile dev
 ```
 
-Pass the same profile flags to other lifecycle commands when applicable. `dev down`
-removes this project's stack and route. If it is the final registered
+Explicit profile flags are preserved for other lifecycle commands. `dev down`
+activates all profiles while removing this project's stack and route. If it is
+the final registered
 project, it also removes the shared gateway and network. Source changes are synced
 through Compose Watch, including Vite HMR on the same portless browser origin.
 
@@ -78,5 +79,8 @@ The API uses TypeORM with PostgreSQL. A sample `Todo` entity and an initial migr
 
 ## Deploy
 
-Docker Compose in `infra/docker`; example k3s manifests in `infra/k3s`
-(use `secret.example.yaml` as a template — never commit real secrets).
+Docker Compose lives in `infra/docker`; the basic k3s manifests in `infra/k3s`
+route every public path through the web proxy. Use `podo deploy init`, `doctor`,
+and `plan` for an exact-image Helm release on an existing cluster. Applying or
+rolling back requires the exact confirmation hash from a fresh plan. See the
+PodoKit [deployment guide](https://github.com/podosoft-dev/podokit/blob/main/docs/deployment.md).

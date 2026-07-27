@@ -21,3 +21,9 @@ BODY_SIZE_LIMIT=3M
 # job-progress, sse). Start it with: docker compose --profile cache up
 REDIS_HOST=localhost
 REDIS_PORT=6379
+# REDIS_URL takes precedence over the individual settings below.
+# REDIS_URL=rediss://user:password@cache.example.com:6380/0
+REDIS_DB=0
+# REDIS_USERNAME=
+# REDIS_PASSWORD=
+REDIS_TLS=false

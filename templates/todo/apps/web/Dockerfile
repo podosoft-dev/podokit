@@ -16,11 +16,11 @@ RUN npm run build --workspace=apps/web
 FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
-RUN addgroup -S app && adduser -S app -G app
+RUN addgroup -S -g 101 app && adduser -S -D -H -u 100 -G app app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=deps /app/apps/web ./apps/web
 COPY --from=build /app/apps/web/build ./apps/web/build
 WORKDIR /app/apps/web
-USER app
+USER 100:101
 EXPOSE 3000
 CMD ["node", "build"]

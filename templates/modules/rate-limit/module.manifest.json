@@ -1,18 +1,30 @@
 {
   "name": "rate-limit",
-  "description": "Rate limiting with @nestjs/throttler backed by Redis (correct across API replicas). Installs a global throttler guard; configurable via env.",
-  "requires": ["redis"],
+  "description": "Distributed request limiting by authenticated user, validated API key, or trusted-proxy client address. Uses Redis across API replicas and returns stable 429/503 errors.",
+  "requires": ["redis", "api-key-auth"],
   "targetApp": "api",
+  "managedGlobs": [
+    "apps/api/src/rate-limit/**",
+    "tests/api/rate-limit.api.spec.ts"
+  ],
   "dependencies": {
     "@nestjs/throttler": "^6.5.0",
     "@nest-lab/throttler-storage-redis": "^1.2.0"
   },
   "env": [
-    "# rate limit (window in seconds, max requests per window per client)",
+    "# rate limit (window in seconds, max requests per identity)",
     "RATE_LIMIT_TTL=60",
-    "RATE_LIMIT_MAX=100",
+    "RATE_LIMIT_MAX=300",
+    "# stricter authentication endpoint ceiling",
+    "RATE_LIMIT_AUTH_TTL=60",
+    "RATE_LIMIT_AUTH_MAX=20",
     "# higher ceiling for SSR runtime settings reads (maintenance, sign-up, branding)",
-    "RATE_LIMIT_RUNTIME_MAX=1000"
+    "RATE_LIMIT_RUNTIME_MAX=1000",
+    "# trust no proxy hop by default; set the exact production proxy depth",
+    "RATE_LIMIT_TRUSTED_PROXY_HOPS=0",
+    "RATE_LIMIT_PROXY_HEADER=x-forwarded-for",
+    "RATE_LIMIT_STORAGE_TIMEOUT_MS=1000",
+    "RATE_LIMIT_UNAVAILABLE_RETRY_AFTER=1"
   ],
   "inject": [
     { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:imports", "text": "import { RateLimitModule } from \"./rate-limit/rate-limit.module\";" },
@@ -20,10 +32,12 @@
   ],
   "instructions": [
     "Ensure Redis is running:  docker compose -f infra/docker/docker-compose.yml up -d",
-    "Tune RATE_LIMIT_TTL / RATE_LIMIT_MAX / RATE_LIMIT_RUNTIME_MAX in .env.",
-    "Exceeding the limit returns HTTP 429. Skip a route with @SkipThrottle() or tune it with @Throttle().",
+    "Tune the general, authentication, and runtime limits in .env.",
+    "Set RATE_LIMIT_TRUSTED_PROXY_HOPS to the exact number of trusted reverse proxies; keep 0 for direct API access.",
+    "Authenticated users and validated X-API-Key clients receive independent opaque counters; other traffic uses the trusted client address.",
+    "Exceeded limits return RATE_LIMIT_EXCEEDED with HTTP 429 and Retry-After. Redis failures return RATE_LIMIT_UNAVAILABLE with HTTP 503.",
+    "Provide RateLimitIdentityExtension from app.extensions.ts when an application has another validated machine-key source; keep the single managed RateLimitModule import.",
     "GET /health and GET /health/ready bypass request quotas so orchestrator probes remain reliable.",
-    "The limit is shared across API replicas because it is stored in Redis.",
-    "PodoKit's web proxy forwards the resolved client address, so visitors receive independent counters."
+    "The limit is shared across API replicas because it is stored in Redis."
   ]
 }

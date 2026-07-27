@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 const base = process.env.E2E_BASE_URL ?? "http://localhost:5001";
+const secondaryApi = process.env.E2E_SECONDARY_API_URL;
 const origin = { origin: base };
 
 async function session(playwright: import("@playwright/test").PlaywrightWorkerArgs["playwright"]) {
@@ -42,5 +43,45 @@ test("sse: a published message is delivered over the event stream @smoke", async
   }
   ac.abort();
   expect(seen).toBe(true);
+  await ctx.dispose();
+});
+
+test("sse: a second API replica delivers through Redis", async ({ playwright }) => {
+  test.skip(!secondaryApi, "a secondary API replica is not configured");
+  const ctx = await session(playwright);
+  const cookies = (await ctx.storageState()).cookies.map((c) => `${c.name}=${c.value}`).join("; ");
+  const ac = new AbortController();
+  const stream = await fetch(`${base}/api/events/stream`, {
+    headers: { ...origin, cookie: cookies },
+    signal: ac.signal,
+  });
+  expect(stream.ok).toBe(true);
+  expect(stream.body).not.toBeNull();
+
+  const msg = `replica-${Date.now()}`;
+  const published = await fetch(`${secondaryApi}/events`, {
+    method: "POST",
+    headers: {
+      ...origin,
+      cookie: cookies,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ message: msg }),
+  });
+  expect(published.ok).toBe(true);
+
+  const reader = stream.body!.getReader();
+  const decoder = new TextDecoder();
+  let seen = 0;
+  let buffered = "";
+  const deadline = Date.now() + 8000;
+  while (Date.now() < deadline && seen === 0) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffered += decoder.decode(value, { stream: true });
+    seen = buffered.split(msg).length - 1;
+  }
+  ac.abort();
+  expect(seen).toBe(1);
   await ctx.dispose();
 });

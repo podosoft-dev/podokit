@@ -27,9 +27,19 @@ Your editor/agent spawns the server on demand and talks to it over stdio.
 | `list_local_edits` | Managed files you've edited/deleted (`podo diff`). |
 | `check_versions` | Framework versions vs the supported ranges (`podo doctor`). |
 | `preview_update` | Preview what an update would change (`podo update` dry-run). |
+| `initialize_deployment_profile` | Create a repository-local deployment profile without changing a cluster. |
+| `deployment_profiles` | List deployment targets and non-secret metadata. |
+| `deployment_doctor` | Check the explicit cluster, namespace, Helm, storage, and Secret key names without returning Secret values. |
+| `preview_deployment` | Render and hash an immutable release plan without applying it. |
+| `deployment_status` | Read Helm revision, images, ready replicas, and restart totals. |
+| `verify_deployment` | Run the profile's read-only public HTTP checks. |
 | `search_docs` | Search the bundled PodoKit docs/conventions. |
 
 Project tools default to the current directory; pass `projectDir` to target another.
+
+The MCP server intentionally does not expose deployment apply or rollback
+mutations. An agent can inspect and preview with MCP, then use the CLI only after
+the user explicitly approves the exact plan hash.
 
 ## Start a project from scratch with an AI agent
 
