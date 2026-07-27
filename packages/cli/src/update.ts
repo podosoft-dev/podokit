@@ -16,6 +16,7 @@ import {
   writeManifest,
   type Tier,
   type FilesLock,
+  type ManifestModule,
 } from "./lockfile";
 import { NotAProjectError } from "./inspect";
 import { readModuleManifest, resolveModule } from "./add";
@@ -72,6 +73,66 @@ function diskContent(projectRoot: string, path: string): Buffer | null {
   return existsSync(abs) ? readFileSync(abs) : null;
 }
 
+/**
+ * Expand the recorded module list against the target manifests. A module may
+ * gain a new requirement after it was first added to a project; updates must
+ * apply that requirement before rebuilding the dependent module or the target
+ * tree can contain imports and wiring for files that were never installed.
+ */
+function targetModules(
+  projectRoot: string,
+  templatesDir: string,
+  modules: ManifestModule[],
+): ManifestModule[] {
+  const modulesDir = join(templatesDir, "modules");
+  const recorded = new Map(modules.map((module) => [module.name, module]));
+  const ordered: ManifestModule[] = [];
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+
+  const visit = (name: string, requiredBy?: string): void => {
+    if (visited.has(name)) return;
+    if (visiting.has(name)) {
+      throw new Error(`Module dependency cycle detected at "${name}".`);
+    }
+
+    const existing = recorded.get(name);
+    const resolved = resolveModule(existing?.packageName ?? name, modulesDir, projectRoot);
+    if (!resolved) {
+      throw new Error(
+        requiredBy
+          ? `Module "${requiredBy}" requires unknown module "${name}".`
+          : `Cannot resolve module "${name}" while updating the project.`,
+      );
+    }
+
+    visiting.add(name);
+    const moduleManifest = readModuleManifest(resolved.dir);
+    for (const required of moduleManifest.requires ?? []) visit(required, name);
+    visiting.delete(name);
+    visited.add(name);
+
+    ordered.push({
+      ...(existing ?? {
+        name: resolved.name,
+        addedWith: podokitVersion(),
+      }),
+      order: ordered.length,
+      ...(resolved.packageName
+        ? {
+            packageName: resolved.packageName,
+            moduleVersion: resolved.moduleVersion,
+          }
+        : {}),
+    });
+  };
+
+  for (const module of [...modules].sort((a, b) => a.order - b.order)) {
+    visit(module.name);
+  }
+  return ordered;
+}
+
 function targetManagedOverrides(
   projectRoot: string,
   templatesDir: string,
@@ -112,25 +173,26 @@ export function planUpdate(projectRoot: string, templatesDir: string): UpdatePla
   const manifest = readManifest(projectRoot);
   const lock = readFilesLock(projectRoot);
   if (!manifest || !lock) throw new NotAProjectError();
+  const modules = targetModules(projectRoot, templatesDir, manifest.modules);
 
   const newTree = assembleProject({
     templatesDir,
     template: manifest.template,
     answers: manifest.answers,
-    modules: manifest.modules,
+    modules,
     projectRoot,
   });
   const managedOverrides = targetManagedOverrides(
     projectRoot,
     templatesDir,
-    manifest.modules,
+    modules,
     manifest.managedOverrides,
   );
-  const ownedGlobs = targetOwnedGlobs(projectRoot, templatesDir, manifest.modules, manifest.ownedGlobs);
+  const ownedGlobs = targetOwnedGlobs(projectRoot, templatesDir, modules, manifest.ownedGlobs);
   const pendingMigrations = collectPendingMigrations(
     projectRoot,
     templatesDir,
-    manifest.modules,
+    modules,
   );
   const migrationPlan = planModuleMigrations(
     projectRoot,
@@ -235,7 +297,7 @@ export function planUpdate(projectRoot: string, templatesDir: string): UpdatePla
     fromVersion: manifest.podokitVersion,
     toVersion: podokitVersion(),
     template: manifest.template,
-    modules: manifest.modules.map((m) => m.name),
+    modules: modules.map((module) => module.name),
     changes,
   };
 }
@@ -397,7 +459,7 @@ export function applyUpdate(
   const previousLock = readFilesLock(projectRoot);
   if (!manifest || !previousLock) throw new NotAProjectError();
   const plan = planUpdate(projectRoot, templatesDir);
-  const modules = manifest.modules;
+  const modules = targetModules(projectRoot, templatesDir, manifest.modules);
   const newTree = assembleProject({
     templatesDir,
     template: manifest.template,
@@ -440,7 +502,7 @@ export function applyUpdate(
     const previousModules = previousExternalModules(
       projectRoot,
       options.oldTemplatesDir,
-      modules,
+      manifest.modules,
       options.oldExternalModulesRoot,
     );
     try {
@@ -448,7 +510,7 @@ export function applyUpdate(
         templatesDir: options.oldTemplatesDir,
         template: manifest.template,
         answers: manifest.answers,
-        modules,
+        modules: manifest.modules,
         projectRoot: previousModules.root,
       });
     } finally {
@@ -507,7 +569,7 @@ export function applyUpdate(
     ids.push(pending.migration.id);
     appliedMigrations.set(pending.module, ids);
   }
-  const refreshedModules = manifest.modules.map((module) => {
+  const refreshedModules = modules.map((module) => {
     const resolved = resolveModule(module.packageName ?? module.name, modulesDir, projectRoot);
     const applied = [
       ...new Set([

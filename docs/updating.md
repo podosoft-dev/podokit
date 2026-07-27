@@ -34,6 +34,11 @@ Run these inside a generated project:
 compares it to your working copy, so it can update the toolkit's files while
 keeping your changes.
 
+The target version's module dependency graph is authoritative. If an installed
+module gains a new bundled requirement, the update applies that requirement
+first and records it in `.podokit/manifest.json`; generated imports, providers,
+and package dependencies therefore arrive as one consistent change.
+
 ```bash
 podo update            # dry-run: report what would change (writes nothing)
 podo update --apply    # apply the changes

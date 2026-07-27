@@ -145,6 +145,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (ui + api) tests included. No DB migration (uses the existing `app_setting` store).
 
 ### Fixed
+- **Complete module dependency updates.** `podo update` now expands the target
+  version's module requirements and applies newly introduced dependencies before
+  their dependants, preventing partial updates with generated imports that point
+  to files an older project never installed.
 - **Safe dependency detection during module add.** The project manifest is now
   authoritative for installed requirements, so adding an external module cannot
   re-overlay an existing customized dependency and erase other modules'
