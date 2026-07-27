@@ -146,4 +146,18 @@ describe("deployment rollout annotations", () => {
     ).toHaveLength(3);
     expect(manifest).not.toContain("\n      spec:\n      storageClassName:");
   });
+
+  it("labels the object storage initialization Job for lifecycle operations", () => {
+    const { root, profile } = initializedProfile();
+    const manifest = renderDeployment(
+      root,
+      "production",
+      profile,
+      "v1.2.3",
+    ).dependencyManifest;
+
+    expect(manifest).toMatch(
+      /kind: Job\nmetadata:\n  name: example-app-minio-init-[a-f0-9]{8}\n  labels:\n    app\.kubernetes\.io\/name: example-app-minio-initialize\n    app\.kubernetes\.io\/managed-by: podokit\nspec:/,
+    );
+  });
 });

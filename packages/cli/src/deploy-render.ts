@@ -331,7 +331,8 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: ${profile.target.release}-minio-init-${initializationHash}
-spec:
+  labels:
+${labels(`${profile.target.release}-minio-initialize`)}spec:
   backoffLimit: 6
   ttlSecondsAfterFinished: 600
   template:
