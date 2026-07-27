@@ -31,6 +31,16 @@ function quote(value: string): string {
   return JSON.stringify(value);
 }
 
+function yamlScalar(value: string): string {
+  return /^(?!null$|true$|false$|~$)[A-Za-z_][A-Za-z0-9_./:-]*$/i.test(value)
+    ? value
+    : quote(value);
+}
+
+function yamlStringSequence(values: string[]): string {
+  return `[${values.map((value) => yamlScalar(value)).join(", ")}]`;
+}
+
 function digest(parts: string[]): string {
   const hash = createHash("sha256");
   for (const part of parts) hash.update(part).update("\0");
@@ -675,6 +685,7 @@ function migrationManifest(
   images: DeploymentImages,
 ): string {
   const releaseSlug = release.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const command = profile.migration?.command ?? ["npm", "run", "migrate:all"];
   return `apiVersion: batch/v1
 kind: Job
 metadata:
@@ -700,7 +711,7 @@ ${labels(`${profile.target.release}-migration`, 8)}    spec:
         - name: migrate
           image: ${quote(images.api)}
           imagePullPolicy: IfNotPresent
-          command: [npm, run, migrate:all]
+          command: ${yamlStringSequence(command)}
           env:
 ${migrationRuntimeEnv(profile)}
           envFrom:

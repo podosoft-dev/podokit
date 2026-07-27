@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -158,6 +158,27 @@ describe("deployment rollout annotations", () => {
 
     expect(manifest).toMatch(
       /kind: Job\nmetadata:\n  name: example-app-minio-init-[a-f0-9]{8}\n  labels:\n    app\.kubernetes\.io\/name: example-app-minio-initialize\n    app\.kubernetes\.io\/managed-by: podokit\nspec:/,
+    );
+  });
+});
+
+describe("deployment migration command", () => {
+  it("renders the default migration command when the profile omits it", () => {
+    const { root, profile } = initializedProfile();
+    const runtime = renderDeployment(root, "production", profile, "v1.2.3");
+
+    expect(readFileSync(runtime.migrationManifest, "utf8")).toContain(
+      "command: [npm, run, migrate:all]",
+    );
+  });
+
+  it("renders a custom migration command from the profile", () => {
+    const { root, profile } = initializedProfile();
+    profile.migration = { command: ["node", "dist/migrate"] };
+    const runtime = renderDeployment(root, "production", profile, "v1.2.3");
+
+    expect(readFileSync(runtime.migrationManifest, "utf8")).toContain(
+      "command: [node, dist/migrate]",
     );
   });
 });

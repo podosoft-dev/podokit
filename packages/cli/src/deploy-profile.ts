@@ -43,6 +43,10 @@ export interface VerificationCheckProfile {
   expectedJson?: Record<string, string | number | boolean | null>;
 }
 
+export interface MigrationProfile {
+  command: string[];
+}
+
 export interface DeployProfileV1 {
   schemaVersion: 1;
   driver: "kubernetes-helm";
@@ -80,6 +84,7 @@ export interface DeployProfileV1 {
     web: NamedSecretProfile | null;
     imagePull: string;
   };
+  migration?: MigrationProfile;
   runtimeConfig: Record<string, string>;
   verification: {
     baseUrl: string;
@@ -177,6 +182,25 @@ function parseRequiredKeys(value: unknown, field: string): string[] {
     throw new Error(`Deployment profile field "${field}" contains duplicate keys.`);
   }
   return keys.sort();
+}
+
+function parseCommand(value: unknown, field: string): string[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`Deployment profile field "${field}" must be a non-empty string array.`);
+  }
+  return value.map((entry, index) => {
+    if (typeof entry !== "string" || entry.trim() === "") {
+      throw new Error(
+        `Deployment profile field "${field}[${index}]" must be a non-empty string.`,
+      );
+    }
+    if (/[\u0000-\u001f\u007f]/.test(entry)) {
+      throw new Error(
+        `Deployment profile field "${field}[${index}]" must not contain control characters.`,
+      );
+    }
+    return entry;
+  });
 }
 
 function parseNamedSecret(value: unknown, field: string): NamedSecretProfile {
@@ -357,6 +381,7 @@ function parseProfile(value: unknown): DeployProfileV1 {
       "workloads",
       "dependencies",
       "secrets",
+      "migration",
       "runtimeConfig",
       "verification",
     ],
@@ -375,6 +400,8 @@ function parseProfile(value: unknown): DeployProfileV1 {
   const workloads = requiredRecord(value, "workloads");
   const dependencies = requiredRecord(value, "dependencies");
   const secrets = requiredRecord(value, "secrets");
+  const migration =
+    value.migration === undefined ? undefined : requiredRecord(value, "migration");
   const verification = requiredRecord(value, "verification");
   const runtimeConfig = requiredRecord(value, "runtimeConfig");
   assertOnlyKeys(
@@ -395,6 +422,7 @@ function parseProfile(value: unknown): DeployProfileV1 {
   assertOnlyKeys(workloads, ["api", "web", "worker"], "workloads");
   assertOnlyKeys(dependencies, ["postgres", "redis", "objectStorage"], "dependencies");
   assertOnlyKeys(secrets, ["api", "web", "imagePull"], "secrets");
+  if (migration) assertOnlyKeys(migration, ["command"], "migration");
   assertOnlyKeys(verification, ["baseUrl", "checks"], "verification");
 
   const context = requiredString(target, "context");
@@ -582,6 +610,9 @@ function parseProfile(value: unknown): DeployProfileV1 {
           : parseNamedSecret(secrets.web, "secrets.web"),
       imagePull: requiredString(secrets, "imagePull"),
     },
+    ...(migration
+      ? { migration: { command: parseCommand(migration.command, "migration.command") } }
+      : {}),
     runtimeConfig: parsedConfig,
     verification: { baseUrl, checks },
   };

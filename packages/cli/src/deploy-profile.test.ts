@@ -53,3 +53,42 @@ describe("deployment profile verification origin", () => {
     );
   });
 });
+
+describe("deployment profile migration command", () => {
+  it("omits migration configuration from initialized profiles", () => {
+    const root = initializedProfile();
+    const path = profilePath(root, "production");
+    const value = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+
+    expect(value).not.toHaveProperty("migration");
+    expect(loadDeploymentProfile(root, "production").migration).toBeUndefined();
+  });
+
+  it("accepts a non-empty custom migration command", () => {
+    const root = initializedProfile();
+    const path = profilePath(root, "production");
+    const value = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+    value.migration = { command: ["node", "dist/migrate"] };
+    writeFileSync(path, JSON.stringify(value));
+
+    expect(loadDeploymentProfile(root, "production").migration).toEqual({
+      command: ["node", "dist/migrate"],
+    });
+  });
+
+  it.each<[Record<string, unknown>, string]>([
+    [{ command: [] }, "must be a non-empty string array"],
+    [{ command: [""] }, "must be a non-empty string"],
+    [{ command: ["node\nmalicious: value"] }, "must not contain control characters"],
+    [{ command: ["node\u0000malicious"] }, "must not contain control characters"],
+    [{ command: ["node"], unexpected: true }, "contains unknown key"],
+  ])("rejects an invalid migration profile %#", (migration, message) => {
+    const root = initializedProfile();
+    const path = profilePath(root, "production");
+    const value = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+    value.migration = migration;
+    writeFileSync(path, JSON.stringify(value));
+
+    expect(() => loadDeploymentProfile(root, "production")).toThrow(message);
+  });
+});
