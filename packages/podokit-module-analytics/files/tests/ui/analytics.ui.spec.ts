@@ -96,6 +96,54 @@ test("analytics excludes administrator routes from page views", async ({
   ).toHaveLength(0);
 });
 
+test("analytics settings explains how to issue GA4 credentials", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 640 });
+  await ready(page, "/admin/settings");
+  await page.getByRole("tab", { name: "Analytics" }).click();
+  await page
+    .getByRole("button", { name: "How to issue GA4 credentials" })
+    .click();
+
+  const dialog = page.getByRole("dialog", {
+    name: "Issue Google Analytics 4 credentials",
+  });
+  await expect(dialog).toBeVisible();
+  await expect
+    .poll(() => dialog.evaluate((element) => element.scrollTop))
+    .toBe(0);
+  await expect(
+    dialog.getByText("Create or select a GA4 property and web stream")
+  ).toBeVisible();
+  await expect(
+    dialog.getByText("Enable the Google Analytics Data API")
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("link", { name: "Google Analytics Data API guide" })
+  ).toHaveAttribute(
+    "href",
+    "https://developers.google.com/analytics/devguides/reporting/data/v1/quickstart"
+  );
+  await expect(
+    dialog.getByRole("link", { name: "Service account key guide" })
+  ).toHaveAttribute(
+    "href",
+    "https://cloud.google.com/iam/docs/keys-create-delete"
+  );
+
+  const scrollState = await dialog.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+    overflowY: getComputedStyle(element).overflowY,
+  }));
+  expect(scrollState.scrollHeight).toBeGreaterThan(scrollState.clientHeight);
+  expect(["auto", "scroll"]).toContain(scrollState.overflowY);
+
+  await dialog.getByRole("button", { name: "Close guide" }).click();
+  await expect(dialog).toBeHidden();
+});
+
 test("analytics settings stores credentials without reading them back", async ({
   page,
 }) => {

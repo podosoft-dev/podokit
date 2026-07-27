@@ -40,8 +40,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   and realtime visitors. The generated runtime excludes sensitive routes and
   never sends account identifiers, while a new `SiteRuntime` injection seam
   lets optional modules install browser-wide behavior without editing an
-  application-owned root layout. The faithful generated-app Outer path publishes
-  and installs the external package so release gates cover its shipped output.
+  application-owned root layout. A scrollable in-product guide explains how to
+  issue GA4 credentials from the official Google Analytics and Google Cloud
+  consoles. The faithful generated-app Outer path publishes and installs the
+  external package so release gates cover its shipped output.
 - **Extensible mobile and product-shell UI primitives.** Generated applications
   can add owned Playwright browser/device projects without editing the managed
   config, render the shared account menu with visible identity outside the admin

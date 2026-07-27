@@ -109,6 +109,10 @@ GA4 property and enable the Google Analytics Data API in its Google Cloud
 project. Test the connection before enabling collection. Reports are available
 at `/admin/analytics`; successful report responses are cached for five minutes
 and realtime responses for 60 seconds.
+The settings card also provides a scrollable credential guide covering the
+measurement and property identifiers, Data API activation, dedicated service
+account creation, Viewer access, JSON key handling, and official Google
+documentation links.
 
 The browser runtime starts analytics and advertising consent denied. Accepting
 grants only analytics storage; advertising storage, user data, and
