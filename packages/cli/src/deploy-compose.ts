@@ -170,12 +170,78 @@ function dockerArgs(profile: DockerComposeProfileV1, args: string[]): string[] {
   return ["--context", profile.target.context, ...args];
 }
 
-function composeArgs(
+/**
+ * The SSH destination behind a `ssh://` Docker context, or null for a local one.
+ *
+ * This matters more than it looks. `docker compose` resolves `env_file` paths and
+ * expands `${VAR}` **where the CLI runs**, not where the daemon runs. Pointed at a
+ * remote context from a laptop, it looks for the host's secret files on the laptop,
+ * fails to find them, and interpolates every referenced variable to an empty string
+ * -- which is how a deployment silently comes up with a blank database password.
+ *
+ * So the Compose file is executed on the target instead: the whole point of keeping
+ * credentials in files on that host is that nothing else ever reads them.
+ */
+function sshDestination(profile: DockerComposeProfileV1, runner: CommandRunner): string | null {
+  const output = runner(
+    "docker",
+    ["context", "inspect", profile.target.context, "--format", "{{.Endpoints.docker.Host}}"],
+    { capture: true },
+  );
+  if (output.status !== 0) return null;
+  const host = output.stdout.trim();
+  return host.startsWith("ssh://") ? host.slice("ssh://".length) : null;
+}
+
+/** Where the rendered project lives on the target when the context is remote. */
+function remoteProjectDirectory(profile: DockerComposeProfileV1): string {
+  return `.local/share/podokit/${profile.target.project}`;
+}
+
+/**
+ * Run `docker compose` where the Compose file's own references resolve.
+ *
+ * Local context: here. Remote context: on the target, after copying the rendered
+ * file across -- because `env_file` paths and `${...}` expansion are resolved by
+ * whoever runs compose, not by the daemon it talks to.
+ */
+function runCompose(
   profile: DockerComposeProfileV1,
-  runtime: Pick<ComposeRuntime, "composeFile">,
+  runtime: Pick<ComposeRuntime, "composeFile" | "migrationFile">,
+  file: "compose" | "migration",
   args: string[],
-): string[] {
-  return dockerArgs(profile, ["compose", "-f", runtime.composeFile, ...args]);
+  runner: CommandRunner,
+  capture: boolean,
+): string {
+  const localFile = file === "compose" ? runtime.composeFile : runtime.migrationFile;
+  const destination = sshDestination(profile, runner);
+  if (!destination) {
+    return checked(runner, "docker", dockerArgs(profile, ["compose", "-f", localFile, ...args]), capture);
+  }
+  const directory = remoteProjectDirectory(profile);
+  const remoteFile = `${directory}/${file === "compose" ? "compose.yaml" : "compose.migrate.yaml"}`;
+  checked(runner, "ssh", [destination, `mkdir -p ${directory}`], true);
+  checked(runner, "scp", ["-q", localFile, `${destination}:${remoteFile}`], true);
+  return checked(
+    runner,
+    "ssh",
+    [destination, ["docker", "compose", "-f", remoteFile, ...args].join(" ")],
+    capture,
+  );
+}
+
+/** The same dispatch, for a command that may legitimately fail. */
+function tryCompose(
+  profile: DockerComposeProfileV1,
+  runtime: Pick<ComposeRuntime, "composeFile" | "migrationFile">,
+  args: string[],
+  runner: CommandRunner,
+): string {
+  try {
+    return runCompose(profile, runtime, "compose", args, runner, true);
+  } catch {
+    return "";
+  }
 }
 
 function stateVolumeName(profile: DockerComposeProfileV1): string {
@@ -575,13 +641,10 @@ function hostStateDigest(
 
 function composePs(
   profile: DockerComposeProfileV1,
-  runtime: Pick<ComposeRuntime, "composeFile">,
+  runtime: Pick<ComposeRuntime, "composeFile" | "migrationFile">,
   runner: CommandRunner,
 ): string {
-  const result = runner("docker", composeArgs(profile, runtime, ["ps", "--format", "json"]), {
-    capture: true,
-  });
-  return result.status === 0 ? result.stdout.trim() : "";
+  return tryCompose(profile, runtime, ["ps", "--format", "json"], runner).trim();
 }
 
 export function planComposeDeployment(
@@ -764,39 +827,16 @@ export async function applyComposeDeployment(
 
     const dependencies = managedDependencyServices(profile);
     if (dependencies.length) {
-      checked(
-        runner,
-        "docker",
-        composeArgs(profile, runtime, ["up", "-d", "--wait", ...dependencies]),
-        false,
-      );
+      runCompose(profile, runtime, "compose", ["up", "-d", "--wait", ...dependencies], runner, false);
     } else {
       // The application network still has to exist before the migration project,
       // which joins it as an external network, can start.
-      checked(runner, "docker", composeArgs(profile, runtime, ["up", "-d", "--no-start"]), false);
+      runCompose(profile, runtime, "compose", ["up", "-d", "--no-start"], runner, false);
     }
 
-    checked(
-      runner,
-      "docker",
-      dockerArgs(profile, [
-        "compose",
-        "-f",
-        runtime.migrationFile,
-        "run",
-        "--rm",
-        "--no-deps",
-        "migrate",
-      ]),
-      false,
-    );
+    runCompose(profile, runtime, "migration", ["run", "--rm", "--no-deps", "migrate"], runner, false);
 
-    checked(
-      runner,
-      "docker",
-      composeArgs(profile, runtime, ["up", "-d", "--wait", "--remove-orphans"]),
-      false,
-    );
+    runCompose(profile, runtime, "compose", ["up", "-d", "--wait", "--remove-orphans"], runner, false);
 
     const ledger = readLedger(profile, plan.images.api, runner);
     ledger.entries.push({
@@ -1033,12 +1073,7 @@ export async function rollbackComposeDeployment(
       preflight.images,
       preflight.rolloutStateDigest,
     );
-    checked(
-      runner,
-      "docker",
-      composeArgs(profile, runtime, ["up", "-d", "--wait", "--remove-orphans"]),
-      false,
-    );
+    runCompose(profile, runtime, "compose", ["up", "-d", "--wait", "--remove-orphans"], runner, false);
     const ledger = readLedger(profile, preflight.images.api, runner);
     ledger.entries.push({
       revision: (currentLedgerEntry(ledger)?.revision ?? 0) + 1,
