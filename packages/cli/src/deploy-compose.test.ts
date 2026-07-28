@@ -373,3 +373,20 @@ describe("worker service", () => {
     expect(worker).not.toContain("/health/ready");
   });
 });
+
+describe("object storage init", () => {
+  it("writes the policy it attaches", () => {
+    const profile = composeProfileOf(initialized(["auth", "object-storage-s3"]));
+    const document = renderComposeDocument(
+      profile,
+      "v1.2.3",
+      defaultComposeImages(profile, "v1.2.3"),
+      "sha256:0",
+    );
+    // Referencing a policy file the job never creates leaves the application user
+    // with no permissions, and the only symptom is a readiness check that is down.
+    expect(document).toContain("podokit-policy.json");
+    expect(document).toContain("arn:aws:s3:::app/*");
+    expect(document).not.toContain(" /policy.json");
+  });
+});
