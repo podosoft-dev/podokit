@@ -155,6 +155,10 @@ describe("create (integration against templates)", () => {
       expect(dockerfile).not.toContain("COPY --from=deps /app/node_modules");
       // Local workspace packages compile before the app that imports them.
       expect(dockerfile).toContain("npm run build --if-present --workspace");
+      // Local workspace packages ship as real directories. node_modules only holds
+      // symlinks to them, and a dangling link fails at boot rather than at build.
+      expect(dockerfile).toContain("COPY --from=build /app/packages ./packages");
+      expect(dockerfile).toContain("RUN mkdir -p /app/packages");
       // The runtime tree comes from prod-deps, never from a stage holding dev deps.
       expect(dockerfile).toContain("FROM node:22-alpine AS prod-deps");
       expect(dockerfile).toContain("COPY --from=prod-deps /app/node_modules ./node_modules");
