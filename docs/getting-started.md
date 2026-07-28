@@ -183,17 +183,31 @@ npm test        # run tests
 
 ## Deployment
 
-- **Docker Compose** — `infra/docker/`
-- **k3s** — `infra/k3s/` (standard `Ingress` with Traefik response compression; copy
-  `secret.example.yaml` to a real Secret created out-of-band)
+`podo deploy` plans and operates a release on a target you already run. Pick a driver:
 
-Production Dockerfiles use the root npm workspace lockfile. Build both images
-with the repository root as the context:
+- **`docker-compose`** — one Docker host, local or over `ssh://`. Reach for it when a
+  single machine is the whole deployment and a reverse proxy in front of it
+  terminates TLS.
+- **`kubernetes-helm`** — a cluster context and namespace. Reach for it when you
+  already operate a cluster, or need more than one node.
+
+Build both images with the repository root as the context, tagged with the same
+stable SemVer tag and pushed where the target can pull them:
 
 ```bash
-docker build -f apps/api/Dockerfile -t my-app-api .
-docker build -f apps/web/Dockerfile -t my-app-web .
+docker build -f apps/api/Dockerfile -t registry.example.com/my-app-api:v1.2.3 .
+docker build -f apps/web/Dockerfile -t registry.example.com/my-app-web:v1.2.3 .
+docker push registry.example.com/my-app-api:v1.2.3
+docker push registry.example.com/my-app-web:v1.2.3
 ```
+
+Then initialize a profile, review the plan, and apply the exact hash it prints. The
+full procedure — secrets, the migration ordering, verification, and rollback — is in
+[deployment.md](deployment.md).
+
+`infra/docker/` and `infra/k3s/` are **development and reference material**, not a
+deployment: the Compose file there runs PostgreSQL and the local mail catcher, and the
+k3s manifests are illustrative examples the tooling does not apply.
 
 ## Next steps
 
