@@ -299,6 +299,23 @@ function readEnvFileKeys(
   runner: CommandRunner,
 ): string[] {
   const script = `sed -n 's/^[[:space:]]*\\([A-Z][A-Z0-9_]*\\)=.*/\\1/p' /podokit-env | sort -u`;
+  // Read it as the identity that will actually deploy.
+  //
+  // A container running as root proves only that root can read the file, and
+  // `docker compose` on a remote target runs as the SSH user. Checking with the
+  // wrong identity is how a doctor passes and the apply then dies on
+  // "permission denied" -- which is exactly what happened.
+  const destination = sshDestination(profile, runner);
+  if (destination) {
+    const remote = checked(runner, "ssh", [
+      destination,
+      `sed -n 's/^[[:space:]]*\\([A-Z][A-Z0-9_]*\\)=.*/\\1/p' ${path} | sort -u`,
+    ]);
+    return remote
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+  }
   const output = checked(
     runner,
     "docker",
@@ -667,7 +684,15 @@ export function planComposeDeployment(
     ["api", profile.secrets.api.path],
     ...(profile.secrets.web ? ([["web", profile.secrets.web.path]] as Array<[string, string]>) : []),
   ];
+  const identityDestination = sshDestination(profile, runner);
   for (const [label, path] of identityTargets) {
+    if (identityDestination) {
+      secretIdentities[label] = checked(runner, "ssh", [
+        identityDestination,
+        `sha256sum ${path} | cut -d' ' -f1`,
+      ]).trim();
+      continue;
+    }
     const output = checked(
       runner,
       "docker",
