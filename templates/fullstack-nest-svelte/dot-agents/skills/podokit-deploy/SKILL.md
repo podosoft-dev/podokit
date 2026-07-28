@@ -1,20 +1,56 @@
 ---
 name: podokit-deploy
-description: Plan, inspect, apply, verify, and roll back PodoKit Kubernetes releases with an explicit deployment profile and confirmation hash. Use when an agent needs to initialize a .podokit/deploy profile, diagnose a target cluster, preview a release, perform an approved deployment, inspect rollout state, verify public endpoints, or prepare an application rollback.
+description: Plan, inspect, apply, verify, and roll back PodoKit releases with an explicit deployment profile and confirmation hash, on Kubernetes or Docker Compose. Use when an agent needs to initialize a .podokit/deploy profile, diagnose a target, preview a release, perform an approved deployment, inspect rollout state, verify public endpoints, or prepare a rollback.
 ---
 
 # Deploy a PodoKit application
 
+A profile records which driver it uses, so every command below is the same for both.
+Read the profile's `driver` first and say which one you are operating.
+
+| Driver | Target | Use it when |
+| --- | --- | --- |
+| `kubernetes-helm` | a cluster context and namespace | you already run a cluster, or you need more than one node, cluster-managed rollouts, or per-workload scaling |
+| `docker-compose` | one Docker host, local or over `ssh://` | one machine is the whole deployment and a reverse proxy in front of it terminates TLS |
+
 1. Run `npx @podosoft/podokit status`, `npx @podosoft/podokit diff`, and `npx @podosoft/podokit doctor`. Stop if managed-file conflicts or unsupported framework versions could make the image unreliable.
 2. Read [references/profile.md](references/profile.md) before creating or changing a deployment profile.
-3. Run `npx @podosoft/podokit deploy doctor --profile <name>`. Resolve every failure without printing Secret values.
+3. Run `npx @podosoft/podokit deploy doctor --profile <name>`. Resolve every failure without printing secret values.
 4. Run `npx @podosoft/podokit deploy plan --profile <name> --release <stable-semver> --json`.
-5. Show the user the context, cluster fingerprint result, namespace, Helm release, exact images, current revision and status, actions, migration warning, and plan hash.
+5. Show the user the driver, the target (context plus namespace and Helm release, or Docker context plus Compose project), the fingerprint result, the exact image digests, the current revision, the actions, the migration warning, and the plan hash.
 6. Do not apply until the user explicitly approves that exact plan.
 7. Apply with `npx @podosoft/podokit deploy apply --profile <name> --release <stable-semver> --confirm <plan-hash>`.
 8. Run `npx @podosoft/podokit deploy status --profile <name> --json` and `npx @podosoft/podokit deploy verify --profile <name> --json`.
-9. Report the exact images, Helm revision, ready replicas, restart totals, and verification result.
+9. Report the exact images, the revision, running replicas, restart totals, and the verification result.
 
-For rollback, read [references/rollback.md](references/rollback.md), preview the target revision without `--confirm`, show the new plan hash, and obtain explicit approval.
+## The migration runs against the release that is still serving
 
-Never create or rotate cluster credentials, registry credentials, DNS, virtual machines, Kubernetes Secrets, or backup repositories. Never put a password, token, private key, connection URL containing credentials, or Secret value in a profile, command argument, log, or report.
+Both drivers run the migration **before** the new containers start, and both keep the
+previous release serving while the new one rolls out. So a migration must be
+compatible with the code already running:
+
+- Additive changes are safe: new tables, new nullable columns, new indexes.
+- Dropping or renaming a column, or tightening a constraint, breaks the running
+  release the moment the migration commits — before any new code is live.
+- Destructive changes belong in a **second** release, after the code that stopped
+  using the column has fully rolled out.
+
+Rollback does not reverse migrations on either driver. If an older image cannot read
+the current schema, roll forward instead.
+
+## Rollback
+
+Read [references/rollback.md](references/rollback.md), preview the target revision
+without `--confirm`, show the new plan hash, and obtain explicit approval.
+
+The compose driver can only reproduce a revision whose rendered project still matches
+the current profile byte for byte; if the profile changed since, it refuses and tells
+you to roll forward.
+
+## Boundary
+
+Never create or rotate cluster credentials, registry credentials, DNS records,
+virtual machines, Kubernetes Secrets, env files on a deployment host, TLS
+certificates, or backup repositories. Never put a password, token, private key,
+connection URL containing credentials, or secret value in a profile, a command
+argument, a log, or a report.

@@ -6,3 +6,10 @@ dist
 **/.svelte-kit
 .git
 *.log
+
+# Real environment files never enter a build context. The build stages copy the
+# whole repository, so an .env left here is baked into an image layer even when the
+# runtime stage does not copy it -- and getting-started tells you to create one.
+.env
+.env.*
+!.env.example
