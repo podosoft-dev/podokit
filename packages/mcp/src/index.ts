@@ -13,20 +13,23 @@ import {
   builtinModulesDir,
   builtinTemplatesDir,
   create,
-  doctorDeployment,
+  describeDeploymentTarget,
   diff,
   doctor,
-  getDeploymentStatus,
+  doctorAnyDeployment,
+  getAnyDeploymentStatus,
+  initializeComposeProfile,
   initializeDeploymentProfile,
   inspectClusterFingerprint,
-  listDeploymentProfiles,
+  inspectComposeEndpointFingerprint,
+  listAnyDeploymentProfiles,
   listModules,
-  planDeployment,
+  planAnyDeployment,
   planUpdate,
   status,
   summarize,
   TEMPLATES,
-  verifyDeployment,
+  verifyAnyDeployment,
 } from "@podosoft/podokit";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -181,15 +184,25 @@ server.registerTool(
   "initialize_deployment_profile",
   {
     description:
-      "Create a repository-local Kubernetes deployment profile. This only writes .podokit/deploy/<profile>.json and does not change a cluster.",
+      "Create a repository-local deployment profile. This only writes .podokit/deploy/<profile>.json and does not change a cluster or a Docker host.",
     inputSchema: {
       profile: z.string().describe("Profile name, for example production"),
-      context: z.string().describe("Explicit kubeconfig context to bind"),
+      driver: z
+        .enum(["kubernetes-helm", "docker-compose"])
+        .optional()
+        .describe("Deployment driver; defaults to kubernetes-helm"),
+      context: z
+        .string()
+        .describe("Explicit kubeconfig context, or Docker context for the docker-compose driver"),
       clusterFingerprint: z
         .string()
         .optional()
-        .describe("Expected sha256 cluster fingerprint; auto-detected from the explicit context if omitted"),
+        .describe("Expected sha256 target fingerprint; auto-detected from the explicit context if omitted"),
       host: z.string().optional().describe("Public DNS hostname; defaults to app.example.com"),
+      secretsDir: z
+        .string()
+        .optional()
+        .describe("docker-compose only: absolute directory on the target host holding the env files"),
       projectDir: z.string().optional(),
     },
     annotations: {
@@ -199,13 +212,21 @@ server.registerTool(
       openWorldHint: false,
     },
   },
-  async ({ profile, context, clusterFingerprint, host, projectDir }) => {
+  async ({ profile, driver, context, clusterFingerprint, host, secretsDir, projectDir }) => {
     const r = inProject(projectDir, (dir) =>
-      initializeDeploymentProfile(dir, profile, {
-        context,
-        clusterFingerprint: clusterFingerprint ?? inspectClusterFingerprint(context),
-        host,
-      }),
+      driver === "docker-compose"
+        ? initializeComposeProfile(dir, profile, {
+            context,
+            endpointFingerprint:
+              clusterFingerprint ?? inspectComposeEndpointFingerprint(context),
+            host,
+            secretsDirectory: secretsDir,
+          })
+        : initializeDeploymentProfile(dir, profile, {
+            context,
+            clusterFingerprint: clusterFingerprint ?? inspectClusterFingerprint(context),
+            host,
+          }),
     );
     return "content" in r
       ? r
@@ -216,7 +237,8 @@ server.registerTool(
 server.registerTool(
   "deployment_profiles",
   {
-    description: "List deployment profiles and their non-secret target metadata.",
+    description:
+      "List deployment profiles with their driver and non-secret target metadata (kubernetes-helm or docker-compose).",
     inputSchema: projectDirSchema,
     annotations: {
       readOnlyHint: true,
@@ -226,16 +248,13 @@ server.registerTool(
     },
   },
   async ({ projectDir }) => {
-    const r = inProject(projectDir, (dir) => listDeploymentProfiles(dir));
+    const r = inProject(projectDir, (dir) => listAnyDeploymentProfiles(dir));
     return "content" in r
       ? r
       : text(
           r.length
             ? r
-                .map(
-                  (entry) =>
-                    `- ${entry.name}: context=${entry.profile.target.context}, namespace=${entry.profile.target.namespace}, release=${entry.profile.target.release}`,
-                )
+                .map((entry) => `- ${entry.name}: ${describeDeploymentTarget(entry.profile)}`)
                 .join("\n")
             : "No deployment profiles.",
         );
@@ -246,7 +265,7 @@ server.registerTool(
   "deployment_doctor",
   {
     description:
-      "Validate a deployment profile, cluster fingerprint, namespace, Helm, StorageClasses, and required Secret key names without returning Secret values.",
+      "Validate a deployment profile against its target without returning secret values: for kubernetes-helm the cluster fingerprint, namespace, Helm, StorageClasses, and Secret key names; for docker-compose the Docker endpoint fingerprint and the key names in each env file on the target host.",
     inputSchema: {
       profile: z.string(),
       projectDir: z.string().optional(),
@@ -259,7 +278,7 @@ server.registerTool(
     },
   },
   async ({ profile, projectDir }) => {
-    const r = inProject(projectDir, (dir) => doctorDeployment(dir, profile));
+    const r = inProject(projectDir, (dir) => doctorAnyDeployment(dir, profile));
     return "content" in r ? r : text(JSON.stringify(r, null, 2));
   },
 );
@@ -268,7 +287,7 @@ server.registerTool(
   "preview_deployment",
   {
     description:
-      "Render and hash a Kubernetes deployment plan for an immutable shared release tag. This does not change the cluster.",
+      "Render and hash a deployment plan for an immutable shared release tag, using whichever driver the profile declares. This does not change the target.",
     inputSchema: {
       profile: z.string(),
       release: z.string().describe("Stable SemVer tag such as v1.2.3; latest is rejected"),
@@ -282,7 +301,7 @@ server.registerTool(
     },
   },
   async ({ profile, release, projectDir }) => {
-    const r = inProject(projectDir, (dir) => planDeployment(dir, profile, release));
+    const r = inProject(projectDir, (dir) => planAnyDeployment(dir, profile, release));
     return "content" in r ? r : text(JSON.stringify(r, null, 2));
   },
 );
@@ -291,7 +310,7 @@ server.registerTool(
   "deployment_status",
   {
     description:
-      "Read the deployed Helm revision, workload images, ready replicas, and restart totals for a deployment profile.",
+      "Read the deployed revision, workload images, running replicas, and restart totals for a deployment profile.",
     inputSchema: {
       profile: z.string(),
       projectDir: z.string().optional(),
@@ -304,7 +323,7 @@ server.registerTool(
     },
   },
   async ({ profile, projectDir }) => {
-    const r = inProject(projectDir, (dir) => getDeploymentStatus(dir, profile));
+    const r = inProject(projectDir, (dir) => getAnyDeploymentStatus(dir, profile));
     return "content" in r ? r : text(JSON.stringify(r, null, 2));
   },
 );
@@ -326,7 +345,7 @@ server.registerTool(
     },
   },
   async ({ profile, projectDir }) => {
-    const r = await inProjectAsync(projectDir, (dir) => verifyDeployment(dir, profile));
+    const r = await inProjectAsync(projectDir, (dir) => verifyAnyDeployment(dir, profile));
     return "content" in r ? r : text(JSON.stringify(r, null, 2));
   },
 );
