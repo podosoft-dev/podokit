@@ -1,3 +1,4 @@
+# Example only. See README.md in this directory; `podo deploy` renders its own.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -13,8 +14,17 @@ spec:
     spec:
       containers:
         - name: web
-          image: ghcr.io/example/podokit-web:latest
+          # Placeholder. Use one immutable, stable SemVer tag for api and web.
+          image: ghcr.io/example/podokit-web:v0.0.0
           ports:
             - containerPort: 3000
           envFrom:
             - configMapRef: { name: app-config }
+          # Without these a rolling update sends traffic to a process that has not
+          # bound its port yet.
+          readinessProbe:
+            httpGet: { path: /, port: 3000 }
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet: { path: /, port: 3000 }
+            initialDelaySeconds: 15
