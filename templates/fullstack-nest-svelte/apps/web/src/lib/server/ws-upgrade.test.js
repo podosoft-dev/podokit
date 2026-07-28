@@ -95,6 +95,7 @@ describe("createUpgradeProxy", () => {
       },
     });
     const client = socket();
+    /** @type {string[]} */
     const written = [];
     client.on("data", (chunk) => written.push(chunk.toString()));
     proxy({ url: "/events/ws", headers: handshake }, client, null);
@@ -107,6 +108,7 @@ describe("createUpgradeProxy", () => {
       connect: (_options, hooks) => (hooks.onError("ECONNREFUSED"), { abort() {} }),
     });
     const client = socket();
+    /** @type {string[]} */
     const written = [];
     client.on("data", (chunk) => written.push(chunk.toString()));
     proxy({ url: "/events/ws", headers: handshake }, client, null);
@@ -123,6 +125,7 @@ describe("createUpgradeProxy", () => {
       },
     });
     const client = socket();
+    /** @type {string[]} */
     const written = [];
     client.on("data", (chunk) => written.push(chunk.toString()));
     proxy({ url: "/events/ws", headers: handshake }, client, null);
