@@ -118,6 +118,8 @@ const LEDGER_PATH = `${STATE_MOUNT}/releases.json`;
 const LOCK_PATH = `${STATE_MOUNT}/deploy.lock`;
 /** How many rollback targets the ledger keeps. */
 const LEDGER_DEPTH = 10;
+/** Only ever used where the rendered images are not consulted. */
+const PLACEHOLDER_RELEASE = "v0.0.0";
 
 function defaultRunner(
   command: string,
@@ -239,6 +241,11 @@ function readEnvFileKeys(
       "--rm",
       "--network",
       "none",
+      // The env file is root-owned and 0600 on purpose, and the application images
+      // run as a non-root user. Without this the probe reads nothing and reports
+      // every key as missing.
+      "--user",
+      "0:0",
       "-v",
       `${path}:/podokit-env:ro`,
       "--entrypoint",
@@ -260,6 +267,9 @@ function stateScript(profile: DockerComposeProfileV1, image: string, script: str
     "--rm",
     "--network",
     "none",
+    // The state volume is root-owned; the application images are not.
+    "--user",
+    "0:0",
     "-v",
     `${stateVolumeName(profile)}:${STATE_MOUNT}`,
     "--entrypoint",
@@ -389,10 +399,33 @@ function managedDependencyServices(profile: DockerComposeProfileV1): string[] {
   ];
 }
 
+/**
+ * An image the target can pull, for the two checks that need a shell on the host.
+ *
+ * The release image is the right one whenever a release is known -- it is the image
+ * about to run, so proving it pulls is part of the check. Without one (a bare
+ * `podo deploy doctor` before anything is published) fall back to a managed
+ * dependency image, which the profile already pins by digest and the deployment
+ * needs anyway. Fabricating a release tag would ask the registry for something that
+ * can never exist.
+ */
+function probeImage(profile: DockerComposeProfileV1, release?: string): string | null {
+  if (release) return `${profile.release.apiRepository}:${release}`;
+  for (const dependency of [
+    profile.dependencies.postgres,
+    profile.dependencies.redis,
+    profile.dependencies.objectStorage,
+  ]) {
+    if (dependency.mode === "managed") return dependency.image;
+  }
+  return null;
+}
+
 export function doctorComposeDeployment(
   projectRoot: string,
   profileName: string,
   runner: CommandRunner = defaultRunner,
+  release?: string,
 ): ComposeDoctorFinding[] {
   const profile = loadComposeProfile(projectRoot, profileName);
   const findings: ComposeDoctorFinding[] = [];
@@ -431,9 +464,15 @@ export function doctorComposeDeployment(
   }
   if (!endpointOk) return findings;
 
-  // Key-name inspection needs an image with a shell; the released API image is the
-  // one this deployment already trusts, so nothing new is pulled to run the check.
-  const probeImage = defaultComposeImages(profile, "v0.0.0").api;
+  const probe = probeImage(profile, release);
+  if (!probe) {
+    record(
+      "env-files",
+      false,
+      "Cannot inspect the env files: no managed dependency image to borrow a shell from. Re-run with a release.",
+    );
+    return findings;
+  }
   const envFiles: Array<{ label: string; path: string; requiredKeys: string[] }> = [
     { label: "api", path: profile.secrets.api.path, requiredKeys: profile.secrets.api.requiredKeys },
     ...(profile.secrets.web
@@ -485,7 +524,7 @@ export function doctorComposeDeployment(
       file.label === "api" ? [...file.requiredKeys, ...dependencyKeys] : file.requiredKeys,
     );
     try {
-      const present = new Set(readEnvFileKeys(profile, file.path, probeImage, runner));
+      const present = new Set(readEnvFileKeys(profile, file.path, probe, runner));
       const missing = [...required].filter((key) => !present.has(key)).sort();
       record(
         `env-file-${file.label}`,
@@ -499,10 +538,10 @@ export function doctorComposeDeployment(
     }
   }
 
-  if (profile.secrets.registryLogin) {
+  if (profile.secrets.registryLogin && release) {
     const result = runner(
       "docker",
-      dockerArgs(profile, ["run", "--rm", "--entrypoint", "true", probeImage]),
+      dockerArgs(profile, ["run", "--rm", "--entrypoint", "true", probe]),
       { capture: true },
     );
     record(
@@ -574,6 +613,8 @@ export function planComposeDeployment(
         "--rm",
         "--network",
         "none",
+        "--user",
+        "0:0",
         "-v",
         `${path}:/podokit-env:ro`,
         "--entrypoint",
@@ -671,7 +712,7 @@ export async function applyComposeDeployment(
   runner: CommandRunner = defaultRunner,
   fetcher: typeof fetch = fetch,
 ): Promise<{ plan: ComposePlan; status: ComposeStatus; verification: ComposeVerificationResult }> {
-  const findings = doctorComposeDeployment(projectRoot, profileName, runner);
+  const findings = doctorComposeDeployment(projectRoot, profileName, runner, release);
   const failed = findings.filter((finding) => !finding.ok);
   if (failed.length) {
     throw new Error(`Deployment doctor failed: ${failed.map((f) => f.message).join(" ")}`);
@@ -782,7 +823,9 @@ export function getComposeStatus(
   runner: CommandRunner = defaultRunner,
 ): ComposeStatus {
   const profile = loadComposeProfile(projectRoot, profileName);
-  const runtime = renderComposeDeployment(projectRoot, profileName, profile, "v0.0.0");
+  // `compose ps` matches on the project name, so this render exists only to produce
+  // a file path; the tag in it is never resolved and never reaches a registry.
+  const runtime = renderComposeDeployment(projectRoot, profileName, profile, PLACEHOLDER_RELEASE);
   const psOutput = composePs(profile, runtime, runner);
   const entries: ComposePsEntry[] = psOutput
     ? psOutput
@@ -895,8 +938,13 @@ export function planComposeRollback(
   runner: CommandRunner = defaultRunner,
 ): ComposePlan {
   const profile = loadComposeProfile(projectRoot, profileName);
-  const probeImage = defaultComposeImages(profile, "v0.0.0").api;
-  const ledger = readLedger(profile, probeImage, runner);
+  const probe = probeImage(profile);
+  if (!probe) {
+    throw new Error(
+      "Cannot read the release ledger: no managed dependency image to borrow a shell from.",
+    );
+  }
+  const ledger = readLedger(profile, probe, runner);
   const target = ledger.entries.find((entry) => entry.revision === revision);
   if (!target) {
     const known = ledger.entries.map((entry) => entry.revision).join(", ") || "none";

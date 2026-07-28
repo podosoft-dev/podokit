@@ -266,7 +266,9 @@ async function runComposeDeploy(
     return;
   }
   if (action === "doctor") {
-    const findings = doctorComposeDeployment(cwd, profileName);
+    // A release makes the doctor probe with the image about to run, and lets it
+    // check registry access at all.
+    const findings = doctorComposeDeployment(cwd, profileName, undefined, args.release);
     process.stdout.write(
       args.json
         ? `${JSON.stringify(findings, null, 2)}\n`
