@@ -190,9 +190,20 @@ const nodeConnect = (options, hooks) => {
 };
 
 /**
+ * @typedef {object} UpstreamHooks
+ * @property {(status: number, headers: Headers, socket: any, head: Uint8Array | null) => void} onUpgrade
+ * @property {(status: number, statusMessage: string, headers: Headers) => void} onResponse
+ * @property {(reason: string) => void} onError
+ */
+
+/** @typedef {(options: ReturnType<typeof upstreamOptions>, hooks: UpstreamHooks) => { abort: () => void }} Connect */
+
+/**
  * Build the `upgrade` listener the built server mounts.
  *
  * The transport is injected so the decisions here are testable without a socket.
+ *
+ * @param {{ connect?: Connect, allowed?: ReadonlySet<string> }} [options]
  */
 export function createUpgradeProxy(options = {}) {
   const connect = options.connect ?? nodeConnect;
