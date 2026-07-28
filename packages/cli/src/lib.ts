@@ -58,6 +58,38 @@ export type {
 } from "./deploy-profile";
 export { renderDeployment } from "./deploy-render";
 export type { DeploymentRuntime } from "./deploy-render";
+export {
+  DEPLOY_DRIVERS,
+  assertAnyReleaseTag,
+  listAnyDeploymentProfiles,
+  loadAnyDeploymentProfile,
+  loadComposeProfile,
+  loadKubernetesProfile,
+  readDeploymentDriver,
+} from "./deploy-driver";
+export type { AnyDeployProfile, DeployDriver } from "./deploy-driver";
+export { initializeComposeProfile, parseComposeProfile } from "./deploy-compose-profile";
+export type { DockerComposeProfileV1 } from "./deploy-compose-profile";
+export { renderComposeDeployment } from "./deploy-compose-render";
+export type { ComposeRuntime } from "./deploy-compose-render";
+export {
+  applyComposeDeployment,
+  doctorComposeDeployment,
+  getComposeStatus,
+  inspectComposeEndpointFingerprint,
+  planComposeDeployment,
+  planComposeRollback,
+  rollbackComposeDeployment,
+  verifyComposeDeployment,
+} from "./deploy-compose";
+export type { ComposePlan, ComposeStatus } from "./deploy-compose";
+export {
+  describeDeploymentTarget,
+  doctorAnyDeployment,
+  getAnyDeploymentStatus,
+  planAnyDeployment,
+  verifyAnyDeployment,
+} from "./deploy-dispatch";
 
 /** Absolute path to the templates bundled in this installed package. */
 export function builtinTemplatesDir(): string {
