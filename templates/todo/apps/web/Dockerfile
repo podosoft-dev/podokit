@@ -51,6 +51,11 @@ RUN if [ -d packages ]; then \
       done; \
     fi
 RUN npm run build --workspace=apps/web
+# The runtime needs the real workspace package directories, not just the symlinks
+# npm leaves in node_modules pointing at them. Without this the image boots and
+# dies on "Cannot find module <package>" -- a dangling link, at runtime only.
+# mkdir keeps the COPY valid for a project that has no packages/ at all.
+RUN mkdir -p /app/packages
 
 FROM node:22-alpine AS runtime
 WORKDIR /app
@@ -58,6 +63,7 @@ ENV NODE_ENV=production
 RUN addgroup -S -g 101 app && adduser -S -D -H -u 100 -G app app
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=manifests /app/apps/web ./apps/web
+COPY --from=build /app/packages ./packages
 COPY --from=build /app/apps/web/build ./apps/web/build
 # The entry and the modules it imports run OUTSIDE the bundle, so they ship as
 # source. Without them the image falls back to an entry that cannot answer a
