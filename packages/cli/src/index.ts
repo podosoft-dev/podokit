@@ -32,6 +32,24 @@ import {
   loadDeploymentProfile,
 } from "./deploy-profile";
 import { renderDeployment } from "./deploy-render";
+import {
+  DEPLOY_DRIVERS,
+  loadComposeProfile,
+  readDeploymentDriver,
+  type DeployDriver,
+} from "./deploy-driver";
+import { initializeComposeProfile } from "./deploy-compose-profile";
+import { renderComposeDeployment } from "./deploy-compose-render";
+import {
+  applyComposeDeployment,
+  doctorComposeDeployment,
+  getComposeStatus,
+  inspectComposeEndpointFingerprint,
+  planComposeDeployment,
+  planComposeRollback,
+  rollbackComposeDeployment,
+  verifyComposeDeployment,
+} from "./deploy-compose";
 
 const HELP = `podo — PodoKit project generator
 
@@ -43,7 +61,8 @@ Usage:
   podo diff                List PodoKit-managed files you have edited
   podo doctor              Check framework versions against supported ranges
   podo dev <action> [...]  Run the shared, portless container development gateway
-  podo deploy <action>     Plan, apply, verify, or roll back a Kubernetes deployment
+  podo deploy <action>     Plan, apply, verify, or roll back a deployment
+                           (Kubernetes/Helm or Docker Compose)
   podo locale <command>    Add, validate, activate, or list JSON locales
   podo update [--apply]    Preview (or apply) what a version update would change
   podo eject <path...>     Take ownership of managed files (update skips them)
@@ -76,10 +95,11 @@ Example:
   cd my-app && npx @podosoft/podokit add auth
 `;
 
-const DEPLOY_HELP = `podo deploy — Kubernetes and Helm deployment workflow
+const DEPLOY_HELP = `podo deploy — release an application to Kubernetes or Docker Compose
 
 Usage:
-  podo deploy init --profile <name> --context <context> [--host <hostname>]
+  podo deploy init --profile <name> [--driver <driver>] --context <context>
+                   [--host <hostname>] [--secrets-dir <path>]
   podo deploy doctor --profile <name> [--json]
   podo deploy render --profile <name> --release <tag> [--json]
   podo deploy plan --profile <name> --release <tag> [--json]
@@ -88,9 +108,17 @@ Usage:
   podo deploy verify --profile <name> [--json]
   podo deploy rollback --profile <name> --revision <number> [--confirm <plan-hash>]
 
-The namespace, referenced Secrets, ingress controller, and storage classes must
-already exist. Plan and rollback require access to the profile's exact cluster.
-Apply and rollback require confirmation of the exact plan hash.
+Drivers:
+  kubernetes-helm  (default) Helm releases on an existing cluster. --context is a
+                   kubeconfig context; the namespace, Secrets, IngressClass, and
+                   storage classes must already exist.
+  docker-compose   A Compose project on one Docker host. --context is a Docker
+                   context, local or ssh://; the env files named by the profile
+                   must already exist on that host.
+
+A profile records which driver it uses, so every action after init reads it from
+the profile. Both drivers pin the target by fingerprint, resolve image tags to
+digests, and require apply and rollback to confirm the exact plan hash.
 `;
 
 interface ParsedArgs {
@@ -114,6 +142,9 @@ interface ParsedArgs {
   revision?: number;
   context?: string;
   clusterFingerprint?: string;
+  endpointFingerprint?: string;
+  driver?: DeployDriver;
+  secretsDir?: string;
   host?: string;
   json: boolean;
 }
@@ -173,6 +204,16 @@ export function parseArgs(argv: string[]): ParsedArgs {
       parsed.context = argv[++i];
     } else if (arg === "--cluster-fingerprint") {
       parsed.clusterFingerprint = argv[++i];
+    } else if (arg === "--endpoint-fingerprint") {
+      parsed.endpointFingerprint = argv[++i];
+    } else if (arg === "--driver") {
+      const driver = argv[++i];
+      if (driver !== "kubernetes-helm" && driver !== "docker-compose") {
+        throw new Error(`--driver must be one of: ${DEPLOY_DRIVERS.join(", ")}.`);
+      }
+      parsed.driver = driver;
+    } else if (arg === "--secrets-dir") {
+      parsed.secretsDir = argv[++i];
     } else if (arg === "--host") {
       parsed.host = argv[++i];
     } else if (arg === "--json") {
@@ -190,6 +231,114 @@ export function parseArgs(argv: string[]): ParsedArgs {
 function fail(message: string): never {
   process.stderr.write(`error: ${message}\n`);
   process.exit(1);
+}
+
+/**
+ * The docker-compose driver's half of `podo deploy`. It answers the same actions as
+ * the Kubernetes half and enforces the same rule: every mutation echoes back the
+ * exact hash of a plan that was printed first.
+ */
+async function runComposeDeploy(
+  action: string,
+  args: ReturnType<typeof parseArgs>,
+  profileName: string,
+): Promise<void> {
+  const cwd = process.cwd();
+  if (action === "init") {
+    if (!args.context) {
+      fail(
+        "Usage: podo deploy init --profile <name> --driver docker-compose --context <docker-context> [--host <hostname>] [--secrets-dir <path>].",
+      );
+    }
+    const endpointFingerprint =
+      args.endpointFingerprint ?? inspectComposeEndpointFingerprint(args.context);
+    const initialized = initializeComposeProfile(cwd, profileName, {
+      context: args.context,
+      endpointFingerprint,
+      host: args.host,
+      secretsDirectory: args.secretsDir,
+    });
+    process.stdout.write(
+      args.json
+        ? `${JSON.stringify(initialized, null, 2)}\n`
+        : `Created deployment profile ${initialized.name} at ${initialized.path}.\n`,
+    );
+    return;
+  }
+  if (action === "doctor") {
+    const findings = doctorComposeDeployment(cwd, profileName);
+    process.stdout.write(
+      args.json
+        ? `${JSON.stringify(findings, null, 2)}\n`
+        : `${findings.map((f) => `${f.ok ? "ok  " : "FAIL"} ${f.message}`).join("\n")}\n`,
+    );
+    if (findings.some((finding) => !finding.ok)) process.exitCode = 1;
+    return;
+  }
+  if (action === "render") {
+    if (!args.release) fail("podo deploy render requires --release <tag>.");
+    const profile = loadComposeProfile(cwd, profileName);
+    const runtime = renderComposeDeployment(cwd, profileName, profile, args.release);
+    process.stdout.write(
+      args.json
+        ? `${JSON.stringify(runtime, null, 2)}\n`
+        : `Rendered Compose project into ${runtime.root}.\n`,
+    );
+    return;
+  }
+  if (action === "plan") {
+    if (!args.release) fail("podo deploy plan requires --release <tag>.");
+    const plan = planComposeDeployment(cwd, profileName, args.release);
+    process.stdout.write(
+      args.json
+        ? `${JSON.stringify(plan, null, 2)}\n`
+        : `${plan.actions.map((entry) => `${entry.order}. ${entry.description}`).join("\n")}\n` +
+            `${plan.warnings.map((warning) => `warning: ${warning}`).join("\n")}\n` +
+            `Plan hash: ${plan.planHash}\n`,
+    );
+    return;
+  }
+  if (action === "apply") {
+    if (!args.release || !args.confirm) {
+      fail("podo deploy apply requires --release <tag> --confirm <plan-hash>.");
+    }
+    const result = await applyComposeDeployment(cwd, profileName, args.release, args.confirm);
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    if (!result.verification.ok) process.exitCode = 1;
+    return;
+  }
+  if (action === "status") {
+    process.stdout.write(`${JSON.stringify(getComposeStatus(cwd, profileName), null, 2)}\n`);
+    return;
+  }
+  if (action === "verify") {
+    const result = await verifyComposeDeployment(cwd, profileName);
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    if (!result.ok) process.exitCode = 1;
+    return;
+  }
+  if (action === "rollback") {
+    if (!args.revision) fail("podo deploy rollback requires --revision <number>.");
+    if (!args.confirm) {
+      const plan = planComposeRollback(cwd, profileName, args.revision);
+      process.stdout.write(
+        `${JSON.stringify(plan, null, 2)}\nRe-run with --confirm ${plan.planHash}.\n`,
+      );
+      return;
+    }
+    const result = await rollbackComposeDeployment(
+      cwd,
+      profileName,
+      args.revision,
+      args.confirm,
+    );
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    if (!result.verification.ok) process.exitCode = 1;
+    return;
+  }
+  fail(
+    `Unknown deploy command "${action}". Use init, doctor, render, plan, apply, status, verify, or rollback.`,
+  );
 }
 
 async function main(argv: string[]): Promise<void> {
@@ -344,6 +493,15 @@ async function main(argv: string[]): Promise<void> {
       fail("Deployment commands require --profile <name>.");
     }
     try {
+      // A profile names its own driver, so everything but `init` reads it from disk.
+      const driver: DeployDriver =
+        action === "init"
+          ? (args.driver ?? "kubernetes-helm")
+          : readDeploymentDriver(process.cwd(), profileName!);
+      if (driver === "docker-compose") {
+        await runComposeDeploy(action, args, profileName!);
+        return;
+      }
       if (action === "init") {
         if (!args.context) {
           fail("Usage: podo deploy init --profile <name> --context <context> [--host <hostname>].");
