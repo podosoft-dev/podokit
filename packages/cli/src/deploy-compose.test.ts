@@ -390,3 +390,25 @@ describe("object storage init", () => {
     expect(document).not.toContain(" /policy.json");
   });
 });
+
+describe("published port and replicas", () => {
+  it("initializes the web service with a single replica", () => {
+    const profile = composeProfileOf(initialized());
+    expect(profile.workloads.web.replicas).toBe(1);
+  });
+
+  it("refuses more than one replica of the service that publishes the port", () => {
+    const root = initialized();
+    const file = profilePath(root, "production");
+    const value = JSON.parse(readFileSync(file, "utf8")) as {
+      workloads: { web: { replicas: number } };
+    };
+    value.workloads.web.replicas = 2;
+    writeFileSync(file, JSON.stringify(value));
+    // Compose cannot share a host port, so the second replica fails to bind and
+    // takes the rollout down with it.
+    expect(() => loadAnyDeploymentProfile(root, "production")).toThrow(
+      "workloads.web.replicas must be 1",
+    );
+  });
+});
