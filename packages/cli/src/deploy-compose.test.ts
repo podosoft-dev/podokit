@@ -306,3 +306,53 @@ describe("compose plan", () => {
     expect(first.planHash).not.toBe(second.planHash);
   });
 });
+// Appended to deploy-compose.test.ts: a plan must stay confirmable while the
+// target is flapping, which is exactly when a deployment is most needed.
+
+describe("plan stability", () => {
+  it("keeps the same hash while container status churns", () => {
+    const root = initialized();
+    const psLine = (status: string, restarts: number) =>
+      JSON.stringify({
+        Name: "example-app-api-1",
+        Service: "example-app-api",
+        Image: "repo/api@sha256:abc",
+        State: status,
+        Health: status === "running" ? "healthy" : "starting",
+        Status: `Restarting (${restarts}) ${restarts} seconds ago`,
+      });
+
+    const first = planComposeDeployment(
+      root,
+      "production",
+      "v1.2.3",
+      scriptedRunner({ "ps --format json": psLine("restarting", 3) }),
+    );
+    const second = planComposeDeployment(
+      root,
+      "production",
+      "v1.2.3",
+      scriptedRunner({ "ps --format json": psLine("restarting", 47) }),
+    );
+    expect(second.planHash).toBe(first.planHash);
+  });
+
+  it("changes the hash when a different image is deployed", () => {
+    const root = initialized();
+    const psLine = (image: string) =>
+      JSON.stringify({ Service: "example-app-api", Image: image, State: "running" });
+    const first = planComposeDeployment(
+      root,
+      "production",
+      "v1.2.3",
+      scriptedRunner({ "ps --format json": psLine("repo/api@sha256:abc") }),
+    );
+    const second = planComposeDeployment(
+      root,
+      "production",
+      "v1.2.3",
+      scriptedRunner({ "ps --format json": psLine("repo/api@sha256:def") }),
+    );
+    expect(second.planHash).not.toBe(first.planHash);
+  });
+});
