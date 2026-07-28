@@ -174,6 +174,30 @@ already running.**
 Rollback does not reverse migrations. If an older image cannot read the current
 schema, roll forward instead.
 
+## WebSocket endpoints
+
+Public traffic enters through the web app, and a SvelteKit route cannot answer an
+upgrade — `+server.ts` handlers never see one, and the `/api/*` proxy is `fetch`-based,
+which cannot carry a 101. An API WebSocket gateway is therefore unreachable in a
+deployment unless the web server relays it.
+
+Generated projects ship `apps/web/server.js`, which is the image's entry point. It
+keeps adapter-node in charge of listening and graceful shutdown and adds an upgrade
+proxy for the paths named in `WS_PROXY_PATHS`:
+
+```json
+{ "runtimeConfig": { "WS_PROXY_PATHS": "/events/ws" } }
+```
+
+Empty by default, so a deployment with no WebSocket behaves exactly as before. Each
+entry is matched **whole** — not as a prefix or a pattern — and anything else asking
+to upgrade is destroyed rather than proxied. Adding a path is a security decision: the
+API must authorise that socket at handshake time, because the relay forwards whatever
+the caller sent.
+
+Set the same value in the shell that runs `vite dev`, or the feature works in
+development and fails only once deployed.
+
 ## Status and verification
 
 ```bash
