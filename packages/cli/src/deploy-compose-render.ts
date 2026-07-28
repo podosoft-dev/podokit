@@ -281,7 +281,13 @@ function applicationService(
       : "") +
     `    networks: [${profile.target.project}]\n` +
     resourceBlock(workload, "    ") +
-    (options.healthcheckPath ? httpHealthcheck(options.healthcheckPath, "    ") : "") +
+    (options.healthcheckPath
+      ? httpHealthcheck(options.healthcheckPath, "    ")
+      : // The worker runs the API image with a different entry point, and that image
+        // declares an HTTP healthcheck. A process with no HTTP server can never pass
+        // it, so the container reports unhealthy forever unless the inherited check
+        // is switched off here.
+        "    healthcheck:\n      disable: true\n") +
     labelsBlock(profile, release, stateDigest, "    ")
   );
 }
