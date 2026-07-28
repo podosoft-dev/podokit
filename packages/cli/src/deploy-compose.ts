@@ -643,6 +643,32 @@ function currentLedgerEntry(ledger: Ledger): LedgerEntry | null {
   return ledger.entries.length ? (ledger.entries[ledger.entries.length - 1] ?? null) : null;
 }
 
+/**
+ * What is deployed, without what it happens to be doing right now.
+ *
+ * `compose ps` reports restart counts, uptime strings and health transitions, and
+ * folding those into the plan hash makes the hash change every second something is
+ * flapping -- so a plan can never be confirmed on a target that is unhealthy, which
+ * is exactly when you most need to deploy. Keep the identity: which services exist
+ * and which image each one runs.
+ */
+function deployedIdentity(psOutput: string): string {
+  if (!psOutput.trim()) return "[]";
+  const entries = psOutput
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      try {
+        const entry = JSON.parse(line) as ComposePsEntry;
+        return { service: entry.Service ?? entry.Name ?? "", image: entry.Image ?? "" };
+      } catch {
+        return { service: "", image: "" };
+      }
+    })
+    .sort((left, right) => left.service.localeCompare(right.service) || left.image.localeCompare(right.image));
+  return JSON.stringify(entries);
+}
+
 function hostStateDigest(
   profile: DockerComposeProfileV1,
   ledger: Ledger,
@@ -652,7 +678,7 @@ function hostStateDigest(
     "compose-host-state",
     profile.target.endpointFingerprint,
     JSON.stringify(currentLedgerEntry(ledger)),
-    psOutput,
+    deployedIdentity(psOutput),
   ]);
 }
 
