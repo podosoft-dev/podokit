@@ -12,6 +12,13 @@ POSTGRES_DB=podokit
 
 # Web -> API boundary (server-side only; not exposed to the browser)
 BACKEND_INTERNAL_URL=http://localhost:5002
+
+# Exact paths the web server may proxy as WebSocket upgrades to the API, comma
+# separated. Empty means none: a SvelteKit route cannot answer an upgrade, so a
+# WebSocket gateway on the API is unreachable until it is named here. Each path is
+# matched whole and must be authorised by the API at handshake time -- a relay that
+# forwards anything is an open tunnel to every private route.
+WS_PROXY_PATHS=
 CORS_ORIGIN=http://localhost:5001
 
 # ── Optional / development ───────────────────────────────────────────

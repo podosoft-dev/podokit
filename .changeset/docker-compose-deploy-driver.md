@@ -18,3 +18,12 @@ workspaces. They now collect every workspace manifest, carry the whole install o
 into the build, compile local `packages/*` before the app that imports them, install
 the npm major that wrote the lockfile, prune the runtime tree, declare a healthcheck,
 and keep `.env` out of the build context.
+
+Generated projects now ship an upgrade-capable web entry point. A SvelteKit route
+cannot answer a WebSocket upgrade, so an API gateway was unreachable once deployed;
+`apps/web/server.js` keeps adapter-node in charge and relays the exact paths named in
+`WS_PROXY_PATHS`, matched whole. Nothing is forwarded by default.
+
+The example `infra/k3s` manifests no longer contradict the deployment tooling: they
+carry probes, an `ingressClassName`, a TLS block, placeholder tags instead of
+`latest`, and a README saying `podo deploy` renders the manifests it actually applies.

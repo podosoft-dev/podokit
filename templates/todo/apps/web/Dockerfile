@@ -31,14 +31,14 @@ WORKDIR /app
 COPY --from=manifests /app ./
 ARG NPM_VERSION
 RUN npm i -g "npm@${NPM_VERSION}"
-# The runtime tree, resolved from the same lockfile.
+# The runtime tree for this image only.
 #
-# ⚠ This prunes less than it looks. npm 11 writes lockfile entries marked
-# `extraneous` rather than `dev`, and neither --omit=dev nor prune removes those,
-# so a generated project still ships roughly 280 packages including typescript and
-# vite. Measured, not assumed. The prune is kept because it is the correct
-# instruction and will take effect once the lockfile stops carrying them.
-RUN npm ci --omit=dev --no-audit --no-fund && npm prune --omit=dev
+# Scoping to the one workspace matters: --omit=dev at the root still installs the
+# union of every workspace's production dependencies, so the API image carried Vite
+# and the web image carried Nest. Measured on a generated project, this is 198
+# packages instead of 283. TypeScript stays either way -- typeorm depends on ts-node,
+# which depends on it, so it is a production dependency and not bloat.
+RUN npm ci --omit=dev --no-audit --no-fund --workspace=apps/web --include-workspace-root
 
 FROM node:22-alpine AS build
 WORKDIR /app
@@ -59,9 +59,14 @@ RUN addgroup -S -g 101 app && adduser -S -D -H -u 100 -G app app
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=manifests /app/apps/web ./apps/web
 COPY --from=build /app/apps/web/build ./apps/web/build
+# The entry and the modules it imports run OUTSIDE the bundle, so they ship as
+# source. Without them the image falls back to an entry that cannot answer a
+# WebSocket upgrade.
+COPY --from=build /app/apps/web/server.js ./apps/web/server.js
+COPY --from=build /app/apps/web/src/lib/server ./apps/web/src/lib/server
 WORKDIR /app/apps/web
 USER 100:101
 EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=6 \
   CMD node -e "fetch('http://127.0.0.1:3000/').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
-CMD ["node", "build"]
+CMD ["node", "server.js"]
