@@ -187,7 +187,7 @@ function redisService(profile: DockerComposeProfileV1, image: string): string {
     dataPath: "/data",
     // Authenticated and durable, matching what the Kubernetes driver renders.
     command: `["sh", "-c", ${quote(
-      'exec redis-server --appendonly yes --requirepass "$REDIS_PASSWORD"',
+      'exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"',
     )}]`,
     healthcheck:
       `    healthcheck:\n` +
@@ -221,13 +221,16 @@ function objectStorageService(profile: DockerComposeProfileV1, image: string): s
 function objectStorageInitService(profile: DockerComposeProfileV1, clientImage: string): string {
   const storage = profile.dependencies.objectStorage;
   const endpoint = `http://${serviceName(profile, "object-storage")}:9000`;
+  // `$$` is Compose's escape: a single `$` would be substituted at parse time,
+  // from the environment of whoever runs compose, and these values only exist in
+  // the env file the container reads.
   const script = [
     "set -e",
-    `mc alias set podokit ${endpoint} "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"`,
+    `mc alias set podokit ${endpoint} "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"`,
     `mc mb --ignore-existing podokit/${storage.bucket}`,
-    `mc admin user add podokit "$S3_ACCESS_KEY_ID" "$S3_SECRET_ACCESS_KEY" || true`,
+    `mc admin user add podokit "$$S3_ACCESS_KEY_ID" "$$S3_SECRET_ACCESS_KEY" || true`,
     `mc admin policy create podokit podokit-app /policy.json || true`,
-    `mc admin policy attach podokit podokit-app --user "$S3_ACCESS_KEY_ID" || true`,
+    `mc admin policy attach podokit podokit-app --user "$$S3_ACCESS_KEY_ID" || true`,
   ].join("\n");
   return (
     `  ${serviceName(profile, "object-storage-init")}:\n` +
