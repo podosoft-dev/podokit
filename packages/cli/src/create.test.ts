@@ -141,10 +141,27 @@ describe("create (integration against templates)", () => {
     for (const workspace of ["api", "web"]) {
       const dockerfile = readFileSync(join(target, "apps", workspace, "Dockerfile"), "utf8");
       expect(dockerfile).toContain("FROM node:22-alpine AS deps");
-      expect(dockerfile).toContain("COPY package.json package-lock.json ./");
       expect(dockerfile).toContain("RUN npm ci --no-audit --no-fund");
       expect(dockerfile).toContain(`RUN npm run build --workspace=apps/${workspace}`);
       expect(dockerfile).not.toContain("npm install --omit=dev=false");
+
+      // Every workspace manifest must reach `npm ci`. Listing them by hand silently
+      // installs a different tree for a project that adds one.
+      expect(dockerfile).toContain("FROM node:22-alpine AS manifests");
+      expect(dockerfile).toContain('find . -name package.json -not -path "*/node_modules/*"');
+      // The whole install output, not just the root node_modules, so nested
+      // directories npm creates for unhoistable versions survive into the build.
+      expect(dockerfile).toContain("COPY --from=deps /app ./");
+      expect(dockerfile).not.toContain("COPY --from=deps /app/node_modules");
+      // Local workspace packages compile before the app that imports them.
+      expect(dockerfile).toContain("npm run build --if-present --workspace");
+      // The runtime tree comes from prod-deps, never from a stage holding dev deps.
+      expect(dockerfile).toContain("FROM node:22-alpine AS prod-deps");
+      expect(dockerfile).toContain("COPY --from=prod-deps /app/node_modules ./node_modules");
+      expect(dockerfile).not.toContain("COPY --from=build /app/node_modules");
+      // The lockfile is read by the npm major that wrote it.
+      expect(dockerfile).toContain('RUN npm i -g "npm@${NPM_VERSION}"');
+      expect(dockerfile).toContain("HEALTHCHECK");
       if (workspace === "api") {
         expect(dockerfile).toContain(
           "COPY --from=build /app/apps/api/scripts ./apps/api/scripts",
