@@ -356,3 +356,20 @@ describe("plan stability", () => {
     expect(second.planHash).not.toBe(first.planHash);
   });
 });
+
+describe("worker service", () => {
+  it("disables the healthcheck it would inherit from the API image", () => {
+    const profile = composeProfileOf(initialized(["auth", "bullmq"]));
+    const document = renderComposeDocument(
+      profile,
+      "v1.2.3",
+      defaultComposeImages(profile, "v1.2.3"),
+      "sha256:0",
+    );
+    const worker = document.split("example-app-worker:")[1] ?? "";
+    // The API image declares an HTTP healthcheck; a worker has no HTTP server, so
+    // inheriting it means permanently unhealthy.
+    expect(worker).toContain("healthcheck:\n      disable: true");
+    expect(worker).not.toContain("/health/ready");
+  });
+});
