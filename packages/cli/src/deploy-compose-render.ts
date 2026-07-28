@@ -224,13 +224,32 @@ function objectStorageInitService(profile: DockerComposeProfileV1, clientImage: 
   // `$$` is Compose's escape: a single `$` would be substituted at parse time,
   // from the environment of whoever runs compose, and these values only exist in
   // the env file the container reads.
+  // The least-privilege policy the application user gets: its own bucket, nothing
+  // else. It is written here rather than referenced, because a policy file that the
+  // job does not create is a policy that never gets attached -- the user is then
+  // created with no permissions at all and every object operation fails, which
+  // surfaces as a readiness check that is down for no visible reason.
+  const policy = JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Action: ["s3:*"],
+        Resource: [`arn:aws:s3:::${storage.bucket}`, `arn:aws:s3:::${storage.bucket}/*`],
+      },
+    ],
+  });
   const script = [
     "set -e",
     `mc alias set podokit ${endpoint} "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"`,
     `mc mb --ignore-existing podokit/${storage.bucket}`,
     `mc admin user add podokit "$$S3_ACCESS_KEY_ID" "$$S3_SECRET_ACCESS_KEY" || true`,
-    `mc admin policy create podokit podokit-app /policy.json || true`,
+    `printf '%s' '${policy}' > /tmp/podokit-policy.json`,
+    `mc admin policy create podokit podokit-app /tmp/podokit-policy.json || true`,
     `mc admin policy attach podokit podokit-app --user "$$S3_ACCESS_KEY_ID" || true`,
+    // Prove the attachment, or the job reports success while the user still cannot
+    // read its own bucket.
+    `mc admin policy entities podokit --user "$$S3_ACCESS_KEY_ID" | grep -q podokit-app`,
   ].join("\n");
   return (
     `  ${serviceName(profile, "object-storage-init")}:\n` +
