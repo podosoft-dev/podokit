@@ -248,8 +248,11 @@ function objectStorageInitService(profile: DockerComposeProfileV1, clientImage: 
     `mc admin policy create podokit podokit-app /tmp/podokit-policy.json || true`,
     `mc admin policy attach podokit podokit-app --user "$$S3_ACCESS_KEY_ID" || true`,
     // Prove the attachment, or the job reports success while the user still cannot
-    // read its own bucket.
-    `mc admin policy entities podokit --user "$$S3_ACCESS_KEY_ID" | grep -q podokit-app`,
+    // read its own bucket. Checked with shell builtins only: the mc image is
+    // minimal and has no grep, so a pipeline into one exits 127 and takes the job
+    // down for the wrong reason.
+    `attached=$$(mc admin policy entities podokit --user "$$S3_ACCESS_KEY_ID")`,
+    `case "$$attached" in *podokit-app*) ;; *) echo "policy not attached" >&2; exit 1 ;; esac`,
   ].join("\n");
   return (
     `  ${serviceName(profile, "object-storage-init")}:\n` +
@@ -273,14 +276,21 @@ function applicationService(
   const workload = role === "worker" ? profile.workloads.worker : profile.workloads[role];
   if (!workload) return "";
   const envFile = role === "web" ? profile.secrets.web : profile.secrets.api;
-  const dependsOn: string[] = [];
+  // Service name -> the condition it must reach before this one starts.
+  const dependsOn: Array<[string, string]> = [];
   if (profile.dependencies.postgres.mode === "managed" && role !== "web") {
-    dependsOn.push(serviceName(profile, "postgres"));
+    dependsOn.push([serviceName(profile, "postgres"), "service_healthy"]);
   }
   if (profile.dependencies.redis.mode === "managed" && role !== "web") {
-    dependsOn.push(serviceName(profile, "redis"));
+    dependsOn.push([serviceName(profile, "redis"), "service_healthy"]);
   }
-  if (role === "web") dependsOn.push(serviceName(profile, "api"));
+  if (profile.dependencies.objectStorage.mode === "managed" && role !== "web") {
+    // Not just "storage is up": the bucket and the application user's policy are
+    // created by the init service, and an API that starts before that finishes
+    // fails every object operation and reports itself unready.
+    dependsOn.push([serviceName(profile, "object-storage-init"), "service_completed_successfully"]);
+  }
+  if (role === "web") dependsOn.push([serviceName(profile, "api"), "service_healthy"]);
   return (
     `  ${serviceName(profile, role)}:\n` +
     `    image: ${quote(image)}\n` +
@@ -290,7 +300,7 @@ function applicationService(
     environmentBlock(derivedRuntimeConfig(profile), "    ") +
     (dependsOn.length
       ? `    depends_on:\n${dependsOn
-          .map((name) => `      ${name}:\n        condition: service_healthy\n`)
+          .map(([name, condition]) => `      ${name}:\n        condition: ${condition}\n`)
           .join("")}`
       : "") +
     (options.publish
