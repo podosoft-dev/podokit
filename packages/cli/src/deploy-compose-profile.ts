@@ -268,6 +268,17 @@ export function parseComposeProfile(value: unknown): DockerComposeProfileV1 {
   const port = requiredNumber(exposure, "port");
   if (port > 65535) throw new Error("Deployment exposure.port must be a TCP port.");
 
+  const web = parseComposeWorkload(requiredRecord(workloads, "web"), "workloads.web");
+  // Compose has no load balancer. Two replicas of the service that publishes the
+  // host port means the second one cannot bind it, and the deployment fails half
+  // way through the rollout with "port is already allocated". Scaling the public
+  // tier is what the kubernetes-helm driver is for.
+  if (web.replicas > 1) {
+    throw new Error(
+      "Deployment workloads.web.replicas must be 1: the web service publishes a host port, and Compose cannot share one across replicas.",
+    );
+  }
+
   const objectStorageRecord = requiredRecord(dependencies, "objectStorage");
   const objectStorage: ComposeObjectStorageProfile = {
     ...parseComposeDependency(objectStorageRecord, "dependencies.objectStorage", [
@@ -292,7 +303,7 @@ export function parseComposeProfile(value: unknown): DockerComposeProfileV1 {
     exposure: { mode: "publishedPort", host, bindAddress, port },
     workloads: {
       api: parseComposeWorkload(requiredRecord(workloads, "api"), "workloads.api"),
-      web: parseComposeWorkload(requiredRecord(workloads, "web"), "workloads.web"),
+      web,
       worker:
         workloads.worker === null
           ? null
@@ -368,7 +379,8 @@ export function buildDefaultComposeProfile(
     },
     workloads: {
       api: { replicas: 2, resources: { cpuLimit: "1", memoryLimit: "1g" } },
-      web: { replicas: 2, resources: { cpuLimit: "0.5", memoryLimit: "1g" } },
+      // One, not two: this is the service that publishes the host port.
+      web: { replicas: 1, resources: { cpuLimit: "0.5", memoryLimit: "1g" } },
       worker: null,
     },
     dependencies: {
