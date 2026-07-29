@@ -219,9 +219,16 @@
   // Security — change password
   let currentPassword = $state("");
   let newPassword = $state("");
+  let confirmNewPassword = $state("");
   let changing = $state(false);
   async function changePassword(event: SubmitEvent): Promise<void> {
     event.preventDefault();
+    // Checked here rather than by the API, which only sees one new password and
+    // has no way to know it is not the one that was meant.
+    if (newPassword !== confirmNewPassword) {
+      toast.error(i18n.t.account.passwordMismatch);
+      return;
+    }
     changing = true;
     const { error } = await api.auth.changePassword({ currentPassword, newPassword, revokeOtherSessions: true });
     changing = false;
@@ -230,6 +237,7 @@
       toast.success(i18n.t.account.changed);
       currentPassword = "";
       newPassword = "";
+      confirmNewPassword = "";
       await loadSessions();
     }
   }
@@ -632,6 +640,10 @@
                 <div class="flex flex-col gap-2">
                   <Label for="new">{i18n.t.account.newPassword}</Label>
                   <Input id="new" type="password" bind:value={newPassword} required autocomplete="new-password" />
+                </div>
+                <div class="flex flex-col gap-2">
+                  <Label for="new-confirm">{i18n.t.account.confirmNewPassword}</Label>
+                  <Input id="new-confirm" type="password" bind:value={confirmNewPassword} required autocomplete="new-password" />
                 </div>
                 <Button type="submit" class="w-fit" disabled={changing}>{changing ? i18n.t.account.updating : i18n.t.account.update}</Button>
               </form>
