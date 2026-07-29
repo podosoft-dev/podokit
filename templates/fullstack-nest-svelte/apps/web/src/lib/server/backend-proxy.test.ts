@@ -55,4 +55,25 @@ describe("backend proxy client address handling", () => {
     expect(response.status).toBe(204);
     expect(upstreamHeaders?.get("x-forwarded-for")).toBe("203.0.113.9");
   });
+
+  // Not forwarding this does not leave the header unset: fetch substitutes its own
+  // default, so the API records "node" for every session and the account page shows
+  // that as the device for all of them.
+  it("forwards the browser's user agent so sessions record the real device", async () => {
+    let upstreamHeaders: Headers | undefined;
+    vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+      upstreamHeaders = new Headers(init?.headers);
+      return new Response(null, { status: 204 });
+    });
+
+    const agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/141.0.0.0 Safari/537.36";
+    const request = new Request("http://app.localhost/api/auth/sign-in/email", {
+      method: "POST",
+      headers: { "user-agent": agent },
+    });
+    const response = await proxyRequest(request, "http://api:5002/auth/sign-in/email");
+
+    expect(response.status).toBe(204);
+    expect(upstreamHeaders?.get("user-agent")).toBe(agent);
+  });
 });
