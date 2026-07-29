@@ -50,6 +50,7 @@ import {
   rollbackComposeDeployment,
   verifyComposeDeployment,
 } from "./deploy-compose";
+import { revertComposeSync, syncComposeDeployment } from "./deploy-compose-sync";
 
 const HELP = `podo — PodoKit project generator
 
@@ -107,6 +108,7 @@ Usage:
   podo deploy status --profile <name> [--json]
   podo deploy verify --profile <name> [--json]
   podo deploy rollback --profile <name> --revision <number> [--confirm <plan-hash>]
+  podo deploy sync --profile <name> [--build] [--clean] [--revert] [--json]
 
 Drivers:
   kubernetes-helm  (default) Helm releases on an existing cluster. --context is a
@@ -119,6 +121,11 @@ Drivers:
 A profile records which driver it uses, so every action after init reads it from
 the profile. Both drivers pin the target by fingerprint, resolve image tags to
 digests, and require apply and rollback to confirm the exact plan hash.
+
+sync is a development shortcut for the docker-compose driver only. It copies local
+build output into the running containers and restarts them, so the deployment runs
+code its image tag does not describe until the next apply recreates the containers.
+It never runs migrations and refuses when runtime dependencies have changed.
 `;
 
 interface ParsedArgs {
@@ -147,6 +154,9 @@ interface ParsedArgs {
   secretsDir?: string;
   host?: string;
   json: boolean;
+  build: boolean;
+  clean: boolean;
+  revert: boolean;
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
@@ -157,6 +167,9 @@ export function parseArgs(argv: string[]): ParsedArgs {
     adopt: false,
     ai: true,
     json: false,
+    build: false,
+    clean: false,
+    revert: false,
     positionals: [],
   };
   const positionals: string[] = [];
@@ -218,6 +231,12 @@ export function parseArgs(argv: string[]): ParsedArgs {
       parsed.host = argv[++i];
     } else if (arg === "--json") {
       parsed.json = true;
+    } else if (arg === "--build") {
+      parsed.build = true;
+    } else if (arg === "--clean") {
+      parsed.clean = true;
+    } else if (arg === "--revert") {
+      parsed.revert = true;
     } else if (arg !== undefined && !arg.startsWith("-")) {
       positionals.push(arg);
     }
@@ -338,8 +357,32 @@ async function runComposeDeploy(
     if (!result.verification.ok) process.exitCode = 1;
     return;
   }
+  if (action === "sync") {
+    if (args.revert) {
+      const reverted = await revertComposeSync(cwd, profileName);
+      process.stdout.write(
+        args.json
+          ? `${JSON.stringify(reverted, null, 2)}\n`
+          : `Recreated ${reverted.services.join(", ")} from the applied Compose project.\n`,
+      );
+      return;
+    }
+    const result = await syncComposeDeployment(cwd, profileName, {
+      build: args.build,
+      clean: args.clean,
+    });
+    process.stdout.write(
+      args.json
+        ? `${JSON.stringify(result, null, 2)}\n`
+        : `${result.plan.warnings.map((warning) => `warning: ${warning}`).join("\n")}\n` +
+            `Copied ${result.plan.artifacts.length} artifact(s) into ${result.restarted.join(", ")}.\n` +
+            "This deployment now runs code its image tag does not describe; " +
+            "podo deploy sync --revert restores the image.\n",
+    );
+    return;
+  }
   fail(
-    `Unknown deploy command "${action}". Use init, doctor, render, plan, apply, status, verify, or rollback.`,
+    `Unknown deploy command "${action}". Use init, doctor, render, plan, apply, status, verify, rollback, or sync.`,
   );
 }
 
@@ -602,6 +645,14 @@ async function main(argv: string[]): Promise<void> {
         );
         process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
         return;
+      }
+      if (action === "sync") {
+        // Not a gap to fill later. There is no image to swap artifacts into: a
+        // cluster schedules pods across nodes from a registry, so the equivalent
+        // shortcut would have to reach every node and would stop being a shortcut.
+        fail(
+          "podo deploy sync is only available for the docker-compose driver. On a cluster, build and roll out a release.",
+        );
       }
       fail(
         `Unknown deploy command "${action}". Use init, doctor, render, plan, apply, status, verify, or rollback.`,
