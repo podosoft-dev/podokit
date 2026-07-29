@@ -1,5 +1,55 @@
 # @podosoft/podokit-mcp
 
+## 0.3.0
+
+### Minor Changes
+
+- [#141](https://github.com/podosoft-dev/podokit/pull/141) [`ecdd80a`](https://github.com/podosoft-dev/podokit/commit/ecdd80a4bd3bb63c18374a49cb5e0327c455ec4f) Thanks [@korone00](https://github.com/korone00)! - Add `podo deploy sync` and a release workflow for generated projects.
+
+  `podo deploy sync` copies a project's build output into the containers a Compose
+  deployment is already running and restarts them, so iterating against a deployment
+  does not need a full image round trip. It is deliberately not a release: the image
+  tag is unchanged, a marker records the drift, `podo deploy status` reports it as
+  `syncDrift`, and the next apply discards it. It refuses when runtime dependencies
+  have changed, when a release holds the lock, or when a restarted container does not
+  become healthy, and it never runs migrations. A profile can name build outputs to
+  leave alone with `sync.exclude`.
+
+  Generated projects now ship `.github/workflows/release.yml`, which builds and pushes
+  both images on a `vX.Y.Z` tag. Its runner is a variable rather than a constant,
+  because GitHub-hosted minutes are free only for public repositories and image builds
+  are the most expensive job most projects run.
+
+- [#139](https://github.com/podosoft-dev/podokit/pull/139) [`6561d7d`](https://github.com/podosoft-dev/podokit/commit/6561d7d561d78f7eb7b908694669b61870e97770) Thanks [@korone00](https://github.com/korone00)! - Add a `docker-compose` deployment driver alongside `kubernetes-helm`, and fix the
+  production images.
+
+  `podo deploy` now operates a Compose project on one Docker host — local or over
+  `ssh://` — with the same contract the Kubernetes driver has: a fingerprinted target,
+  image tags resolved to digests, a confirmation hash that apply must echo back, a
+  release-scoped lock, an exact-image migration before rollout, public verification, and
+  rollback. A profile declares its own `driver`, so every command after `init` reads it
+  from the profile, and the MCP tools follow it too.
+
+  The production Dockerfiles were only buildable for the template's own three
+  workspaces. They now collect every workspace manifest, carry the whole install output
+  into the build, compile local `packages/*` before the app that imports them, install
+  the npm major that wrote the lockfile, prune the runtime tree, declare a healthcheck,
+  and keep `.env` out of the build context.
+
+  Generated projects now ship an upgrade-capable web entry point. A SvelteKit route
+  cannot answer a WebSocket upgrade, so an API gateway was unreachable once deployed;
+  `apps/web/server.js` keeps adapter-node in charge and relays the exact paths named in
+  `WS_PROXY_PATHS`, matched whole. Nothing is forwarded by default.
+
+  The example `infra/k3s` manifests no longer contradict the deployment tooling: they
+  carry probes, an `ingressClassName`, a TLS block, placeholder tags instead of
+  `latest`, and a README saying `podo deploy` renders the manifests it actually applies.
+
+### Patch Changes
+
+- Updated dependencies [[`ecdd80a`](https://github.com/podosoft-dev/podokit/commit/ecdd80a4bd3bb63c18374a49cb5e0327c455ec4f), [`6561d7d`](https://github.com/podosoft-dev/podokit/commit/6561d7d561d78f7eb7b908694669b61870e97770), [`aa06b1d`](https://github.com/podosoft-dev/podokit/commit/aa06b1dd5b6ecfde8371041c5253ff14328e211a)]:
+  - @podosoft/podokit@0.17.0
+
 ## 0.2.0
 
 ### Minor Changes
