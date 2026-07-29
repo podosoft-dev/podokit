@@ -53,6 +53,8 @@
     "email": "Email",
     "emailOrUsername": "Email or username",
     "password": "Password",
+    "confirmPassword": "Confirm password",
+    "passwordMismatch": "Passwords do not match",
     "forgot": "Forgot?",
     "signIn": "Sign in",
     "signingIn": "Signing in…",

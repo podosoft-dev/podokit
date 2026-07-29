@@ -53,6 +53,8 @@
     "email": "이메일",
     "emailOrUsername": "이메일 또는 사용자명",
     "password": "비밀번호",
+    "confirmPassword": "비밀번호 확인",
+    "passwordMismatch": "비밀번호가 일치하지 않습니다",
     "forgot": "비밀번호 찾기",
     "signIn": "로그인",
     "signingIn": "로그인 중…",

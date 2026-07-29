@@ -18,14 +18,22 @@
   let name = $state("");
   let email = $state("");
   let password = $state("");
+  let confirmPassword = $state("");
   let error = $state<string | null>(null);
   let loading = $state(false);
   const redirectTo = (): string => safeAuthRedirect(page.url.searchParams.get("redirect"));
 
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    loading = true;
     error = null;
+    // Before the request, not after: a typo here costs the account. Sign-up is the
+    // one password entry with no way back — the address is not verified yet, so the
+    // reset link that would rescue it goes somewhere the user cannot read.
+    if (password !== confirmPassword) {
+      error = i18n.t.auth.passwordMismatch;
+      return;
+    }
+    loading = true;
     // callbackURL: where the verification link lands once confirmed (absolute so
     // it returns to the web app, not the API origin). Ignored when verification is off.
     const { error: authError } = await api.auth.signUp.email({
@@ -84,6 +92,10 @@
       <div class="flex flex-col gap-2">
         <Label for="password">{i18n.t.auth.password}</Label>
         <Input id="password" type="password" bind:value={password} required autocomplete="new-password" />
+      </div>
+      <div class="flex flex-col gap-2">
+        <Label for="confirm-password">{i18n.t.auth.confirmPassword}</Label>
+        <Input id="confirm-password" type="password" bind:value={confirmPassword} required autocomplete="new-password" />
       </div>
       <Button type="submit" disabled={loading}>{loading ? i18n.t.auth.creating : i18n.t.auth.create}</Button>
     </form>
