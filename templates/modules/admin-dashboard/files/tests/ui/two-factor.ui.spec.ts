@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { anonState } from "../helpers/accounts";
+import { ADMIN, USER, anonState } from "../helpers/accounts";
 import { totpCode } from "../helpers/totp";
 
 test.use({ storageState: anonState });
@@ -59,7 +59,7 @@ test("require-2fa: a new sign-up is forced through the enrolment page", async ({
   const admin = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   const caps = await (await admin.get("/api/account/capabilities")).json();
   test.skip(!caps?.twoFactor, "two-factor not enabled");
-  await admin.post("/api/auth/sign-in/email", { data: { email: "admin@example.com", password: "Podokit3e-Str0ng!pw" } });
+  await admin.post("/api/auth/sign-in/email", { data: { email: ADMIN.email, password: ADMIN.password } });
 
   const email = `rq-ui-${Date.now()}@example.com`;
   const pw = "Podokit3e-Str0ng!pw";
@@ -97,7 +97,7 @@ test("require-2fa: a new sign-up is forced through the enrolment page", async ({
     await admin.put("/api/account/settings", { data: { require2fa: false } });
     await expect(async () => {
       const probe = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
-      await probe.post("/api/auth/sign-in/email", { data: { email: "user@example.com", password: "Podokit3e-Str0ng!pw" } });
+      await probe.post("/api/auth/sign-in/email", { data: { email: USER.email, password: USER.password } });
       const status = (await probe.get("/api/account/me")).status();
       await probe.dispose();
       expect(status).toBe(200);
