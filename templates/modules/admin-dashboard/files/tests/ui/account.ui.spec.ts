@@ -176,10 +176,13 @@ test("account security and sessions sub-navigation", async ({ page }) => {
 test("changing a password refuses a mistyped confirmation", async ({ page }) => {
   await ready(page, "/admin/account");
   await page.getByRole("button", { name: "Security" }).click();
-  await page.getByLabel("Current password").fill("Podokit3e-Str0ng!pw");
+  await page.getByLabel("Current password").fill(ADMIN.password);
   await page.getByLabel("New password", { exact: true }).fill("Podokit3e-N3wStr0ng!pw");
   await page.getByLabel("Confirm new password").fill("Podokit3e-N3wStr0ng!pwX");
-  await page.getByRole("button", { name: "Update", exact: true }).click();
+  // The control: the message must not already be on screen, or this test would pass
+  // against a form that shows it unconditionally.
+  await expect(page.getByText("Passwords do not match")).toBeHidden();
+  await page.getByRole("button", { name: "Update password" }).click();
   await expect(page.getByText("Passwords do not match")).toBeVisible();
 });
 
@@ -198,7 +201,7 @@ test("two-factor setup shows a scannable QR code when enabled", async ({ page })
   await expect(page.getByRole("button", { name: "Enable", exact: true })).toBeVisible();
   // Start setup (password + Enable) and confirm the QR renders. Stop before
   // verifying so 2FA stays inactive and the shared admin session keeps working.
-  await page.locator("#tf-on-pw").fill("Podokit3e-Str0ng!pw");
+  await page.locator("#tf-on-pw").fill(ADMIN.password);
   await page.getByRole("button", { name: "Enable", exact: true }).click();
   await expect(page.getByRole("img", { name: "TOTP QR code" })).toBeVisible();
 });
