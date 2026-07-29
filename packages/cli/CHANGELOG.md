@@ -1,5 +1,43 @@
 # @podosoft/podokit
 
+## 0.17.1
+
+### Patch Changes
+
+- [#145](https://github.com/podosoft-dev/podokit/pull/145) [`38a7226`](https://github.com/podosoft-dev/podokit/commit/38a72268da361f19125179e1b3b02fa76bfebc51) Thanks [@korone00](https://github.com/korone00)! - Confirm a new password when resetting it or changing it from the account page.
+
+  Both forms took the new password once. A reset spends a single-use token, so a typo
+  costs another trip through the mailbox; a change from the account page simply
+  succeeds, and the mistake surfaces at the next sign-in with a password the person
+  cannot reproduce.
+
+- [#146](https://github.com/podosoft-dev/podokit/pull/146) [`dbb3dab`](https://github.com/podosoft-dev/podokit/commit/dbb3dabe82ab45de80aee7554028b8d2e5c14694) Thanks [@korone00](https://github.com/korone00)! - Stop the e2e suite from depending on a seeded account's password, and fix the
+  change-password spec that could never pass.
+
+  `tests/helpers/accounts.ts` hardcoded the seed password, so the suite could only
+  sign in on a stack it had created itself. Against an install bootstrapped with
+  `admin:bootstrap`, `admin@example.com` is a real account with a password somebody
+  uses — and the only way to make the run green was to reset that account to match
+  the constant, which takes their login with it. The passwords now read
+  `E2E_ADMIN_PASSWORD` / `E2E_USER_PASSWORD` and fall back to the seed value, so an
+  existing account is told to the suite instead of altered. Without the override the
+  run fails with `INVALID_EMAIL_OR_PASSWORD` — a refusal rather than a silent
+  overwrite. The two-factor and account specs that signed in as the shared accounts
+  now use the same constants.
+
+  The spec asserting that a mistyped password confirmation is refused clicked a
+  button named `Update`; the button is `Update password`, so the test timed out
+  before reaching its assertion and had never passed. It now clicks the real button
+  and first asserts the error is absent, so a form that showed it unconditionally
+  would still fail.
+
+- [#143](https://github.com/podosoft-dev/podokit/pull/143) [`62fe5da`](https://github.com/podosoft-dev/podokit/commit/62fe5dac532c6a44552922407fb3dd56bd4dd0dc) Thanks [@korone00](https://github.com/korone00)! - Confirm the password when signing up.
+
+  Sign-up took the password once, while every form where an administrator sets someone
+  else's asks twice. It is the worst place for the omission: a mistyped sign-up costs
+  the account, because the address is not verified yet and the reset link that would
+  rescue it goes to an inbox the person cannot open.
+
 ## 0.17.0
 
 ### Minor Changes
