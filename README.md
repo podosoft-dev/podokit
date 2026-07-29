@@ -49,7 +49,7 @@ Run without flags in a terminal and PodoKit prompts for the template and package
 | `podo update [--apply]` | Preview or apply a version update (3-way merges your edits) |
 | `podo eject <path…>` | Take ownership of a managed file |
 | `podo dev <action>` | Run container development through the shared portless `*.localhost` gateway (`npx @podosoft/podokit dev …` without a global install) |
-| `podo deploy <action>` | Plan, apply, verify, or roll back an exact-image Helm release on an existing Kubernetes cluster |
+| `podo deploy <action>` | Plan, apply, verify, or roll back an exact-image release on an existing Kubernetes cluster or Docker host |
 
 ## Templates
 
@@ -175,11 +175,12 @@ podo update --apply  # apply it — clean updates written, your edits 3-way merg
 Files you own (routes, your components, shadcn UI) are never touched. See
 [docs/updating.md](docs/updating.md).
 
-## Deploy to Kubernetes
+## Deploy
 
-PodoKit can bind an application-owned deployment profile to an explicit
-Kubernetes context, render module-aware Helm resources, run migrations with the
-exact API image, and roll out matching API/web SemVer tags:
+PodoKit binds an application-owned deployment profile to an explicit target —
+a Kubernetes context, or a Docker host when one machine is the whole deployment —
+renders module-aware resources, runs migrations with the exact API image, and
+rolls out matching API/web SemVer tags:
 
 ```bash
 podo deploy init --profile production --context production --host app.example.com
@@ -188,9 +189,17 @@ podo deploy plan --profile production --release v1.2.3 --json
 ```
 
 Applying or rolling back requires the exact hash from a freshly computed plan.
-The profile contains Secret names, never Secret values, and public Ingress
-traffic always enters through the SvelteKit web proxy. See
-[Kubernetes deployment](docs/deployment.md).
+The profile contains secret names, never secret values, and public traffic always
+enters through the SvelteKit web proxy.
+
+Generated projects also ship `.github/workflows/release.yml`, which builds and
+pushes both images when you tag `vX.Y.Z`. **Check which runner it uses before the
+first tag**: GitHub-hosted runners are free for public repositories only, and a
+private repository is billed for them. And while developing against a Compose
+deployment, `podo deploy sync` copies local build output into the running
+containers instead of round-tripping a release.
+
+See [deployment](docs/deployment.md).
 
 ## AI coding agents
 

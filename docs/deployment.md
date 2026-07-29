@@ -24,7 +24,8 @@ PodoKit manages:
 PodoKit consumes:
 
 - an explicit target context and a fingerprint of it recorded in the profile
-- pre-built API and web images sharing one stable SemVer tag
+- pre-built API and web images sharing one stable SemVer tag — generated projects get
+  a workflow that builds them, but CI runs it, not the deployment tooling
 - registry access through Docker Buildx so every tag resolves to a digest
 - pre-existing secrets — Kubernetes Secrets, or env files on the Docker host
 - storage classes or Docker volumes, and public routing infrastructure
@@ -34,9 +35,45 @@ DNS records, registries, TLS certificates, or backup repositories.
 
 ## Build and publish the images first
 
-The deployment tooling consumes images; it does not build them. Build both with the
-repository root as the context, tag them with the same stable SemVer tag, and push
-them to a registry the target can pull from:
+The deployment tooling consumes images; it does not build them. Generated projects
+ship `.github/workflows/release.yml`, which does: pushing a `v*.*.*` tag verifies the
+commit, builds both images with the repository root as the context, and pushes them
+under that one tag. It stops there. Rolling out requires confirming a plan hash, and
+that approval belongs to a person.
+
+Read that file before the first tag — it documents the three variables and two
+secrets it reads, and the runner choice below is the one that costs money if it is
+left at its default in a private repository.
+
+### Choosing the runner, and what it costs
+
+**GitHub-hosted runners are free for public repositories only.** In a private
+repository every minute is metered against the account's included Actions minutes and
+billed beyond them, and image builds are usually the most expensive job a project
+runs. A self-hosted runner consumes no Actions minutes at all, whatever the
+repository's visibility.
+
+| | GitHub-hosted (`ubuntu-latest`) | Self-hosted |
+| --- | --- | --- |
+| Public repository | free | free |
+| Private repository | **metered, then billed** | free |
+| Architecture | whatever the label provides | the machine's own |
+| Setup | none | register a runner, label it |
+
+The workflow reads the choice from a repository or organization variable, so it is
+one setting rather than an edit:
+
+```
+PODOKIT_RUNNER   JSON array of labels. Unset -> ["ubuntu-latest"].
+                 Self-hosted example: ["self-hosted","Linux","X64"]
+```
+
+Nothing warns you when a private repository is still on the default: the workflow
+succeeds either way and the difference appears on a bill. Set it before the first tag.
+
+### Building by hand
+
+The equivalent, when a tag is not the trigger you want:
 
 ```bash
 docker build -f apps/api/Dockerfile -t registry.example.com/example-app-api:v1.2.3 .
@@ -45,10 +82,14 @@ docker push registry.example.com/example-app-api:v1.2.3
 docker push registry.example.com/example-app-web:v1.2.3
 ```
 
-Build for the architecture the target runs. Building on an arm64 laptop and deploying
-to an amd64 host produces `exec format error` at rollout — after the migration has
-already run. Pass `--platform linux/amd64` (or use `docker buildx build --platform`)
-when they differ.
+**Build for the architecture the target runs.** Building on an arm64 laptop and
+deploying to an amd64 host produces `exec format error` at rollout — after the
+migration has already run. Pass `--platform linux/amd64` (or use
+`docker buildx build --platform`) when they differ, and expect it to be slow: the
+build then runs under emulation, which is the usual reason a "Docker is too slow to
+iterate on" complaint turns out not to be about Docker. A native runner of the
+target's architecture removes that cost entirely, which is the other reason to set
+`PODOKIT_RUNNER`.
 
 A bare local tag cannot be deployed: it does not match the stable SemVer pattern and
 cannot be resolved to a digest.
@@ -197,6 +238,67 @@ the caller sent.
 
 Set the same value in the shell that runs `vite dev`, or the feature works in
 development and fails only once deployed.
+
+## Fast development sync (`docker-compose` only)
+
+Developing *against* a deployment through full releases is slow for a reason that has
+nothing to do with the change: a release rebuilds dependencies that did not move,
+pushes them, and recreates containers. When the only thing that changed is compiled
+output, `podo deploy sync` copies that output into the containers that are already
+running and restarts them.
+
+```bash
+podo deploy sync --profile production --build
+podo deploy sync --profile production --revert
+```
+
+`--build` compiles first, in the order the images do it — every `packages/*` before
+the apps, because a root `build` script runs workspaces in manifest order and an app
+listed first compiles against a workspace package's previous output.
+
+**It is not a release, and the difference is the point:**
+
+- The image tag does not change, so the deployment runs code its tag does not
+  describe. A marker file records that, and `podo deploy status` reports it under
+  `syncDrift`.
+- Nothing is pushed anywhere, so nothing is reproducible from it.
+- The next `apply` — or any container recreate — discards it, because a container's
+  writable layer does not survive recreation. The drift heals itself, which is what
+  keeps this from becoming a second deployment path.
+
+What it copies is exactly what the images copy in beside their dependency tree: each
+`packages/*/dist`, `apps/api/dist` and `apps/api/scripts`, `apps/web/build`, and the
+two things the web image ships as source rather than bundle — `apps/web/server.js`
+and `apps/web/src/lib/server`. The API payload goes to the worker container too: it
+runs the same image but is a different container, and writable layers are per
+container. `node_modules` is never copied.
+
+**It refuses rather than warns** when the result could not be trusted:
+
+| Refusal | Why |
+| --- | --- |
+| runtime dependencies differ from the container's manifests | the image installed `--omit=dev` from the old manifest, so the new code would import a package that is not there — a crash loop after the restart, not a copy error |
+| a release holds the deployment lock | an apply is in progress |
+| no running container for the project | there is nothing to sync into; deploy a release first |
+| `--clean` with an exclude beneath a synced path | emptying that destination would delete artifacts this machine cannot rebuild |
+| a restarted container does not become healthy | the copy already happened, so this has to be said rather than swallowed |
+
+It never runs migrations. A change that needs one belongs in a release: the migration
+would otherwise commit against containers that are about to be replaced by hand.
+
+### Excluding part of a build output
+
+Some of a build output can come from a toolchain the developer's machine does not
+have. Overwriting that part with a local build replaces real artifacts with an index
+of artifacts that are no longer there — and the application keeps serving pages while
+the missing files 404, so nothing looks broken. Name those paths in the profile:
+
+```json
+{ "sync": { "exclude": ["apps/web/build/static-assets/generated"] } }
+```
+
+The key is read only by `sync`. It is never rendered into the Compose project, so
+adding it changes what that one command copies and nothing about what is deployed.
 
 ## Status and verification
 

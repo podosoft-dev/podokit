@@ -1,6 +1,6 @@
 ---
 name: podokit-deploy
-description: Plan, inspect, apply, verify, and roll back PodoKit Kubernetes releases with an explicit profile and confirmation hash. Use for Kubernetes deployment and rollback work in a generated PodoKit project.
+description: Plan, inspect, apply, verify, and roll back PodoKit releases with an explicit profile and confirmation hash, on Kubernetes or Docker Compose. Use for release, rollout, and rollback work in a generated PodoKit project.
 ---
 
 # PodoKit deployment
