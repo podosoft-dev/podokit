@@ -47,6 +47,8 @@ test("authentication return targets reject external and recursive redirects", ()
 test("signup page renders", async ({ page }) => {
   await page.goto("/signup");
   await expect(page.getByLabel("Name")).toBeVisible();
+  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Confirm password")).toBeVisible();
   await expect(page.getByRole("button", { name: "Create account" })).toBeVisible();
 });
 
@@ -120,8 +122,31 @@ test("signup creates an account and enters the app @smoke", async ({ page }) => 
   const email = `signup-${Date.now()}@example.com`;
   await page.getByLabel("Name").fill("New User");
   await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill("Podokit3e-Str0ng!pw");
+  // `exact` because "Confirm password" also contains "Password".
+  await page.getByLabel("Password", { exact: true }).fill("Podokit3e-Str0ng!pw");
+  await page.getByLabel("Confirm password").fill("Podokit3e-Str0ng!pw");
   await page.getByRole("button", { name: "Create account" }).click();
   // Verification off → straight into the app; on → the verify-email page.
   await expect(page).toHaveURL((url) => url.pathname === "/" || url.pathname === "/verify-email");
+});
+
+// A typo here is not recoverable the way a mistyped login is: the address has not
+// been verified, so the reset link that would rescue the account is sent to an
+// inbox the person cannot open.
+test("signup refuses a mistyped password confirmation", async ({ page }) => {
+  await ready(page, "/signup");
+  const email = `signup-mismatch-${Date.now()}@example.com`;
+  await page.getByLabel("Name").fill("New User");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password", { exact: true }).fill("Podokit3e-Str0ng!pw");
+  await page.getByLabel("Confirm password").fill("Podokit3e-Str0ng!pwX");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.getByText("Passwords do not match")).toBeVisible();
+  // Still on the form, and no account was created for that address.
+  await expect(page).toHaveURL(/\/signup/);
+  const probe = await page.context().request.post("/api/auth/sign-in/email", {
+    data: { email, password: "Podokit3e-Str0ng!pw" },
+    headers: { origin: new URL(page.url()).origin },
+  });
+  expect(probe.ok()).toBeFalsy();
 });
