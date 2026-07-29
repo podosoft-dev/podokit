@@ -1,8 +1,25 @@
-import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { CommandRunner } from "./dev";
 import { loadComposeProfile } from "./deploy-driver";
+import {
+  LEDGER_PATH,
+  LOCK_PATH,
+  checked,
+  composeProjectPs,
+  currentLedgerEntry,
+  defaultRunner,
+  dockerArgs,
+  parseJson,
+  probeImage,
+  readLedger,
+  runCompose,
+  sshDestination,
+  stateScript,
+  stateVolumeName,
+  type Ledger,
+} from "./deploy-compose-exec";
+import { readComposeSyncDrift, type ComposeSyncDrift } from "./deploy-compose-sync";
 import {
   composeProfileDigest,
   type DockerComposeProfileV1,
@@ -13,7 +30,6 @@ import {
   rolloutStateDigest,
   serviceName,
   type ComposeImages,
-  type ComposeRuntime,
 } from "./deploy-compose-render";
 import { assertAnyReleaseTag } from "./deploy-driver";
 
@@ -67,6 +83,13 @@ export interface ComposeStatus {
     health: string;
     restartCount: number;
   }>;
+  /**
+   * Containers running locally synced artifacts instead of their image's.
+   *
+   * Reported beside the release because the two disagree when it is non-empty: the
+   * tag says one thing and the running code is another. Empty is the normal state.
+   */
+  syncDrift: ComposeSyncDrift[];
 }
 
 export interface ComposeVerificationResult {
@@ -74,19 +97,6 @@ export interface ComposeVerificationResult {
   baseUrl: string;
   ok: boolean;
   paths: Array<{ path: string; status: number | null; ok: boolean; error?: string }>;
-}
-
-interface LedgerEntry {
-  revision: number;
-  release: string;
-  images: ComposeImages;
-  composeDocumentDigest: string;
-  rolloutStateDigest: string;
-}
-
-interface Ledger {
-  schemaVersion: 1;
-  entries: LedgerEntry[];
 }
 
 interface DockerContextInspect {
@@ -113,139 +123,13 @@ interface ImageManifest {
   digest?: string;
 }
 
-const STATE_MOUNT = "/podokit-state";
-const LEDGER_PATH = `${STATE_MOUNT}/releases.json`;
-const LOCK_PATH = `${STATE_MOUNT}/deploy.lock`;
 /** How many rollback targets the ledger keeps. */
 const LEDGER_DEPTH = 10;
-/** Only ever used where the rendered images are not consulted. */
-const PLACEHOLDER_RELEASE = "v0.0.0";
-
-function defaultRunner(
-  command: string,
-  args: string[],
-  options: { capture: boolean },
-): ReturnType<CommandRunner> {
-  const result = spawnSync(command, args, {
-    encoding: "utf8",
-    stdio: options.capture ? "pipe" : "inherit",
-  });
-  if (result.error) throw result.error;
-  return {
-    status: result.status,
-    stdout: options.capture ? (result.stdout ?? "") : "",
-    stderr: options.capture ? (result.stderr ?? "") : "",
-  };
-}
-
-function checked(runner: CommandRunner, command: string, args: string[], capture = true): string {
-  const result = runner(command, args, { capture });
-  if (result.status !== 0) {
-    const detail = capture ? result.stderr.trim() || result.stdout.trim() : "";
-    throw new Error(
-      `${command} ${args.join(" ")} failed with status ${String(result.status)}${detail ? `: ${detail}` : ""}`,
-    );
-  }
-  return result.stdout;
-}
-
-function parseJson<T>(value: string, description: string): T {
-  if (!value.trim()) throw new Error(`${description} returned empty JSON.`);
-  try {
-    return JSON.parse(value) as T;
-  } catch (error) {
-    throw new Error(
-      `${description} returned invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-}
 
 function digest(parts: string[]): string {
   const hash = createHash("sha256");
   for (const part of parts) hash.update(part).update("\0");
   return `sha256:${hash.digest("hex")}`;
-}
-
-function dockerArgs(profile: DockerComposeProfileV1, args: string[]): string[] {
-  return ["--context", profile.target.context, ...args];
-}
-
-/**
- * The SSH destination behind a `ssh://` Docker context, or null for a local one.
- *
- * This matters more than it looks. `docker compose` resolves `env_file` paths and
- * expands `${VAR}` **where the CLI runs**, not where the daemon runs. Pointed at a
- * remote context from a laptop, it looks for the host's secret files on the laptop,
- * fails to find them, and interpolates every referenced variable to an empty string
- * -- which is how a deployment silently comes up with a blank database password.
- *
- * So the Compose file is executed on the target instead: the whole point of keeping
- * credentials in files on that host is that nothing else ever reads them.
- */
-function sshDestination(profile: DockerComposeProfileV1, runner: CommandRunner): string | null {
-  const output = runner(
-    "docker",
-    ["context", "inspect", profile.target.context, "--format", "{{.Endpoints.docker.Host}}"],
-    { capture: true },
-  );
-  if (output.status !== 0) return null;
-  const host = output.stdout.trim();
-  return host.startsWith("ssh://") ? host.slice("ssh://".length) : null;
-}
-
-/** Where the rendered project lives on the target when the context is remote. */
-function remoteProjectDirectory(profile: DockerComposeProfileV1): string {
-  return `.local/share/podokit/${profile.target.project}`;
-}
-
-/**
- * Run `docker compose` where the Compose file's own references resolve.
- *
- * Local context: here. Remote context: on the target, after copying the rendered
- * file across -- because `env_file` paths and `${...}` expansion are resolved by
- * whoever runs compose, not by the daemon it talks to.
- */
-function runCompose(
-  profile: DockerComposeProfileV1,
-  runtime: Pick<ComposeRuntime, "composeFile" | "migrationFile">,
-  file: "compose" | "migration",
-  args: string[],
-  runner: CommandRunner,
-  capture: boolean,
-): string {
-  const localFile = file === "compose" ? runtime.composeFile : runtime.migrationFile;
-  const destination = sshDestination(profile, runner);
-  if (!destination) {
-    return checked(runner, "docker", dockerArgs(profile, ["compose", "-f", localFile, ...args]), capture);
-  }
-  const directory = remoteProjectDirectory(profile);
-  const remoteFile = `${directory}/${file === "compose" ? "compose.yaml" : "compose.migrate.yaml"}`;
-  checked(runner, "ssh", [destination, `mkdir -p ${directory}`], true);
-  checked(runner, "scp", ["-q", localFile, `${destination}:${remoteFile}`], true);
-  return checked(
-    runner,
-    "ssh",
-    [destination, ["docker", "compose", "-f", remoteFile, ...args].join(" ")],
-    capture,
-  );
-}
-
-/** The same dispatch, for a command that may legitimately fail. */
-function tryCompose(
-  profile: DockerComposeProfileV1,
-  runtime: Pick<ComposeRuntime, "composeFile" | "migrationFile">,
-  args: string[],
-  runner: CommandRunner,
-): string {
-  try {
-    return runCompose(profile, runtime, "compose", args, runner, true);
-  } catch {
-    return "";
-  }
-}
-
-function stateVolumeName(profile: DockerComposeProfileV1): string {
-  return `${profile.target.project}-podokit-state`;
 }
 
 /**
@@ -342,44 +226,6 @@ function readEnvFileKeys(
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
-}
-
-function stateScript(profile: DockerComposeProfileV1, image: string, script: string): string[] {
-  return dockerArgs(profile, [
-    "run",
-    "--rm",
-    "--network",
-    "none",
-    // The state volume is root-owned; the application images are not.
-    "--user",
-    "0:0",
-    "-v",
-    `${stateVolumeName(profile)}:${STATE_MOUNT}`,
-    "--entrypoint",
-    "sh",
-    image,
-    "-c",
-    script,
-  ]);
-}
-
-function readLedger(
-  profile: DockerComposeProfileV1,
-  image: string,
-  runner: CommandRunner,
-): Ledger {
-  const result = runner(
-    "docker",
-    stateScript(profile, image, `cat ${LEDGER_PATH} 2>/dev/null || echo ""`),
-    { capture: true },
-  );
-  const body = result.status === 0 ? result.stdout.trim() : "";
-  if (!body) return { schemaVersion: 1, entries: [] };
-  const parsed = parseJson<Ledger>(body, "Release ledger");
-  if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.entries)) {
-    throw new Error("Release ledger is not a supported schema version 1 document.");
-  }
-  return parsed;
 }
 
 function writeLedger(
@@ -480,28 +326,6 @@ function managedDependencyServices(profile: DockerComposeProfileV1): string[] {
       ? [serviceName(profile, "object-storage")]
       : []),
   ];
-}
-
-/**
- * An image the target can pull, for the two checks that need a shell on the host.
- *
- * The release image is the right one whenever a release is known -- it is the image
- * about to run, so proving it pulls is part of the check. Without one (a bare
- * `podo deploy doctor` before anything is published) fall back to a managed
- * dependency image, which the profile already pins by digest and the deployment
- * needs anyway. Fabricating a release tag would ask the registry for something that
- * can never exist.
- */
-function probeImage(profile: DockerComposeProfileV1, release?: string): string | null {
-  if (release) return `${profile.release.apiRepository}:${release}`;
-  for (const dependency of [
-    profile.dependencies.postgres,
-    profile.dependencies.redis,
-    profile.dependencies.objectStorage,
-  ]) {
-    if (dependency.mode === "managed") return dependency.image;
-  }
-  return null;
 }
 
 export function doctorComposeDeployment(
@@ -639,10 +463,6 @@ export function doctorComposeDeployment(
   return findings;
 }
 
-function currentLedgerEntry(ledger: Ledger): LedgerEntry | null {
-  return ledger.entries.length ? (ledger.entries[ledger.entries.length - 1] ?? null) : null;
-}
-
 /**
  * What is deployed, without what it happens to be doing right now.
  *
@@ -682,12 +502,8 @@ function hostStateDigest(
   ]);
 }
 
-function composePs(
-  profile: DockerComposeProfileV1,
-  runtime: Pick<ComposeRuntime, "composeFile" | "migrationFile">,
-  runner: CommandRunner,
-): string {
-  return tryCompose(profile, runtime, ["ps", "--format", "json"], runner).trim();
+function composePs(profile: DockerComposeProfileV1, runner: CommandRunner): string {
+  return composeProjectPs(profile, runner);
 }
 
 export function planComposeDeployment(
@@ -751,7 +567,7 @@ export function planComposeDeployment(
     stateDigest,
   );
   const composeDocumentDigest = digest(["compose-document", runtime.composeDocument]);
-  const psOutput = composePs(profile, runtime, runner);
+  const psOutput = composePs(profile, runner);
 
   const actions: ComposePlanAction[] = [];
   const dependencies = managedDependencyServices(profile);
@@ -914,10 +730,13 @@ export function getComposeStatus(
   runner: CommandRunner = defaultRunner,
 ): ComposeStatus {
   const profile = loadComposeProfile(projectRoot, profileName);
-  // `compose ps` matches on the project name, so this render exists only to produce
-  // a file path; the tag in it is never resolved and never reaches a registry.
-  const runtime = renderComposeDeployment(projectRoot, profileName, profile, PLACEHOLDER_RELEASE);
-  const psOutput = composePs(profile, runtime, runner);
+  // No render here. This used to build one with a placeholder release purely to have
+  // a file path to pass to `compose ps`, on the reasoning that the tag inside it was
+  // never resolved -- but on a remote context every compose invocation copied that
+  // file to the target first, so reading the status replaced the applied project with
+  // one naming an image that does not exist. `compose -p <project> ps` matches on
+  // labels and needs no file at all.
+  const psOutput = composePs(profile, runner);
   const entries: ComposePsEntry[] = psOutput
     ? psOutput
         .split("\n")
@@ -978,6 +797,7 @@ export function getComposeStatus(
     revision: current?.revision ?? null,
     release: current?.release ?? null,
     services,
+    syncDrift: readComposeSyncDrift(projectRoot, profileName, runner),
   };
 }
 
@@ -1056,7 +876,7 @@ export function planComposeRollback(
         "Roll forward with a new release instead.",
     );
   }
-  const psOutput = composePs(profile, runtime, runner);
+  const psOutput = composePs(profile, runner);
   const current = currentLedgerEntry(ledger);
   const profileDigest = composeProfileDigest(profile);
   const planHash = digest([

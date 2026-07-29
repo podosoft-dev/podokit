@@ -15,13 +15,22 @@ Read the profile's `driver` first and say which one you are operating.
 
 1. Run `npx @podosoft/podokit status`, `npx @podosoft/podokit diff`, and `npx @podosoft/podokit doctor`. Stop if managed-file conflicts or unsupported framework versions could make the image unreliable.
 2. Read [references/profile.md](references/profile.md) before creating or changing a deployment profile.
-3. Run `npx @podosoft/podokit deploy doctor --profile <name>`. Resolve every failure without printing secret values.
-4. Run `npx @podosoft/podokit deploy plan --profile <name> --release <stable-semver> --json`.
-5. Show the user the driver, the target (context plus namespace and Helm release, or Docker context plus Compose project), the fingerprint result, the exact image digests, the current revision, the actions, the migration warning, and the plan hash.
-6. Do not apply until the user explicitly approves that exact plan.
-7. Apply with `npx @podosoft/podokit deploy apply --profile <name> --release <stable-semver> --confirm <plan-hash>`.
-8. Run `npx @podosoft/podokit deploy status --profile <name> --json` and `npx @podosoft/podokit deploy verify --profile <name> --json`.
-9. Report the exact images, the revision, running replicas, restart totals, and the verification result.
+3. Make sure the images exist for that tag. Read [references/release.md](references/release.md): tagging `vX.Y.Z` runs the release workflow, which builds and pushes both images and stops there. Never apply a release whose images were not published.
+4. Run `npx @podosoft/podokit deploy doctor --profile <name>`. Resolve every failure without printing secret values.
+5. Run `npx @podosoft/podokit deploy plan --profile <name> --release <stable-semver> --json`.
+6. Show the user the driver, the target (context plus namespace and Helm release, or Docker context plus Compose project), the fingerprint result, the exact image digests, the current revision, the actions, the migration warning, and the plan hash.
+7. Do not apply until the user explicitly approves that exact plan.
+8. Apply with `npx @podosoft/podokit deploy apply --profile <name> --release <stable-semver> --confirm <plan-hash>`.
+9. Run `npx @podosoft/podokit deploy status --profile <name> --json` and `npx @podosoft/podokit deploy verify --profile <name> --json`.
+10. Report the exact images, the revision, running replicas, restart totals, and the verification result. Report `syncDrift` too: a non-empty value means containers are running locally synced artifacts and the release tag does not describe what is serving.
+
+## Iterating against a deployment is a different command
+
+If the user is changing code and wants to see it on the deployment, a release is the
+wrong loop — it rebuilds and republishes to move a few megabytes of compiled output.
+Use the `podokit-deploy-fast` skill (`podo deploy sync`, docker-compose driver only).
+Reach for a release when the change needs a migration, changes runtime dependencies,
+or is going to real users.
 
 ## The migration runs against the release that is still serving
 

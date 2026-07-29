@@ -310,7 +310,9 @@ server.registerTool(
   "deployment_status",
   {
     description:
-      "Read the deployed revision, workload images, running replicas, and restart totals for a deployment profile.",
+      "Read the deployed revision, workload images, running replicas, and restart totals for a deployment profile. " +
+      "For the docker-compose driver it also reports syncDrift: containers running locally synced artifacts, " +
+      "which means the release tag does not describe the code currently serving.",
     inputSchema: {
       profile: z.string(),
       projectDir: z.string().optional(),

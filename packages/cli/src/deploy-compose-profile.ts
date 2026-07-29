@@ -72,6 +72,21 @@ export interface ComposeEnvFileProfile {
   requiredKeys: string[];
 }
 
+/**
+ * Development-time artifact sync. Read only by `podo deploy sync`, never rendered
+ * into the Compose project — so adding it changes what that one command copies and
+ * nothing about what is deployed.
+ *
+ * `exclude` names project-relative paths the sync must leave alone. It exists
+ * because part of a build output can come from a toolchain the developer's machine
+ * does not have: overwriting that part with a local build replaces real artifacts
+ * with an index of artifacts that are no longer there, and the application keeps
+ * serving pages while the missing files 404.
+ */
+export interface ComposeSyncProfile {
+  exclude: string[];
+}
+
 export interface DockerComposeProfileV1 {
   schemaVersion: 1;
   driver: "docker-compose";
@@ -103,6 +118,7 @@ export interface DockerComposeProfileV1 {
     registryLogin: boolean;
   };
   migration?: MigrationProfile;
+  sync?: ComposeSyncProfile;
   runtimeConfig: Record<string, string>;
   verification: VerificationProfile;
 }
@@ -194,6 +210,33 @@ function parseComposeDependency(
   return parsed;
 }
 
+/** A project-relative POSIX path: no absolute paths, no traversal, no drift upward. */
+const PROJECT_RELATIVE_PATH = /^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*$/;
+
+function parseSyncProfile(value: Record<string, unknown>, field: string): ComposeSyncProfile {
+  assertOnlyKeys(value, ["exclude"], field);
+  const exclude = value.exclude;
+  if (!Array.isArray(exclude)) {
+    throw new Error(`Deployment profile field "${field}.exclude" must be a string array.`);
+  }
+  const parsed = exclude.map((entry, index) => {
+    if (
+      typeof entry !== "string" ||
+      !PROJECT_RELATIVE_PATH.test(entry) ||
+      entry.split("/").includes("..")
+    ) {
+      throw new Error(
+        `Deployment profile field "${field}.exclude[${index}]" must be a project-relative path.`,
+      );
+    }
+    return entry;
+  });
+  if (new Set(parsed).size !== parsed.length) {
+    throw new Error(`Deployment profile field "${field}.exclude" contains duplicate paths.`);
+  }
+  return { exclude: parsed.sort() };
+}
+
 function parseEnvFileProfile(value: unknown, field: string): ComposeEnvFileProfile {
   if (!isRecord(value)) throw new Error(`Deployment profile field "${field}" must be an object.`);
   assertOnlyKeys(value, ["path", "requiredKeys"], field);
@@ -219,6 +262,7 @@ export function parseComposeProfile(value: unknown): DockerComposeProfileV1 {
       "dependencies",
       "secrets",
       "migration",
+      "sync",
       "runtimeConfig",
       "verification",
     ],
@@ -237,6 +281,7 @@ export function parseComposeProfile(value: unknown): DockerComposeProfileV1 {
   const dependencies = requiredRecord(value, "dependencies");
   const secrets = requiredRecord(value, "secrets");
   const migration = value.migration === undefined ? undefined : requiredRecord(value, "migration");
+  const sync = value.sync === undefined ? undefined : requiredRecord(value, "sync");
   assertOnlyKeys(target, ["context", "endpointFingerprint", "project"], "target");
   assertOnlyKeys(exposure, ["mode", "host", "bindAddress", "port"], "exposure");
   assertOnlyKeys(workloads, ["api", "web", "worker"], "workloads");
@@ -325,6 +370,7 @@ export function parseComposeProfile(value: unknown): DockerComposeProfileV1 {
     ...(migration
       ? { migration: { command: parseCommand(migration.command, "migration.command") } }
       : {}),
+    ...(sync ? { sync: parseSyncProfile(sync, "sync") } : {}),
     runtimeConfig: parseRuntimeConfig(requiredRecord(value, "runtimeConfig")),
     verification: parseVerification(requiredRecord(value, "verification")),
   };

@@ -69,7 +69,8 @@ Useful commands:
 - `podo remove <module>` — un-apply a module (inverse of add; refuses if another module needs it, keeps files you edited).
 - `podo status` / `podo diff` — see your local edits vs. what PodoKit generated.
 - `podo update` — pull in template/module improvements (3-way merges your edits; never touches owned files).
-- `podo deploy` — plan, apply, verify, or roll back an immutable Kubernetes release. Use `.agents/skills/podokit-deploy`.
+- `podo deploy` — plan, apply, verify, or roll back an immutable release on Kubernetes or one Docker host. Tag `vX.Y.Z` to build and push the images (`.github/workflows/release.yml`; check its runner — GitHub-hosted minutes are free for public repositories only). Use `.agents/skills/podokit-deploy`.
+- `podo deploy sync` — copy local build output into a running Compose deployment and restart it, for iterating without a release. Not a release: no image is published and the next `apply` discards it. Use `.agents/skills/podokit-deploy-fast`.
 
 ## Commit conventions
 
