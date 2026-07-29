@@ -17,6 +17,7 @@
   import { api } from "$lib/api";
   import { getI18n, fmt, formatDateTime } from "$lib/i18n";
   import { cn } from "$lib/utils";
+  import { deviceLabel } from "$lib/device-label";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
@@ -194,7 +195,7 @@
   let mSessionsPage = $state(1);
   let mSessionsSort = $state<SortState | null>(null);
   const mSessionsColumns: DataTableColumn<Session>[] = [
-    { key: "userAgent", label: i18n.t.adminSessions.device, sortable: true },
+    { key: "userAgent", label: i18n.t.adminSessions.device, sortable: true, value: (s) => deviceLabel(s.userAgent) ?? s.userAgent ?? "" },
     { key: "ipAddress", label: i18n.t.adminSessions.ip, sortable: true },
     { key: "createdAt", label: i18n.t.adminSessions.since, sortable: true, value: (s) => new Date(s.createdAt).getTime() },
     { key: "actions", label: "", class: "w-10" },
@@ -557,7 +558,7 @@
               empty={i18n.t.adminSessions.empty}
             >
               {#snippet row(s)}
-                <Table.Cell class="max-w-40 truncate">{s.userAgent ?? i18n.t.adminSessions.unknown}</Table.Cell>
+                <Table.Cell class="max-w-40 truncate" title={s.userAgent ?? ""}>{deviceLabel(s.userAgent) ?? s.userAgent ?? i18n.t.adminSessions.unknown}</Table.Cell>
                 <Table.Cell class="text-muted-foreground">{s.ipAddress ?? "—"}</Table.Cell>
                 <Table.Cell class="text-muted-foreground">{formatDateTime(s.createdAt)}</Table.Cell>
                 <Table.Cell><Button variant="ghost" size="sm" disabled={busy} onclick={() => revokeSession(s.token)}>{i18n.t.users.revokeSession}</Button></Table.Cell>

@@ -9,6 +9,7 @@
   import * as Table from "$lib/components/ui/table";
   import * as Dialog from "$lib/components/ui/dialog";
   import DataTable, { type DataTableColumn, type SortState, DEFAULT_PAGE_SIZE } from "$lib/components/data-table.svelte";
+  import { deviceLabel } from "$lib/device-label";
   import { toast } from "svelte-sonner";
   import { api } from "$lib/api";
   import { getI18n, fmt, formatDateTime } from "$lib/i18n";
@@ -382,7 +383,7 @@
   let sessionsSort = $state<SortState | null>(null);
   let busy = $state(false);
   const sessionsColumns: DataTableColumn<Session>[] = [
-    { key: "userAgent", label: i18n.t.sessions.device, sortable: true, value: (s) => s.userAgent ?? "" },
+    { key: "userAgent", label: i18n.t.sessions.device, sortable: true, value: (s) => deviceLabel(s.userAgent) ?? s.userAgent ?? "" },
     { key: "ipAddress", label: i18n.t.sessions.ip, sortable: true, value: (s) => s.ipAddress ?? "" },
     { key: "createdAt", label: i18n.t.sessions.since, sortable: true, value: (s) => new Date(s.createdAt).getTime() },
     { key: "status", label: i18n.t.sessions.status },
@@ -793,7 +794,7 @@
             >
               {#snippet row(s)}
                 {@const isCurrent = s.id === data.currentSessionId}
-                <Table.Cell class="max-w-xs truncate">{s.userAgent ?? i18n.t.sessions.unknown}</Table.Cell>
+                <Table.Cell class="max-w-xs truncate" title={s.userAgent ?? ""}>{deviceLabel(s.userAgent) ?? s.userAgent ?? i18n.t.sessions.unknown}</Table.Cell>
                 <Table.Cell class="text-muted-foreground">{s.ipAddress ?? "—"}</Table.Cell>
                 <Table.Cell class="text-muted-foreground">{formatDateTime(s.createdAt)}</Table.Cell>
                 <Table.Cell>{#if isCurrent}<Badge>{i18n.t.sessions.current}</Badge>{/if}</Table.Cell>

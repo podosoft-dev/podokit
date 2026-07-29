@@ -9,6 +9,7 @@
   import { toast } from "svelte-sonner";
   import { api } from "$lib/api";
   import { getI18n, fmt, formatDateTime } from "$lib/i18n";
+  import { deviceLabel } from "$lib/device-label";
 
   const i18n = getI18n();
 
@@ -43,7 +44,7 @@
 
   const columns = $derived<DataTableColumn<Row>[]>([
     { key: "user", label: i18n.t.adminSessions.user, sortable: true, value: (r) => r.userName },
-    { key: "device", label: i18n.t.adminSessions.device, sortable: true, value: (r) => r.userAgent },
+    { key: "device", label: i18n.t.adminSessions.device, sortable: true, value: (r) => deviceLabel(r.userAgent) ?? r.userAgent ?? "" },
     { key: "ip", label: i18n.t.adminSessions.ip, sortable: true, value: (r) => r.ipAddress },
     { key: "createdAt", label: i18n.t.adminSessions.since, sortable: true },
     { key: "expiresAt", label: i18n.t.adminSessions.expires, sortable: true, value: (r) => (r.expiresAt ? new Date(r.expiresAt).getTime() : 0) },
@@ -134,7 +135,7 @@
         </div>
         <div class="text-muted-foreground text-xs">{r.userEmail}</div>
       </Table.Cell>
-      <Table.Cell class="max-w-xs truncate">{r.userAgent ?? i18n.t.adminSessions.unknown}</Table.Cell>
+      <Table.Cell class="max-w-xs truncate" title={r.userAgent ?? ""}>{deviceLabel(r.userAgent) ?? r.userAgent ?? i18n.t.adminSessions.unknown}</Table.Cell>
       <Table.Cell class="text-muted-foreground">{r.ipAddress ?? "—"}</Table.Cell>
       <Table.Cell class="text-muted-foreground">{formatDateTime(r.createdAt)}</Table.Cell>
       <Table.Cell class="text-muted-foreground">{r.expiresAt ? formatDateTime(r.expiresAt) : "—"}</Table.Cell>

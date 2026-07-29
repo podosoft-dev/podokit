@@ -1,7 +1,21 @@
 // Server-side proxy boundary. The browser never talks to the API directly:
 // requests go through SvelteKit server routes, which forward an allowlist of
 // headers to BACKEND_INTERNAL_URL and relay the response (including Set-Cookie).
-const FORWARDED_HEADERS = ["authorization", "cookie", "content-type", "accept", "origin", "referer"];
+//
+// `user-agent` is on the list for the same reason the client IP is forwarded
+// below: better-auth records it on the session and the account page shows it as
+// the device. Leaving it off does not produce an empty column -- fetch supplies
+// its own default, so every session in the database reads "node", and the list
+// of "your devices" becomes a list of identical rows that identify nothing.
+const FORWARDED_HEADERS = [
+  "authorization",
+  "cookie",
+  "content-type",
+  "accept",
+  "origin",
+  "referer",
+  "user-agent",
+];
 const RELAYED_RESPONSE_HEADERS = ["content-type", "location", "cache-control"];
 
 export function backendBaseUrl(): string {
