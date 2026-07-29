@@ -161,10 +161,26 @@ test("account security and sessions sub-navigation", async ({ page }) => {
   await ready(page, "/admin/account");
   await page.getByRole("button", { name: "Security" }).click();
   await expect(page.getByLabel("Current password")).toBeVisible();
+  // `exact` because "Confirm new password" also contains "New password".
+  await expect(page.getByLabel("New password", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Confirm new password")).toBeVisible();
   await page.getByRole("button", { name: "Sessions" }).click();
   await expect(page.getByText("Active sessions")).toBeVisible();
   await expect(page.getByText("Current", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign out other sessions" })).toBeVisible();
+});
+
+// Changing a password is the one form here whose mistake is silent: the change
+// succeeds, and the person finds out at the next sign-in with a password they
+// cannot reproduce.
+test("changing a password refuses a mistyped confirmation", async ({ page }) => {
+  await ready(page, "/admin/account");
+  await page.getByRole("button", { name: "Security" }).click();
+  await page.getByLabel("Current password").fill("Podokit3e-Str0ng!pw");
+  await page.getByLabel("New password", { exact: true }).fill("Podokit3e-N3wStr0ng!pw");
+  await page.getByLabel("Confirm new password").fill("Podokit3e-N3wStr0ng!pwX");
+  await page.getByRole("button", { name: "Update", exact: true }).click();
+  await expect(page.getByText("Passwords do not match")).toBeVisible();
 });
 
 test("account nav shows the core sections", async ({ page }) => {

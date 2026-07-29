@@ -31,7 +31,16 @@ test("forgot password: request, open the emailed link, set a new password, sign 
   await page.goto(await waitForLink(email));
   await page.waitForLoadState("load");
   await page.waitForTimeout(400);
-  await page.getByLabel("New password").fill("Podokit3e-N3wStr0ng!pw");
+  // `exact` because "Confirm new password" also contains "New password".
+  await page.getByLabel("New password", { exact: true }).fill("Podokit3e-N3wStr0ng!pw");
+  // A mismatch is refused, and the single-use token survives it: the same page
+  // still accepts the corrected pair below.
+  await page.getByLabel("Confirm new password").fill("Podokit3e-N3wStr0ng!pwX");
+  await page.getByRole("button", { name: "Update password" }).click();
+  await expect(page.getByText("Passwords do not match")).toBeVisible();
+  await expect(page).not.toHaveURL(/\/login/);
+
+  await page.getByLabel("Confirm new password").fill("Podokit3e-N3wStr0ng!pw");
   await page.getByRole("button", { name: "Update password" }).click();
   await expect(page).toHaveURL(/\/login/);
 

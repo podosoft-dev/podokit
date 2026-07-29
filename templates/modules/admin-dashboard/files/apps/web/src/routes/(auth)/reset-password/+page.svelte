@@ -11,14 +11,21 @@
 
   const i18n = getI18n();
   let password = $state("");
+  let confirmPassword = $state("");
   let error = $state<string | null>(null);
   let loading = $state(false);
   const token = $derived(page.url.searchParams.get("token") ?? "");
 
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    loading = true;
     error = null;
+    // The token is single-use: a mistyped password here is not a retry, it is
+    // another round trip through the mailbox to get a link that still works.
+    if (password !== confirmPassword) {
+      error = i18n.t.auth.passwordMismatch;
+      return;
+    }
+    loading = true;
     const { error: authError } = await api.auth.resetPassword({ newPassword: password, token });
     loading = false;
     if (authError) {
@@ -44,6 +51,10 @@
       <div class="flex flex-col gap-2">
         <Label for="password">{i18n.t.auth.newPassword}</Label>
         <Input id="password" type="password" bind:value={password} required autocomplete="new-password" />
+      </div>
+      <div class="flex flex-col gap-2">
+        <Label for="confirm-password">{i18n.t.auth.confirmNewPassword}</Label>
+        <Input id="confirm-password" type="password" bind:value={confirmPassword} required autocomplete="new-password" />
       </div>
       <Button type="submit" disabled={loading || !token}>{loading ? i18n.t.auth.updating : i18n.t.auth.updatePassword}</Button>
     </form>
