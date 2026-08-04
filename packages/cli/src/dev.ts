@@ -211,13 +211,20 @@ function writeRuntimeFiles(runtime: DevRuntime): void {
 }
 
 function registerRoute(runtime: DevRuntime): void {
-  const collision = activeEntries().find(
+  const entries = activeEntries();
+  const collision = entries.find(
     (entry) => entry.hostname === runtime.config.hostname && entry.projectRoot !== runtime.projectRoot,
   );
   if (collision) {
     throw new Error(
       `Development hostname ${runtime.config.hostname} is already registered by ${collision.projectRoot}. Change .podokit/dev.json or run podo dev down there.`,
     );
+  }
+  for (const stale of entries.filter(
+    (entry) => entry.projectRoot === runtime.projectRoot && entry.routeId !== runtime.routeId,
+  )) {
+    rmSync(join(registryDirectory(), `${stale.routeId}.json`), { force: true });
+    rmSync(join(routesDirectory(), `${stale.routeId}.yml`), { force: true });
   }
   mkdirSync(registryDirectory(), { recursive: true });
   mkdirSync(routesDirectory(), { recursive: true });
@@ -320,7 +327,7 @@ function runCompose(runtime: DevRuntime, args: string[], runner: CommandRunner):
 }
 
 function composeCommand(
-  action: "down" | "exec" | "logs" | "ps" | "watch",
+  action: "down" | "exec" | "logs" | "ps" | "up" | "watch",
   args: string[],
   installedProfiles: string[],
 ): string[] {
@@ -391,6 +398,22 @@ export function runDevCommand(
     return;
   }
 
+  if (action === "up") {
+    ensureNetwork(runner);
+    registerRoute(runtime);
+    try {
+      ensureGateway(runner);
+      process.stdout.write(`Development URL: http://${runtime.config.hostname}\n`);
+      if (runtime.config.publicUrl) process.stdout.write(`Public OAuth URL: ${runtime.config.publicUrl}\n`);
+      runCompose(runtime, composeCommand("up", args, profiles), runner);
+    } catch (error) {
+      unregisterRoute(runtime);
+      stopGatewayWhenUnused(runner);
+      throw error;
+    }
+    return;
+  }
+
   if (action === "down") {
     runCompose(runtime, composeCommand("down", args, profiles), runner);
     unregisterRoute(runtime);
@@ -403,5 +426,5 @@ export function runDevCommand(
     return;
   }
 
-  throw new Error("Usage: podo dev <watch|exec|logs|ps|down|url> [docker compose options]");
+  throw new Error("Usage: podo dev <watch|up|exec|logs|ps|down|url> [docker compose options]");
 }
