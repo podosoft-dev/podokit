@@ -242,6 +242,14 @@ export function planUpdate(projectRoot: string, templatesDir: string): UpdatePla
     const tier: Tier = controlledByTarget ? classified : locked?.tier ?? classified;
 
     if (tier === "owned") {
+      // A file introduced by a newer template or module has no previous lock
+      // entry. Seed it once when the application has not already claimed that
+      // path; subsequent edits or deletions stay protected by the recorded
+      // owned entry.
+      if (!locked && disk === null && newText !== null) {
+        changes.push({ path, tier, action: "add", note: "new owned seed in this version" });
+        continue;
+      }
       const explicitlyOwned = ownedGlobs.some(
         (glob) => !glob.includes("*") && matchGlob(path, glob),
       );
@@ -437,6 +445,20 @@ function updatedFilesLock(
     } else {
       // A file created by the application is not implicitly PodoKit-managed.
       delete next.files[path];
+    }
+  }
+
+  // Keep a tombstone for an owned seed that the application deleted or moved.
+  // Without the previous entry, the next update would mistake the missing path
+  // for a newly introduced seed and recreate it.
+  for (const [path, entry] of Object.entries(previous.files)) {
+    if (entry.tier !== "owned" || next.files[path]) continue;
+    const newText = treeText(newTree, path);
+    if (
+      newText !== null &&
+      classifyTier(path, newText, ownedGlobs, managedOverrides) === "owned"
+    ) {
+      next.files[path] = entry;
     }
   }
 
