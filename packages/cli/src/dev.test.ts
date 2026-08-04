@@ -177,6 +177,55 @@ describe("PodoKit development gateway", () => {
     expect(calls.some(({ args }) => args[0] === "rm" && args.includes("podokit-dev-gateway"))).toBe(true);
   });
 
+  it("starts a detached stack through the shared gateway", () => {
+    const root = project();
+    const devHome = temporaryDirectory("podokit-dev-home-");
+    process.env.PODOKIT_DEV_HOME = devHome;
+    const calls: string[][] = [];
+    let networkExists = false;
+    let gatewayExists = false;
+    const runner: CommandRunner = (_command, args) => {
+      calls.push(args);
+      if (args[0] === "info") return { status: 0, stdout: "27.0.0\n", stderr: "" };
+      if (args[0] === "network" && args[1] === "inspect") {
+        return { status: networkExists ? 0 : 1, stdout: "", stderr: "" };
+      }
+      if (args[0] === "network" && args[1] === "create") {
+        networkExists = true;
+        return { status: 0, stdout: "created\n", stderr: "" };
+      }
+      if (args[0] === "inspect") {
+        return {
+          status: gatewayExists ? 0 : 1,
+          stdout: gatewayExists ? "1 true\n" : "",
+          stderr: "",
+        };
+      }
+      if (args[0] === "run") gatewayExists = true;
+      return { status: 0, stdout: "", stderr: "" };
+    };
+
+    runDevCommand(root, "up", ["-d", "--build"], runner);
+
+    const upCall = calls.find((args) => args.includes("up"));
+    expect(upCall?.slice(-3)).toEqual(["up", "-d", "--build"]);
+    const originalRuntime = resolveDevRuntime(root);
+    expect(readFileSync(originalRuntime.runtimeComposePath, "utf8")).toContain(
+      "podokit-dev-gateway",
+    );
+    expect(calls.filter((args) => args[0] === "run")).toHaveLength(1);
+
+    writeFileSync(
+      join(root, ".podokit", "dev.json"),
+      JSON.stringify({ schemaVersion: 1, hostname: "renamed.localhost" }),
+    );
+    runDevCommand(root, "up", ["-d"], runner);
+    const renamedRuntime = resolveDevRuntime(root);
+    expect(existsSync(join(devHome, "projects", `${originalRuntime.routeId}.json`))).toBe(false);
+    expect(existsSync(join(devHome, "routes", `${originalRuntime.routeId}.yml`))).toBe(false);
+    expect(existsSync(join(devHome, "projects", `${renamedRuntime.routeId}.json`))).toBe(true);
+  });
+
   it("activates every compose profile when stopping a project", () => {
     const root = project();
     const devHome = temporaryDirectory("podokit-dev-home-");

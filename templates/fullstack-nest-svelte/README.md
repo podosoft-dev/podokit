@@ -27,6 +27,7 @@ Run lifecycle and container commands from a second terminal:
 
 ```bash
 npx @podosoft/podokit dev url
+npx @podosoft/podokit dev up -d # detached stack without source watching
 npx @podosoft/podokit dev ps
 npx @podosoft/podokit dev logs
 npx @podosoft/podokit dev exec api npm run migration:run -w {{projectName}}-api
@@ -35,6 +36,8 @@ npx @podosoft/podokit dev down
 
 `dev watch` reads `.podokit/manifest.json` and automatically activates `cache`,
 `storage`, and `queue` when installed modules require Redis, MinIO, or a worker.
+`dev up` uses the same shared gateway and module profiles without keeping Compose
+Watch attached.
 You can still activate an additional Compose profile explicitly:
 
 ```bash

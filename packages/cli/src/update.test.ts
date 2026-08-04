@@ -309,6 +309,53 @@ describe("applyUpdate", () => {
     return templates;
   }
 
+  it("adds newly introduced owned template and module seeds once", () => {
+    const oldTemplates = oldTemplatesCopy();
+    const extension = "apps/api/src/app.extensions.ts";
+    const settingsComponent =
+      "apps/web/src/routes/(admin)/admin/settings/general-settings.svelte";
+    rmSync(join(oldTemplates, "fullstack-nest-svelte", extension));
+    rmSync(join(oldTemplates, "modules/admin-dashboard/files", settingsComponent));
+
+    const project = join(tmp(), "app");
+    create({
+      name: "app",
+      template: "fullstack-nest-svelte",
+      templatesDir: oldTemplates,
+      targetDir: project,
+    });
+    addModule({
+      projectRoot: project,
+      module: "admin-dashboard",
+      modulesDir: join(oldTemplates, "modules"),
+    });
+
+    expect(existsSync(join(project, extension))).toBe(false);
+    expect(existsSync(join(project, settingsComponent))).toBe(false);
+    const plan = planUpdate(project, REPO_TEMPLATES);
+    expect(plan.changes.find((change) => change.path === extension)).toMatchObject({
+      action: "add",
+      tier: "owned",
+    });
+    expect(plan.changes.find((change) => change.path === settingsComponent)).toMatchObject({
+      action: "add",
+      tier: "owned",
+    });
+
+    const result = applyUpdate(project, REPO_TEMPLATES);
+    expect(result.written).toEqual(expect.arrayContaining([extension, settingsComponent]));
+    expect(readFilesLock(project)?.files[extension]?.tier).toBe("owned");
+    expect(readFilesLock(project)?.files[settingsComponent]?.tier).toBe("owned");
+
+    writeFileSync(join(project, extension), "// application extension\n");
+    rmSync(join(project, settingsComponent));
+    const repeat = planUpdate(project, REPO_TEMPLATES);
+    expect(repeat.changes.find((change) => change.path === extension)?.action).toBe("skip");
+    expect(repeat.changes.find((change) => change.path === settingsComponent)?.action).toBe(
+      "skip",
+    );
+  });
+
   function legacyAdminProject(): string {
     const templates = legacyAdminTemplatesCopy();
     const project = join(tmp(), "legacy-admin-app");

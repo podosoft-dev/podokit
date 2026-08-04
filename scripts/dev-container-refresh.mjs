@@ -3,12 +3,14 @@
 // end to end — the repetitive, error-prone dance done in one command:
 //   1. read the app's installed modules from .podokit/manifest.json
 //   2. back up .env.docker and .podokit/dev.json (instance config)
-//   3. docker compose down
+//   3. podo dev down (all profiles, route, and gateway lifecycle)
 //   4. regenerate with dev-app.mjs --published (container-friendly, avoids the
 //      host file:-link dangling-symlink issue — docs/pitfalls.md P-008)
 //   5. restore .env.docker
-//   6. docker compose up -d --build, then force-recreate api (env-cache fix so
-//      trustedOrigins pick up the restored CORS_ORIGIN — P-005 "Invalid origin")
+//   6. podo dev up -d --build, then force-recreate api (env-cache fix so
+//      trustedOrigins pick up the restored CORS_ORIGIN — P-005 "Invalid origin").
+//      Going through podo reconnects the regenerated web container to the shared
+//      gateway network and re-registers its hostname route.
 //   7. run Better Auth and TypeORM migrations (new auth/module tables)
 //   8. health-check: wait until the site answers 200 via Traefik
 //
@@ -22,6 +24,7 @@ import { fileURLToPath } from "node:url";
 import { externalPackageSpec, planRefreshModules, refreshHost } from "./dev-container-refresh-lib.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const cliEntry = join(repoRoot, "packages/cli/dist/index.js");
 const args = process.argv.slice(2);
 const appDir = args.find((a) => !a.startsWith("--")) && resolve(args.find((a) => !a.startsWith("--")));
 const addFlag = (() => {
@@ -69,8 +72,8 @@ const corsLine = hasEnv ? (readFileSync(envDocker, "utf8").match(/^CORS_ORIGIN=(
 const host = refreshHost(corsLine);
 console.log(`Instance host: ${host}`);
 
-// 3) compose down
-try { sh("docker", ["compose", "-f", compose, "down"], { cwd: appDir }); } catch { /* ok */ }
+// 3) stop every module profile and unregister the old route
+try { sh("node", [cliEntry, "dev", "down"], { cwd: appDir }); } catch { /* ok */ }
 
 // 4) regenerate (container-friendly). External modules must be installed before
 // podo can resolve and add them, so replay them after the bundled module pass.
@@ -103,10 +106,11 @@ try {
   }
 }
 
-// 6) up + rebuild, then force-recreate api so it re-reads the restored env
-sh("docker", ["compose", "-f", compose, "up", "-d", "--build"], { cwd: appDir });
-sh("docker", ["compose", "-f", compose, "up", "-d", "--force-recreate", "--no-build", "api"], { cwd: appDir });
-sh("docker", ["compose", "-f", compose, "up", "-d"], { cwd: appDir }); // ensure traefik/web are up
+// 6) up + rebuild through podo so the shared gateway route/network are restored,
+// then force-recreate api so it re-reads the restored env.
+sh("node", [cliEntry, "dev", "up", "-d", "--build"], { cwd: appDir });
+sh("node", [cliEntry, "dev", "up", "-d", "--force-recreate", "--no-build", "api"], { cwd: appDir });
+sh("node", [cliEntry, "dev", "up", "-d"], { cwd: appDir });
 
 // 7) wait for api, then run migrations
 const waitApi = async () => {

@@ -109,6 +109,8 @@ replace it with `npx @podosoft/podokit`, for example
 ```bash
 cd /tmp/myapp
 podo dev watch                                                   # core stack
+# For a detached stack without source watching:
+podo dev up -d
 # installed modules automatically enable cache/storage/queue as needed
 # first run only — create the tables (in the api container):
 podo dev exec api \
@@ -140,7 +142,8 @@ What you get:
 - **Live edits.** `podo dev watch` delegates to Compose Watch. The web has
   instant Vite HMR; an **API** source change restarts the api service (~5s) — the stable
   approach for NestJS in a container (its in-process watcher doesn't reliably respawn).
-- **Lifecycle helpers.** Use `podo dev ps`, `podo dev logs`, `podo dev exec`, and
+- **Lifecycle helpers.** Use `podo dev up -d` for a detached stack and `podo dev ps`,
+  `podo dev logs`, `podo dev exec`, and
   `podo dev down`. `down` automatically activates every Compose profile so it also
   removes optional services that were started by an earlier `watch` command. The last
   project removed also removes the shared gateway and network.
