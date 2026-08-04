@@ -250,21 +250,6 @@ export function planUpdate(projectRoot: string, templatesDir: string): UpdatePla
         changes.push({ path, tier, action: "add", note: "new owned seed in this version" });
         continue;
       }
-      if (
-        locked?.tier === "owned" &&
-        disk !== null &&
-        newText !== null &&
-        hashContent(disk) === locked.outHash &&
-        hashContent(newText) !== locked.outHash
-      ) {
-        changes.push({
-          path,
-          tier,
-          action: "update",
-          note: "pristine owned seed update",
-        });
-        continue;
-      }
       const explicitlyOwned = ownedGlobs.some(
         (glob) => !glob.includes("*") && matchGlob(path, glob),
       );
