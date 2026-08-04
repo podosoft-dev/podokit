@@ -1,5 +1,14 @@
 # @podosoft/podokit-mcp
 
+## 0.3.1
+
+### Patch Changes
+
+- [#147](https://github.com/podosoft-dev/podokit/pull/147) [`d6a509e`](https://github.com/podosoft-dev/podokit/commit/d6a509e05bddd98827342918e479254623bb7569) Thanks [@dependabot](https://github.com/apps/dependabot)! - Update the Model Context Protocol SDK to 1.30.0 for stricter content-type
+  validation, corrected SSE keep-alive handling, and current Zod compatibility.
+- Updated dependencies [[`1be595c`](https://github.com/podosoft-dev/podokit/commit/1be595c6af3d7e9ab13e8a38ccea1b95441e8f96)]:
+  - @podosoft/podokit@0.17.2
+
 ## 0.3.0
 
 ### Minor Changes

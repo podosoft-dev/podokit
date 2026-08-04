@@ -1,5 +1,12 @@
 # @podosoft/podokit
 
+## 0.17.2
+
+### Patch Changes
+
+- [#148](https://github.com/podosoft-dev/podokit/pull/148) [`1be595c`](https://github.com/podosoft-dev/podokit/commit/1be595c6af3d7e9ab13e8a38ccea1b95441e8f96) Thanks [@korone00](https://github.com/korone00)! - Explain when an account session is too old to list other sessions and offer a direct
+  sign-in action instead of showing the upstream error in a toast.
+
 ## 0.17.1
 
 ### Patch Changes
