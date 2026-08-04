@@ -1,5 +1,11 @@
 # @podosoft/podokit
 
+## 0.17.3
+
+### Patch Changes
+
+- [#150](https://github.com/podosoft-dev/podokit/pull/150) [`5c85c4a`](https://github.com/podosoft-dev/podokit/commit/5c85c4a1bdcd3f1a12cd913c53412a9b48e18480) Thanks [@korone00](https://github.com/korone00)! - Add a detached `podo dev up` lifecycle command, restore shared gateway routing when refreshing generated development apps, remove stale routes when a project's local hostname changes, and seed newly introduced owned files without overwriting existing application paths.
+
 ## 0.17.2
 
 ### Patch Changes
