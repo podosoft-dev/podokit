@@ -356,6 +356,50 @@ describe("applyUpdate", () => {
     );
   });
 
+  it("updates pristine owned seeds while preserving application edits", () => {
+    const oldTemplates = oldTemplatesCopy();
+    const layout = "apps/web/src/routes/+layout.svelte";
+    const oldLayoutPath = join(oldTemplates, "fullstack-nest-svelte", layout);
+    writeFileSync(oldLayoutPath, "<main>old generated layout</main>\n");
+
+    const pristineProject = join(tmp(), "pristine-app");
+    create({
+      name: "pristine-app",
+      template: "fullstack-nest-svelte",
+      templatesDir: oldTemplates,
+      targetDir: pristineProject,
+    });
+    expect(
+      planUpdate(pristineProject, REPO_TEMPLATES).changes.find(
+        (change) => change.path === layout,
+      ),
+    ).toMatchObject({ action: "update", tier: "owned" });
+    const result = applyUpdate(pristineProject, REPO_TEMPLATES);
+    expect(result.written).toContain(layout);
+    expect(readFileSync(join(pristineProject, layout), "utf8")).toBe(
+      readFileSync(join(REPO_TEMPLATES, "fullstack-nest-svelte", layout), "utf8"),
+    );
+
+    const editedProject = join(tmp(), "edited-app");
+    create({
+      name: "edited-app",
+      template: "fullstack-nest-svelte",
+      templatesDir: oldTemplates,
+      targetDir: editedProject,
+    });
+    writeFileSync(join(editedProject, layout), "<main>application layout</main>\n");
+    expect(
+      planUpdate(editedProject, REPO_TEMPLATES).changes.find(
+        (change) => change.path === layout,
+      )?.action,
+    ).toBe("skip");
+    const editedResult = applyUpdate(editedProject, REPO_TEMPLATES);
+    expect(editedResult.written).not.toContain(layout);
+    expect(readFileSync(join(editedProject, layout), "utf8")).toBe(
+      "<main>application layout</main>\n",
+    );
+  });
+
   function legacyAdminProject(): string {
     const templates = legacyAdminTemplatesCopy();
     const project = join(tmp(), "legacy-admin-app");
