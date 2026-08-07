@@ -1,5 +1,11 @@
 # @podosoft/podokit
 
+## 0.17.4
+
+### Patch Changes
+
+- [#152](https://github.com/podosoft-dev/podokit/pull/152) [`9892142`](https://github.com/podosoft-dev/podokit/commit/98921425c4af85150b6a6481ab702a6a2d3e0ef3) Thanks [@korone00](https://github.com/korone00)! - Return regular users to the shared account page after mandatory two-factor enrollment and keep the account route behind the enrollment gate.
+
 ## 0.17.3
 
 ### Patch Changes
