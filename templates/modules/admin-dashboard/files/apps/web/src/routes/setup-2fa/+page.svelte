@@ -51,7 +51,7 @@
       error = i18n.t.auth.twoFactorInvalidCode;
       return;
     }
-    await goto("/admin", { invalidateAll: true });
+    await goto("/account", { invalidateAll: true });
   }
 
   function downloadCodes(): void {

@@ -8,6 +8,6 @@ export const load: PageServerLoad = ({ locals }) => {
   requireBackendAvailable(locals);
   if (!locals.user) redirect(302, "/login");
   const user = locals.user as App.Locals["user"] & { twoFactorEnabled?: boolean };
-  if (user.twoFactorEnabled) redirect(302, "/admin");
+  if (user.twoFactorEnabled) redirect(302, "/account");
   return { user: locals.user };
 };

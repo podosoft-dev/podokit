@@ -772,6 +772,22 @@ describe("addModule (auth / better-auth)", () => {
     const guards = readFileSync(join(project, "apps/web/src/lib/server/guards.ts"), "utf8");
     expect(guards).toContain('error(503, "Service temporarily unavailable")');
     expect(guards).toContain("export function isPublicPath");
+    const setupTwoFactorLoader = readFileSync(
+      join(project, "apps/web/src/routes/setup-2fa/+page.server.ts"),
+      "utf8",
+    );
+    expect(setupTwoFactorLoader).toContain('redirect(302, "/account")');
+    expect(setupTwoFactorLoader).not.toContain('redirect(302, "/admin")');
+    const setupTwoFactorPage = readFileSync(
+      join(project, "apps/web/src/routes/setup-2fa/+page.svelte"),
+      "utf8",
+    );
+    expect(setupTwoFactorPage).toContain('goto("/account", { invalidateAll: true })');
+    const accountLoader = readFileSync(
+      join(project, "apps/web/src/routes/account/+page.server.ts"),
+      "utf8",
+    );
+    expect(accountLoader).toContain("await loadProtectedLayout({ locals, fetch })");
     // i18n: message catalog + language switch
     expect(existsSync(join(project, "apps/web/src/lib/i18n/messages.ts"))).toBe(true);
     expect(existsSync(join(project, "apps/web/src/lib/components/language-switch.svelte"))).toBe(true);
