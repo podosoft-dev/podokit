@@ -41,7 +41,7 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - name: Open or update the Version Packages PR
         id: changesets
-        uses: changesets/action@v1
+        uses: changesets/action@v2
         with:
           version: npm run version
           title: "chore: version packages"
