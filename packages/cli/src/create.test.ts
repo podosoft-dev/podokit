@@ -332,6 +332,30 @@ describe("create (integration against templates)", () => {
   });
 
   it.each(["fullstack-nest-svelte", "todo"])(
+    "scaffolds audited dependency floors in the %s template",
+    (template) => {
+      const target = join(tmp(), "secure-app");
+      create({ name: "secure-app", template, templatesDir: REPO_TEMPLATES, targetDir: target });
+
+      const rootPkg = JSON.parse(readFileSync(join(target, "package.json"), "utf8")) as {
+        overrides: Record<string, Record<string, string>>;
+      };
+      const apiPkg = JSON.parse(
+        readFileSync(join(target, "apps", "api", "package.json"), "utf8"),
+      ) as { devDependencies: Record<string, string> };
+      const webPkg = JSON.parse(
+        readFileSync(join(target, "apps", "web", "package.json"), "utf8"),
+      ) as { devDependencies: Record<string, string> };
+
+      expect(rootPkg.overrides["@nestjs/swagger"]?.["js-yaml"]).toBe("5.2.3");
+      expect(rootPkg.overrides["@sveltejs/kit"]?.cookie).toBe("0.7.2");
+      expect(apiPkg.devDependencies["@swc/cli"]).toBe("^0.8.1");
+      expect(webPkg.devDependencies["@sveltejs/vite-plugin-svelte"]).toBe("^7.3.0");
+      expect(webPkg.devDependencies.vite).toBe("^8.2.1");
+    },
+  );
+
+  it.each(["fullstack-nest-svelte", "todo"])(
     "documents the shared development gateway in the %s generated README",
     (template) => {
       const target = join(tmp(), "documented-app");

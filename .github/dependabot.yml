@@ -9,7 +9,7 @@ updates:
       dev-dependencies:
         dependency-type: development
     ignore:
-      # Node 20 is the supported baseline; stay on the matching @types/node major.
+      # Published packages support Node 20; keep compilation on matching Node types.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
       # TypeScript majors need a moduleResolution migration — handle deliberately.
