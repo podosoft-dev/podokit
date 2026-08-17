@@ -32,6 +32,16 @@ test("uses package-only verification for the generated Changesets PR", () => {
   assert.match(e2e, /Cache generated app npm downloads/);
   assert.match(e2e, /E2E_NPM_CACHE: \/home\/runner\/\.cache\/podokit-e2e-npm/);
   assert.match(version, /actions: write/);
+  assert.match(ci, /node-version: 22\.22\.1/);
+  assert.match(release, /node-version: 22\.22\.1/);
+  assert.match(version, /node-version: 22\.22\.1/);
+  assert.match(version, /uses: changesets\/action@v2/);
+  assert.match(version, /github-token: \$\{\{ secrets\.GITHUB_TOKEN \}\}/);
+  assert.match(version, /version-script: npm run version/);
+  assert.match(version, /pr-title: "chore: version packages"/);
+  assert.match(version, /commit-message: "chore: version packages"/);
+  assert.match(version, /outputs\['has-changesets'\] == 'true'/);
+  assert.doesNotMatch(version, /uses: changesets\/action@v1/);
   assert.match(version, /gh workflow run ci\.yml --ref changeset-release\/main/);
   assert.match(version, /gh workflow run e2e\.yml --ref changeset-release\/main -f mode=package-smoke/);
 });
