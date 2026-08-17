@@ -9,6 +9,14 @@
     "apps/*",
     "tests"
   ],
+  "overrides": {
+    "@nestjs/swagger": {
+      "js-yaml": "5.2.3"
+    },
+    "@sveltejs/kit": {
+      "cookie": "0.7.2"
+    }
+  },
   "scripts": {
     "dev": "npm run dev --workspaces --if-present",
     "build": "npm run build --workspaces --if-present",
