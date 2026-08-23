@@ -20,7 +20,7 @@ test("register a passkey and sign in with it", async ({ page, baseURL }) => {
   const signup = await page.context().request.post("/api/auth/sign-up/email", { data: { email, password: pw, name: "PK" }, headers: origin });
   expect(signup.ok(), await signup.text()).toBeTruthy();
 
-  await ready(page, "/admin/account");
+  await ready(page, "/account");
   await page.getByRole("button", { name: "Security" }).click();
   const addBtn = page.getByRole("button", { name: "Add passkey" });
   test.skip((await addBtn.count()) === 0, "passkeys not enabled");

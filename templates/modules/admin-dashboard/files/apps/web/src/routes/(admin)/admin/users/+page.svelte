@@ -121,11 +121,12 @@
     page = 1;
   }
 
-  // Impersonate — become the user, then a banner offers "stop impersonating".
+  // Impersonate — become the user, then continue on the signed-in account page
+  // where the banner offers a route back to the administrator session.
   async function impersonate(u: Row): Promise<void> {
     const { error } = await api.auth.admin.impersonateUser({ userId: u.id });
     if (error) return void toast.error(error.message ?? i18n.t.users.actionFailed);
-    await goto("/admin", { invalidateAll: true });
+    await goto("/account", { invalidateAll: true });
   }
 
   async function approve(u: Row): Promise<void> {

@@ -211,6 +211,9 @@ async function main() {
       // phoneNumber flag for its tests. Only server-enforced flags are env:
       // exercise the breached-password check end to end.
       "AUTH_HIBP=true",
+      // The audit-log module ships with this fallback enabled. Preserve that
+      // module default after the faithful harness replaces the generated .env.
+      "AUDIT_LOG_ENABLED=true",
       // Point mail at the CI Mailpit service when present so the email specs run;
       // otherwise the app logs mail and those specs skip.
       ...(process.env.SMTP_HOST
@@ -259,6 +262,7 @@ async function main() {
     // Runtime env for the built api (`node dist/main` below). Auth feature flags
     // are DB-backed (migration-seeded), so only server-enforced env remains.
     AUTH_HIBP: "true",
+    AUDIT_LOG_ENABLED: "true",
     // Route phone-number OTPs to the local SMS sink so the phone spec can read them.
     SMS_WEBHOOK_URL: `${smsSinkURL}/sms`,
     // Backend-module runtime config (present only when the CI service is up).

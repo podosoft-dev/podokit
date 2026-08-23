@@ -4,5 +4,8 @@ import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ locals, fetch }) => {
   await loadProtectedLayout({ locals, fetch });
-  return loadAccountData(locals, fetch);
+  return {
+    ...(await loadAccountData(locals, fetch)),
+    impersonating: Boolean(locals.session?.impersonatedBy),
+  };
 };
