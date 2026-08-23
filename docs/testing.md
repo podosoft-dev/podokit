@@ -60,6 +60,17 @@ npm run test:e2e:api     # request-only — backend endpoints
 npm run test:e2e:report  # open the HTML report
 ```
 
+The Bun 1.4.0 profile exposes the same scripts through `bun run`. Its unit-test
+contract is intentionally runtime-native: the NestJS app runs `bun test src`,
+while the SvelteKit app runs Vitest under Bun.
+
+```bash
+bun run build
+bun run lint
+bun run test
+bun run test:e2e
+```
+
 The suite runs against a **live stack**: the web on `E2E_BASE_URL` proxying
 `/api/*` to the API. With the recommended containerized loop, bring the app up
 through its generated hostname and pass that origin to Playwright:
@@ -214,6 +225,14 @@ run the reviewed `@smoke` subset, and the generated Changesets PR runs
 `concurrency` cancels superseded runs. Every Outer run prints per-phase timings so
 future optimization is based on measured publish, install, build, startup, and test
 costs.
+
+The fast CI workflow also has a `bun-compatibility` job pinned to Bun 1.4.0. It
+creates a Node project containing every bundled module, applies Node→Bun
+conversion, lets the conversion gate install/audit/build/lint/test without a
+Node fallback, and then converts the same project back to Node/npm. The Outer
+Verdaccio/Playwright path remains the release-faithful Node/npm baseline; the
+Bun job verifies the alternate generated toolchain, bundled-module composition,
+and round-trip contract.
 
 The ready-PR subset intentionally stays small and risk-based. It covers scaffold
 health, authentication and authorization boundaries, one representative path for

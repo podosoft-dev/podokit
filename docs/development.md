@@ -157,7 +157,9 @@ What you get:
 Prefer the host `npm run dev` loop for quick single-project work; reach for the containerized
 loop when you run several projects at once or want dev to mirror the k3s/Traefik production
 topology. These files (`compose.dev.yaml`, `Dockerfile.dev`, `.devcontainer/`, `.env.docker`,
-`infra/traefik/`) are yours to edit — `podo update` never touches them. The per-project Traefik
+`infra/traefik/`) are yours to edit — `podo update` never touches them. An explicit
+`podo runtime set ... --apply` is the exception: it 3-way merges the runtime-specific Docker and
+Compose surfaces as part of the requested conversion. The per-project Traefik
 service remains available only through the `podokit-legacy-proxy` profile for compatibility.
 
 OAuth providers should use a stable HTTPS development origin instead of adding local ports to a
@@ -179,6 +181,25 @@ For anything auth/session related (login, admin, cookies), do a full local run
 (compose + migrate + `npm run dev`) and exercise the flow in the browser — a
 build passing is necessary but not sufficient.
 
+### Bun compatibility
+
+Generate or convert with the exact supported Bun version, then run the same
+static gates without falling back to Node:
+
+```bash
+bunx --bun @podosoft/podokit create bun-app --dir /tmp/bun-app --runtime bun --yes
+cd /tmp/bun-app
+bun install
+bun audit --audit-level=high
+bun run build
+bun run lint
+bun run test
+```
+
+The CI `bun-compatibility` job additionally exercises Node→Bun→Node conversion.
+Keep performance measurements outside correctness gates: install/build timings
+depend heavily on registry proximity, cache state, filesystem, and host CPU.
+
 ### The standing verification app
 
 Keep one generated app running throughout a work session (api `nest start --watch`,
@@ -194,7 +215,7 @@ Non-injected template files mirror live; when you change an injection target
 `dev-app.mjs`. Run the Verdaccio smoke (`scripts/e2e-ci.mjs --smoke`) once when the
 PR is ready for review; draft pushes use the fast CI loop — see
 [testing.md](./testing.md).
-The mirror renders `projectName` and `packageManager` from the generated app's
+The mirror renders the project name and complete runtime/toolchain variables from the generated app's
 `.podokit/manifest.json`; it must never copy unresolved template placeholders.
 
 ## Testing

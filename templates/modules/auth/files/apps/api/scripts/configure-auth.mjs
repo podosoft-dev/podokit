@@ -15,10 +15,10 @@ function usage() {
   console.log(`Configure PodoKit authentication through the admin API.
 
 Usage:
-  npm run auth:configure -- --provider google --require-signup-approval
-  npm run auth:configure -- --provider google --redirect-only
-  npm run auth:configure -- --smtp
-  npm run auth:configure -- --check-only --provider google
+  {{apiRun}} auth:configure -- --provider google --require-signup-approval
+  {{apiRun}} auth:configure -- --provider google --redirect-only
+  {{apiRun}} auth:configure -- --smtp
+  {{apiRun}} auth:configure -- --check-only --provider google
 
 Required environment for writes:
   AUTH_SETUP_ORIGIN          Public app origin (or BETTER_AUTH_URL)

@@ -362,7 +362,7 @@
   async function disconnect(provider: string): Promise<void> {
     const account = accounts.find((a) => a.providerId === provider);
     if (!account) return;
-    const { error } = await api.auth.unlinkAccount({ providerId: provider, accountId: account.accountId });
+    const { error } = await api.auth.unlinkAccount({ accountId: account.accountId });
     if (error) toast.error(error.message ?? i18n.t.account.saveFailed);
     else {
       toast.success(i18n.t.account.disconnected);

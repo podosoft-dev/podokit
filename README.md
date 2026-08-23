@@ -8,12 +8,24 @@ Modern full-stack projects repeat the same setup work: backend structure, fronte
 
 ## Quick start
 
+Node.js with npm remains the default:
+
 ```bash
 npx @podosoft/podokit create my-app
 cd my-app
 npm install
 cp .env.example .env
 npx @podosoft/podokit dev watch
+```
+
+Or generate a Bun-native project with the pinned Bun 1.4.0 profile:
+
+```bash
+bunx --bun @podosoft/podokit create my-app --runtime bun
+cd my-app
+bun install
+cp .env.example .env
+bunx --bun @podosoft/podokit dev watch
 ```
 
 Open **http://my-app.localhost**. The first running project starts one user-level
@@ -30,12 +42,15 @@ podo create <name> [options]
 Options:
   --template <t>   fullstack-nest-svelte (default) | todo | base
   --dir <path>     Target directory (default: ./<name>)
-  --pm <name>      npm (default) | pnpm | yarn
+  --runtime <r>    node (default) | bun
+  --pm <name>      npm (default) | pnpm | yarn (Node only)
   -y, --yes        Skip prompts and accept defaults
   -h, --help       Show help
 ```
 
-Run without flags in a terminal and PodoKit prompts for the template and package manager.
+Run without flags in a terminal and PodoKit prompts for the template, runtime,
+and (for Node) package manager. Bun projects use Bun as both runtime and package
+manager; combining `--runtime bun` with `--pm` is rejected.
 
 | Command | What it does |
 |---|---|
@@ -47,6 +62,7 @@ Run without flags in a terminal and PodoKit prompts for the template and package
 | `podo doctor` | Framework versions vs. supported ranges |
 | `podo locale <command>` | Add, validate, activate, deactivate, or list JSON locales |
 | `podo update [--apply]` | Preview or apply a version update (3-way merges your edits) |
+| `podo runtime set <node\|bun> [--apply]` | Preview or apply an atomic runtime conversion |
 | `podo eject <path…>` | Take ownership of a managed file |
 | `podo dev <action>` | Run container development through the shared portless `*.localhost` gateway (`npx @podosoft/podokit dev …` without a global install) |
 | `podo deploy <action>` | Plan, apply, verify, or roll back an exact-image release on an existing Kubernetes cluster or Docker host |
@@ -57,7 +73,7 @@ Run without flags in a terminal and PodoKit prompts for the template and package
 | --- | --- |
 | `fullstack-nest-svelte` (default) | Clean NestJS + SvelteKit starter: config validation, health checks, Swagger, TypeORM wired (no domain code) + Docker Compose and k3s |
 | `todo` | The fullstack starter plus a Todo CRUD example (DB entity, migration, UI) — a runnable reference |
-| `base` | Minimal npm workspace to build up from scratch |
+| `base` | Minimal Node/npm or Bun workspace to build up from scratch |
 
 Pick one interactively, or pass `--template <name>`:
 
@@ -65,7 +81,31 @@ Pick one interactively, or pass `--template <name>`:
 npx @podosoft/podokit create my-app                    # clean fullstack (default)
 npx @podosoft/podokit create my-app --template todo    # worked todo example
 npx @podosoft/podokit create my-app --template base    # minimal
+bunx --bun @podosoft/podokit create my-app --runtime bun # Bun 1.4.0
 ```
+
+## Runtime profiles
+
+PodoKit formally supports Node.js 22.22.1+ with npm, pnpm, or yarn, and an exact
+Bun 1.4.0 profile. The Bun profile supplies Bun lockfiles, scripts, Docker
+images, Compose commands, and GitHub Actions setup; its validation runs the
+NestJS suite with `bun test` and the SvelteKit suite with Vitest under Bun.
+
+Convert an existing generated project with a dry-run first:
+
+```bash
+podo runtime set bun
+podo runtime set bun --apply
+
+podo runtime set node --pm npm
+podo runtime set node --pm npm --apply
+```
+
+Conversion checks the target runtime version, 3-way merges edited managed files,
+installs dependencies, audits high-severity advisories, then runs build, lint,
+and tests. The manifest and source lockfile change only after every gate passes;
+on failure, files, lockfiles, and the previous `node_modules` are restored. See
+[Updating](docs/updating.md#changing-the-runtime).
 
 ### Preview — the `todo` template
 
@@ -89,7 +129,7 @@ my-app/
 │   ├── docker/  # docker-compose: PostgreSQL, Redis (healthchecks)
 │   └── k3s/     # namespace, deployments, service, ingress, secret example
 ├── .env.example
-├── package.json # npm workspace
+├── package.json # Node/npm or Bun workspace
 └── README.md
 ```
 
@@ -217,9 +257,10 @@ extend `AGENTS.md` with their own conventions as you add them. Skip it all with
 `podo create --no-ai`.
 
 Projects also ship a `.mcp.json` wiring up the **PodoKit MCP server**
-([`@podosoft/podokit-mcp`](packages/mcp/README.md)) — run locally via `npx`, no
-hosting — so agents can list/add modules, check project status, preview updates,
-and search the docs. And you can point any MCP-capable tool at the docs remotely
+([`@podosoft/podokit-mcp`](packages/mcp/README.md)) — run locally via `npx` for
+Node or `bunx --bun` for Bun, with no hosting — so agents can list/add modules,
+check project status, preview updates, and search the docs. And you can point any
+MCP-capable tool at the docs remotely
 with **GitMCP** (no install): register the URL
 `https://gitmcp.io/podosoft-dev/podokit`, e.g. for Cursor/Claude Code:
 
@@ -234,7 +275,10 @@ A repo-root [`llms.txt`](llms.txt) gives LLMs a curated index of these docs.
 Register the MCP server **globally** so it's available before any project exists:
 
 ```bash
+# Node
 claude mcp add --scope user podokit -- npx -y @podosoft/podokit-mcp
+# Bun
+claude mcp add --scope user podokit -- bunx --bun @podosoft/podokit-mcp
 # Cursor/Codex: add the same command in their MCP settings
 ```
 
@@ -242,9 +286,9 @@ Then, in an empty folder, tell your agent:
 
 > "Create a fullstack PodoKit app called **blog** with auth and admin-dashboard."
 
-It calls `list_templates` → `create_project` → `add_module` and runs
-`npm install` — from nothing to a running starter in one prompt, with the
-conventions already loaded from `AGENTS.md`.
+It calls `list_templates` → `create_project` → `add_module` and installs with
+the selected Node or Bun toolchain — from nothing to a running starter in one
+prompt, with the conventions already loaded from `AGENTS.md`.
 
 ## Documentation
 

@@ -2,6 +2,7 @@ import { existsSync, readFileSync, rmdirSync, rmSync, writeFileSync } from "node
 import { dirname, join } from "node:path";
 import {
   renderTemplate,
+  renderTokens,
   removeAtMarker,
   hashContent,
   type JsonObject,
@@ -17,6 +18,7 @@ import {
   writeFilesLock,
   writeManifest,
 } from "./lockfile";
+import { toolchainTemplateVars } from "./toolchain";
 
 export interface RemoveOptions {
   projectRoot: string;
@@ -38,8 +40,9 @@ export interface RemoveResult {
   unwired: string[];
 }
 
-function readModuleManifest(moduleDir: string): ModuleManifest {
-  return JSON.parse(readFileSync(join(moduleDir, "module.manifest.json"), "utf8")) as ModuleManifest;
+function readModuleManifest(moduleDir: string, vars?: TemplateVars): ModuleManifest {
+  const source = readFileSync(join(moduleDir, "module.manifest.json"), "utf8");
+  return JSON.parse(vars ? renderTokens(source, vars) : source) as ModuleManifest;
 }
 
 function readJson(path: string): JsonObject {
@@ -83,7 +86,11 @@ export function removeModule(options: RemoveOptions): RemoveResult {
   if (!moduleDir) {
     throw new Error(`Cannot resolve module "${module}" to un-apply it. Is it still installed/bundled?`);
   }
-  const targetManifest = readModuleManifest(moduleDir);
+  const vars: TemplateVars = {
+    projectName: projectName(projectRoot),
+    ...toolchainTemplateVars(manifest.toolchain),
+  };
+  const targetManifest = readModuleManifest(moduleDir, vars);
 
   // Resolve the manifests of the OTHER installed modules once — used for the
   // requires guard and to decide which files/deps/env are shared.
@@ -91,7 +98,7 @@ export function removeModule(options: RemoveOptions): RemoveResult {
     .filter((m) => m.name !== module)
     .map((m) => {
       const dir = resolveModuleDir(m.packageName ?? m.name, modulesDir, projectRoot);
-      return dir ? { name: m.name, dir, manifest: readModuleManifest(dir) } : null;
+      return dir ? { name: m.name, dir, manifest: readModuleManifest(dir, vars) } : null;
     })
     .filter((m): m is { name: string; dir: string; manifest: ModuleManifest } => m !== null);
 
@@ -103,7 +110,6 @@ export function removeModule(options: RemoveOptions): RemoveResult {
     );
   }
 
-  const vars: TemplateVars = { projectName: projectName(projectRoot) };
   const sharedFiles = new Set(others.flatMap((o) => moduleFilePaths(o.dir, vars)));
   const lock = readFilesLock(projectRoot);
 

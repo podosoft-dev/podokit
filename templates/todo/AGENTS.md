@@ -6,7 +6,7 @@ Follow it so your changes match the project's conventions.
 
 ## Project overview
 
-A full-stack TypeScript monorepo (npm workspaces):
+A full-stack TypeScript monorepo ({{runtime}} runtime, {{packageManager}} workspaces):
 
 - `apps/api` — **NestJS** backend (`{{projectName}}-api`), TypeORM + PostgreSQL, Swagger at `/api-docs`.
 - `apps/web` — **SvelteKit** frontend (`{{projectName}}-web`), Tailwind v4 + shadcn-svelte + typesafe-i18n.
@@ -17,18 +17,18 @@ A full-stack TypeScript monorepo (npm workspaces):
 ## Setup & commands
 
 ```bash
-npm install
+{{packageManager}} install
 cp .env.example .env
 docker compose -f infra/docker/docker-compose.yml up -d   # PostgreSQL (+ Redis)
-npm run dev        # api on http://localhost:5002, web on http://localhost:5001
+{{rootRun}} dev        # api on http://localhost:5002, web on http://localhost:5001
 ```
 
 - **Ports: web = 5001, api = 5002.** The web app reaches the API only through its
   SvelteKit server proxy (`/api/*`), never with a direct browser `fetch`.
-- Build: `npm run build`  ·  Type-check/lint: `npm run lint`  ·  Unit tests: `npm test`
-- Per workspace: `npm run build -w {{projectName}}-api` / `-w {{projectName}}-web`.
-- DB migrations (TypeORM): `npm run migration:run -w {{projectName}}-api`.
-- e2e (Playwright, ships in `tests/`): `npm run test:e2e`.
+- Build: `{{rootRun}} build`  ·  Type-check/lint: `{{rootRun}} lint`  ·  Unit tests: `{{rootRun}} test`
+- Per workspace: `{{apiRun}} build` / `{{webRun}} build`.
+- DB migrations (TypeORM): `{{apiRun}} migration:run`.
+- e2e (Playwright, ships in `tests/`): `{{rootRun}} test:e2e`.
 
 **Always** verify a change by building the affected workspace (and `svelte-check`
 for web) before considering it done. UI changes need a Playwright test; API
@@ -70,6 +70,7 @@ Useful commands:
 - `podo remove <module>` — un-apply a module (inverse of add; refuses if another module needs it, keeps files you edited).
 - `podo status` / `podo diff` — see your local edits vs. what PodoKit generated.
 - `podo update` — pull in template/module improvements (3-way merges your edits; never touches owned files).
+- `podo runtime set node|bun` — preview a runtime conversion; add `--apply` only after reviewing the managed-file and validation plan.
 - `podo deploy` — plan, apply, verify, or roll back an immutable release on Kubernetes or one Docker host. Tag `vX.Y.Z` to build and push the images (`.github/workflows/release.yml`; check its runner — GitHub-hosted minutes are free for public repositories only). Use `.agents/skills/podokit-deploy`.
 - `podo deploy sync` — copy local build output into a running Compose deployment and restart it, for iterating without a release. Not a release: no image is published and the next `apply` discards it. Use `.agents/skills/podokit-deploy-fast`.
 

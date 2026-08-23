@@ -4,8 +4,9 @@
 
 ## Prerequisites
 
-- Node.js >= 22.22.1
-- npm (or pnpm / yarn)
+- One supported toolchain:
+  - Node.js >= 22.22.1 with npm (or pnpm / yarn)
+  - Bun 1.4.0 (exactly; used as both runtime and package manager)
 - Docker (optional, for local PostgreSQL and Redis)
 
 ## Create a project
@@ -14,11 +15,22 @@
 npx @podosoft/podokit create my-app
 ```
 
-Run in a terminal, PodoKit prompts for the template and package manager. To skip prompts:
+Run in a terminal, PodoKit prompts for the template, runtime, and Node package
+manager. To skip prompts:
 
 ```bash
 npx @podosoft/podokit create my-app --template fullstack-nest-svelte --pm npm --yes
 ```
+
+To create a Bun-native project, invoke the CLI with Bun and select the runtime:
+
+```bash
+bunx --bun @podosoft/podokit create my-app --template fullstack-nest-svelte --runtime bun --yes
+```
+
+The interactive flow asks for the runtime first. Node defaults to npm and also
+supports pnpm/yarn; Bun always uses Bun, so do not pass `--pm` with
+`--runtime bun`.
 
 Then:
 
@@ -28,6 +40,9 @@ npm install
 cp .env.example .env
 npx @podosoft/podokit dev watch
 ```
+
+For a Bun project, use `bun install` and
+`bunx --bun @podosoft/podokit dev watch` in the same sequence.
 
 Open **http://my-app.localhost**. The first running project starts a user-level,
 socket-free Traefik gateway on `127.0.0.1:80`. Each additional project reuses
@@ -41,6 +56,12 @@ npx @podosoft/podokit dev ps
 npx @podosoft/podokit dev logs
 npx @podosoft/podokit dev exec api npm run migration:run -w my-app-api
 npx @podosoft/podokit dev down
+```
+
+The Bun equivalent of the migration command is:
+
+```bash
+bunx --bun @podosoft/podokit dev exec api bun run --cwd apps/api migration:run
 ```
 
 `dev down` removes only the current project, including services started with any
@@ -66,7 +87,7 @@ npm run dev
 
 - **`fullstack-nest-svelte`** (default) — NestJS API + SvelteKit web + Docker/k3s.
 - **`todo`** — the fullstack starter plus a runnable Todo CRUD example.
-- **`base`** — a minimal npm workspace when you want to build up from scratch.
+- **`base`** — a minimal workspace for the selected Node/npm or Bun profile.
 
 See [templates.md](templates.md) for what each generates.
 
@@ -114,8 +135,8 @@ Claude Code skills under `.claude/skills/`. As you `podo add` modules, they
 extend `AGENTS.md` with their own rules. Don't want them? `podo create --no-ai`.
 
 A `.mcp.json` also wires up the **PodoKit MCP server** (`@podosoft/podokit-mcp`,
-run locally via `npx` — no hosting): agents can list/add modules, check the
-project status, preview updates, and search the docs directly. See
+run locally via `npx` for Node or `bunx --bun` for Bun — no hosting): agents can
+list/add modules, check the project status, preview updates, and search the docs directly. See
 [`@podosoft/podokit-mcp`](https://www.npmjs.com/package/@podosoft/podokit-mcp).
 
 For docs search without any install, register **GitMCP** as a remote MCP server —
@@ -127,7 +148,10 @@ docs and code straight from the public repo.
 You don't even need an existing project. Register the MCP server **globally**:
 
 ```bash
+# Node
 claude mcp add --scope user podokit -- npx -y @podosoft/podokit-mcp
+# Bun
+claude mcp add --scope user podokit -- bunx --bun @podosoft/podokit-mcp
 ```
 
 Then, in an empty folder, ask your agent to build one:
@@ -135,8 +159,9 @@ Then, in an empty folder, ask your agent to build one:
 > "Create a fullstack PodoKit app called **blog** with auth and admin-dashboard."
 
 The agent uses the MCP tools `list_templates` → `create_project` → `add_module`
-(auth, admin-dashboard) and runs `npm install` — going from an empty directory to
-a running starter in a single prompt, with the conventions already loaded.
+(auth, admin-dashboard) and installs with the selected Node or Bun toolchain —
+going from an empty directory to a running starter in a single prompt, with the
+conventions already loaded.
 
 ## Keep your project up to date
 
@@ -172,7 +197,7 @@ The API validates required variables on startup and fails fast if something is m
 
 ## Project scripts
 
-The generated workspace forwards scripts to `apps/*`:
+The generated workspace forwards scripts to `apps/*`. Node/npm projects use:
 
 ```bash
 npm run dev     # run api + web in watch mode
@@ -180,6 +205,20 @@ npm run build   # build all apps
 npm run lint    # type-check / lint all apps
 npm test        # run tests
 ```
+
+Bun projects expose the same root script names:
+
+```bash
+bun run dev
+bun run build
+bun run lint
+bun run test
+```
+
+Use `podo runtime set bun` / `podo runtime set bun --apply` to preview/apply a
+conversion, or `podo runtime set node --pm npm` / `--apply` to return to Node.
+See [Updating](updating.md#changing-the-runtime) for the validation and rollback
+contract.
 
 ## Deployment
 

@@ -5,14 +5,14 @@
   "scripts": {
     "dev": "nest start --watch --builder swc",
     "build": "nest build",
-    "start": "node dist/main",
+    "start": "{{runtimeCommand}} dist/main",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "jest --passWithNoTests",
-    "migrate:all": "node dist/database/migrate",
+    "migrate:all": "{{runtimeCommand}} dist/database/migrate",
     "typeorm": "typeorm-ts-node-commonjs -d src/database/data-source.ts",
-    "migration:run": "npm run typeorm -- migration:run",
-    "migration:revert": "npm run typeorm -- migration:revert",
-    "migration:generate": "npm run typeorm -- migration:generate"
+    "migration:run": "{{packageManager}} run typeorm -- migration:run",
+    "migration:revert": "{{packageManager}} run typeorm -- migration:revert",
+    "migration:generate": "{{packageManager}} run typeorm -- migration:generate"
   },
   "dependencies": {
     "@podosoft/podokit-contracts": "^0.4.0",

@@ -6,11 +6,29 @@
 | --- | --- |
 | `fullstack-nest-svelte` (default) | Clean NestJS + SvelteKit starter — no domain code |
 | `todo` | The fullstack starter plus a Todo CRUD example |
-| `base` | Minimal npm workspace |
+| `base` | Minimal workspace for the selected runtime profile |
+
+## Runtime profiles
+
+Every template can be rendered for either supported toolchain:
+
+| Profile | Selection | Generated package/runtime surface |
+| --- | --- | --- |
+| Node.js 22.22.1+ (default) | `--runtime node` or no flag | npm by default; pnpm/yarn via `--pm`; package-manager lockfile, Node Docker images, `setup-node` CI |
+| Bun 1.4.0 | `--runtime bun` | `bun.lock`, hoisted workspace install, Bun Docker images, `setup-bun` CI, Bun-native API and web tests |
+
+```bash
+npx @podosoft/podokit create my-app
+bunx --bun @podosoft/podokit create my-app --runtime bun
+```
+
+Bun is both the runtime and package manager; `--runtime bun --pm ...` is
+rejected. Runtime-specific overlays replace scripts, Dockerfiles, Compose, and
+release CI while the application source remains shared.
 
 ## `fullstack-nest-svelte` (default)
 
-A clean full-stack npm workspace: everything wired (config, health, Swagger, TypeORM connection, SvelteKit + Tailwind + shadcn + i18n + server proxy) but **no domain code** — you add your own entities and routes.
+A clean full-stack workspace: everything wired (config, health, Swagger, TypeORM connection, SvelteKit + Tailwind + shadcn + i18n + server proxy) but **no domain code** — you add your own entities and routes.
 
 ```
 apps/
@@ -35,7 +53,7 @@ infra/
   docker/docker-compose.yml   # PostgreSQL + Redis (healthchecks)
   k3s/                        # namespace, deployments, service, ingress, secret example
 .env.example
-package.json                  # npm workspace
+package.json                  # Node/npm or Bun workspace
 ```
 
 Conventions baked in:
@@ -43,7 +61,7 @@ Conventions baked in:
 - **Backend** returns a stable error envelope `{ success: false, error: { code, message, statusCode, path, timestamp } }`; clients branch on `code`, not the message.
 - **Frontend** talks to the API only through the typed **`@podosoft/podokit-api-client`** (`$lib/api.ts`), which calls SvelteKit proxy routes (`routes/api/**`) that forward to the backend — the browser never hits the API directly, and tokens/cookies stay server-side. Use `client.get/post(...)` for REST and `client.auth.*` for auth.
 - **Env** uses `SCREAMING_SNAKE` names grouped by service; the API validates them before listening.
-- **Production images** are built from the repository root (`docker build -f apps/api/Dockerfile .` and `docker build -f apps/web/Dockerfile .`) so `npm ci` uses the workspace lockfile reproducibly.
+- **Production images** are built from the repository root (`docker build -f apps/api/Dockerfile .` and `docker build -f apps/web/Dockerfile .`) so the selected toolchain uses its committed workspace lockfile reproducibly.
 
 ## `todo`
 
@@ -64,12 +82,17 @@ npx @podosoft/podokit dev watch
 npx @podosoft/podokit dev exec api npm run migration:run -w my-app-api
 ```
 
+With Bun, create the same example with `--runtime bun`, install with `bun
+install`, and run the migration as `bun run --cwd apps/api migration:run`.
+
 Open `http://my-app.localhost`. See [development.md](development.md) for the
 shared gateway lifecycle and the alternative host-process loop.
 
 ## `base`
 
-A minimal npm workspace (root `package.json`, `apps/api` and `apps/web` placeholders, `.env.example`, `.gitignore`). Use it when you want to assemble a project yourself.
+A minimal workspace for the selected runtime (root `package.json`, `apps/api`
+and `apps/web` placeholders, `.env.example`, `.gitignore`). Use it when you want
+to assemble a project yourself.
 
 ## UI: shadcn-svelte
 

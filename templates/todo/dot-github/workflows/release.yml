@@ -60,22 +60,19 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: npm
+      {{ciSetup}}
 
-      - run: npm ci --no-audit --no-fund
+      - run: {{ciInstallCommand}}
 
       # Verify before publishing. An image built from a commit that never passed is
       # indistinguishable from one that did, once it is in the registry.
-      - run: npm run lint
-      - run: npm test
+      - run: {{ciLintCommand}}
+      - run: {{ciTestCommand}}
 
       - name: Read the release target from the deployment profile
         id: profile
         run: |
-          node --input-type=module -e '
+          {{profileRuntime}} -e '
             import { readFileSync } from "node:fs";
             const name = process.env.PROFILE || "production";
             const path = `.podokit/deploy/${name}.json`;

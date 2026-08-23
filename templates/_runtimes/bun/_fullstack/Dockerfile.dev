@@ -1,0 +1,31 @@
+# Development image for the Bun 1.4.0 PodoKit monorepo.
+FROM oven/bun:1.4.0-alpine AS manifests
+WORKDIR /src
+COPY . .
+RUN mkdir -p /app \
+    && cp package.json bun.lock bunfig.toml /app/ \
+    && find . -name package.json -not -path "*/node_modules/*" \
+         -exec sh -c 'mkdir -p "/app/$(dirname "$1")" && cp "$1" "/app/$1"' _ {} \;
+
+FROM oven/bun:1.4.0-alpine
+
+RUN apk add --no-cache git python3 make g++ ca-certificates
+
+WORKDIR /app
+COPY --from=manifests /app ./
+ARG PODOKIT_NPM_REGISTRY=""
+RUN if [ -n "$PODOKIT_NPM_REGISTRY" ]; then \
+      bun install --frozen-lockfile --registry "$PODOKIT_NPM_REGISTRY"; \
+    else \
+      bun install --frozen-lockfile; \
+    fi
+
+COPY . .
+RUN if [ -d packages ]; then \
+      for manifest in packages/*/package.json; do \
+        [ -e "$manifest" ] || continue; \
+        bun run --cwd "$(dirname "$manifest")" --if-present build; \
+      done; \
+    fi
+
+EXPOSE 5001 5002

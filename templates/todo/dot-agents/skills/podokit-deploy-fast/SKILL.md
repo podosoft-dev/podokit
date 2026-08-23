@@ -11,7 +11,7 @@ already running and restarts them. `docker-compose` driver only — read the pro
 to reach every node and would stop being a shortcut.
 
 ```bash
-npx @podosoft/podokit deploy sync --profile <name> --build
+{{packageExecutor}} @podosoft/podokit deploy sync --profile <name> --build
 ```
 
 ## Say what this does before doing it
@@ -61,7 +61,7 @@ cannot detect, which is why they are your job.
 ## Restoring the image
 
 ```bash
-npx @podosoft/podokit deploy sync --profile <name> --revert
+{{packageExecutor}} @podosoft/podokit deploy sync --profile <name> --revert
 ```
 
 This recreates the containers from the Compose project **already on the target**,

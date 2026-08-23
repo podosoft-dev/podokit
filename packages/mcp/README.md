@@ -1,7 +1,8 @@
 # @podosoft/podokit-mcp
 
 A local [Model Context Protocol](https://modelcontextprotocol.io) server for
-**PodoKit** projects. It runs on your machine via `npx` — no hosting, no
+**PodoKit** projects. It runs on your machine via `npx` (Node) or `bunx --bun`
+(Bun) — no hosting, no
 account, no separate server — and gives AI coding tools (Claude Code, Cursor, …)
 first-class access to `podo` tooling and the PodoKit conventions.
 
@@ -13,6 +14,8 @@ Generated PodoKit projects already ship a `.mcp.json`:
 { "mcpServers": { "podokit": { "command": "npx", "args": ["-y", "@podosoft/podokit-mcp"] } } }
 ```
 
+Bun projects receive the equivalent `bunx --bun` configuration.
+
 Your editor/agent spawns the server on demand and talks to it over stdio.
 
 ## Tools
@@ -20,7 +23,7 @@ Your editor/agent spawns the server on demand and talks to it over stdio.
 | Tool | Does |
 |---|---|
 | `list_templates` | List the project templates (`fullstack-nest-svelte`, `todo`, `base`). |
-| `create_project` | **Scaffold a new project from scratch** (`podo create`). |
+| `create_project` | **Scaffold a Node or Bun project from scratch** (`podo create`). |
 | `list_modules` | List the feature modules you can add (`podo add`). |
 | `add_module` | Add a module — overlays files, merges deps, wires it in. |
 | `project_status` | Version, modules, file tiers, and your local edits (`podo status`). |
@@ -47,7 +50,10 @@ Register the server **globally** (user scope) so it's available before any
 project exists:
 
 ```bash
+# Node
 claude mcp add --scope user podokit -- npx -y @podosoft/podokit-mcp
+# Bun
+claude mcp add --scope user podokit -- bunx --bun @podosoft/podokit-mcp
 ```
 
 Then, in an empty folder, ask your agent:
@@ -55,7 +61,8 @@ Then, in an empty folder, ask your agent:
 > "Create a fullstack PodoKit app called `blog` with auth and admin-dashboard."
 
 The agent calls `list_templates` → `create_project` → `add_module` (auth,
-admin-dashboard), then runs `npm install` — a working starter in one step.
+admin-dashboard), then installs with npm or Bun according to the selected
+runtime — a working starter in one step.
 
 ## License
 

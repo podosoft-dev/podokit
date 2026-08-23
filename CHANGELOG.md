@@ -7,6 +7,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- **Node and Bun runtime profiles.** `podo create --runtime bun` now generates a
+  Bun 1.4.0-native workspace with Bun lockfiles, scripts, Docker images, Compose,
+  release CI, and tests while keeping Node/npm as the default and pnpm/yarn as
+  Node-compatible choices. `podo runtime set node|bun` previews and atomically
+  applies runtime conversion with version checks, dependency audit, build,
+  lint, tests, 3-way merge protection, and rollback on failure. Manifest schema
+  v3 records the selected toolchain, and CI verifies a Node→Bun→Node round trip.
+  The MCP `create_project` tool and generated MCP configuration select the same
+  runtime profile. Bun containers use the pinned Alpine image and production
+  images install only the target app workspace. Conversion resolves the target
+  lockfile from its manifest instead of importing stale resolutions from the
+  previous package manager.
 - **Guarded Kubernetes deployment and distributed runtime primitives.**
   `podo deploy` now initializes secret-free profiles, validates an explicit
   cluster fingerprint, renders module-aware Helm resources, hashes plans, runs

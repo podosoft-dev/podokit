@@ -11,6 +11,8 @@ export interface StatusReport {
   podokitVersion: string;
   template: string;
   packageManager: string;
+  runtime: string;
+  runtimeVersion: string;
   modules: string[];
   moduleDetails: { name: string; packageName?: string; version?: string }[];
   tiers: Record<Tier, number>;
@@ -35,7 +37,9 @@ export function status(projectRoot: string): StatusReport {
   return {
     podokitVersion: manifest.podokitVersion,
     template: manifest.template,
-    packageManager: manifest.packageManager,
+    packageManager: manifest.toolchain.packageManager,
+    runtime: manifest.toolchain.runtime,
+    runtimeVersion: manifest.toolchain.runtimeVersion,
     modules: manifest.modules.map((m) => m.name),
     moduleDetails: manifest.modules.map((m) => ({
       name: m.name,

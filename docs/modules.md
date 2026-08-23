@@ -8,6 +8,10 @@ cd my-app
 npx @podosoft/podokit add <module>
 ```
 
+Examples in this guide use the default Node/npm profile. In a Bun 1.4.0 project,
+invoke package CLIs with `bunx --bun`, install with `bun install`, use `bun run`
+for root scripts, and run API scripts as `bun run --cwd apps/api <script>`.
+
 `podo add` (with no module) lists what's available. Modules can depend on other modules — required modules are added automatically. Each module:
 
 - overlays its files into the project,

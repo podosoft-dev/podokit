@@ -63,8 +63,12 @@ describe("create (integration against templates)", () => {
     expect(result.packageManager).toBe("npm");
     expect(result.template).toBe("base");
 
-    const pkg = JSON.parse(readFileSync(join(target, "package.json"), "utf8")) as { name: string };
+    const pkg = JSON.parse(readFileSync(join(target, "package.json"), "utf8")) as {
+      name: string;
+      engines: { node: string };
+    };
     expect(pkg.name).toBe("my-app");
+    expect(pkg.engines.node).toBe(">=22.22.1");
     expect(existsSync(join(target, ".gitignore"))).toBe(true);
     expect(existsSync(join(target, ".env.example"))).toBe(true);
     expect(readFileSync(join(target, "README.md"), "utf8")).toContain("my-app");
@@ -79,6 +83,92 @@ describe("create (integration against templates)", () => {
     expect(manifest.answers.projectName).toBe("my-app");
     expect(manifest.modules).toEqual([]);
     expect(existsSync(join(target, ".podokit", "files.lock"))).toBe(true);
+  });
+
+  it("scaffolds a Bun 1.4.0 project without Node command fallbacks", () => {
+    const target = join(tmp(), "bun-app");
+    const result = create({
+      name: "bun-app",
+      runtime: "bun",
+      templatesDir: REPO_TEMPLATES,
+      targetDir: target,
+    });
+
+    expect(result.toolchain).toEqual({
+      runtime: "bun",
+      runtimeVersion: "1.4.0",
+      packageManager: "bun",
+    });
+    const rootPackage = JSON.parse(readFileSync(join(target, "package.json"), "utf8")) as {
+      packageManager: string;
+      engines: Record<string, string>;
+      trustedDependencies: string[];
+    };
+    expect(rootPackage.packageManager).toBe("bun@1.4.0");
+    expect(rootPackage.engines).toEqual({ bun: "1.4.0" });
+    expect(rootPackage.trustedDependencies).toEqual(["@swc/core"]);
+    expect(readFileSync(join(target, "bunfig.toml"), "utf8")).toContain('auto = "disable"');
+    expect(readFileSync(join(target, "apps/api/package.json"), "utf8")).toContain(
+      '"test": "bun test src"',
+    );
+    for (const workspace of ["api", "web"]) {
+      const dockerfile = readFileSync(join(target, `apps/${workspace}/Dockerfile`), "utf8");
+      expect(dockerfile).toContain("FROM oven/bun:1.4.0-alpine");
+      expect(dockerfile).toContain("RUN bun ci");
+      expect(dockerfile).toContain(
+        `RUN bun install --production --frozen-lockfile --filter './apps/${workspace}'`,
+      );
+      expect(dockerfile).toContain(`RUN bun run --cwd apps/${workspace} build`);
+      expect(dockerfile).not.toContain("bun --cwd");
+      expect(dockerfile).not.toContain("FROM node:");
+      expect(dockerfile).not.toContain("npm ");
+    }
+    const workflow = readFileSync(join(target, ".github/workflows/release.yml"), "utf8");
+    expect(workflow).toContain("oven-sh/setup-bun@v2");
+    expect(workflow).toContain("bun-version: 1.4.0");
+    expect(workflow).not.toContain("actions/setup-node");
+    expect(readFileSync(join(target, "compose.dev.yaml"), "utf8")).toContain(
+      "bun run --cwd apps/api dev",
+    );
+    const devDockerfile = readFileSync(join(target, "Dockerfile.dev"), "utf8");
+    expect(devDockerfile).toContain("FROM oven/bun:1.4.0-alpine");
+    expect(devDockerfile).toContain(
+      "RUN apk add --no-cache git python3 make g++ ca-certificates",
+    );
+    expect(devDockerfile).not.toContain("apt-get");
+    const devcontainer = JSON.parse(
+      readFileSync(join(target, ".devcontainer/devcontainer.json"), "utf8"),
+    ) as { remoteUser: string };
+    expect(devcontainer.remoteUser).toBe("bun");
+    const manifest = JSON.parse(
+      readFileSync(join(target, ".podokit/manifest.json"), "utf8"),
+    ) as { schemaVersion: number; toolchain: Record<string, string>; packageManager?: string };
+    expect(manifest.schemaVersion).toBe(3);
+    expect(manifest.toolchain).toEqual(result.toolchain);
+    expect(manifest.packageManager).toBeUndefined();
+  });
+
+  it.each(["base", "todo"])("applies the Bun profile to the %s template", (template) => {
+    const target = join(tmp(), `bun-${template}`);
+    create({
+      name: `bun-${template}`,
+      template,
+      runtime: "bun",
+      templatesDir: REPO_TEMPLATES,
+      targetDir: target,
+    });
+
+    expect(readFileSync(join(target, "package.json"), "utf8")).toContain('"bun@1.4.0"');
+    expect(readFileSync(join(target, "bunfig.toml"), "utf8")).toContain('linker = "hoisted"');
+    const guidance = readFileSync(join(target, "AGENTS.md"), "utf8");
+    expect(guidance).toContain("bun install");
+    expect(guidance).toContain("bun run build");
+    expect(guidance).not.toContain("npm install");
+    if (template === "todo") {
+      expect(readFileSync(join(target, "apps/web/Dockerfile"), "utf8")).toContain(
+        "oven/bun:1.4.0-alpine",
+      );
+    }
   });
 
   it("ships AI agent guidance by default and omits it with ai:false", () => {

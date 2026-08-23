@@ -82,6 +82,12 @@ docker push registry.example.com/example-app-api:v1.2.3
 docker push registry.example.com/example-app-web:v1.2.3
 ```
 
+The generated Node and Bun production Dockerfiles both install only the target
+application workspace. The Bun 1.4.0 profile uses its pinned Alpine image and
+`bun install --production --frozen-lockfile --filter './apps/api'` (or
+`./apps/web`) so one image does not carry the other application's runtime
+dependencies.
+
 **Build for the architecture the target runs.** Building on an arm64 laptop and
 deploying to an amd64 host produces `exec format error` at rollout — after the
 migration has already run. Pass `--platform linux/amd64` (or use
@@ -133,8 +139,9 @@ credentials belong in the referenced secret, not in the profile. `runtimeConfig`
 rejects keys that look like passwords, tokens, private keys, or credentials, and
 values containing URL user information.
 
-Profiles omit `migration` by default, which runs `npm run migrate:all` in the exact
-API image. Applications with a different compiled entry point declare one:
+Profiles omit `migration` by default, which runs the selected project's package
+manager (`npm run migrate:all` or `bun run migrate:all`) in the exact API image.
+Applications with a different compiled entry point declare one:
 
 ```json
 { "migration": { "command": ["node", "dist/migrate"] } }

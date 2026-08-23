@@ -20,4 +20,4 @@ description: Use when adding or changing a NestJS REST endpoint in apps/api — 
 5. **Swagger**: annotate with `@ApiTags` so it shows under `/api-docs`.
 6. **Test**: add an e2e/unit test under `apps/api` or the `tests/` workspace
    (Nest e2e or Vitest + supertest). Verify with
-   `npm run build -w {{projectName}}-api` and the test.
+   `{{apiRun}} build` and the test.

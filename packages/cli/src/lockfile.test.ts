@@ -114,6 +114,24 @@ describe("initLockfile + computeFilesLock", () => {
     expect(lock.files["apps/web/src/routes/+page.svelte"].tier).toBe("owned");
     expect(lock.files["apps/api/src/main.ts"].outHash).toMatch(/^sha256:/);
   });
+
+  it("maps a schema v2 manifest to the Node toolchain on read", () => {
+    const root = tmp();
+    write(root, ".podokit/manifest.json", JSON.stringify({
+      schemaVersion: 2,
+      podokitVersion: "0.17.4",
+      template: "base",
+      packageManager: "pnpm",
+      answers: { projectName: "app", packageManager: "pnpm" },
+      modules: [],
+      ownedGlobs: [],
+    }));
+    expect(readManifest(root)?.toolchain).toEqual({
+      runtime: "node",
+      runtimeVersion: "22.22.1",
+      packageManager: "pnpm",
+    });
+  });
 });
 
 describe("recordModules", () => {

@@ -13,7 +13,7 @@ Full-stack TypeScript starter generated with [PodoKit](https://github.com/podoso
 ```bash
 {{packageManager}} install
 cp .env.example .env
-npx @podosoft/podokit dev watch
+{{packageExecutor}} @podosoft/podokit dev watch
 ```
 
 Open the URL printed by the command; a new project defaults to
@@ -26,12 +26,12 @@ the same topology, with one route and no project-specific host port.
 Run lifecycle and container commands from a second terminal:
 
 ```bash
-npx @podosoft/podokit dev url
-npx @podosoft/podokit dev up -d # detached stack without source watching
-npx @podosoft/podokit dev ps
-npx @podosoft/podokit dev logs
-npx @podosoft/podokit dev exec api npm run migration:run -w {{projectName}}-api
-npx @podosoft/podokit dev down
+{{packageExecutor}} @podosoft/podokit dev url
+{{packageExecutor}} @podosoft/podokit dev up -d # detached stack without source watching
+{{packageExecutor}} @podosoft/podokit dev ps
+{{packageExecutor}} @podosoft/podokit dev logs
+{{packageExecutor}} @podosoft/podokit dev exec api {{apiRun}} migration:run
+{{packageExecutor}} @podosoft/podokit dev down
 ```
 
 `dev watch` reads `.podokit/manifest.json` and automatically activates `cache`,
@@ -41,7 +41,7 @@ Watch attached.
 You can still activate an additional Compose profile explicitly:
 
 ```bash
-npx @podosoft/podokit dev watch --profile dev
+{{packageExecutor}} @podosoft/podokit dev watch --profile dev
 ```
 
 Explicit profile flags are preserved for other lifecycle commands. `dev down`
@@ -71,12 +71,12 @@ entity under `apps/api/src`, register it in `src/database/data-source.ts`, then
 generate and run a migration:
 
 ```bash
-{{packageManager}} run migration:generate -w {{projectName}}-api -- src/migrations/Init
-{{packageManager}} run migration:run -w {{projectName}}-api
+{{apiRun}} migration:generate -- src/migrations/Init
+{{apiRun}} migration:run
 ```
 
 Want a worked example? Generate the `todo` template instead:
-`npx @podosoft/podokit create my-app --template todo`.
+`{{packageExecutor}} @podosoft/podokit create my-app --template todo --runtime {{runtime}}`.
 
 For multi-project routing, container profiles, migrations, and OAuth over a
 stable HTTPS tunnel, see the PodoKit [development guide](https://github.com/podosoft-dev/podokit/blob/main/docs/development.md).
@@ -88,9 +88,9 @@ route every public path through the web proxy. For a managed release on an
 existing cluster, initialize an application-owned profile:
 
 ```bash
-npx @podosoft/podokit deploy init --profile production --context production --host app.example.com
-npx @podosoft/podokit deploy doctor --profile production
-npx @podosoft/podokit deploy plan --profile production --release v1.2.3
+{{packageExecutor}} @podosoft/podokit deploy init --profile production --context production --host app.example.com
+{{packageExecutor}} @podosoft/podokit deploy doctor --profile production
+{{packageExecutor}} @podosoft/podokit deploy plan --profile production --release v1.2.3
 ```
 
 Use existing Kubernetes Secrets and never commit their values. See the PodoKit

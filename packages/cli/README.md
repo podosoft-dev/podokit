@@ -6,6 +6,8 @@ Stop rewriting the same backend bootstrap, frontend setup, environment config, h
 
 ## Quick start
 
+Node.js with npm remains the default:
+
 ```bash
 npx @podosoft/podokit create my-app
 cd my-app
@@ -14,12 +16,24 @@ cp .env.example .env
 npx @podosoft/podokit dev watch
 ```
 
+For the supported Bun 1.4.0 profile:
+
+```bash
+bunx --bun @podosoft/podokit create my-app --runtime bun
+cd my-app
+bun install
+cp .env.example .env
+bunx --bun @podosoft/podokit dev watch
+```
+
 Open **http://my-app.localhost**. The first project starts one user-level
 Traefik gateway on loopback port 80; later projects reuse it and route by
 hostname. Stop this project with `npx @podosoft/podokit dev down`. The traditional
 `npm run dev` loop remains available on web port 5001 and API port 5002.
 
-When run in a terminal, `podo create` lists the templates with descriptions and asks which one (and which package manager) to use. Pass flags (or `--yes`) to skip the prompts.
+When run in a terminal, `podo create` lists the templates with descriptions and
+asks which runtime and package manager to use. Pass flags (or `--yes`) to skip
+the prompts.
 
 The `todo` template (`--template todo`) generates a working todo app (SvelteKit UI + NestJS API + PostgreSQL) with Swagger docs:
 
@@ -36,6 +50,7 @@ The `todo` template (`--template todo`) generates a working todo app (SvelteKit 
 | `podo doctor` | Check framework versions against the supported ranges |
 | `podo locale <command>` | Add, validate, activate, deactivate, or list JSON locales |
 | `podo update [--apply]` | Preview (or apply) what a version update would change |
+| `podo runtime set <node\|bun> [--apply]` | Preview or apply an atomic runtime conversion |
 | `podo eject <path…>` | Take ownership of a managed file so updates skip it |
 | `podo dev <action>` | Watch, inspect, execute in, or stop a container stack behind the shared `*.localhost` gateway |
 | `podo deploy <action>` | Plan, apply, verify, or roll back an exact-image Helm release |
@@ -49,9 +64,10 @@ Options:
   --template <t>   Template to scaffold (default: fullstack-nest-svelte)
                      - fullstack-nest-svelte : clean NestJS + SvelteKit starter
                      - todo                  : fullstack + a Todo CRUD example
-                     - base                  : minimal npm workspace
+                     - base                  : minimal workspace
   --dir <path>     Target directory (default: ./<name>)
-  --pm <name>      Package manager: npm | pnpm | yarn (default: npm)
+  --runtime <r>    Runtime: node | bun (default: node)
+  --pm <name>      Package manager: npm | pnpm | yarn (Node only; default: npm)
   --no-ai          Skip AI agent guidance (AGENTS.md, CLAUDE.md, editor rules)
   -y, --yes        Skip prompts and accept defaults
   -h, --help       Show help
@@ -74,9 +90,28 @@ npx @podosoft/podokit create my-app
 # Non-interactive, explicit choices
 npx @podosoft/podokit create my-app --template fullstack-nest-svelte --pm pnpm --yes
 
+# Bun 1.4.0 runtime and package manager
+bunx --bun @podosoft/podokit create my-app --template fullstack-nest-svelte --runtime bun --yes
+
 # Minimal workspace
 npx @podosoft/podokit create my-lib --template base --yes
 ```
+
+The interactive flow asks for the runtime before the package manager. Bun uses
+Bun as both runtime and package manager, so `--runtime bun` cannot be combined
+with `--pm`. To convert a generated project later, preview and then apply:
+
+```bash
+podo runtime set bun
+podo runtime set bun --apply
+podo runtime set node --pm npm
+podo runtime set node --pm npm --apply
+```
+
+The conversion updates runtime-managed scripts, Docker and CI files, resolves a
+fresh target lockfile without importing the previous package manager's lock,
+audits dependencies, and runs build, lint, and tests. Any failure restores the
+previous files, lockfile, manifest, and `node_modules`.
 
 ## Add features with modules
 
@@ -135,7 +170,7 @@ my-app/
 │   ├── docker/        # docker-compose (PostgreSQL, Redis)
 │   └── k3s/           # namespace, deployments, service, ingress, secret example
 ├── .env.example
-├── package.json       # npm workspace
+├── package.json       # Node/npm or Bun workspace
 └── README.md
 ```
 

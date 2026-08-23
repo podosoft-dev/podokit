@@ -7,7 +7,8 @@ import {
   loadDeploymentProfile,
 } from "./deploy-profile";
 import { renderDeployment } from "./deploy-render";
-import { initLockfile } from "./lockfile";
+import { initLockfile, readManifest, writeManifest } from "./lockfile";
+import { resolveToolchain } from "./toolchain";
 
 const created: string[] = [];
 const rolloutAnnotation = "podokit.example.com/rollout-state-checksum";
@@ -179,6 +180,19 @@ describe("deployment migration command", () => {
 
     expect(readFileSync(runtime.migrationManifest, "utf8")).toContain(
       "command: [node, dist/migrate]",
+    );
+  });
+
+  it("uses Bun for the default migration in a Bun project", () => {
+    const { root, profile } = initializedProfile();
+    const manifest = readManifest(root);
+    if (!manifest) throw new Error("expected manifest");
+    writeManifest(root, { ...manifest, toolchain: resolveToolchain("bun") });
+
+    const runtime = renderDeployment(root, "production", profile, "v1.2.3");
+
+    expect(readFileSync(runtime.migrationManifest, "utf8")).toContain(
+      "command: [bun, run, migrate:all]",
     );
   });
 });

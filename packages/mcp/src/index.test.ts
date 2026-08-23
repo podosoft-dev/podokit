@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -70,6 +70,21 @@ describe("podokit-mcp server", () => {
     expect(r.isError ?? false).toBe(false);
     expect(existsSync(join(target, "package.json"))).toBe(true);
     expect(existsSync(join(target, ".podokit"))).toBe(true);
+  });
+
+  it("create_project scaffolds the pinned Bun profile", async () => {
+    const target = mkdtempSync(join(tmpdir(), "mcp-create-bun-")) + "/blog";
+    tmpDirs.push(target);
+    const r = (await client.callTool({
+      name: "create_project",
+      arguments: { name: "blog", template: "base", runtime: "bun", targetDir: target },
+    })) as TextResult;
+    expect(r.isError ?? false).toBe(false);
+    expect(r.content[0].text).toContain("bun install");
+    expect(readFileSync(join(target, "package.json"), "utf8")).toContain('"bun@1.4.0"');
+    expect(readFileSync(join(target, ".podokit", "manifest.json"), "utf8")).toContain(
+      '"runtime": "bun"',
+    );
   });
 
   it("list_templates lists the templates", async () => {
