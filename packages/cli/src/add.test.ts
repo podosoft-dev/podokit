@@ -736,10 +736,19 @@ describe("addModule (auth / better-auth)", () => {
       join(project, "tests/helpers/disposable-users.ts"),
       "utf8",
     );
-    expect(disposableUsers).toContain("async ({ context }, use)");
-    expect(disposableUsers).toContain("const request = context.request");
+    expect(disposableUsers).toContain("async ({ context, playwright }, use, testInfo)");
+    expect(disposableUsers).toContain("playwright.request.newContext");
+    expect(disposableUsers).toContain('testInfo.project.name === "api"');
+    expect(disposableUsers).toContain("ADMIN.email");
     expect(disposableUsers).toContain("headers: origin");
-    expect(disposableUsers).not.toContain("signInAdmin");
+    expect(disposableUsers).toContain("if (ownsRequest) await request.dispose()");
+    const impersonationBanner = readFileSync(
+      join(project, "apps/web/src/lib/components/impersonation-banner.svelte"),
+      "utf8",
+    );
+    expect(impersonationBanner).toContain("api.auth.admin.stopImpersonating()");
+    expect(impersonationBanner).toContain('goto("/admin", { invalidateAll: true })');
+    expect(impersonationBanner).not.toContain("error.message");
     const usersCrudSpec = readFileSync(
       join(project, "tests/ui/users-crud.ui.spec.ts"),
       "utf8",

@@ -107,6 +107,13 @@ test("requires dependency readiness only when object storage is configured", () 
   assert.match(source, /\$\{env\.SECONDARY_API_PORT\}\$\{secondaryHealthPath\}/);
 });
 
+test("preserves the audit-log module default in the generated app environment", () => {
+  const source = readFileSync(join(repoRoot, "scripts/e2e-ci.mjs"), "utf8");
+
+  assert.match(source, /"AUDIT_LOG_ENABLED=true"/);
+  assert.match(source, /AUDIT_LOG_ENABLED: "true"/);
+});
+
 test("records named phase durations and a total", () => {
   let clock = 0;
   const output = [];
