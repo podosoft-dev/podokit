@@ -19,5 +19,5 @@ description: Use when adding or changing a SvelteKit page/route in apps/web — 
    skill, added with the admin-dashboard module).
 5. **i18n**: no hardcoded user-facing strings — add keys to
    `apps/web/src/lib/i18n/messages.ts` for **every** locale.
-6. **Verify**: `npm run build -w {{projectName}}-web` (includes `svelte-check`)
+6. **Verify**: `{{webRun}} build` (includes `svelte-check`)
    and add/adjust a Playwright test in `tests/`.

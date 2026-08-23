@@ -1,8 +1,16 @@
 import { existsSync, readdirSync, rmSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import { copyTemplate, type TemplateVars } from "@podosoft/podokit-template-engine";
+import { writeTree, type TemplateVars } from "@podosoft/podokit-template-engine";
 import { DEFAULT_TEMPLATE } from "./templates";
 import { initLockfile } from "./lockfile";
+import { renderProjectTemplate } from "./assemble";
+import {
+  resolveToolchain,
+  toolchainTemplateVars,
+  type NodePackageManager,
+  type Runtime,
+  type Toolchain,
+} from "./toolchain";
 
 /** AI agent guidance files, removed when scaffolding with `--no-ai`. */
 const AI_ARTIFACTS = [
@@ -14,7 +22,7 @@ const AI_ARTIFACTS = [
   ".github/copilot-instructions.md",
 ];
 
-export type PackageManager = "npm" | "pnpm" | "yarn";
+export type PackageManager = NodePackageManager;
 
 export { DEFAULT_TEMPLATE };
 
@@ -29,6 +37,8 @@ export interface CreateOptions {
   targetDir?: string;
   /** Package manager recorded in the generated project. Defaults to `npm`. */
   packageManager?: PackageManager;
+  /** Application runtime. Defaults to Node.js. */
+  runtime?: Runtime;
   /** PodoKit version stamped into the lockfile. Defaults to the CLI version. */
   podokitVersion?: string;
   /** Include AI agent guidance (AGENTS.md, CLAUDE.md, editor rules). Defaults to true. */
@@ -37,7 +47,8 @@ export interface CreateOptions {
 
 export interface CreateResult {
   projectDir: string;
-  packageManager: PackageManager;
+  packageManager: Toolchain["packageManager"];
+  toolchain: Toolchain;
   template: string;
 }
 
@@ -65,7 +76,7 @@ export function create(options: CreateOptions): CreateResult {
   assertValidName(name);
 
   const template = options.template ?? DEFAULT_TEMPLATE;
-  const packageManager = options.packageManager ?? "npm";
+  const toolchain = resolveToolchain(options.runtime, options.packageManager);
   const projectDir = options.targetDir
     ? isAbsolute(options.targetDir)
       ? options.targetDir
@@ -81,8 +92,11 @@ export function create(options: CreateOptions): CreateResult {
     throw new Error(`Template "${template}" not found at ${templateDir}`);
   }
 
-  const vars: TemplateVars = { projectName: name, packageManager };
-  copyTemplate(templateDir, projectDir, vars);
+  const vars: TemplateVars = {
+    projectName: name,
+    ...toolchainTemplateVars(toolchain),
+  };
+  writeTree(renderProjectTemplate(templatesDir, template, vars), projectDir);
 
   if (options.ai === false) {
     for (const artifact of AI_ARTIFACTS) rmSync(join(projectDir, artifact), { recursive: true, force: true });
@@ -90,10 +104,15 @@ export function create(options: CreateOptions): CreateResult {
 
   initLockfile(projectDir, {
     template,
-    packageManager,
-    answers: { projectName: name, packageManager },
+    toolchain,
+    answers: vars,
     version: options.podokitVersion,
   });
 
-  return { projectDir, packageManager, template };
+  return {
+    projectDir,
+    packageManager: toolchain.packageManager,
+    toolchain,
+    template,
+  };
 }

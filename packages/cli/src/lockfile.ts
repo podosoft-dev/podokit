@@ -8,6 +8,13 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { hashContent } from "@podosoft/podokit-template-engine";
+import type { TemplateVars } from "@podosoft/podokit-template-engine";
+import {
+  resolveToolchain,
+  toolchainTemplateVars,
+  type NodePackageManager,
+  type Toolchain,
+} from "./toolchain";
 
 /**
  * The generation lockfile (`.podokit/`) records how a project was assembled so
@@ -15,7 +22,7 @@ import { hashContent } from "@podosoft/podokit-template-engine";
  * ADR-0009 (update mechanism) and ADR-0010 (ownership model).
  */
 
-export const LOCK_SCHEMA_VERSION = 2;
+export const LOCK_SCHEMA_VERSION = 3;
 
 /** File ownership tier. See ADR-0010. */
 export type Tier = "managed" | "assembled" | "owned";
@@ -45,7 +52,10 @@ export interface PodokitManifest {
   schemaVersion: number;
   podokitVersion: string;
   template: string;
-  packageManager: string;
+  /** Runtime and package manager selected for generated and converted projects. */
+  toolchain: Toolchain;
+  /** Legacy schema v2 field, accepted on read and omitted by new manifests. */
+  packageManager?: string;
   /** Render vars / prompt answers, replayed on update (copier-style). */
   answers: Record<string, string>;
   modules: ManifestModule[];
@@ -142,7 +152,17 @@ export function filesLockPath(projectRoot: string): string {
 
 export function readManifest(projectRoot: string): PodokitManifest | null {
   const file = manifestPath(projectRoot);
-  return existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as PodokitManifest) : null;
+  if (!existsSync(file)) return null;
+  const raw = JSON.parse(readFileSync(file, "utf8")) as Omit<PodokitManifest, "toolchain"> & {
+    toolchain?: Toolchain;
+  };
+  if (raw.toolchain) return raw as PodokitManifest;
+  const legacyPackageManager = raw.packageManager;
+  const packageManager: NodePackageManager =
+    legacyPackageManager === "pnpm" || legacyPackageManager === "yarn"
+      ? legacyPackageManager
+      : "npm";
+  return { ...raw, toolchain: resolveToolchain("node", packageManager) };
 }
 
 export function writeManifest(projectRoot: string, manifest: PodokitManifest): void {
@@ -151,6 +171,11 @@ export function writeManifest(projectRoot: string, manifest: PodokitManifest): v
     manifestPath(projectRoot),
     `${JSON.stringify({ ...manifest, schemaVersion: LOCK_SCHEMA_VERSION }, null, 2)}\n`,
   );
+}
+
+/** Complete replay variables, including fields missing from legacy v2 answers. */
+export function manifestTemplateVars(manifest: PodokitManifest): TemplateVars {
+  return { ...manifest.answers, ...toolchainTemplateVars(manifest.toolchain) };
 }
 
 export function writeFilesLock(projectRoot: string, lock: FilesLock): void {
@@ -275,7 +300,9 @@ export function computeDrift(projectRoot: string): Drift {
 
 export interface InitLockOptions {
   template: string;
-  packageManager: string;
+  toolchain?: Toolchain;
+  /** Legacy caller compatibility. New callers should pass toolchain. */
+  packageManager?: string;
   answers: Record<string, string>;
   version?: string;
   ownedGlobs?: string[];
@@ -284,11 +311,16 @@ export interface InitLockOptions {
 /** Write the initial `.podokit/` lockfile for a freshly created project. */
 export function initLockfile(projectRoot: string, options: InitLockOptions): void {
   const ownedGlobs = options.ownedGlobs ?? DEFAULT_OWNED_GLOBS;
+  const legacyPackageManager = options.packageManager;
+  const packageManager: NodePackageManager =
+    legacyPackageManager === "pnpm" || legacyPackageManager === "yarn"
+      ? legacyPackageManager
+      : "npm";
   const manifest: PodokitManifest = {
     schemaVersion: LOCK_SCHEMA_VERSION,
     podokitVersion: options.version ?? podokitVersion(),
     template: options.template,
-    packageManager: options.packageManager,
+    toolchain: options.toolchain ?? resolveToolchain("node", packageManager),
     answers: options.answers,
     modules: [],
     ownedGlobs,

@@ -307,17 +307,31 @@ export function planComposeSync(
  */
 function buildArtifacts(projectRoot: string, runner: CommandRunner): void {
   const manifest = readManifest(projectRoot);
-  const pm = manifest?.packageManager ?? "npm";
+  const pm = manifest?.toolchain.packageManager ?? "npm";
   const packagesDir = join(projectRoot, "packages");
   if (existsSync(packagesDir)) {
     for (const entry of readdirSync(packagesDir).sort()) {
       if (!existsSync(join(packagesDir, entry, "package.json"))) continue;
-      checked(runner, pm, ["run", "build", "--if-present", "--workspace", `packages/${entry}`], false);
+      checked(
+        runner,
+        pm,
+        pm === "bun"
+          ? ["run", "--cwd", `packages/${entry}`, "--if-present", "build"]
+          : ["run", "build", "--if-present", "--workspace", `packages/${entry}`],
+        false,
+      );
     }
   }
   for (const app of ["api", "web"]) {
     if (!existsSync(join(projectRoot, "apps", app, "package.json"))) continue;
-    checked(runner, pm, ["run", "build", "--if-present", "--workspace", `apps/${app}`], false);
+    checked(
+      runner,
+      pm,
+      pm === "bun"
+        ? ["run", "--cwd", `apps/${app}`, "--if-present", "build"]
+        : ["run", "build", "--if-present", "--workspace", `apps/${app}`],
+      false,
+    );
   }
 }
 

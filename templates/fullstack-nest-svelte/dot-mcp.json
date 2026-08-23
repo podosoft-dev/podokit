@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "podokit": {
-      "command": "npx",
-      "args": ["-y", "@podosoft/podokit-mcp"]
+      "command": "{{packageExecutorCommand}}",
+      "args": [{{packageExecutorArgs}}"@podosoft/podokit-mcp"]
     }
   }
 }

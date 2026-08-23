@@ -3,7 +3,7 @@
 Every project created by `podo create` records how it was assembled in a
 `.podokit/` directory (committed to your repo):
 
-- `.podokit/manifest.json` — PodoKit version, template, package manager, the
+- `.podokit/manifest.json` — PodoKit version, template, runtime/toolchain, the
   answers used to render it, and the modules you added.
 - `.podokit/files.lock` — every file's ownership tier and a content hash of what
   PodoKit last wrote, so local edits are detectable.
@@ -66,6 +66,51 @@ replacing application-owned route layouts or public pages.
 
 The dry-run prints a per-file plan (`update` / `add` / `move` / `remove` /
 `conflict`) so there are no surprises.
+
+## Changing the runtime
+
+`podo runtime set` converts the runtime-specific parts of an existing generated
+project without changing its application source. Node/npm is the default;
+PodoKit also supports an exact Bun 1.4.0 profile.
+
+Preview first, then apply the same target:
+
+```bash
+podo runtime set bun
+podo runtime set bun --apply
+
+podo runtime set node --pm npm
+podo runtime set node --pm npm --apply
+```
+
+Node targets also accept `--pm pnpm` or `--pm yarn`. Bun is both the runtime and
+package manager, so it rejects `--pm`. The preview lists runtime-managed file
+changes and every validation command without writing anything.
+
+On apply, PodoKit:
+
+1. requires Bun 1.4.0 exactly, or Node.js 22.22.1 or newer plus the selected
+   package manager;
+2. 3-way merges edited runtime-managed files and stops before mutation if a
+   conflict cannot be resolved cleanly;
+3. snapshots both lockfiles, removes them from the install workspace so the
+   target package manager cannot import stale resolutions, moves the current
+   `node_modules` aside, and generates a fresh target lockfile;
+4. rejects high-severity dependency advisories, then runs the generated build,
+   lint, and test commands;
+5. records the new manifest toolchain only after all gates succeed.
+
+If any command fails, the previous files, manifest, lockfile, and
+`node_modules` are restored. Application-owned source files remain outside the
+conversion scope. Commit the resulting managed-file and lockfile changes
+together after reviewing them. If a required runtime surface was explicitly
+ejected, conversion refuses to rewrite it and reports the path instead of
+creating a mixed toolchain.
+
+Manifest schema v3 stores a structured `toolchain` object with `runtime`,
+`runtimeVersion`, and `packageManager`. Schema-v2 projects are read as Node
+projects using their existing npm/pnpm/yarn selection and are upgraded when a
+write operation succeeds.
 
 ### Module path migrations
 

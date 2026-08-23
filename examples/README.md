@@ -2,7 +2,10 @@
 
 PodoKit generates projects rather than vendoring large example apps, so the
 canonical example is what `podo create` produces. Each example below layers on
-one more feature.
+one more feature. Commands below show the default Node/npm profile. For Bun
+1.4.0, create with `bunx --bun @podosoft/podokit create ... --runtime bun`, use
+`bun install` / `bun run`, run workspace scripts as `bun run --cwd apps/api
+<script>`, and invoke package CLIs with `bunx --bun`.
 
 ## 1. todo (`--template todo`)
 

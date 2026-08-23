@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // PodoKit MCP server (stdio). Wraps the `podo` CLI library + docs so AI coding
 // tools can list/add modules, inspect a project, preview updates, and search
-// the conventions — run locally via `npx @podosoft/podokit-mcp` (no hosting).
+// the conventions — run locally via npx (Node) or bunx --bun (Bun), with no hosting.
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -83,21 +83,34 @@ server.registerTool(
   "create_project",
   {
     description:
-      "Scaffold a new PodoKit project from scratch (= `podo create`). Creates the app files in a new directory; then run `add_module` for features and `npm install`. Use this to start a project in an empty folder.",
+      "Scaffold a new Node or Bun PodoKit project from scratch (= `podo create`). Creates the app files in a new directory; then run `add_module` for features and install with the selected package manager. Use this to start a project in an empty folder.",
     inputSchema: {
       name: z.string().describe("Project name (also the default directory name)"),
       template: z.string().optional().describe("Template: fullstack-nest-svelte (default), todo, or base"),
+      runtime: z.enum(["node", "bun"]).optional().describe("Runtime: node (default) or bun 1.4.0"),
+      packageManager: z
+        .enum(["npm", "pnpm", "yarn"])
+        .optional()
+        .describe("Node package manager; omit for Bun"),
       targetDir: z.string().optional().describe("Where to create it; defaults to <cwd>/<name>"),
       ai: z.boolean().optional().describe("Include AI agent guidance (AGENTS.md, skills, .mcp.json). Default true."),
     },
   },
-  async ({ name, template, targetDir, ai }) => {
+  async ({ name, template, runtime, packageManager, targetDir, ai }) => {
     try {
       const dir = targetDir ?? join(process.cwd(), name);
-      const r = create({ name, template, targetDir: dir, templatesDir: builtinTemplatesDir(), ai });
+      const r = create({
+        name,
+        template,
+        runtime,
+        packageManager,
+        targetDir: dir,
+        templatesDir: builtinTemplatesDir(),
+        ai,
+      });
       return text(
         `Created ${r.template} project "${name}" at ${r.projectDir}.\n` +
-          `Next: add features with add_module (projectDir="${r.projectDir}"), then run \`npm install\` there.`,
+          `Next: add features with add_module (projectDir="${r.projectDir}"), then run \`${r.packageManager} install\` there.`,
       );
     } catch (err) {
       return fail(`create_project failed: ${err instanceof Error ? err.message : String(err)}`);

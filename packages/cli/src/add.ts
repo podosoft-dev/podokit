@@ -6,6 +6,7 @@ import {
   insertAtMarker,
   mergePackageJson,
   renderTemplate,
+  renderTokens,
   type JsonObject,
   type TemplateVars,
 } from "@podosoft/podokit-template-engine";
@@ -17,6 +18,7 @@ import {
   writeManifest,
   type ManifestModuleInput,
 } from "./lockfile";
+import { toolchainTemplateVars } from "./toolchain";
 
 interface Injection {
   file: string;
@@ -325,8 +327,9 @@ export function listModules(
   return [...out].map(([name, description]) => ({ name, description }));
 }
 
-export function readModuleManifest(moduleDir: string): ModuleManifest {
-  return JSON.parse(readFileSync(join(moduleDir, "module.manifest.json"), "utf8")) as ModuleManifest;
+export function readModuleManifest(moduleDir: string, vars?: TemplateVars): ModuleManifest {
+  const source = readFileSync(join(moduleDir, "module.manifest.json"), "utf8");
+  return JSON.parse(vars ? renderTokens(source, vars) : source) as ModuleManifest;
 }
 
 function readJson(path: string): JsonObject {
@@ -435,11 +438,14 @@ function applyModule(
     );
   }
   const moduleDir = resolved.dir;
-  const manifest = readModuleManifest(moduleDir);
-  assertManifestVersion(module, manifest);
-  assertRequiredProjectFiles(projectRoot, module, manifest);
+  const rawManifest = readModuleManifest(moduleDir);
+  assertManifestVersion(module, rawManifest);
+  assertRequiredProjectFiles(projectRoot, module, rawManifest);
 
-  const requiredApps = new Set([manifest.targetApp, ...Object.keys(manifest.packageOverlays ?? {})]);
+  const requiredApps = new Set([
+    rawManifest.targetApp,
+    ...Object.keys(rawManifest.packageOverlays ?? {}),
+  ]);
   const missingApp = [...requiredApps].find(
     (app) => !existsSync(join(projectRoot, "apps", app, "package.json")),
   );
@@ -448,6 +454,14 @@ function applyModule(
       `This does not look like a PodoKit project: ${join("apps", missingApp, "package.json")} not found. Run inside a generated project.`,
     );
   }
+
+  const appName = projectName(projectRoot);
+  const projectManifest = readProjectManifest(projectRoot);
+  const vars: TemplateVars = {
+    projectName: appName,
+    ...(projectManifest ? toolchainTemplateVars(projectManifest.toolchain) : {}),
+  };
+  const manifest = readModuleManifest(moduleDir, vars);
 
   applied.add(module);
 
@@ -468,9 +482,6 @@ function applyModule(
     adopted.push(...result.adopted);
     touched.push(...result.touched);
   }
-
-  const appName = projectName(projectRoot);
-  const vars: TemplateVars = { projectName: appName };
 
   // 1) overlay files
   const filesDir = join(moduleDir, "files");

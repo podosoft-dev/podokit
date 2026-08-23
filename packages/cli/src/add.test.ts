@@ -26,9 +26,9 @@ afterEach(() => {
   for (const dir of created.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-function generate(template: string): string {
+function generate(template: string, runtime?: "node" | "bun"): string {
   const target = join(tmp(), "app");
-  create({ name: "app", template, templatesDir: REPO_TEMPLATES, targetDir: target });
+  create({ name: "app", template, runtime, templatesDir: REPO_TEMPLATES, targetDir: target });
   return target;
 }
 
@@ -459,7 +459,31 @@ describe("addModule (auth / better-auth)", () => {
     };
     expect(apiPkg.dependencies["@nestjs/bullmq"]).toBeDefined();
     expect(apiPkg.scripts["dev:worker"]).toContain("main-worker");
+    expect(readFileSync(join(project, "infra/k3s/worker-deployment.yaml"), "utf8")).toContain(
+      'command: ["node", "dist/main-worker"]',
+    );
     expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).toContain("JobsModule,");
+  });
+
+  it("renders Bun commands into module scripts and worker manifests", () => {
+    const project = generate("fullstack-nest-svelte", "bun");
+    addModule({ projectRoot: project, module: "bullmq", modulesDir: MODULES });
+
+    const apiPkg = JSON.parse(readFileSync(join(project, "apps/api/package.json"), "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    expect(apiPkg.scripts["start:worker"]).toBe("bun dist/main-worker");
+    expect(apiPkg.scripts["dev:worker"]).toBe(
+      "bunx --bun nest start --watch --builder swc --entryFile main-worker",
+    );
+    for (const path of [
+      "infra/k3s/worker-deployment.yaml",
+      "infra/docker/worker.compose.example.yml",
+    ]) {
+      const source = readFileSync(join(project, path), "utf8");
+      expect(source).toContain('command: ["bun", "dist/main-worker"]');
+      expect(source).not.toContain('{{runtimeCommand}}');
+    }
   });
 
   it("adds object-storage-s3 with provider config, env, and a MinIO compose overlay", () => {
@@ -813,14 +837,21 @@ describe("addModule (auth / better-auth)", () => {
       devDependencies: Record<string, string>;
       scripts: Record<string, string>;
     };
-    expect(apiPkg.dependencies["image-size"]).toBe("^2.0.2");
+    expect(apiPkg.dependencies["probe-image-size"]).toBe("^7.4.0");
     expect(apiPkg.devDependencies["@types/multer"]).toBe("^1.4.12");
+    expect(apiPkg.devDependencies["@types/probe-image-size"]).toBe("^7.2.5");
     expect(apiPkg.scripts["admin:bootstrap"]).toBe("node scripts/bootstrap-admin.mjs");
     expect(existsSync(join(project, "apps/api/src/profile-image/profile-image.module.ts"))).toBe(true);
     expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).toContain(
       "ProfileImageModule,",
     );
     expect(existsSync(join(project, "apps/api/scripts/bootstrap-admin.mjs"))).toBe(true);
+    const accountPage = readFileSync(
+      join(project, "apps/web/src/lib/components/account-page.svelte"),
+      "utf8",
+    );
+    expect(accountPage).toContain("unlinkAccount({ accountId: account.accountId })");
+    expect(accountPage).not.toContain("unlinkAccount({ providerId:");
     expect(readManifest(project)?.managedOverrides).toContain(
       ".claude/skills/podokit-configure-auth/**",
     );

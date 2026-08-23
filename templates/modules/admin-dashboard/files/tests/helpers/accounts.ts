@@ -13,7 +13,7 @@ export type Account = { name: string; email: string; password: string };
  * So the constant is a DEFAULT and the environment wins:
  *
  * ```bash
- * E2E_BASE_URL=https://app.example.com E2E_ADMIN_PASSWORD='…' npx playwright test …
+ * E2E_BASE_URL=https://app.example.com E2E_ADMIN_PASSWORD='…' {{packageExecutor}} playwright test …
  * ```
  *
  * Without the override the run fails with `INVALID_EMAIL_OR_PASSWORD`, which is the correct

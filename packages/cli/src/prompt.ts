@@ -1,5 +1,6 @@
 import { type PackageManager } from "./create";
 import { DEFAULT_TEMPLATE, TEMPLATE_NAMES, isKnownTemplate } from "./templates";
+import { isRuntime, resolveToolchain, type Runtime, type Toolchain } from "./toolchain";
 
 export const PACKAGE_MANAGERS: PackageManager[] = ["npm", "pnpm", "yarn"];
 
@@ -9,11 +10,12 @@ export type Ask = (question: string) => Promise<string>;
 export interface RawCreateArgs {
   template?: string;
   pm?: PackageManager;
+  runtime?: Runtime;
 }
 
 export interface ResolvedCreateOptions {
   template: string;
-  packageManager: PackageManager;
+  toolchain: Toolchain;
 }
 
 function isPackageManager(value: string): value is PackageManager {
@@ -42,7 +44,22 @@ export async function resolveCreateOptions(
     throw new Error(`Unknown template "${template}". Choose one of: ${TEMPLATE_NAMES.join(", ")}.`);
   }
 
+  let runtime: string | undefined = args.runtime;
+  if (!runtime && interactive) {
+    const answer = await ask("Runtime (node / bun) [node]: ");
+    runtime = answer || undefined;
+  }
+  runtime = runtime ?? "node";
+  if (!isRuntime(runtime)) {
+    throw new Error('Invalid runtime. Choose one of: node, bun.');
+  }
+
   let pm: string | undefined = args.pm;
+  if (runtime === "bun") {
+    if (pm) throw new Error('Bun runtime requires the "bun" package manager. Remove --pm.');
+    const toolchain = resolveToolchain(runtime);
+    return { template, toolchain };
+  }
   if (!pm && interactive) {
     const answer = await ask(`Package manager (${PACKAGE_MANAGERS.join(" / ")}) [npm]: `);
     pm = answer || undefined;
@@ -52,5 +69,6 @@ export async function resolveCreateOptions(
     throw new Error(`Invalid package manager "${pm}". Choose one of: ${PACKAGE_MANAGERS.join(", ")}.`);
   }
 
-  return { template, packageManager: pm };
+  const toolchain = resolveToolchain(runtime, pm);
+  return { template, toolchain };
 }

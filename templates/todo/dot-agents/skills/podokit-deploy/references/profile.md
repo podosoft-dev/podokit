@@ -7,7 +7,7 @@ The profile at `.podokit/deploy/<name>.json` is application-owned and contains n
 Initialize it with an explicit kubeconfig context:
 
 ```bash
-npx @podosoft/podokit deploy init --profile production --context production --host app.example.com
+{{packageExecutor}} @podosoft/podokit deploy init --profile production --context production --host app.example.com
 ```
 
 Review the target, immutable API/web repositories, exposure, workloads, dependency modes, API/optional web Secret names and required keys, non-sensitive runtime configuration, and verification checks before planning.
@@ -36,7 +36,7 @@ and it is pinned by a fingerprint of the endpoint plus the daemon ID, so repoint
 it at a different host invalidates the profile instead of deploying somewhere else.
 
 ```bash
-npx @podosoft/podokit deploy init \
+{{packageExecutor}} @podosoft/podokit deploy init \
   --profile production \
   --driver docker-compose \
   --context production \

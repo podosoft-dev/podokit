@@ -2,13 +2,19 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { hashContent, threeWayMerge, type VfsTree } from "@podosoft/podokit-template-engine";
+import {
+  hashContent,
+  threeWayMerge,
+  type TemplateVars,
+  type VfsTree,
+} from "@podosoft/podokit-template-engine";
 import { assembleProject } from "./assemble";
 import {
   classifyTier,
   computeFilesLock,
   DEFAULT_OWNED_GLOBS,
   matchGlob,
+  manifestTemplateVars,
   podokitVersion,
   readFilesLock,
   readManifest,
@@ -18,6 +24,7 @@ import {
   type FilesLock,
   type ManifestModule,
 } from "./lockfile";
+import type { Toolchain } from "./toolchain";
 import { NotAProjectError } from "./inspect";
 import { readModuleManifest, resolveModule } from "./add";
 import {
@@ -169,7 +176,20 @@ function targetOwnedGlobs(
  * Build the update plan. `templatesDir` is the installed CLI's template set (the
  * new version); the lock records what PodoKit last wrote (to detect user edits).
  */
-export function planUpdate(projectRoot: string, templatesDir: string): UpdatePlan {
+export interface PlanOptions {
+  /** Replay variables for a toolchain conversion instead of the current answers. */
+  targetAnswers?: TemplateVars;
+  /** Treat normally owned runtime scaffolding as managed for this operation. */
+  forceManagedPaths?: string[];
+  /** Restrict planning to selected paths, used by focused conversions. */
+  onlyPaths?: string[];
+}
+
+export function planUpdate(
+  projectRoot: string,
+  templatesDir: string,
+  options: PlanOptions = {},
+): UpdatePlan {
   const manifest = readManifest(projectRoot);
   const lock = readFilesLock(projectRoot);
   if (!manifest || !lock) throw new NotAProjectError();
@@ -178,7 +198,7 @@ export function planUpdate(projectRoot: string, templatesDir: string): UpdatePla
   const newTree = assembleProject({
     templatesDir,
     template: manifest.template,
-    answers: manifest.answers,
+    answers: options.targetAnswers ?? manifestTemplateVars(manifest),
     modules,
     projectRoot,
   });
@@ -222,6 +242,7 @@ export function planUpdate(projectRoot: string, templatesDir: string): UpdatePla
 
   for (const path of [...paths].sort()) {
     if (movedSources.has(path) || movedTargets.has(path)) continue;
+    if (options.onlyPaths && !options.onlyPaths.some((glob) => matchGlob(path, glob))) continue;
     const locked = lock.files[path];
     const newText = treeText(newTree, path);
     const disk = diskContent(projectRoot, path);
@@ -230,6 +251,7 @@ export function planUpdate(projectRoot: string, templatesDir: string): UpdatePla
     // particular, an exact path recorded by `podo eject` must keep winning over
     // a module's managed override, while managed overrides may still reclaim a
     // path covered only by a broad owned glob.
+    const forceManaged = options.forceManagedPaths?.some((glob) => matchGlob(path, glob)) ?? false;
     const controlledByTarget =
       managedOverrides.some((glob) => matchGlob(path, glob)) ||
       ownedGlobs.some((glob) => matchGlob(path, glob));
@@ -239,7 +261,11 @@ export function planUpdate(projectRoot: string, templatesDir: string): UpdatePla
       ownedGlobs,
       managedOverrides,
     );
-    const tier: Tier = controlledByTarget ? classified : locked?.tier ?? classified;
+    const tier: Tier = forceManaged
+      ? "managed"
+      : controlledByTarget
+        ? classified
+        : locked?.tier ?? classified;
 
     if (tier === "owned") {
       // A file introduced by a newer template or module has no previous lock
@@ -315,6 +341,13 @@ export interface ApplyOptions {
   oldTemplatesDir?: string;
   /** Preinstalled previous external modules. Primarily useful for offline updates. */
   oldExternalModulesRoot?: string;
+  /** Replay variables and manifest value used by a runtime conversion. */
+  targetAnswers?: TemplateVars;
+  targetToolchain?: Toolchain;
+  forceManagedPaths?: string[];
+  onlyPaths?: string[];
+  /** Refuse to write anything when a 3-way merge would leave conflict markers. */
+  abortOnConflict?: boolean;
 }
 
 export interface ApplyResult {
@@ -419,10 +452,17 @@ function updatedFilesLock(
   previous: FilesLock,
   ownedGlobs: string[],
   managedOverrides: string[],
+  onlyPaths?: string[],
 ): FilesLock {
   const next = computeFilesLock(projectRoot, ownedGlobs, managedOverrides);
 
   for (const [path, entry] of Object.entries(next.files)) {
+    if (onlyPaths && !onlyPaths.some((glob) => matchGlob(path, glob))) {
+      const previousEntry = previous.files[path];
+      if (previousEntry) next.files[path] = previousEntry;
+      else delete next.files[path];
+      continue;
+    }
     const newText = treeText(newTree, path);
     if (newText !== null) {
       if (entry.tier !== "owned") {
@@ -480,12 +520,16 @@ export function applyUpdate(
   const manifest = readManifest(projectRoot);
   const previousLock = readFilesLock(projectRoot);
   if (!manifest || !previousLock) throw new NotAProjectError();
-  const plan = planUpdate(projectRoot, templatesDir);
+  const plan = planUpdate(projectRoot, templatesDir, {
+    targetAnswers: options.targetAnswers,
+    forceManagedPaths: options.forceManagedPaths,
+    onlyPaths: options.onlyPaths,
+  });
   const modules = targetModules(projectRoot, templatesDir, manifest.modules);
   const newTree = assembleProject({
     templatesDir,
     template: manifest.template,
-    answers: manifest.answers,
+    answers: options.targetAnswers ?? manifestTemplateVars(manifest),
     modules,
     projectRoot,
   });
@@ -531,12 +575,34 @@ export function applyUpdate(
       oldTree = assembleProject({
         templatesDir: options.oldTemplatesDir,
         template: manifest.template,
-        answers: manifest.answers,
+        answers: manifestTemplateVars(manifest),
         modules: manifest.modules,
         projectRoot: previousModules.root,
       });
     } finally {
       if (previousModules.cleanup) rmSync(previousModules.root, { recursive: true, force: true });
+    }
+  }
+
+  if (options.abortOnConflict) {
+    const unresolved: string[] = [];
+    for (const change of plan.changes) {
+      if (change.action !== "conflict") continue;
+      const next = treeText(newTree, change.path);
+      const base = oldTree ? treeText(oldTree, change.path) : null;
+      const current = diskContent(projectRoot, change.path)?.toString("utf8") ?? null;
+      if (next === null || base === null || current === null) {
+        unresolved.push(change.path);
+        continue;
+      }
+      if (threeWayMerge(base, current, next).conflicts > 0) unresolved.push(change.path);
+    }
+    if (unresolved.length) {
+      throw new Error(
+        `Runtime conversion would conflict with local edits:\n${unresolved
+          .map((path) => `  - ${path}`)
+          .join("\n")}`,
+      );
     }
   }
 
@@ -582,6 +648,7 @@ export function applyUpdate(
       previousLock,
       migratedOwnedGlobs,
       migratedManagedOverrides,
+      options.onlyPaths,
     ),
   );
   const modulesDir = join(templatesDir, "modules");
@@ -612,6 +679,9 @@ export function applyUpdate(
   });
   writeManifest(projectRoot, {
     ...manifest,
+    answers: options.targetAnswers ?? manifestTemplateVars(manifest),
+    toolchain: options.targetToolchain ?? manifest.toolchain,
+    packageManager: undefined,
     ownedGlobs: migratedOwnedGlobs,
     managedOverrides: migratedManagedOverrides,
     modules: refreshedModules,
