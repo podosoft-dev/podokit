@@ -121,14 +121,11 @@ const HEALTH_POLL_INTERVAL_MS = 2_000;
  * What the images ship outside their dependency tree.
  *
  * Every entry mirrors a `COPY --from=build` line in the generated Dockerfiles, which
- * is what makes the copy equivalent to a rebuild for code-only changes. Two entries
- * exist for a reason worth keeping:
- *
- * - `apps/web/server.js` and `apps/web/src/lib/server` ship as SOURCE, outside the
- *   bundle, because the entry point has to run before the adapter does. Syncing only
- *   `build/` would leave a stale entry running new routes.
- * - `packages/*` are copied as real directories rather than the symlinks npm leaves
- *   behind, so their `dist/` is a separate destination from the apps'.
+ * is what makes the copy equivalent to a rebuild for code-only changes. The web
+ * image is different from the API image: the official Bun adapter bundles the web
+ * application and its workspace dependencies into `apps/web/build`, so that one
+ * directory is the complete web payload. API and worker processes still load
+ * workspace package output separately.
  *
  * `node_modules` is deliberately absent: the image installs a production-only,
  * workspace-scoped tree for its own platform, and a developer's tree is neither.
@@ -154,7 +151,7 @@ export function composeSyncArtifacts(projectRoot: string): ComposeSyncArtifact[]
         `packages/${entry}/dist`,
         `/app/packages/${entry}/dist`,
         "directory",
-        ["api", "web", "worker"],
+        ["api", "worker"],
       );
     }
   }
@@ -162,8 +159,6 @@ export function composeSyncArtifacts(projectRoot: string): ComposeSyncArtifact[]
   push("apps/api/dist", "/app/apps/api/dist", "directory", ["api", "worker"]);
   push("apps/api/scripts", "/app/apps/api/scripts", "directory", ["api", "worker"]);
   push("apps/web/build", "/app/apps/web/build", "directory", ["web"]);
-  push("apps/web/server.js", "/app/apps/web/server.js", "file", ["web"]);
-  push("apps/web/src/lib/server", "/app/apps/web/src/lib/server", "directory", ["web"]);
   return artifacts;
 }
 
@@ -178,12 +173,11 @@ export function excludesWithin(artifact: ComposeSyncArtifact, excludes: string[]
 /**
  * Whether the image's dependency tree can still run this code.
  *
- * Only the runtime dependency sets matter: `npm ci --omit=dev` installed what these
- * declare and nothing else, so a change to any of them means the container is
- * missing a package the new code imports -- a failure that surfaces as a crash loop
- * after the restart rather than as a copy error. `devDependencies` are absent from
- * the image by design and a `version` bump changes nothing at runtime, so neither
- * takes part.
+ * Only the runtime dependency sets matter for API and worker images: their package
+ * manager installed what these manifests declare and nothing else, so a change can
+ * leave the container without a package the new code imports. The web image has no
+ * runtime dependency tree; the official Bun adapter includes those dependencies in
+ * the synced build instead. `devDependencies` and package versions do not take part.
  */
 export function runtimeDependenciesOf(manifest: PackageManifest): string {
   return JSON.stringify({
@@ -195,9 +189,9 @@ export function runtimeDependenciesOf(manifest: PackageManifest): string {
 
 /** The manifests whose runtime dependencies a role's container was built from. */
 function manifestPathsFor(projectRoot: string, role: ComposeSyncRole): Array<[string, string]> {
-  const app = role === "web" ? "web" : "api";
+  if (role === "web") return [];
   const pairs: Array<[string, string]> = [
-    [join(projectRoot, "apps", app, "package.json"), `/app/apps/${app}/package.json`],
+    [join(projectRoot, "apps", "api", "package.json"), "/app/apps/api/package.json"],
   ];
   const packagesDir = join(projectRoot, "packages");
   if (existsSync(packagesDir)) {
