@@ -22,11 +22,11 @@
     "tailwind-variants": "^3.2.2"
   },
   "devDependencies": {
-    "@sveltejs/adapter-node": "^5.2.0",
-    "@sveltejs/kit": "^2.8.0",
+    "@sveltejs/adapter-bun": "1.0.0-next.1",
+    "@sveltejs/kit": "3.0.0-next.25",
     "@sveltejs/vite-plugin-svelte": "^7.3.0",
     "@tailwindcss/vite": "^4.0.0",
-    "svelte": "^5.1.0",
+    "svelte": "^5.56.4",
     "svelte-check": "^4.0.0",
     "tailwindcss": "^4.0.0",
     "typesafe-i18n": "^5.26.2",

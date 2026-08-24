@@ -79,6 +79,21 @@ The shared loopback Traefik gateway routes each committed
 `.podokit/dev.json` hostname to its web container. SvelteKit proxies
 `/api/*` internally to Elysia, so browsers use one origin.
 
+If the API exposes a WebSocket endpoint, add its exact path to the same file:
+
+```json
+{
+  "schemaVersion": 1,
+  "hostname": "myapp.localhost",
+  "webSocketPaths": ["/events/ws"]
+}
+```
+
+Only these exact paths are routed directly to the API; all other paths stay on the
+web service. The gateway forwards cookies and proxy headers, but the API must
+authenticate the upgrade request. Add `publicUrl` when a stable HTTPS tunnel sends
+its public `Host` header to the loopback gateway.
+
 `podo dev watch` delegates to Compose Watch. Vite handles web HMR and Bun's
 watch process reloads the Elysia API. Use `podo dev ps`, `logs`, `exec`, and
 `down` for lifecycle operations. Install native dependencies inside the target

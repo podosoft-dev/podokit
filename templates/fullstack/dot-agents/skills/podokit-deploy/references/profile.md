@@ -16,7 +16,9 @@ Review these fields before planning:
 
 - `target`: context, cluster fingerprint, namespace, release
 - `release`: API/web repositories and stable SemVer tag pattern
-- `exposure`: Ingress or NodePort; Ingress routes every public path to web
+- `exposure`: Ingress or NodePort. Ingress routes `/` to web and routes only the
+  exact paths in `webSocketPaths` directly to API. The list is empty by default;
+  root, prefixes, patterns, queries, encoded separators, and traversal are invalid.
 - `workloads`: API/web replicas and resources plus an optional worker
 - `dependencies`: PostgreSQL, Redis, and object storage mode, image, Secret name, and storage
 - `secrets`: API/optional web Secret names and required key names, plus image-pull Secret

@@ -162,6 +162,27 @@ describe("deployment rollout annotations", () => {
   });
 });
 
+describe("deployment ingress routing", () => {
+  it("routes only configured exact WebSocket paths to the API service", () => {
+    const { root, profile } = initializedProfile();
+    profile.exposure.webSocketPaths = ["/events/ws", "/notifications/socket"];
+
+    const manifest = renderDeployment(root, "production", profile, "v1.2.3")
+      .applicationManifest;
+
+    expect(manifest).toMatch(
+      /path: "\/events\/ws"\n\s+pathType: Exact\n\s+backend:\n\s+service:\n\s+name: example-app-api/,
+    );
+    expect(manifest).toMatch(
+      /path: "\/notifications\/socket"\n\s+pathType: Exact\n\s+backend:\n\s+service:\n\s+name: example-app-api/,
+    );
+    expect(manifest).toMatch(
+      /path: \/\n\s+pathType: Prefix\n\s+backend:\n\s+service:\n\s+name: example-app-web/,
+    );
+    expect(manifest.indexOf('path: "/events/ws"')).toBeLessThan(manifest.lastIndexOf("path: /"));
+  });
+});
+
 describe("deployment migration command", () => {
   it("renders the default migration command when the profile omits it", () => {
     const { root, profile } = initializedProfile();

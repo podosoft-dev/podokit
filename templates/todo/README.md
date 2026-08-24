@@ -23,6 +23,11 @@ one user-level Traefik gateway on `127.0.0.1:80`; additional projects reuse it a
 route by that hostname. Even a single app uses
 the same topology, with one route and no project-specific host port.
 
+When the API exposes WebSocket endpoints, add their exact paths to
+`.podokit/dev.json` under `webSocketPaths`. The shared gateway sends only those paths
+directly to the API and leaves every other path on the web app. Add `publicUrl` to the
+same file when an HTTPS tunnel preserves its public `Host` header.
+
 In a second terminal, apply the included Todo migration and use the lifecycle helpers:
 
 ```bash

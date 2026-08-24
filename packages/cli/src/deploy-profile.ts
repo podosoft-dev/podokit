@@ -23,6 +23,7 @@ import {
   validateImageRepository,
   STABLE_SEMVER_TAG_PATTERN,
 } from "./deploy-schema";
+import { parseExactWebSocketPaths } from "./websocket-paths";
 
 export { profileDirectory, profilePath } from "./deploy-schema";
 export type { MigrationProfile, VerificationCheckProfile } from "./deploy-schema";
@@ -82,6 +83,7 @@ export interface DeployProfileV1 {
     host: string;
     ingressClassName: string;
     tlsSecretName: string | null;
+    webSocketPaths: string[];
   };
   workloads: {
     api: WorkloadProfile;
@@ -253,7 +255,7 @@ function parseProfile(value: unknown): DeployProfileV1 {
   );
   assertOnlyKeys(
     exposure,
-    ["mode", "host", "ingressClassName", "tlsSecretName"],
+    ["mode", "host", "ingressClassName", "tlsSecretName", "webSocketPaths"],
     "exposure",
   );
   assertOnlyKeys(workloads, ["api", "web", "worker"], "workloads");
@@ -304,6 +306,13 @@ function parseProfile(value: unknown): DeployProfileV1 {
   validateDnsSubdomain(ingressClassName, "exposure.ingressClassName");
   const tlsSecretName = optionalString(exposure, "tlsSecretName");
   if (tlsSecretName) validateDnsSubdomain(tlsSecretName, "exposure.tlsSecretName");
+  const webSocketPaths = parseExactWebSocketPaths(
+    exposure.webSocketPaths ?? [],
+    "exposure.webSocketPaths",
+  );
+  if (exposureMode === "nodePort" && webSocketPaths.length > 0) {
+    throw new Error("Deployment exposure.webSocketPaths requires exposure.mode ingress.");
+  }
 
   const postgres = parseStatefulDependency(
     requiredRecord(dependencies, "postgres"),
@@ -362,6 +371,7 @@ function parseProfile(value: unknown): DeployProfileV1 {
       host,
       ingressClassName,
       tlsSecretName,
+      webSocketPaths,
     },
     workloads: {
       api: parseWorkload(requiredRecord(workloads, "api"), "workloads.api"),
@@ -469,6 +479,7 @@ export function initializeDeploymentProfile(
       host,
       ingressClassName: "traefik",
       tlsSecretName: null,
+      webSocketPaths: [],
     },
     workloads: {
       api: {

@@ -315,7 +315,10 @@ async function main() {
   run("bun", ["run", "--cwd", "apps/api", "contract"], { cwd: target, env: pgEnv });
 
   step("build web");
-  run("bun", ["run", "--cwd", "apps/web", "build"], { cwd: target });
+  run("bun", ["run", "--cwd", "apps/web", "build"], {
+    cwd: target,
+    env: { ...process.env, PODOKIT_BUILD_ORIGIN: webURL },
+  });
 
   if (!packageSmoke) {
     step("verify protected routes fail closed during a backend outage");

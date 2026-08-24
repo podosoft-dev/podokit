@@ -120,9 +120,13 @@ describe("create (integration against templates)", () => {
       const dockerfile = readFileSync(join(target, `apps/${workspace}/Dockerfile`), "utf8");
       expect(dockerfile).toContain("FROM oven/bun:1.4.0-alpine");
       expect(dockerfile).toContain("RUN bun ci");
-      expect(dockerfile).toContain(
-        `RUN bun install --production --frozen-lockfile --filter './apps/${workspace}'`,
-      );
+      if (workspace === "api") {
+        expect(dockerfile).toContain(
+          "RUN bun install --production --frozen-lockfile --filter './apps/api'",
+        );
+      } else {
+        expect(dockerfile).not.toContain("bun install --production");
+      }
       expect(dockerfile).toContain(`RUN bun run --cwd apps/${workspace} build`);
       expect(dockerfile).not.toContain("bun --cwd");
       expect(dockerfile).not.toContain("FROM node:");
@@ -213,7 +217,14 @@ describe("create (integration against templates)", () => {
     expect(result.template).toBe("fullstack");
     expect(existsSync(join(target, "apps", "api", "src", "main.ts"))).toBe(true);
     expect(existsSync(join(target, "apps", "api", "src", "database", "data-source.ts"))).toBe(true);
-    expect(existsSync(join(target, "apps", "web", "svelte.config.js"))).toBe(true);
+    expect(existsSync(join(target, "apps", "web", "svelte.config.js"))).toBe(false);
+    const viteConfig = readFileSync(join(target, "apps", "web", "vite.config.ts"), "utf8");
+    expect(viteConfig).toContain('import adapter from "@sveltejs/adapter-bun"');
+    expect(viteConfig).toContain("sveltekit({");
+    expect(viteConfig).toContain("preprocess: vitePreprocess()");
+    expect(readFileSync(join(target, "apps", "web", "tsconfig.json"), "utf8")).toContain(
+      '"extends": "$app/tsconfig"',
+    );
     expect(existsSync(join(target, "infra", "k3s", "ingress.yaml"))).toBe(true);
     const gitignore = readFileSync(join(target, ".gitignore"), "utf8");
     expect(gitignore).toContain("playwright/.auth/");
@@ -253,23 +264,30 @@ describe("create (integration against templates)", () => {
       expect(dockerfile).not.toContain("COPY --from=deps /app/node_modules");
       // Local workspace packages compile before the app that imports them.
       expect(dockerfile).toContain('bun run --cwd "$(dirname "$manifest")" --if-present build');
-      // Local workspace packages ship as real directories. node_modules only holds
-      // symlinks to them, and a dangling link fails at boot rather than at build.
-      expect(dockerfile).toContain("COPY --from=build /app/packages ./packages");
       expect(dockerfile).toContain("RUN mkdir -p /app/packages");
-      // The runtime tree comes from prod-deps, never from a stage holding dev deps.
-      expect(dockerfile).toContain("FROM oven/bun:1.4.0-alpine AS prod-deps");
-      expect(dockerfile).toContain("COPY --from=prod-deps /app/node_modules ./node_modules");
       expect(dockerfile).not.toContain("COPY --from=build /app/node_modules");
-      expect(dockerfile).toContain("--frozen-lockfile");
       expect(dockerfile).toContain("HEALTHCHECK");
       if (workspace === "api") {
+        // Local workspace packages ship as real directories. node_modules only holds
+        // symlinks to them, and a dangling link fails at boot rather than at build.
+        expect(dockerfile).toContain("COPY --from=build /app/packages ./packages");
+        // The API runtime tree comes from prod-deps, never from a stage holding dev deps.
+        expect(dockerfile).toContain("FROM oven/bun:1.4.0-alpine AS prod-deps");
+        expect(dockerfile).toContain("COPY --from=prod-deps /app/node_modules ./node_modules");
+        expect(dockerfile).toContain("--frozen-lockfile");
         expect(dockerfile).toContain(
           "COPY --from=build /app/apps/api/scripts ./apps/api/scripts",
         );
         expect(existsSync(join(target, "apps/api/scripts/.keep"))).toBe(true);
       } else {
+        // adapter-bun bundles the production server, so the web runtime needs
+        // neither production node_modules nor workspace source packages.
+        expect(dockerfile).not.toContain("AS prod-deps");
+        expect(dockerfile).not.toContain("/app/node_modules");
+        expect(dockerfile).not.toContain("COPY --from=build /app/packages ./packages");
         expect(dockerfile).toContain("ENV BODY_SIZE_LIMIT=3M");
+        expect(dockerfile).toContain('CMD ["bun", "./build"]');
+        expect(dockerfile).not.toContain("server.js");
       }
     }
     const rootPkg = JSON.parse(readFileSync(join(target, "package.json"), "utf8")) as {
@@ -332,6 +350,9 @@ describe("create (integration against templates)", () => {
     expect(readFileSync(join(target, ".env.docker"), "utf8")).toContain("BACKEND_INTERNAL_URL=http://api:5002");
     expect(readFileSync(join(target, ".env.docker"), "utf8")).toContain("BETTER_AUTH_URL=http://app.localhost");
     expect(readFileSync(join(target, ".podokit", "dev.json"), "utf8")).toContain('"hostname": "app.localhost"');
+    expect(readFileSync(join(target, ".podokit", "dev.json"), "utf8")).toContain(
+      '"webSocketPaths": []',
+    );
     expect(readFileSync(join(target, ".gitignore"), "utf8")).toContain(".podokit/runtime/");
     const backendProxy = readFileSync(
       join(target, "apps", "web", "src", "lib", "server", "backend-proxy.ts"),
@@ -444,9 +465,12 @@ describe("create (integration against templates)", () => {
         readFileSync(join(target, "apps", "web", "package.json"), "utf8"),
       ) as { devDependencies: Record<string, string> };
 
-      expect(rootPkg.overrides["@sveltejs/kit"]?.cookie).toBe("0.7.2");
+      expect(rootPkg.overrides["@sveltejs/kit"]?.cookie).toBe("2.0.1");
       expect(apiPkg.devDependencies["@types/bun"]).toBe("^1.3.9");
       expect(webPkg.devDependencies["@sveltejs/vite-plugin-svelte"]).toBe("^7.3.0");
+      expect(webPkg.devDependencies["@sveltejs/adapter-bun"]).toBe("1.0.0-next.1");
+      expect(webPkg.devDependencies["@sveltejs/adapter-node"]).toBeUndefined();
+      expect(webPkg.devDependencies["@sveltejs/kit"]).toBe("3.0.0-next.25");
       expect(webPkg.devDependencies.vite).toBe("^8.2.1");
     },
   );
