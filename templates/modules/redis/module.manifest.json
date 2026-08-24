@@ -1,31 +1,22 @@
 {
   "name": "redis",
-  "description": "Redis client (ioredis) with get/set/del and publish/subscribe, plus demo cache endpoints.",
+  "description": "Bun native Redis client with get/set/del and publish/subscribe, plus demo cache endpoints.",
   "requires": [],
   "requiredProjectFiles": [
     "apps/api/src/config/redis.connection.ts",
     "apps/api/src/health/readiness.service.ts"
   ],
-  "requiredProjectContents": {
-    "apps/api/src/config/redis.connection.ts": [
-      "connectTimeout?: number;",
-      "commandTimeout?: number;"
-    ]
-  },
   "managedGlobs": [
     "apps/api/src/redis/**",
     "tests/api/redis.api.spec.ts"
   ],
   "targetApp": "api",
-  "dependencies": {
-    "ioredis": "^5.4.1"
-  },
   "env": [
     "# redis uses REDIS_URL or the REDIS_HOST / REDIS_PORT / REDIS_USERNAME / REDIS_PASSWORD / REDIS_DB settings defined above"
   ],
   "inject": [
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:imports", "text": "import { RedisModule } from \"./redis/redis.module\";" },
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:module-imports", "text": "RedisModule," }
+    { "file": "apps/api/src/app.ts", "marker": "// podokit:end:imports", "text": "import { redisModule } from \"./redis/redis.module\";" },
+    { "file": "apps/api/src/app.ts", "marker": "// podokit:end:modules", "text": "redisModule," }
   ],
   "instructions": [
     "Start Redis:  docker compose -f infra/docker/docker-compose.yml up -d",

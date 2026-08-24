@@ -19,7 +19,8 @@ import {
 } from "./deploy-compose";
 import { loadAnyDeploymentProfile, readDeploymentDriver } from "./deploy-driver";
 import { profilePath } from "./deploy-schema";
-import { initLockfile } from "./lockfile";
+import { initLockfile, readManifest, writeManifest } from "./lockfile";
+import { resolveToolchain } from "./toolchain";
 
 const created: string[] = [];
 const API_DIGEST = `sha256:${"1".repeat(64)}`;
@@ -31,8 +32,7 @@ function project(modules: string[] = ["auth"]): string {
   created.push(root);
   mkdirSync(join(root, "apps", "api"), { recursive: true });
   initLockfile(root, {
-    template: "fullstack-nest-svelte",
-    packageManager: "npm",
+    template: "fullstack",
     answers: { projectName: "example-app" },
     version: "0.16.4",
   });
@@ -181,6 +181,17 @@ describe("compose rendering", () => {
     expect(document).toContain(`repo/api@${API_DIGEST}`);
     expect(document).toContain('command: ["npm", "run", "migrate:all"]');
     expect(document).toContain("external: true");
+  });
+
+  it("uses Bun for the default migration in a Bun project", () => {
+    const root = initialized();
+    const manifest = readManifest(root);
+    if (!manifest) throw new Error("expected manifest");
+    writeManifest(root, { ...manifest, toolchain: resolveToolchain("bun") });
+    const profile = composeProfileOf(root);
+    const runtime = renderComposeDeployment(root, "production", profile, "v1.2.3");
+
+    expect(runtime.migrationDocument).toContain('command: ["bun", "run", "migrate:all"]');
   });
 
   it("changes the rollout state when an env file changes", () => {

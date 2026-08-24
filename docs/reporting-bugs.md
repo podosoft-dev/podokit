@@ -25,12 +25,12 @@ cause, which speeds up triage.
 
 - **Reproduction that starts from zero.** The exact commands, from `npx @podosoft/podokit create …`
   onward — including the template, the modules added (`podo add …`), and how you ran it
-  (host `npm run dev` vs. `podo dev`, plus the `.podokit/dev.json` hostname).
+  (host `bun run dev` vs. `podo dev`, plus the `.podokit/dev.json` hostname).
 - **Expected vs. actual**, stated separately.
 - **Evidence, not adjectives.** Paste the failing log line, the browser console/network error,
   the stack trace, or a screenshot. "Doesn't work" is not reproducible; `WebSocket to
   'ws://app.localhost/…' failed` is.
-- **Environment.** OS, Node version, package manager + version, and PodoKit/CLI version
+- **Environment.** OS, runtime + version, package manager + version, and PodoKit/CLI version
   (`podo --version`, or the `@podosoft/podokit*` versions in your lockfile).
 - **A suspected root cause or fix, if you have one** — optional, but it turns a report into a
   head start. Point at the file and line if you can.
@@ -48,10 +48,10 @@ headings — they map directly onto how we triage. Delete the italic hints.
 
 ## Environment
 - PodoKit / CLI version: *e.g. @podosoft/podokit 0.7.0 (`podo --version`)*
-- Template: *fullstack-nest-svelte | todo | base*
+- Template: *fullstack | todo | base*
 - Modules added: *e.g. auth, admin-dashboard — or "none"*
-- Run mode: *host `npm run dev` | `podo dev` (note the local hostname and any HTTPS tunnel)*
-- OS / Node / package manager: *e.g. macOS 15 / Node 22.11 / npm 10*
+- Run mode: *host runtime script | `podo dev` (note the local hostname and any HTTPS tunnel)*
+- OS / runtime / package manager: *e.g. macOS 15 / Bun 1.4.0, or Linux / Bun 1.4.0*
 
 ## Steps to reproduce
 1. *exact command, starting from `npx @podosoft/podokit create …`*

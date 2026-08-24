@@ -1,0 +1,139 @@
+# Build and publish the release images for a tag.
+#
+# `podo deploy` consumes images; it does not build them. This is the other half:
+# tagging a commit produces the two images that `podo deploy apply` then rolls out.
+# It stops at the push, because rolling out requires confirming a plan hash and that
+# approval belongs to a person.
+#
+# ── Which runner, and what it costs ──────────────────────────────────────────────
+#
+# GitHub-hosted runners are free for PUBLIC repositories only. In a PRIVATE
+# repository every minute is metered against the account's included Actions minutes
+# and billed beyond them -- and image builds are the most expensive job most
+# projects run. A self-hosted runner consumes no Actions minutes at all, whatever
+# the repository's visibility.
+#
+# So the runner is a variable rather than a constant:
+#
+#   PODOKIT_RUNNER   repository or organization variable, a JSON array of labels.
+#                    Unset -> ["ubuntu-latest"], which is right for a public
+#                    repository and costs money in a private one.
+#                    Self-hosted example: ["self-hosted","Linux","X64"]
+#
+# Set it before the first tag if this repository is private. Nothing here warns you
+# when you have not: the workflow succeeds either way, and the difference shows up
+# on a bill.
+#
+# ── The other two variables ──────────────────────────────────────────────────────
+#
+#   PODOKIT_DEPLOY_PROFILE   which .podokit/deploy/<name>.json names the image
+#                            repositories. Unset -> production.
+#   PODOKIT_IMAGE_PLATFORM   the architecture the deployment target runs.
+#                            Unset -> linux/amd64. Building for the wrong one
+#                            produces "exec format error" at rollout, after the
+#                            migration has already run.
+#
+# ── Secrets ──────────────────────────────────────────────────────────────────────
+#
+#   REGISTRY_USERNAME / REGISTRY_PASSWORD   credentials for the registry named by
+#   the profile. A robot or deploy account is enough, but note that some registries
+#   refuse to let a robot CREATE a repository -- push the first tag of a new
+#   repository with an account that can, or create it in the registry first.
+
+name: release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  images:
+    # One job builds both images rather than a matrix of two. A self-hosted pool is
+    # usually small, and fanning out here takes runners away from every other
+    # repository that shares it for no wall-clock gain on a multi-core machine.
+    runs-on: ${{ fromJSON(vars.PODOKIT_RUNNER || '["ubuntu-latest"]') }}
+    steps:
+      - uses: actions/checkout@v5
+
+      {{ciSetup}}
+
+      - run: {{ciInstallCommand}}
+
+      # Verify before publishing. An image built from a commit that never passed is
+      # indistinguishable from one that did, once it is in the registry.
+      - run: {{ciLintCommand}}
+      - run: {{ciTestCommand}}
+
+      - name: Read the release target from the deployment profile
+        id: profile
+        run: |
+          {{profileRuntime}} -e '
+            import { readFileSync } from "node:fs";
+            const name = process.env.PROFILE || "production";
+            const path = `.podokit/deploy/${name}.json`;
+            let profile;
+            try {
+              profile = JSON.parse(readFileSync(path, "utf8"));
+            } catch {
+              throw new Error(`No deployment profile at ${path}. Run podo deploy init first.`);
+            }
+            const { apiRepository, webRepository } = profile.release ?? {};
+            if (!apiRepository || !webRepository) {
+              throw new Error(`${path} does not declare release.apiRepository and release.webRepository.`);
+            }
+            // Everything before the first slash is a registry host only when it
+            // looks like one; otherwise the reference is a Docker Hub short name.
+            const first = apiRepository.split("/")[0];
+            const registry = /[.:]/.test(first) ? first : "";
+            const out = [
+              `api=${apiRepository}`,
+              `web=${webRepository}`,
+              `registry=${registry}`,
+              `tag=${process.env.GITHUB_REF_NAME}`,
+            ].join("\n");
+            process.stdout.write(out + "\n");
+          ' >> "$GITHUB_OUTPUT"
+        env:
+          PROFILE: ${{ vars.PODOKIT_DEPLOY_PROFILE }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ steps.profile.outputs.registry }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build and push the API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          platforms: ${{ vars.PODOKIT_IMAGE_PLATFORM || 'linux/amd64' }}
+          push: true
+          tags: ${{ steps.profile.outputs.api }}:${{ steps.profile.outputs.tag }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+
+      - name: Build and push the web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          platforms: ${{ vars.PODOKIT_IMAGE_PLATFORM || 'linux/amd64' }}
+          push: true
+          tags: ${{ steps.profile.outputs.web }}:${{ steps.profile.outputs.tag }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+
+      - name: Report what to deploy
+        run: |
+          echo "Pushed ${{ steps.profile.outputs.api }}:${{ steps.profile.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Pushed ${{ steps.profile.outputs.web }}:${{ steps.profile.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo 'Roll out with `podo deploy plan --profile <name> --release ${{ steps.profile.outputs.tag }}`, then apply the printed hash.' >> "$GITHUB_STEP_SUMMARY"

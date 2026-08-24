@@ -1,213 +1,148 @@
 # Updating a generated project
 
-Every project created by `podo create` records how it was assembled in a
-`.podokit/` directory (committed to your repo):
+PodoKit v1 updates Bun/Elysia v1 projects. It does not convert PodoKit 0.x
+Node/NestJS projects in place.
 
-- `.podokit/manifest.json` — PodoKit version, template, package manager, the
-  answers used to render it, and the modules you added.
-- `.podokit/files.lock` — every file's ownership tier and a content hash of what
-  PodoKit last wrote, so local edits are detectable.
+## Project metadata
 
-## Ownership tiers
+Every generated project commits:
+
+- `.podokit/manifest.json` — PodoKit version, template, Bun toolchain, modules,
+  and rendering answers.
+- `.podokit/files.lock` — ownership tier and generated hash for every tracked
+  file.
 
 | Tier | Meaning | Example |
 |---|---|---|
-| **managed** | PodoKit owns it | `apps/api/src/main.ts`, config |
-| **assembled** | base + module wiring, inside `// podokit:begin…end` fences | `apps/api/src/app.module.ts`, `auth/auth.ts` |
-| **owned** | yours — never touched by tooling | `apps/web/src/routes/**`, `apps/web/src/lib/components/ui/**`, your code |
+| managed | PodoKit owns the file and updates it safely | `apps/api/src/main.ts` |
+| assembled | PodoKit rebuilds fenced registrations from the module set | `apps/api/src/app.ts`, `auth/auth.ts` |
+| owned | Application code; PodoKit never overwrites it | routes, UI primitives, `app.extensions.ts` |
 
-## Read-only commands
-
-Run these inside a generated project:
-
-- `podo status` — PodoKit version, applied modules, file-tier counts, and how
-  many managed files you have edited.
-- `podo diff` — lists the PodoKit-managed files you have edited since
-  generation. Files in the `owned` tier are never reported.
-- `podo doctor` — checks the framework versions your app declares against the
-  ranges the matching PodoKit line supports.
-
-## Updating to a newer PodoKit
-
-`podo update` rebuilds the current PodoKit version of your project **in memory**
-(from the same template, modules, and answers recorded in `.podokit/`) and
-compares it to your working copy, so it can update the toolkit's files while
-keeping your changes.
-
-The target version's module dependency graph is authoritative. If an installed
-module gains a new bundled requirement, the update applies that requirement
-first and records it in `.podokit/manifest.json`; generated imports, providers,
-and package dependencies therefore arrive as one consistent change.
+## Inspect before updating
 
 ```bash
-podo update            # dry-run: report what would change (writes nothing)
-podo update --apply    # apply the changes
+podo status
+podo diff
+podo doctor
+podo update
 ```
 
-What each tier does on `--apply`:
+`podo update` is read-only. It rebuilds the current v1 template and modules in
+memory and prints a per-file plan. `podo doctor` checks declared Elysia, Svelte,
+and Better Auth versions against the supported ranges.
 
-- **managed / assembled** files you have *not* edited are updated to the new
-  version. Assembled files are recomputed from the module set (the
-  `// podokit:begin…end` fences are re-derived, not line-merged).
-- files you *have* edited are **3-way merged**: pass the previous version's
-  templates with `--from <dir>` for a real merge; without a base, an edited file
-  is left untouched and reported as a conflict (never clobbered). Conflicts are
-  written with standard `<<<<<<< / ======= / >>>>>>>` markers for you to resolve.
-- After a clean merge, the lock keeps PodoKit's assembled file as the baseline
-  rather than absorbing your merged lines. Later updates therefore continue to
-  3-way merge those edits instead of treating them as replaceable generated
-  output. Unrelated application files are not implicitly adopted as managed.
-- **owned** files (your routes, components, shadcn UI) are never written.
-
-Starter root layouts render the managed
-`apps/web/src/lib/components/site-runtime.svelte` slot. Modules can add global
-behavior such as branding and runtime themes through that component without
-replacing application-owned route layouts or public pages.
-
-The dry-run prints a per-file plan (`update` / `add` / `move` / `remove` /
-`conflict`) so there are no surprises.
-
-### Module path migrations
-
-Module manifests can declare one-time path migrations when a generated file or
-route group must be renamed. `podo update` expands directory moves in the
-dry-run, preserves locally edited bytes, applies only exact declared text
-replacements, and records the migration ID after a successful apply. It also
-updates matching lockfile paths, `managedOverrides`, and explicit `ownedGlobs`.
-
-The move preflight is atomic: if a destination already exists, a replacement
-does not match its declared count, or an installed external module still ships
-the legacy path, the migration stops before writing anything. Upgrade external
-module packages first, resolve the reported collision, and rerun the dry-run.
-
-The admin-dashboard migration moves its admin-only console shell and all
-`/admin/*` route files from `(app)` to `(admin)`, including application-owned admin pages.
-Non-admin product routes remain in `(app)` and no longer inherit admin chrome.
-
-### Updating external package modules
-
-External module records include `packageName` and `moduleVersion`. Upgrade the
-package first, then use the same dry-run/apply flow:
+Apply only after reviewing the plan:
 
 ```bash
-npm update @podosoft/podokit-module-blog
+podo update --apply
+```
+
+During apply:
+
+- unchanged managed files are replaced with the new generated version;
+- assembled fenced regions are recomputed from the module graph;
+- edited managed files use a 3-way merge when a previous template tree is
+  available;
+- conflicts are written with standard conflict markers and reported;
+- owned files are never modified; and
+- the manifest and lockfile advance only with the applied tree.
+
+The target module graph is authoritative. If a module gains a requirement,
+PodoKit applies the dependency first so services, imports, package dependencies,
+environment examples, and tests arrive together.
+
+## Bun-only v1 boundary
+
+PodoKit v1 manifests declare Bun 1.4.0. The removed `podo runtime set` command
+is not a migration mechanism. A PodoKit 0.x manifest is rejected with a message
+to use the final 0.x CLI:
+
+```bash
+npx @podosoft/podokit@0.17.4 status
+npx @podosoft/podokit@0.17.4 update
+```
+
+This boundary is deliberate. Automatic conversion cannot safely infer custom
+NestJS decorators, guards, interceptors, TypeORM repositories, middleware,
+dynamic modules, or application-specific API semantics. Create a new v1 app
+and migrate domain behavior with explicit endpoint and data-contract tests.
+
+## External package modules
+
+Upgrade an external module with Bun, then preview and apply its managed changes:
+
+```bash
+bun update @podosoft/podokit-module-blog
 podo update
 podo update --apply
 ```
 
-When a PodoKit version update also needs `--from` to merge edited managed files,
-install the target external package versions before applying the update. PodoKit
-uses those installed packages for the target tree and temporarily installs the
-exact versions recorded in the project manifest to reconstruct the merge base:
+The manifest records the package name and installed version. If the package is
+missing from `node_modules`, update fails instead of silently removing its
+files. When a 3-way merge requires a previous external module, registry access
+to that recorded version is required.
+
+## Module path migrations
+
+Module manifests can declare atomic path migrations. PodoKit expands directory
+moves in the preview, preserves edited bytes, applies exact text replacements,
+updates lock paths and ownership globs, and records the migration identifier
+only after success.
+
+The preflight refuses to proceed if a destination exists, a replacement count
+does not match, or an installed external package still ships an incompatible
+layout.
+
+## Removing a module
 
 ```bash
-npm update @podosoft/podokit-module-blog
-podo update --apply --from <previous-podokit-templates>
+podo remove <module>
 ```
 
-Registry access to the recorded external versions is required only when a
-3-way merge needs a previous tree. Clean updates do not fetch a merge base.
+Removal reverses registrations, files, package overlays, and environment
+examples. It refuses to remove a module required by another installed module,
+keeps locally edited files, and never drops database tables.
 
-The update assembler resolves the package from the generated project's
-`node_modules` and retains its root dependency declaration. If the package is
-missing, update stops with a resolution error instead of silently dropping the
-module.
-
-Adding a module does not re-baseline the entire working tree. Existing managed
-file drift keeps its previous hash, and unrelated application files stay outside
-`files.lock`. Only module overlays, package/env merges, injection targets, and
-explicitly adopted paths are added to the module baseline. This keeps a later
-update from overwriting or deleting application work that happened before the
-module was installed.
-
-## Removing a module — `podo remove`
-
-`podo remove <module>` is the inverse of `podo add`: it un-wires the module's
-injections, deletes the files it added, prunes the deps/env it introduced, and
-drops it from the manifest. It won't cascade (a module another one still requires
-is refused), won't delete files you've edited, and never drops database tables.
-See [modules.md](modules.md#removing-a-module) for the details.
-
-## Taking ownership — `podo eject`
-
-If you want to fully own a managed file and stop updates from touching it:
+## Taking ownership
 
 ```bash
-podo eject apps/api/src/main.ts
+podo eject apps/api/src/example.ts
 ```
 
-This flips the file's tier to `owned` and records the path in your project's
-`ownedGlobs` (in `.podokit/manifest.json`), so it **stays owned** even after a
-later `podo add` or `podo update` rebuilds the file tiers. It still shows up in
-`podo diff`, but `podo update` will skip it from then on. Unlike a one-way
-project eject, this is per-file and reversible.
+Eject changes that exact path to the owned tier. Future updates neither restore
+nor overwrite it, even when it is moved or deleted. Use this only when the
+application accepts responsibility for keeping the file compatible.
 
-If an application later moves or deletes that exact file, `podo update` reports
-`explicitly owned — missing or relocated; not restored` and does not recreate
-the original path. This is particularly important for SvelteKit route loaders:
-an ejected loader moved into another route group must not reappear at its old
-URL and create a duplicate route.
+Modules can declare owned presentation paths and managed exceptions. This lets
+public SvelteKit pages remain fully customizable while route loaders, reusable
+logic, or agent workflows continue to receive safe updates.
 
-### Module-owned paths
+## Extending the Elysia application
 
-A module can declare paths it ships as **owned** up front, via `ownedGlobs` in
-its `module.manifest.json`. This is how a module keeps its **public presentation
-pages** freely customizable (owned) while its reusable logic under
-`apps/web/src/lib/<module>/` stays **managed** and keeps receiving updates. When
-you `podo add` such a module, its `ownedGlobs` are merged into your project's
-`ownedGlobs`, so those files are yours to restyle and `podo update` never
-touches them.
-
-### Managed files inside owned areas
-
-Broad areas such as `.claude/**` and `apps/web/src/routes/**` remain user-owned
-by default. A module can declare `managedOverrides` for the exact workflow or
-route behavior it supplies, for example
-`.claude/skills/podokit-configure-auth/**` or a generated
-`+page.server.ts` loader. Presentation files and the application root layout
-remain owned. Managed exceptions receive normal update protection: unchanged
-files update automatically, while local edits require a 3-way merge and are
-never silently replaced. The exception is recorded in
-`.podokit/manifest.json` and removed with the module. A file-level
-`podo eject <path>` still wins over a broad managed override when an application
-chooses to own that generated workflow permanently.
-
-Optional application configuration can also be reserved as an exact owned path.
-For example, `tests/playwright.projects.cjs` adds browser or device projects
-without editing the managed `tests/playwright.config.ts`.
-
-## Overriding providers — `app.extensions.ts`
-
-To change how the backend behaves without editing managed code, use the owned
-slot `apps/api/src/app.extensions.ts`. Export extra modules/providers, or
-override a PodoKit-provided provider by its token:
+`apps/api/src/app.extensions.ts` is application-owned. Register custom services
+or module descriptors there without editing assembled fences:
 
 ```ts
-// apps/api/src/app.extensions.ts
-import type { Provider } from "@nestjs/common";
-import { Mailer } from "./mailer/mailer";
-import { MyMailer } from "./my-mailer";
+import type { PodokitModule, ServiceRegistry } from "./core/services";
 
-export const extensionProviders: Provider[] = [
-  { provide: Mailer, useClass: MyMailer },
-];
+export function configureServices(services: ServiceRegistry): void {
+  // Register or override an application-owned service before startup freezes.
+  void services;
+}
+
+export const extensionModules: PodokitModule[] = [];
 ```
 
-`AppModule` spreads these in *after* the module-wired providers, so a same-token
-override here wins. The file is **owned** — `podo update` never touches it. This
-is the seam for swapping the mailer transport, the contact-form sink, a storage
-adapter, and so on, while still receiving updates to everything else.
+For a new route, create an Elysia plugin, validate inputs with `t`, throw
+`AppException` with a stable code, declare OpenAPI details, register its access
+policy, and add Bun tests plus an API contract entry.
 
-## Framework compatibility
-
-PodoKit ships its reusable pieces as `@podosoft/*` packages that plug into the
-frameworks your app owns. Keep those frameworks within the supported range so
-the extensions match:
+## Compatibility ranges
 
 | Framework | Supported range |
 |---|---|
-| `@nestjs/*` | `^11` |
+| `elysia` | `^1.4` |
 | `svelte` | `^5` |
 | `better-auth` | `>=1.6.23 <1.7` |
 
-`podo doctor` warns when a framework moves outside its range.
+`podo doctor` warns when an application moves outside these ranges.

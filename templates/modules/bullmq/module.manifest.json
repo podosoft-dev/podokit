@@ -7,31 +7,30 @@
   ],
   "targetApp": "api",
   "dependencies": {
-    "@nestjs/bullmq": "^11.0.4",
     "bullmq": "^5.34.0"
   },
   "scripts": {
-    "start:worker": "node dist/main-worker",
-    "dev:worker": "nest start --watch --builder swc --entryFile main-worker"
+    "start:worker": "bun dist/main-worker.js",
+    "dev:worker": "bun --watch src/main-worker.ts"
   },
   "env": [
     "# bullmq uses REDIS_URL or the individual Redis settings defined above"
   ],
   "inject": [
     {
-      "file": "apps/api/src/app.module.ts",
+      "file": "apps/api/src/app.ts",
       "marker": "// podokit:end:imports",
-      "text": "import { JobsModule } from \"./jobs/jobs.module\";"
+      "text": "import { jobsModule } from \"./jobs/jobs.module\";"
     },
     {
-      "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:end:module-imports",
-      "text": "JobsModule,"
+      "file": "apps/api/src/app.ts",
+      "marker": "// podokit:end:modules",
+      "text": "jobsModule,"
     }
   ],
   "instructions": [
     "Ensure Redis is running:  docker compose -f infra/docker/docker-compose.yml up -d",
-    "Run the worker in a separate terminal:  npm run dev:worker -w <app>-api",
+    "Run the worker in a separate terminal:  {{apiRun}} dev:worker{{apiWorkspaceArg}}",
     "Enqueue a job:  curl -XPOST localhost:5002/jobs -H 'content-type: application/json' -d '{\"text\":\"hello\"}'",
     "Check status:   curl localhost:5002/jobs/<id>  (state goes waiting -> active -> completed)",
     "Deploy the worker as its own process: k3s manifest added at infra/k3s/worker-deployment.yaml; Docker Compose example at infra/docker/worker.compose.example.yml"

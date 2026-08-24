@@ -1,7 +1,7 @@
 {
   "name": "@podosoft/podokit",
   "version": "0.17.4",
-  "description": "An opinionated but extensible starter toolkit and CLI for full-stack TypeScript apps with NestJS, SvelteKit, TailwindCSS, shadcn-svelte, Docker, and k3s.",
+  "description": "An opinionated Bun and Elysia full-stack TypeScript starter toolkit and CLI with SvelteKit, TailwindCSS, shadcn-svelte, Docker, and k3s.",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -9,7 +9,8 @@
     "directory": "packages/cli"
   },
   "keywords": [
-    "nestjs",
+    "elysia",
+    "bun",
     "sveltekit",
     "starter",
     "cli",
@@ -39,7 +40,7 @@
     "provenance": true
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/copy-templates.mjs",
+    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.json && node scripts/copy-templates.mjs",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },

@@ -48,7 +48,7 @@ describe("classifyTier", () => {
     expect(classifyTier("apps/web/src/routes/+page.svelte", "anything", DEFAULT_OWNED_GLOBS)).toBe("owned");
   });
   it("assembled when a podokit marker is present", () => {
-    expect(classifyTier("apps/api/src/app.module.ts", "// podokit:module-imports", [])).toBe("assembled");
+    expect(classifyTier("apps/api/src/app.ts", "// podokit:module-imports", [])).toBe("assembled");
   });
   it("managed otherwise", () => {
     expect(classifyTier("apps/api/src/main.ts", "bootstrap()", [])).toBe("managed");
@@ -91,28 +91,41 @@ describe("initLockfile + computeFilesLock", () => {
   it("writes a manifest and a files.lock with classified tiers", () => {
     const root = tmp();
     write(root, "apps/api/src/main.ts", "bootstrap()");
-    write(root, "apps/api/src/app.module.ts", "// podokit:module-imports");
+    write(root, "apps/api/src/app.ts", "// podokit:module-imports");
     write(root, "apps/web/src/routes/+page.svelte", "<h1/>");
 
     initLockfile(root, {
-      template: "fullstack-nest-svelte",
-      packageManager: "npm",
-      answers: { projectName: "app", packageManager: "npm" },
+      template: "fullstack",
+      answers: { projectName: "app" },
       version: "9.9.9",
     });
 
     const manifest = readManifest(root);
     expect(manifest?.podokitVersion).toBe("9.9.9");
-    expect(manifest?.template).toBe("fullstack-nest-svelte");
+    expect(manifest?.template).toBe("fullstack");
     expect(manifest?.modules).toEqual([]);
     expect(manifest?.ownedGlobs).toEqual(DEFAULT_OWNED_GLOBS);
     expect(manifest?.managedOverrides).toEqual([]);
 
     const lock = JSON.parse(readFileSync(join(root, ".podokit/files.lock"), "utf8")) as FilesLock;
     expect(lock.files["apps/api/src/main.ts"].tier).toBe("managed");
-    expect(lock.files["apps/api/src/app.module.ts"].tier).toBe("assembled");
+    expect(lock.files["apps/api/src/app.ts"].tier).toBe("assembled");
     expect(lock.files["apps/web/src/routes/+page.svelte"].tier).toBe("owned");
     expect(lock.files["apps/api/src/main.ts"].outHash).toMatch(/^sha256:/);
+  });
+
+  it("rejects a PodoKit v0 schema with a pinning instruction", () => {
+    const root = tmp();
+    write(root, ".podokit/manifest.json", JSON.stringify({
+      schemaVersion: 2,
+      podokitVersion: "0.17.4",
+      template: "base",
+      packageManager: "pnpm",
+      answers: { projectName: "app", packageManager: "pnpm" },
+      modules: [],
+      ownedGlobs: [],
+    }));
+    expect(() => readManifest(root)).toThrow("@podosoft/podokit@0.17.4");
   });
 });
 
@@ -122,8 +135,7 @@ describe("recordModules", () => {
     write(root, "apps/api/src/main.ts", "x");
     initLockfile(root, {
       template: "base",
-      packageManager: "npm",
-      answers: { projectName: "app", packageManager: "npm" },
+      answers: { projectName: "app" },
       version: "1.0.0",
     });
 
@@ -148,7 +160,7 @@ describe("recordModules", () => {
     const root = tmp();
     write(root, "apps/api/src/main.ts", "x");
     write(root, "apps/web/src/lib/blog/PostCard.svelte", "<p/>");
-    initLockfile(root, { template: "base", packageManager: "npm", answers: {}, version: "1.0.0" });
+    initLockfile(root, { template: "base", answers: {}, version: "1.0.0" });
     // by default a $lib file is managed
     expect(readFilesLock(root)?.files["apps/web/src/lib/blog/PostCard.svelte"].tier).toBe("managed");
 

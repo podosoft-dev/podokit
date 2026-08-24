@@ -16,12 +16,26 @@ import {
 
 export type SmtpConfig = { host: string; port: number; secure: boolean; user?: string; pass?: string; from?: string };
 
-type Row = { key: string; enabled: boolean; config: Record<string, unknown>; secret: string | null; updatedAt: Date };
+type Row = { key: string; enabled: boolean; config: unknown; secret: string | null; updatedAt: Date };
 
 const TTL_MS = 3_000;
 
 function bool(v: unknown, fallback: boolean): boolean {
   return typeof v === "boolean" ? v : fallback;
+}
+
+function object(value: unknown): Record<string, unknown> {
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  if (typeof value === "string") {
+    try {
+      return object(JSON.parse(value) as unknown);
+    } catch {
+      return {};
+    }
+  }
+  return {};
 }
 
 export function createConfigStore(pool: Pool) {
@@ -53,8 +67,9 @@ export function createConfigStore(pool: Pool) {
   }
 
   function oauthFromRow(row: Row): OAuthProviderConfig {
-    const clientId = typeof row.config.clientId === "string" ? row.config.clientId : "";
-    const redirectURI = typeof row.config.redirectURI === "string" ? row.config.redirectURI : undefined;
+    const config = object(row.config);
+    const clientId = typeof config.clientId === "string" ? config.clientId : "";
+    const redirectURI = typeof config.redirectURI === "string" ? config.redirectURI : undefined;
     let clientSecret = "";
     if (row.secret) {
       try {
@@ -93,16 +108,17 @@ export function createConfigStore(pool: Pool) {
     const rs = await rows();
     const env = envAuthConfig();
     const server = rs.find((r) => r.key === "server");
+    const serverConfig = object(server?.config);
     return {
       version: versionOf(rs),
       social: socialFrom(rs),
-      requireEmailVerification: server ? bool(server.config.requireEmailVerification, env.requireEmailVerification) : env.requireEmailVerification,
-      requireSignupApproval: server ? bool(server.config.requireSignupApproval, env.requireSignupApproval) : env.requireSignupApproval,
-      allowDelete: server ? bool(server.config.allowDelete, env.allowDelete) : env.allowDelete,
-      hibp: server ? bool(server.config.hibp, env.hibp) : env.hibp,
-      auditLog: server ? bool(server.config.auditLog, env.auditLog) : env.auditLog,
+      requireEmailVerification: server ? bool(serverConfig.requireEmailVerification, env.requireEmailVerification) : env.requireEmailVerification,
+      requireSignupApproval: server ? bool(serverConfig.requireSignupApproval, env.requireSignupApproval) : env.requireSignupApproval,
+      allowDelete: server ? bool(serverConfig.allowDelete, env.allowDelete) : env.allowDelete,
+      hibp: server ? bool(serverConfig.hibp, env.hibp) : env.hibp,
+      auditLog: server ? bool(serverConfig.auditLog, env.auditLog) : env.auditLog,
       sessionIdleTimeoutMinutes: server
-        ? resolveSessionIdleTimeoutMinutes(server.config.sessionIdleTimeoutMinutes, env.sessionIdleTimeoutMinutes)
+        ? resolveSessionIdleTimeoutMinutes(serverConfig.sessionIdleTimeoutMinutes, env.sessionIdleTimeoutMinutes)
         : env.sessionIdleTimeoutMinutes,
     };
   }
@@ -110,7 +126,8 @@ export function createConfigStore(pool: Pool) {
   /** SMTP transport config for the mailer (DB-first, env fallback). null → no SMTP. */
   async function smtpConfig(): Promise<SmtpConfig | null> {
     const row = (await rows()).find((r) => r.key === "smtp");
-    if (row?.enabled && typeof row.config.host === "string" && row.config.host) {
+    const config = object(row?.config);
+    if (row?.enabled && typeof config.host === "string" && config.host) {
       let pass: string | undefined;
       if (row.secret) {
         try {
@@ -120,12 +137,12 @@ export function createConfigStore(pool: Pool) {
         }
       }
       return {
-        host: row.config.host,
-        port: typeof row.config.port === "number" ? row.config.port : 587,
-        secure: bool(row.config.secure, false),
-        user: typeof row.config.user === "string" ? row.config.user : undefined,
+        host: config.host,
+        port: typeof config.port === "number" ? config.port : 587,
+        secure: bool(config.secure, false),
+        user: typeof config.user === "string" ? config.user : undefined,
         pass,
-        from: typeof row.config.from === "string" ? row.config.from : undefined,
+        from: typeof config.from === "string" ? config.from : undefined,
       };
     }
     if (process.env.SMTP_HOST) {

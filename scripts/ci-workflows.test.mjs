@@ -9,6 +9,13 @@ const ci = readFileSync(resolve(repoRoot, ".github/workflows/ci.yml"), "utf8");
 const e2e = readFileSync(resolve(repoRoot, ".github/workflows/e2e.yml"), "utf8");
 const release = readFileSync(resolve(repoRoot, ".github/workflows/release.yml"), "utf8");
 const version = readFileSync(resolve(repoRoot, ".github/workflows/version.yml"), "utf8");
+const cliPackage = JSON.parse(
+  readFileSync(resolve(repoRoot, "packages/cli/package.json"), "utf8"),
+);
+
+test("cleans removed CLI outputs before packaging", () => {
+  assert.match(cliPackage.scripts.build, /^node scripts\/clean-dist\.mjs && tsc /);
+});
 
 test("cancels superseded CI runs for the same workflow and ref", () => {
   assert.match(ci, /group: \$\{\{ github\.workflow \}\}-\$\{\{ github\.ref \}\}/);
@@ -29,8 +36,9 @@ test("uses package-only verification for the generated Changesets PR", () => {
   assert.match(e2e, /inputs\.mode == 'package-smoke'/);
   assert.match(e2e, /node scripts\/e2e-ci\.mjs --package-smoke/);
   assert.match(e2e, /node scripts\/e2e-ci\.mjs --smoke/);
-  assert.match(e2e, /Cache generated app npm downloads/);
-  assert.match(e2e, /E2E_NPM_CACHE: \/home\/runner\/\.cache\/podokit-e2e-npm/);
+  assert.match(e2e, /Cache generated app Bun downloads/);
+  assert.match(e2e, /E2E_BUN_CACHE: \/home\/runner\/\.bun\/install\/cache/);
+  assert.match(e2e, /bun-version: 1\.4\.0/);
   assert.match(version, /actions: write/);
   assert.match(ci, /node-version: 22\.22\.1/);
   assert.match(release, /node-version: 22\.22\.1/);

@@ -8,12 +8,16 @@ cd my-app
 npx @podosoft/podokit add <module>
 ```
 
+Generated PodoKit v1 applications use Bun 1.4.0. Install dependencies with
+`bun install`, invoke package CLIs with `bunx`, use `bun run` for root scripts,
+and run API scripts as `bun run --cwd apps/api <script>`.
+
 `podo add` (with no module) lists what's available. Modules can depend on other modules — required modules are added automatically. Each module:
 
 - overlays its files into the project,
 - merges its dependencies into the target app's `package.json`,
 - appends any environment variables to `.env.example`,
-- wires itself into `app.module.ts` at marker comments,
+- wires its Elysia plugin and startup services into `app.ts` at marker comments,
 - may declare `ownedGlobs` (paths it ships as user-owned — e.g. public pages you
   restyle — merged into your project so `podo update` never touches them; see
   [updating](updating.md#module-owned-paths)),
@@ -36,7 +40,7 @@ PodoKit can load a module from an installed package named
 root, then add it by its short name:
 
 ```bash
-npm install --save-dev @podosoft/podokit-module-blog
+bun add --dev @podosoft/podokit-module-blog
 podo add blog
 ```
 
@@ -63,10 +67,10 @@ comments; admins can manage all content. Hiding and showing an existing post kee
 its first publication time and public list position.
 
 ```bash
-npm install --save-dev @podosoft/podokit-module-blog
+bun add --dev @podosoft/podokit-module-blog
 podo add blog
-npm install
-npm run migration:run -w <app>-api
+bun install
+bun run --cwd apps/api migration:run
 ```
 
 The module keeps `apps/api/src/blog/**`, reusable `$lib/blog/**`, and its tests
@@ -95,10 +99,10 @@ traffic and key-event reports, and a realtime 30-minute visitor view. It never
 stores raw visitor events in the application database.
 
 ```bash
-npm install --save-dev @podosoft/podokit-module-analytics
+bun add --dev @podosoft/podokit-module-analytics
 podo add analytics
-npm install
-npm run migration:run -w <app>-api
+bun install
+bun run --cwd apps/api migration:run
 ```
 
 Administrators enter a GA4 measurement ID, numeric property ID, and a
@@ -143,16 +147,16 @@ SvelteKit runtime sends one manual `page_view` for each navigation.
 
 Full authentication built on [better-auth](https://better-auth.com): email/password
 and sessions out of the box, plus **OAuth** and **2FA** enabled by configuration.
-Adding it installs a **global auth guard**, so the API is **secure by default** —
+Adding it installs a **global Elysia request guard**, so the API is **secure by default** —
 every route requires a session except `/health` and `/api/auth/*`. Opt routes out
-with `@Public()`; read the current user with `@Session()`.
+by registering a public access policy; read the current user through `AuthService`.
 
 ```bash
-npx @podosoft/podokit add auth
-npm install
+bunx @podosoft/podokit add auth
+bun install
 # create the auth tables (user/session/account/verification)
-npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
-npm run dev
+bunx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
+bun run dev
 
 # sign up (sets a session cookie), then call a protected route
 curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-up/email \
@@ -165,7 +169,7 @@ TypeORM migrations without downloading a CLI or copying TypeScript source into
 the image:
 
 ```bash
-npm run migrate:all -w <app>-api
+bun run --cwd apps/api migrate:all
 ```
 
 The command uses `dist/migrate.js`, exits non-zero on failure, and is suitable
@@ -222,9 +226,9 @@ for a Kubernetes migration Job before a rolling deployment.
   export AUTH_SETUP_ADMIN_PASSWORD="<from-secret-manager>"
   export OAUTH_CLIENT_ID="<provider-client-id>"
   export OAUTH_CLIENT_SECRET="<from-secret-manager>"
-  npm run auth:configure -w <app>-api -- --provider google --require-signup-approval --dry-run
-  npm run auth:configure -w <app>-api -- --provider google --require-signup-approval
-  npm run auth:configure -w <app>-api -- --provider google --check-only
+  bun run --cwd apps/api auth:configure --provider google --require-signup-approval --dry-run
+  bun run --cwd apps/api auth:configure --provider google --require-signup-approval
+  bun run --cwd apps/api auth:configure --provider google --check-only
   ```
 
   The generated `.claude/skills/podokit-configure-auth` skill contains Google, Apple, SMTP relay,
@@ -287,13 +291,13 @@ Needs Redis.
 
 ```bash
 npx @podosoft/podokit add bullmq
-npm install
+bun install
 docker compose -f infra/docker/docker-compose.yml up -d   # postgres + redis
 
 # terminal 1 — API (producer)
-npm run dev
+bun run dev
 # terminal 2 — worker (consumer)
-npm run dev:worker -w my-app-api
+bun run --cwd apps/api dev:worker
 
 curl -XPOST localhost:5002/jobs -H 'content-type: application/json' -d '{"text":"hello"}'
 curl localhost:5002/jobs/<id>   # waiting -> active -> completed
@@ -303,10 +307,11 @@ Without the worker running, jobs stay `waiting`; start the worker and they compl
 
 **Deployment.** The worker is a separate process, so `podo add bullmq` also adds:
 
-- `infra/k3s/worker-deployment.yaml` — runs the API image with `node dist/main-worker` (no Service/Ingress).
+- `infra/k3s/worker-deployment.yaml` — runs the API image with `bun dist/main-worker.js` (no Service/Ingress).
 - `infra/docker/worker.compose.example.yml` — an example worker service for a containerized Compose deployment.
 
-Run it in production as `npm run start:worker` (or the container command `node dist/main-worker`).
+Run it in production as `bun run --cwd apps/api start:worker` (or the container
+command `bun dist/main-worker.js`).
 
 ### `object-storage-s3`
 
@@ -316,11 +321,11 @@ by the `STORAGE_PROVIDER` env var (`minio` or `aws`). Provides a `StorageService
 
 ```bash
 npx @podosoft/podokit add object-storage-s3
-npm install
+bun install
 
 # local dev with MinIO
 docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml up -d
-npm run dev
+bun run dev
 
 curl -XPUT localhost:5002/storage/hello -H 'content-type: application/json' -d '{"content":"hi"}'
 curl localhost:5002/storage/hello            # { key, content }
@@ -332,7 +337,7 @@ curl localhost:5002/storage/hello/presigned  # { url }
 - **MinIO** (default, for dev): `STORAGE_PROVIDER=minio`, `S3_ENDPOINT=http://localhost:9000`, `S3_FORCE_PATH_STYLE=true`, `S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY`.
 - **AWS S3**: `STORAGE_PROVIDER=aws`, remove `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE=false`, real credentials, and a pre-created bucket/region.
 
-The same `@aws-sdk/client-s3` code path serves both — only configuration differs.
+The same native `Bun.S3Client` code path serves both — only configuration differs.
 The module registers a bucket probe with `/health/ready`, so an unavailable or
 unauthorized bucket removes the API pod from service without failing liveness.
 
@@ -344,9 +349,9 @@ adds it automatically if it is not already present.
 
 ```bash
 npx @podosoft/podokit add file-upload   # also adds object-storage-s3
-npm install
+bun install
 docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml up -d
-npm run dev
+bun run dev
 
 curl -F 'file=@./photo.png' localhost:5002/files
 # → { key, url }  (url is a presigned download link)
@@ -360,7 +365,7 @@ global, so any module (for example a queue processor) can broadcast updates.
 
 ```bash
 npx @podosoft/podokit add sse
-npm run dev
+bun run dev
 
 # terminal 1 — stream
 curl -N localhost:5002/events/stream
@@ -383,9 +388,10 @@ hints; clients must reload authoritative state after reconnecting.
 
 ### `redis`
 
-A Redis client ([ioredis](https://github.com/redis/ioredis)) with `get`/`set`/`del`
-and `publish`/`subscribe`, exposed as a global `RedisService`, plus demo `/cache`
-endpoints.
+Bun's native Redis client with `get`/`set`/`del` and `publish`/`subscribe`,
+exposed as a shared `RedisService`, plus demo `/cache` endpoints. BullMQ retains
+its own transitive `ioredis` connection because that is BullMQ's supported
+transport.
 
 For production, prefer an authenticated `REDIS_URL`. `REDIS_USERNAME`,
 `REDIS_PASSWORD`, `REDIS_DB`, and `REDIS_TLS=true` are also supported with the
@@ -395,9 +401,9 @@ configuration without logging credentials.
 
 ```bash
 npx @podosoft/podokit add redis
-npm install
+bun install
 docker compose -f infra/docker/docker-compose.yml up -d   # redis
-npm run dev
+bun run dev
 
 curl -XPUT localhost:5002/cache/greeting -H 'content-type: application/json' -d '{"value":"hi","ttl":60}'
 curl localhost:5002/cache/greeting   # { key, value }
@@ -412,11 +418,11 @@ production pattern for pushing worker progress to the browser across processes.
 
 ```bash
 npx @podosoft/podokit add job-progress   # also adds bullmq, sse, redis
-npm install
+bun install
 docker compose -f infra/docker/docker-compose.yml up -d   # postgres + redis
 
-npm run dev                          # terminal 1 — API
-npm run dev:worker -w my-app-api     # terminal 2 — worker
+bun run dev                          # terminal 1 — API
+bun run --cwd apps/api dev:worker    # terminal 2 — worker
 
 curl -N localhost:5002/events/stream                                             # terminal 3 — watch
 curl -XPOST localhost:5002/progress -H 'content-type: application/json' -d '{"steps":5}'
@@ -425,25 +431,25 @@ curl -XPOST localhost:5002/progress -H 'content-type: application/json' -d '{"st
 
 ### `logging`
 
-Structured request logging with [nestjs-pino](https://github.com/iamolegga/nestjs-pino):
-every HTTP request is logged with a per-request **correlation id** (`x-request-id`,
-honored from the inbound header and echoed back). Pretty single-line logs in dev,
-JSON in production.
+Structured request logging with [pino](https://getpino.io/): every Elysia request
+is logged with a per-request **correlation id** (`x-request-id`, honored from the
+inbound header and echoed back). Logs are pretty single-line records in
+development and JSON in production.
 
 ```bash
 npx @podosoft/podokit add logging
-npm install
-npm run dev
+bun install
+bun run dev
 curl localhost:5002/health   # watch the API log a structured "request completed" line
 ```
 
-Set `LOG_LEVEL` (`debug|info|warn|error`) in `.env`. To route Nest's own logs
-through pino as well, create the app with `{ bufferLogs: true }` and call
-`app.useLogger(app.get(Logger))` in `main.ts`.
+Set `LOG_LEVEL` (`debug|info|warn|error`) in `.env`. The module replaces the
+startup registry's logger before the Elysia application is assembled, so startup,
+request, and module logs use the same pino instance.
 
 ### `audit-log`
 
-Audit logging built on `auth` (added automatically). A **global interceptor**
+Audit logging built on `auth` (added automatically). A **global Elysia hook**
 records every mutating request (POST/PUT/PATCH/DELETE) to an `audit_logs` table
 with the **acting user**, method, path, and status. Read recent entries at
 `/audit-logs`. On/off is an **admin toggle on the Settings page** (stored in the
@@ -452,11 +458,11 @@ until an admin sets it (leave it `true` so the trail is on out of the box).
 
 ```bash
 npx @podosoft/podokit add audit-log   # also adds auth
-npm install
+bun install
 docker compose -f infra/docker/docker-compose.yml up -d
-npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
-npm run migration:run -w my-app-api   # creates audit_logs
-npm run dev
+bunx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
+bun run --cwd apps/api migration:run   # creates audit_logs
+bun run dev
 
 # sign in, make a change, then see who did it
 curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-up/email \
@@ -467,8 +473,8 @@ curl -b cookies.txt localhost:5002/audit-logs   # [{ userId, method:"POST", path
 
 ### `rate-limit`
 
-Rate limiting with [`@nestjs/throttler`](https://docs.nestjs.com/security/rate-limiting)
-backed by **Redis**, with `auth` and `api-key-auth` added automatically. Counters
+Rate limiting with a native Elysia request guard backed by **Redis**, with `auth`
+and `api-key-auth` added automatically. Counters
 are selected by authenticated user first, then a validated `X-API-Key`, then the
 trusted-proxy client address. Every identity is domain-separated and SHA-256
 hashed before it becomes a Redis key. The limit holds across API replicas.
@@ -477,9 +483,9 @@ excluded so orchestrator probes cannot consume the application request quota.
 
 ```bash
 npx @podosoft/podokit add rate-limit   # also adds redis, auth, and api-key-auth
-npm install
+bun install
 docker compose -f infra/docker/docker-compose.yml up -d
-npm run dev
+bun run dev
 # with RATE_LIMIT_MAX low, repeated requests return 429 once the window is exceeded
 ```
 
@@ -489,32 +495,27 @@ Configure these with `RATE_LIMIT_*`. Set `RATE_LIMIT_TRUSTED_PROXY_HOPS` to the
 exact number of proxies that replace or append the configured header; keep it at
 0 when the API accepts direct traffic. Malformed or incomplete forwarding chains
 fall back to the direct peer instead of trusting attacker input.
+Set a distinct `RATE_LIMIT_KEY_PREFIX` for deployments that share the same Redis
+database so their counters remain isolated. The default is
+`podokit:rate-limit`.
 
 Exceeded limits return HTTP 429 with `RATE_LIMIT_EXCEEDED` and `Retry-After`.
 Redis errors or the bounded storage timeout return HTTP 503 with
 `RATE_LIMIT_UNAVAILABLE`, also with `Retry-After`. Applications with another
-validated machine-key source can provide `RateLimitIdentityExtension` from the
-owned `app.extensions.ts` file:
+validated machine-key source can wrap or replace the rate-limit guard from the
+owned `app.extensions.ts` file. Register application services in
+`configureServices()` and append application Elysia plugins to
+`extensionModules`.
 
-```ts
-export const extensionProviders: Provider[] = [
-  {
-    provide: RateLimitIdentityExtension,
-    useClass: ApplicationRateLimitIdentityExtension,
-  },
-];
-```
-
-The extension returns a stable internal identity only after application-specific
-validation. Keep the one `RateLimitModule` import managed by PodoKit; do not import
-a second module from `app.extensions.ts`.
+Keep the managed `rateLimitModule` registered once. Application-specific identity
+code must validate the credential before producing a stable internal identifier.
 
 ### `api-key-auth`
 
-API-key authentication for **machine/service clients** (`X-API-Key`), separate from
-user sessions. Provides an `ApiKeyGuard` and an `@ApiKeyProtected()` decorator that
-opens a route to key holders (it bypasses the user-session guard and requires a valid
-key instead). Requires `auth` (auto-added).
+API-key authentication for **machine/service clients** (`X-API-Key`), separate
+from user sessions. The module registers an `api-key` access policy and validates
+the header with `ApiKeyVerifier`; routes using that policy bypass the user-session
+guard and require a valid machine key. Requires `auth` (auto-added).
 
 ```bash
 npx @podosoft/podokit add api-key-auth   # also adds auth
@@ -522,9 +523,10 @@ npx @podosoft/podokit add api-key-auth   # also adds auth
 curl -H 'x-api-key: key1' localhost:5002/machine/ping   # { ok: true, via: "api-key" }
 ```
 
-Protect your own machine routes with `@ApiKeyProtected()`. The exported
-`ApiKeyVerifier` hashes the configured allowlist and supplied key with SHA-256 before
-using a fixed-length, constant-time comparison.
+Protect your own machine routes by registering their method/path with
+`ACCESS_POLICY` as `api-key`, then call `requireApiKey()` in the route. The
+exported `ApiKeyVerifier` hashes the configured allowlist and supplied key with
+SHA-256 before using a fixed-length, constant-time comparison.
 
 > **`api-key-auth` vs. personal API keys.** These solve different problems — pick by
 > who holds the key:
@@ -560,18 +562,18 @@ different protected group must call
 
 ```bash
 npx @podosoft/podokit add admin-dashboard   # also adds auth
-npm install
+bun install
 docker compose -f infra/docker/docker-compose.yml up -d
 # Set ADMIN_EMAILS in the deployment environment, then build and migrate.
-npm run build
-npm run migrate:all -w my-app-api
+bun run build
+bun run --cwd apps/api migrate:all
 
 # Inject these only for the bootstrap command; do not save the password in Git
 # or a long-lived deployment secret.
 export ADMIN_BOOTSTRAP_EMAIL="admin@example.com"
 IFS= read -r -s ADMIN_BOOTSTRAP_PASSWORD && export ADMIN_BOOTSTRAP_PASSWORD
-npm run admin:bootstrap -w my-app-api -- --dry-run
-npm run admin:bootstrap -w my-app-api
+bun run --cwd apps/api admin:bootstrap --dry-run
+bun run --cwd apps/api admin:bootstrap
 unset ADMIN_BOOTSTRAP_PASSWORD
 ```
 
@@ -677,7 +679,7 @@ runtime — no rebuild, no DB migration (settings live in the existing
   `$lib/components/site-runtime.svelte`. The application-owned root layout keeps
   this stable runtime slot while public route content remains untouched. Clearing
   the theme removes the stylesheet so `app.css` defaults win.
-- **Validation** — the site-settings controller whitelists `themePreset`
+- **Validation** — the site-settings Elysia plugin whitelists `themePreset`
   (name regex), `themeRadius` (0–4 rem) and `themeOverrides` (known token keys +
   hex values only) to prevent CSS injection.
 - **App-owned tokens** — only the 9 base tokens are themeable. Tokens an app
@@ -713,7 +715,7 @@ Guard your own routes by permission instead of by role — the server is authori
 const { success } = await auth.api.userHasPermission({
   body: { userId: session.user.id, permissions: { invoice: ["issue"] } },
 });
-if (!success) throw new ForbiddenException();
+if (!success) throw new AppException("PERMISSION_DENIED", "Permission denied.", 403);
 ```
 
 #### Enterprise: OIDC provider & SSO
@@ -760,7 +762,7 @@ provider you have two options, in increasing order of effort:
 SAML is intentionally not wired into the starter (extra dependency, per-IdP config). Add
 it deliberately:
 
-1. `npm i @better-auth/sso` in `apps/api`.
+1. `bun add --cwd apps/api @better-auth/sso`.
 2. Mount the `sso()` plugin in `auth/auth.ts` (an injection target — regenerate or edit the
    assembled file; don't hand-copy the base module over it).
 3. Register your IdP: metadata/entrypoint URL, the SP entity id + ACS callback
@@ -786,7 +788,7 @@ suite (it needs a live IdP), so verify a new integration by hand:
 ##### SCIM provisioning (extension point)
 
 SCIM 2.0 (automated user/group provisioning from an IdP) is **not implemented** in the
-starter — it's a documented extension point. To add it, build a NestJS controller that
+starter — it's a documented extension point. To add it, build an Elysia plugin that
 implements the SCIM endpoints your IdP calls (`/scim/v2/Users`, `/scim/v2/Groups`, with
 GET/POST/PUT/PATCH/DELETE), guard it with a bearer token the IdP sends, and map SCIM
 resource attributes to the better-auth user/organization tables (create/update/deactivate
@@ -810,6 +812,42 @@ Organizations (multi-tenant teams) come from better-auth, extended where it fall
 
 Add your own org fields/roles the same way: extend `additionalFields` and the
 `org-permissions.ts` roles, then re-run the better-auth migration.
+
+## API endpoint contract
+
+The paths below are the direct Elysia API paths. Browser requests that pass
+through the generated SvelteKit proxy add the `/api` prefix. For example,
+`GET /account/me` is exposed to browser code as `GET /api/account/me`.
+
+Every generated API build emits an OpenAPI document and
+`bun run --cwd apps/api contract` verifies that the routes for the selected
+template and installed
+modules are present. Better Auth contributes routes dynamically according to its
+enabled plugins; its generated OpenAPI schema is merged into the same document,
+so sign-in methods, callbacks, organization, passkey, two-factor, OAuth provider,
+and other enabled auth endpoints are checked without maintaining a second stale
+hand-written list. Inspect the complete result at `/api-docs` or
+`/api-docs-json`.
+
+| Source | Direct API endpoints |
+| --- | --- |
+| Core | `GET /health`<br>`GET /health/ready` |
+| `todo` template | `GET /todos`<br>`GET /todos/{id}`<br>`POST /todos`<br>`PATCH /todos/{id}`<br>`DELETE /todos/{id}` |
+| `auth` application routes | `GET /account/me`<br>`GET /account/require-2fa`<br>`GET /account/capabilities`<br>`PUT /account/settings`<br>`GET /account/auth-config`<br>`PUT /account/auth-config`<br>`POST /account/org-member`<br>`GET /api/auth/get-session`<br>`POST /api/auth/sign-in/email` |
+| `admin-dashboard` | `GET /site/settings`<br>`PUT /site/settings`<br>`POST /site/favicon`<br>`GET /site/favicon`<br>`POST /account/profile-image`<br>`DELETE /account/profile-image`<br>`GET /profile-images/{fileName}` |
+| `api-key-auth` | `GET /machine/ping` |
+| `audit-log` | `GET /audit-logs` |
+| `analytics` | `GET /analytics/config`<br>`GET /admin/analytics/config`<br>`PUT /admin/analytics/config`<br>`DELETE /admin/analytics/config/credentials`<br>`POST /admin/analytics/config/test`<br>`GET /admin/analytics/report`<br>`GET /admin/analytics/realtime` |
+| `blog` | `GET /blog`<br>`POST /blog/images`<br>`GET /blog/images/{id}`<br>`GET /blog/mine`<br>`GET /blog/manage/{slug}`<br>`GET /blog/{slug}/comments`<br>`GET /blog/{slug}`<br>`POST /blog`<br>`PATCH /blog/{id}`<br>`DELETE /blog/{id}`<br>`POST /blog/{slug}/comments`<br>`PATCH /blog/comments/{id}`<br>`DELETE /blog/comments/{id}`<br>`GET /admin/blog`<br>`GET /admin/blog/{id}`<br>`POST /admin/blog`<br>`PATCH /admin/blog/{id}`<br>`DELETE /admin/blog/{id}` |
+| `bullmq` | `POST /jobs`<br>`GET /jobs/{id}` |
+| `file-upload` | `POST /files`<br>`GET /files/{key}/url` |
+| `job-progress` | `POST /progress` |
+| `object-storage-s3` | `PUT /storage/{key}`<br>`GET /storage/{key}`<br>`GET /storage/{key}/presigned` |
+| `redis` | `PUT /cache/{key}`<br>`GET /cache/{key}` |
+| `sse` | `GET /events/stream`<br>`POST /events` |
+
+`mailer`, `logging`, and `rate-limit` modify shared application behavior and do
+not add endpoints of their own.
 
 ## Where modules come from
 

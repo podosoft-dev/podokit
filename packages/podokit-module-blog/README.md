@@ -8,10 +8,10 @@ SEO policy.
 ## Install
 
 ```bash
-npm install --save-dev @podosoft/podokit-module-blog
+bun add --dev @podosoft/podokit-module-blog
 podo add blog
-npm install
-npm run migration:run -w <app>-api
+bun install
+bun run --cwd apps/api migration:run
 ```
 
 When adopting an existing blog whose backend paths are currently app-owned, use
@@ -20,7 +20,7 @@ When adopting an existing blog whose backend paths are currently app-owned, use
 ## Update
 
 ```bash
-npm update @podosoft/podokit-module-blog
+bun update @podosoft/podokit-module-blog
 podo update
 podo update --apply
 ```

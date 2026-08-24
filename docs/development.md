@@ -1,209 +1,146 @@
 # Local development
 
-How to work on PodoKit itself — templates, modules, and the packages — and
-verify changes in a real generated app **without publishing to npm**.
+How to work on PodoKit templates, modules, and packages, then verify the result
+in a real generated Bun application without publishing to npm.
 
-## Why this is needed
+## Generate a local verification app
 
-The `fullstack-nest-svelte` and `todo` templates depend on
-`@podosoft/podokit-api-client`. Until that package is published, a freshly
-generated app cannot `npm install` it from the registry. For local work we
-point the generated app at the **local** package instead.
-
-## One command
+From the PodoKit monorepo root:
 
 ```bash
-# from the monorepo root
-node scripts/dev-app.mjs /tmp/myapp                      # fullstack, no modules
+node scripts/dev-app.mjs /tmp/myapp
 node scripts/dev-app.mjs /tmp/myapp --add auth,admin-dashboard
 node scripts/dev-app.mjs /tmp/myapp --template todo --no-build
 ```
 
-`scripts/dev-app.mjs`:
-1. builds the monorepo (skip with `--no-build`),
-2. generates the app with the local CLI,
-3. rewrites the web app's `@podosoft/podokit-api-client` dependency to
-   `file:<repo>/packages/api-client` and installs it with `--install-links`
-   (packed like a registry dependency instead of left as a symlink),
-4. applies any `--add` modules,
-5. runs `npm install --install-links`.
-
-## Iterating on the api-client
-
-After editing `packages/api-client`:
+The helper builds the monorepo, runs the local CLI, links unpublished local
+`@podosoft/*` packages, applies requested modules, and runs `bun install`.
+After changing `packages/api-client`, rebuild it in the PodoKit monorepo and
+refresh the generated app:
 
 ```bash
-npm run build -w @podosoft/podokit-api-client   # in the monorepo
-# then, in the generated app:
-npm install --install-links                     # picks up the new local build
+npm run build -w @podosoft/podokit-api-client
+cd /tmp/myapp
+bun install
 ```
 
-Containerized reference apps can resolve unpublished packages from a local
-registry during image builds by setting `PODOKIT_NPM_REGISTRY`. The registry
-must listen on an address reachable from containers (for example,
-`0.0.0.0:4873`, not only `127.0.0.1`). On Docker Desktop, use the host alias
-visible inside the build container, for example:
+The PodoKit monorepo itself continues to use npm and Node-based release tooling.
+Generated PodoKit v1 applications use Bun 1.4.0.
 
-```bash
-PODOKIT_NPM_REGISTRY=http://host.docker.internal:4873 podo dev watch
-```
+Container image builds can resolve unpublished packages through a local
+Verdaccio registry by setting `PODOKIT_NPM_REGISTRY` to a container-reachable
+address. Use this only with a read-open local registry and never pass registry
+tokens through the build argument.
 
-Leave the variable unset for the normal npm registry. Never put registry tokens
-in this build argument; use it only with a read-open local development registry.
+## Run a generated application
 
-## Running the generated app
+Generated applications support two development layouts:
 
-There are **two ways** to run a generated app while you develop. Both are supported;
-pick per situation.
+| | Host process | Containerized (`compose.dev.yaml`) |
+| --- | --- | --- |
+| Web/API | `bun run dev` on the host | Bun runs inside containers |
+| Dependencies | Docker with published host ports | Internal Docker networks |
+| URL | `localhost:5001` and `:5002` | `http://<project>.localhost` |
+| Best fit | One quick local project | Several projects and deployment parity |
 
-| | **A. Host process** (traditional) | **B. Containerized** (`compose.dev.yaml`) |
-|---|---|---|
-| App (web/api) | run on your host (`npm run dev`) | run in containers |
-| Databases | Docker, **host ports published** (5432, 6379, 9000) | Docker, **no host ports** (internal only) |
-| Reach the app | `localhost:5001` / `:5002` | a portless `http://<project>.localhost` origin |
-| Multiple projects at once | ports collide — you remap by hand | one shared loopback gateway routes by hostname |
-| Editors / AI agents | on the host | on the host **or inside the container** (`.devcontainer/`) |
-| Best for | quick single-project work | many projects at once; dev/prod (k3s Traefik) parity |
-
-### A. Host process (traditional)
+### Host process
 
 ```bash
 cd /tmp/myapp
-docker compose -f infra/docker/docker-compose.yml up -d                   # runtime: postgres
-docker compose -f infra/docker/docker-compose.yml --profile dev up -d     # + dev tools (mailpit, sms-sink)
-# if the app uses the auth module, create the auth tables:
-npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
-npm run dev                    # API + web on localhost:5001 / :5002
+docker compose -f infra/docker/docker-compose.yml up -d
+docker compose -f infra/docker/docker-compose.yml --profile dev up -d
+
+# When auth is installed:
+bunx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
+bun run --cwd apps/api migration:run
+
+bun run dev
 ```
 
-Approach **B** is documented under [Containerized development environment](#containerized-development-environment) below.
+The root `dev` script starts the Elysia API on port 5002 and SvelteKit on port
+5001. Redis, MinIO, Mailpit, and the SMS sink are enabled by the generated
+Compose profiles only when required.
 
-### Which services run when (compose profiles)
-
-Services are split by what they're for, using Docker Compose profiles:
-
-| Service | Profile | Needed for |
-|---|---|---|
-| `postgres` | *(none)* | **Runtime** — always started by `docker compose up`. |
-| `redis` | `cache` | **Runtime, conditional** — only the cache/queue modules (redis, bullmq, rate-limit, job-progress, sse). Start host dependencies with `--profile cache`. |
-| `mailpit` | `dev` | **Development/testing** — local email catcher (SMTP 1025, UI/REST 8025). |
-| `sms-sink` | `dev` | **Development/testing** — local SMS catcher; the app posts OTPs here via `SMS_WEBHOOK_URL`, tests read them over REST (port 8095). |
-| `minio` / `minio-init` | `dev` | **Development/testing** — local S3 (object-storage-s3 module overlay); in production point `S3_*` at a real service. |
-
-So `docker compose up` starts only what the app needs to **run**; `--profile dev up` adds the
-tools you need to **develop and test** locally. In production you provide managed Postgres
-(and Redis if used) and real SMTP/SMS/S3 providers — the `dev` tools never ship.
-
-## Containerized development environment
-
-The two commands above run the app (`npm run dev`) on your host and the databases in
-Docker. If you juggle several projects at once, their databases fight over the same host
-ports (5432, 6379, 9000) and the web/api ports collide too. The generated project also
-ships a **fully containerized** dev environment that avoids this: everything runs in
-containers, one user-level gateway owns loopback port 80, and you edit source on your host as usual.
-
-The examples use the short `podo` executable. If the CLI is not installed globally,
-replace it with `npx @podosoft/podokit`, for example
-`npx @podosoft/podokit dev watch`.
+### Containerized development
 
 ```bash
 cd /tmp/myapp
-podo dev watch                                                   # core stack
-# For a detached stack without source watching:
+podo dev watch
+# or use a detached stack:
 podo dev up -d
-# installed modules automatically enable cache/storage/queue as needed
-# first run only — create the tables (in the api container):
-podo dev exec api \
-  npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
-podo dev exec api npm run migration:run -w myapp-api
+
+# Run migrations inside the API container when auth/modules require them:
+podo dev exec api bunx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
+podo dev exec api bun run migration:run
 ```
 
-Open the URL printed by `podo dev watch`. New projects default to
-**http://myapp.localhost**; browsers resolve `*.localhost` to loopback automatically.
+Use `npx @podosoft/podokit dev ...` when `podo` is not installed globally.
+The shared loopback Traefik gateway routes each committed
+`.podokit/dev.json` hostname to its web container. SvelteKit proxies
+`/api/*` internally to Elysia, so browsers use one origin.
 
-What you get:
+`podo dev watch` delegates to Compose Watch. Vite handles web HMR and Bun's
+watch process reloads the Elysia API. Use `podo dev ps`, `logs`, `exec`, and
+`down` for lifecycle operations. Install native dependencies inside the target
+container with `podo dev exec api bun install` when validating Linux-specific
+artifacts.
 
-- **One shared entry point.** `podo dev` creates one socket-free Traefik gateway at
-  `127.0.0.1:80`. Every project joins its external Docker network with a unique alias, while
-  `postgres`, `redis`, `minio`, and `api` remain internal. A hostname collision fails with the
-  path of the project that already owns it.
-- **Project-owned hostname.** Commit `.podokit/dev.json` to select the stable local hostname and,
-  optionally, document an HTTPS development origin. Ports are intentionally not part of this contract:
+OAuth providers should use a stable HTTPS development origin rather than
+registering changing local ports. See
+[OAuth development over HTTPS](oauth-development.md).
 
-  ```json
-  { "schemaVersion": 1, "hostname": "myapp.localhost", "publicUrl": "https://myapp-dev.example.com" }
-  ```
+## Verify template and module changes
 
-- **Single origin.** The browser calls the web origin; SvelteKit
-  proxies `/api/*` to the api container internally. The shared gateway routes the exact host to the web service
-  and compresses eligible HTML, JSON, CSS, and JavaScript responses according to the browser's
-  `Accept-Encoding` header. It mounts only generated file-provider routes; it never mounts the
-  Docker socket.
-- **Live edits.** `podo dev watch` delegates to Compose Watch. The web has
-  instant Vite HMR; an **API** source change restarts the api service (~5s) — the stable
-  approach for NestJS in a container (its in-process watcher doesn't reliably respawn).
-- **Lifecycle helpers.** Use `podo dev up -d` for a detached stack and `podo dev ps`,
-  `podo dev logs`, `podo dev exec`, and
-  `podo dev down`. `down` automatically activates every Compose profile so it also
-  removes optional services that were started by an earlier `watch` command. The last
-  project removed also removes the shared gateway and network.
-- **Profiles match modules** (same names as above): `cache` (redis), `storage` (minio),
-  `queue` (worker). A minimal app needs none; enable the ones your app uses.
-- **Editors & AI agents inside the container.** `.devcontainer/devcontainer.json` lets VS Code
-  ("Reopen in Container") and Dev-Container-aware agents attach *inside* the container, where
-  `node_modules`, TypeScript, and `git` all resolve. Install/upgrade packages in the container
-  (`podo dev exec api npm install …`) so native binaries match Linux.
-
-Prefer the host `npm run dev` loop for quick single-project work; reach for the containerized
-loop when you run several projects at once or want dev to mirror the k3s/Traefik production
-topology. These files (`compose.dev.yaml`, `Dockerfile.dev`, `.devcontainer/`, `.env.docker`,
-`infra/traefik/`) are yours to edit — `podo update` never touches them. The per-project Traefik
-service remains available only through the `podokit-legacy-proxy` profile for compatibility.
-
-OAuth providers should use a stable HTTPS development origin instead of adding local ports to a
-provider client. See [OAuth development over HTTPS](oauth-development.md).
-
-## Verifying template / module changes
-
-The fastest signal without running servers:
+Run static gates in a freshly generated app:
 
 ```bash
 node scripts/dev-app.mjs /tmp/myapp --add <module>
 cd /tmp/myapp
-npm run build -w myapp-api        # NestJS build
-npm run build -w myapp-web        # SvelteKit build
-cd apps/web && npx svelte-kit sync && npx svelte-check --tsconfig ./tsconfig.json
+bun run lint
+bun run test
+bun run build
+bun run --cwd apps/api contract
 ```
 
-For anything auth/session related (login, admin, cookies), do a full local run
-(compose + migrate + `npm run dev`) and exercise the flow in the browser — a
-build passing is necessary but not sufficient.
+The API build, runtime, migrations, worker, and unit tests must use Bun 1.4.0.
+The contract command assembles the actual Elysia application, merges Better
+Auth's generated OpenAPI schema, and verifies every expected template/module
+route.
 
-### The standing verification app
+Playwright is the one Node-runtime test-tool exception. The package officially
+supports Node, and `bunx playwright` intentionally respects its Node shebang.
+Do not add `--bun` when running Playwright.
 
-Keep one generated app running throughout a work session (api `nest start --watch`,
-web `vite dev`, plus `dev-watch` to mirror template edits). It doubles as the target
-for fast spec runs — from the app's `tests/` workspace:
+For authentication, cookies, browser behavior, queues, Redis, object storage,
+or migrations, also exercise the feature against a live generated stack.
+Run the full Verdaccio gate once per ready batch:
 
 ```bash
-E2E_BASE_URL=http://localhost:5001 npx playwright test ui/settings.ui.spec.ts
+node scripts/e2e-ci.mjs --smoke
 ```
 
-Non-injected template files mirror live; when you change an injection target
-(`auth.ts`, `app.module.ts`, a manifest `inject`) regenerate this one app with
-`dev-app.mjs`. Run the Verdaccio smoke (`scripts/e2e-ci.mjs --smoke`) once when the
-PR is ready for review; draft pushes use the fast CI loop — see
-[testing.md](./testing.md).
-The mirror renders `projectName` and `packageManager` from the generated app's
-`.podokit/manifest.json`; it must never copy unresolved template placeholders.
+This publishes the local packages to an isolated registry, creates a fresh app
+through the real CLI path, installs it with Bun, runs migrations and the API
+contract, builds and starts the Bun API/worker and SvelteKit web app, then runs
+the shipped Playwright suite. See [testing.md](testing.md) for the verification
+levels and available modes.
 
 ## Testing
 
-End-to-end/ui tests ship inside every generated app (`tests/` workspace) and run
-with Playwright. See [testing.md](./testing.md) for how to run them
-(`npm run test:e2e`), author them (the `@playwright/cli` loop), and verify faithfully
-against a local Verdaccio registry (`scripts/e2e-ci.mjs`, mirrored by the `e2e` CI
-workflow).
+Generated applications expose:
+
+```bash
+bun run lint
+bun run test
+bun run build
+bun run test:e2e
+bun run test:e2e:api
+bun run test:e2e:ui
+```
+
+Use `E2E_BASE_URL=http://myapp.localhost bun run test:e2e` against a
+containerized development stack. Tests that require external IdPs or production
+cloud credentials must document their manual verification boundary.
 
 ## Data tables
 

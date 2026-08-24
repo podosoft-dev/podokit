@@ -28,7 +28,7 @@ if (!appDir || !existsSync(appDir)) {
   console.error("usage: node scripts/dev-watch.mjs <appDir> [--template <t>] [--module m1,m2] [--once]");
   process.exit(1);
 }
-const template = flag("template") ?? "fullstack-nest-svelte";
+const template = flag("template") ?? "fullstack";
 const requested = (flag("add") ?? flag("module") ?? "").split(",").map((m) => m.trim()).filter(Boolean);
 const appName = appDir.split(sep).pop();
 const modulesRoot = join(repoRoot, "templates", "modules");

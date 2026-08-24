@@ -1,6 +1,6 @@
 # @podosoft/podokit-contracts
 
-Shared contracts for PodoKit apps — the pieces the NestJS backend and the
+Shared contracts for PodoKit apps — the pieces the Elysia backend and the
 SvelteKit frontend must agree on, in one place so they cannot drift:
 
 - `Capabilities` — feature flags and public authentication policy values, including

@@ -79,12 +79,17 @@ test("authenticated authors can upload stable public blog images", async ({
   expect(invalid.status()).toBe(400);
   expect((await invalid.json()).error.code).toBe("BLOG_IMAGE_TYPE_INVALID");
 
-  const anonymous = await request.post("/api/blog/images", {
+  const anonymous = await playwright.request.newContext({
+    baseURL: base,
+    extraHTTPHeaders: { origin: base },
+  });
+  const anonymousUpload = await anonymous.post("/api/blog/images", {
     multipart: {
       file: { name: "pixel.png", mimeType: "image/png", buffer: PNG_PIXEL },
     },
   });
-  expect(anonymous.status()).toBe(401);
+  expect(anonymousUpload.status()).toBe(401);
+  await anonymous.dispose();
   await context.dispose();
 });
 

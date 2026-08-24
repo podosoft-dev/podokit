@@ -5,7 +5,7 @@ of [better-auth](https://better-auth.com) so OAuth providers, SMTP, and
 server-enforced policies, including automatic logout, can be managed at runtime (from an admin Settings page)
 instead of being frozen in environment variables at boot.
 
-It is deliberately free of better-auth and NestJS/TypeORM imports (only
+It is deliberately free of better-auth and web-framework/ORM imports (only
 `node:crypto` and a `pg` peer), so it can be loaded outside dependency injection
 and by the `@better-auth/cli` during migrations.
 

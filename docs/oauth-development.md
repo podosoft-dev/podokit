@@ -23,8 +23,8 @@ export AUTH_SETUP_ADMIN_EMAIL="admin@example.com"
 export AUTH_SETUP_ADMIN_PASSWORD="<from-secret-manager>"
 export OAUTH_CLIENT_ID="<development-client-id>"
 export OAUTH_CLIENT_SECRET="<from-secret-manager>"
-npm run auth:configure -w <app>-api -- --provider google --dry-run
-npm run auth:configure -w <app>-api -- --provider google
+bun run --cwd apps/api auth:configure --provider google --dry-run
+bun run --cwd apps/api auth:configure --provider google
 ```
 
 When credentials are already stored, repair a stale callback without reading or
@@ -32,7 +32,7 @@ replacing the client secret:
 
 ```bash
 AUTH_SETUP_ORIGIN=https://myapp-dev.example.com \
-  npm run auth:configure -w <app>-api -- --provider google --redirect-only
+  bun run --cwd apps/api auth:configure --provider google --redirect-only
 ```
 
 Add both the local and HTTPS origins to the API's `CORS_ORIGIN` and set

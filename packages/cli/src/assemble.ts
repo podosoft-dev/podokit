@@ -8,7 +8,7 @@ import {
   type TemplateVars,
   type VfsTree,
 } from "@podosoft/podokit-template-engine";
-import { modulePackageOverlays, resolveModule, type ModuleManifest } from "./add";
+import { modulePackageOverlays, readModuleManifest, resolveModule } from "./add";
 import type { ManifestModule } from "./lockfile";
 
 /**
@@ -25,10 +25,6 @@ export interface AssembleOptions {
   projectRoot?: string;
 }
 
-function readManifest(moduleDir: string): ModuleManifest {
-  return JSON.parse(readFileSync(join(moduleDir, "module.manifest.json"), "utf8")) as ModuleManifest;
-}
-
 function textOf(tree: VfsTree, path: string): string {
   return String(tree.get(path)?.content ?? "");
 }
@@ -38,7 +34,7 @@ function setText(tree: VfsTree, path: string, content: string): void {
 }
 
 function applyModuleToTree(tree: VfsTree, moduleDir: string, vars: TemplateVars): void {
-  const manifest = readManifest(moduleDir);
+  const manifest = readModuleManifest(moduleDir, vars);
 
   // 1) overlay files (module files override the base)
   const filesDir = join(moduleDir, "files");
@@ -104,7 +100,7 @@ function preserveExternalPackageDependency(
 
 /** Assemble the project tree for a template + ordered modules, in memory. */
 export function assembleProject(options: AssembleOptions): VfsTree {
-  const tree = renderTemplate(join(options.templatesDir, options.template), options.answers);
+  const tree = renderProjectTemplate(options.templatesDir, options.template, options.answers);
   for (const mod of options.modules) {
     const name = typeof mod === "string" ? mod : (mod.packageName ?? mod.name);
     const resolved = resolveModule(
@@ -123,6 +119,38 @@ export function assembleProject(options: AssembleOptions): VfsTree {
     if (typeof mod !== "string" && mod.packageName && options.projectRoot) {
       preserveExternalPackageDependency(tree, options.projectRoot, mod.packageName);
     }
+  }
+  return tree;
+}
+
+/** Render a Bun-native project template. */
+export function renderProjectTemplate(
+  templatesDir: string,
+  template: string,
+  answers: TemplateVars,
+): VfsTree {
+  const tree = template === "todo"
+    ? renderTemplate(join(templatesDir, "fullstack"), answers)
+    : renderTemplate(join(templatesDir, template), answers);
+  if (template === "todo") {
+    for (const [path, file] of renderTemplate(join(templatesDir, template), answers)) {
+      tree.set(path, file);
+    }
+    const appPath = "apps/api/src/app.ts";
+    const appSource = textOf(tree, appPath);
+    setText(
+      tree,
+      appPath,
+      insertAtMarker(
+        insertAtMarker(
+          appSource,
+          "// podokit:end:imports",
+          'import { todoPlugin } from "./todos/todo.plugin";',
+        ),
+        "// podokit:end:modules",
+        '{ name: "todo", plugin: todoPlugin },',
+      ),
+    );
   }
   return tree;
 }

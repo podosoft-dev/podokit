@@ -6,29 +6,32 @@ Follow it so your changes match the project's conventions.
 
 ## Project overview
 
-A full-stack TypeScript monorepo (npm workspaces):
+A Bun 1.4 full-stack TypeScript monorepo ({{packageManager}} workspaces):
 
-- `apps/api` — **NestJS** backend (`{{projectName}}-api`), TypeORM + PostgreSQL, Swagger at `/api-docs`.
+- `apps/api` — **Elysia** backend (`{{projectName}}-api`), Bun.SQL + PostgreSQL, merged OpenAPI at `/api-docs`.
 - `apps/web` — **SvelteKit** frontend (`{{projectName}}-web`), Tailwind v4 + shadcn-svelte + typesafe-i18n.
 - `infra/` — Docker Compose (PostgreSQL/Redis) and example k3s manifests.
 - `.podokit/` — PodoKit's generation lockfile (see "PodoKit tooling" below). Do not edit by hand.
-- **Todo example**: `apps/api/src/todos/` (controller/service/entity/DTO + migration) and the todo UI in `apps/web/src/routes/` show the end-to-end patterns to follow.
+- **Todo example**: `apps/api/src/todos/` (Elysia plugin, Bun.SQL repository, and migration) and the todo UI in `apps/web/src/routes/` show the end-to-end patterns to follow.
 
 ## Setup & commands
 
 ```bash
-npm install
+{{packageManager}} install
 cp .env.example .env
 docker compose -f infra/docker/docker-compose.yml up -d   # PostgreSQL (+ Redis)
-npm run dev        # api on http://localhost:5002, web on http://localhost:5001
+{{rootRun}} dev        # api on http://localhost:5002, web on http://localhost:5001
 ```
 
 - **Ports: web = 5001, api = 5002.** The web app reaches the API only through its
   SvelteKit server proxy (`/api/*`), never with a direct browser `fetch`.
-- Build: `npm run build`  ·  Type-check/lint: `npm run lint`  ·  Unit tests: `npm test`
-- Per workspace: `npm run build -w {{projectName}}-api` / `-w {{projectName}}-web`.
-- DB migrations (TypeORM): `npm run migration:run -w {{projectName}}-api`.
-- e2e (Playwright, ships in `tests/`): `npm run test:e2e`.
+- Build: `{{rootRun}} build`  ·  Type-check/lint: `{{rootRun}} lint`  ·  Unit tests: `{{rootRun}} test`
+- Per workspace: `{{apiRun}} build` / `{{webRun}} build`.
+- DB migrations (TypeORM migration layer only): `{{apiRun}} migration:run`.
+- e2e (Playwright, ships in `tests/`): `{{rootRun}} test:e2e`.
+- Playwright officially runs on Node, so `bunx playwright` respects its Node
+  shebang. Node LTS is a test-tool dependency only; API, web, worker, migrations,
+  builds, and unit tests run on Bun.
 
 **Always** verify a change by building the affected workspace (and `svelte-check`
 for web) before considering it done. UI changes need a Playwright test; API
@@ -38,7 +41,7 @@ changes need an e2e/unit test.
 
 ### TypeScript (both apps)
 - `strict` mode. **No `any`** — use `unknown` + narrowing. **No `@ts-ignore`/`@ts-expect-error`** and no `eslint-disable`.
-- Explicit function return types. DTOs use `class-validator` decorators.
+- Explicit function return types. Validate HTTP inputs with Elysia `t` schemas.
 - Keep `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns`, `noUncheckedIndexedAccess`.
 
 ### Svelte 5 (web)
@@ -60,8 +63,8 @@ changes need an e2e/unit test.
 This project is managed by the `podo` CLI. Files have an ownership tier recorded
 in `.podokit/files.lock` — respect it:
 
-- **owned** (your code: `apps/web/src/routes/**`, your components/services, `apps/api/src/app.extensions.ts`, and this `AGENTS.md`) — edit freely. To add or override Nest providers/modules, use `app.extensions.ts` (spread into `AppModule` after the module-wired providers, so a same-token override wins) rather than editing `app.module.ts`.
-- **assembled** (e.g. `apps/api/src/app.module.ts`, `auth.ts`) — contain `// podokit:begin:… / …:end` fenced regions that the toolkit recomputes. Edit outside the fences only; **never hand-edit inside the fences**.
+- **owned** (your code: `apps/web/src/routes/**`, your components/services, `apps/api/src/app.extensions.ts`, and this `AGENTS.md`) — edit freely. Add application-owned services or module descriptors through `app.extensions.ts` instead of changing toolkit registrations.
+- **assembled** (e.g. `apps/api/src/app.ts`, `auth.ts`) — contain `// podokit:begin:… / …:end` fenced regions that the toolkit recomputes. Edit outside the fences only; **never hand-edit inside the fences**.
 - **managed** (bootstrap/config like `main.ts`) — the toolkit may update these; avoid gratuitous edits.
 
 Useful commands:

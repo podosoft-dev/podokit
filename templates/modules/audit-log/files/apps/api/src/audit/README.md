@@ -12,20 +12,21 @@ which the better-auth hook (`audit-hook.ts`) maps to semantic action codes like
 `user.create` and `auth.login`. Everything else is **opt-in** — you decide what
 matters.
 
-## Audit your own routes with `@Audit`
+## Audit your own Elysia routes
 
 ```ts
-import { Audit } from "../audit/audit.decorator";
-
-@Post()
-@Audit("todo.create", (_req, todo) => ({ type: "todo", id: todo.id, label: todo.title }))
-create(@Body() dto: CreateTodoDto) {
-  return this.todos.create(dto);
-}
+const session = await auth.requireSession(request);
+const todo = await todos.create(body);
+await audit.recordRequest("todo.create", request, session, {
+  type: "todo",
+  id: todo.id,
+  label: todo.title,
+});
+return todo;
 ```
 
-The interceptor resolves the acting user (name + email), attaches the target you
-return, and writes one entry when the handler succeeds.
+Call `recordRequest` only after the operation succeeds. It attaches the actor and
+request address, then writes the target metadata through the shared pipeline.
 
 ## Record from anywhere in code
 
@@ -40,8 +41,8 @@ await recordAudit({
 });
 ```
 
-Or inject `AuditService` in a Nest provider and call `audit.record({ ... })`.
-Both never throw — a failed audit write never breaks the request.
+Resolve `AUDIT` from the application service registry to call
+`audit.record({ ... })`. Audit writes never break the request.
 
 ## Fields (`AuditEntry`)
 
@@ -52,8 +53,8 @@ survives renames/deletes), `targetType/targetId/targetLabel`, `ip`, `metadata`
 ## Customize
 
 - **Auth actions:** edit the `ACTIONS` map in `audit-hook.ts`.
-- **Your routes:** add `@Audit("your.action")` where you want a trail.
-- **Schema:** add columns to `audit-log.entity.ts` + a migration, and keep the
+- **Your routes:** call `AuditService.recordRequest()` after successful operations.
+- **Schema:** add columns with a migration, and keep the
   `AuditEntry` type in `audit-events.ts` in sync.
-- **Reading:** `GET /audit-logs` returns the latest 50 (admin only); extend
-  `audit.controller.ts` for filtering/pagination.
+- **Reading:** `GET /audit-logs` returns the latest 50 (admin only); extend the
+  Elysia plugin in `audit.module.ts` for filtering or pagination.

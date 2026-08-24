@@ -2,13 +2,14 @@
 
 PodoKit generates projects rather than vendoring large example apps, so the
 canonical example is what `podo create` produces. Each example below layers on
-one more feature.
+one more feature. PodoKit v1 applications use Bun 1.4.0; run package CLIs with
+`bunx` and API workspace scripts with `bun run --cwd apps/api <script>`.
 
 ## 1. todo (`--template todo`)
 
-The `todo` template is a working todo app: a SvelteKit UI, a NestJS `todos`
-CRUD API (TypeORM + PostgreSQL), and Swagger docs. (The default
-`fullstack-nest-svelte` template is the same foundation without the todo code.)
+The `todo` template is a working todo app: a SvelteKit UI, an Elysia `todos`
+CRUD API backed by native `Bun.SQL` and PostgreSQL, and OpenAPI docs. (The
+default `fullstack` template is the same foundation without the todo code.)
 
 | Web (SvelteKit) | API docs (Swagger) |
 | --- | --- |
@@ -17,14 +18,14 @@ CRUD API (TypeORM + PostgreSQL), and Swagger docs. (The default
 ```bash
 npx @podosoft/podokit create todo-app --template todo
 cd todo-app
-npm install
+bun install
 cp .env.example .env
 
 # start PostgreSQL + Redis, then apply migrations
 docker compose -f infra/docker/docker-compose.yml up -d
-npm run migration:run -w todo-app-api
+bun run --cwd apps/api migration:run
 
-npm run dev
+bun run dev
 ```
 
 - Web: http://localhost:5001
@@ -42,12 +43,12 @@ route needs a session except `/health` and `/api/auth/*`.
 
 ```bash
 npx @podosoft/podokit create auth-demo
-cd auth-demo && npm install && cp .env.example .env
+cd auth-demo && bun install && cp .env.example .env
 npx @podosoft/podokit add auth
-npm install
+bun install
 docker compose -f infra/docker/docker-compose.yml up -d
-npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
-npm run dev
+bunx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
+bun run dev
 
 # sign up (sets a session cookie), then call a protected route
 curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-up/email \
@@ -63,14 +64,14 @@ Add a BullMQ queue with a **separate worker process**.
 
 ```bash
 npx @podosoft/podokit create jobs-demo
-cd jobs-demo && npm install && cp .env.example .env
+cd jobs-demo && bun install && cp .env.example .env
 npx @podosoft/podokit add bullmq
-npm install
+bun install
 docker compose -f infra/docker/docker-compose.yml up -d
 
 # API (producer) and worker (consumer) run as separate processes
-npm run dev                       # terminal 1
-npm run dev:worker -w jobs-demo-api   # terminal 2
+bun run dev                          # terminal 1
+bun run --cwd apps/api dev:worker    # terminal 2
 
 curl -XPOST localhost:5002/jobs -H 'content-type: application/json' -d '{"text":"hello"}'
 curl localhost:5002/jobs/<id>     # waiting -> active -> completed
@@ -85,11 +86,11 @@ presigned download URL. `file-upload` pulls in `object-storage-s3` automatically
 
 ```bash
 npx @podosoft/podokit create files-demo
-cd files-demo && npm install && cp .env.example .env
+cd files-demo && bun install && cp .env.example .env
 npx @podosoft/podokit add file-upload
-npm install
+bun install
 docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml up -d
-npm run dev
+bun run dev
 
 curl -F 'file=@./photo.png' localhost:5002/files   # → { key, url }
 ```
@@ -102,13 +103,13 @@ added automatically.
 
 ```bash
 npx @podosoft/podokit create jobs-dash
-cd jobs-dash && npm install && cp .env.example .env
+cd jobs-dash && bun install && cp .env.example .env
 npx @podosoft/podokit add job-progress          # also adds bullmq, sse, redis
-npm install
+bun install
 docker compose -f infra/docker/docker-compose.yml up -d
 
-npm run dev                            # API
-npm run dev:worker -w jobs-dash-api    # worker (separate process)
+bun run dev                            # API
+bun run --cwd apps/api dev:worker      # worker (separate process)
 
 curl -N localhost:5002/events/stream   # watch
 curl -XPOST localhost:5002/progress -H 'content-type: application/json' -d '{"steps":5}'
@@ -138,14 +139,14 @@ shadcn-svelte sidebar shell, plus:
 
 ```bash
 npx @podosoft/podokit create my-admin
-cd my-admin && npm install && cp .env.example .env
+cd my-admin && bun install && cp .env.example .env
 npx @podosoft/podokit add admin-dashboard    # also adds auth
-npm install
+bun install
 docker compose -f infra/docker/docker-compose.yml up -d
-npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
-npm run migration:run -w my-admin-api        # creates auth_config + app_setting
+bunx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
+bun run --cwd apps/api migration:run         # creates auth_config + app_setting
 # set ADMIN_EMAILS=you@example.com in .env
-npm run dev
+bun run dev
 # open /signup, register that email (→ admin), then manage users at /admin/users
 ```
 

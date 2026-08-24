@@ -11,6 +11,8 @@ export interface StatusReport {
   podokitVersion: string;
   template: string;
   packageManager: string;
+  runtime: string;
+  runtimeVersion: string;
   modules: string[];
   moduleDetails: { name: string; packageName?: string; version?: string }[];
   tiers: Record<Tier, number>;
@@ -35,7 +37,9 @@ export function status(projectRoot: string): StatusReport {
   return {
     podokitVersion: manifest.podokitVersion,
     template: manifest.template,
-    packageManager: manifest.packageManager,
+    packageManager: manifest.toolchain.packageManager,
+    runtime: manifest.toolchain.runtime,
+    runtimeVersion: manifest.toolchain.runtimeVersion,
     modules: manifest.modules.map((m) => m.name),
     moduleDetails: manifest.modules.map((m) => ({
       name: m.name,
@@ -68,7 +72,7 @@ export interface DoctorFinding {
  * `@podosoft/*` extensions still match.
  */
 export const SUPPORTED_FRAMEWORKS: Record<string, { app: "api" | "web"; range: string; majors: number[] }> = {
-  "@nestjs/core": { app: "api", range: "^11", majors: [11] },
+  elysia: { app: "api", range: "^1.4", majors: [1] },
   "better-auth": { app: "api", range: ">=1.6.23 <1.7", majors: [1] },
   svelte: { app: "web", range: "^5", majors: [5] },
 };
@@ -83,7 +87,7 @@ function declaredVersion(projectRoot: string, app: "api" | "web", pkg: string): 
   return json.dependencies?.[pkg] ?? json.devDependencies?.[pkg] ?? null;
 }
 
-/** Parse the leading major from a semver range like `^11.1.0` or `>=1.6.23 <1.7`. */
+/** Parse the leading major from a semver range like `^1.4.29` or `>=1.6.23 <1.7`. */
 export function leadingMajor(range: string): number | null {
   const match = range.match(/(\d+)\./);
   return match ? Number(match[1]) : null;

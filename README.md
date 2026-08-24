@@ -1,111 +1,190 @@
 # PodoKit
 
-PodoKit is an opinionated but extensible starter toolkit and CLI for building full-stack TypeScript applications with **NestJS**, **SvelteKit**, **TailwindCSS**, **shadcn-svelte**, **Docker**, and **k3s**.
+PodoKit is an opinionated Bun 1.4 full-stack toolkit and CLI built around
+**Elysia**, **SvelteKit**, **TailwindCSS**, **shadcn-svelte**, PostgreSQL,
+Redis, Docker, and k3s.
 
-## Why PodoKit?
-
-Modern full-stack projects repeat the same setup work: backend structure, frontend structure, shared TypeScript configuration, environment variables, Docker Compose, k3s manifests, health checks, and CI. PodoKit gives you a consistent, production-minded foundation so you can start building features instead of plumbing.
+PodoKit v1 intentionally generates Bun-only applications. The CLI itself can
+still be launched with `npx` or `bunx`, but generated API, web, worker,
+migration, build, and unit-test processes run on Bun. Existing PodoKit 0.x
+applications are not converted in place; keep them on
+`@podosoft/podokit@0.17.4`.
 
 ## Quick start
 
 ```bash
 npx @podosoft/podokit create my-app
 cd my-app
-npm install
+bun install
 cp .env.example .env
-npx @podosoft/podokit dev watch
+bunx --bun @podosoft/podokit dev watch
 ```
 
-Open **http://my-app.localhost**. The first running project starts one user-level
-Traefik gateway on loopback port 80; additional projects reuse it and route by
-their own `*.localhost` hostname. Stop this project with
-`npx @podosoft/podokit dev down`. See [Development](docs/development.md) for
-profiles, migrations, lifecycle commands, and the alternative host-process loop.
+You can also create the project with Bun:
+
+```bash
+bunx --bun @podosoft/podokit create my-app
+```
+
+Open **http://my-app.localhost**. PodoKit starts one user-level Traefik gateway
+on loopback port 80 and routes multiple projects by their `*.localhost`
+hostnames. See [Development](docs/development.md) for profiles, migrations,
+container lifecycle, and the host-process loop.
 
 ## CLI
 
-```
+```text
 podo create <name> [options]
 
 Options:
-  --template <t>   fullstack-nest-svelte (default) | todo | base
+  --template <t>   fullstack (default) | todo | base
   --dir <path>     Target directory (default: ./<name>)
-  --pm <name>      npm (default) | pnpm | yarn
+  --runtime bun    Optional explicit Bun selection
   -y, --yes        Skip prompts and accept defaults
   -h, --help       Show help
 ```
 
-Run without flags in a terminal and PodoKit prompts for the template and package manager.
-
 | Command | What it does |
 |---|---|
-| `podo create <name>` | Scaffold a new project from a template |
-| `podo add <module>` | Add a feature module (auth, admin-dashboard, redis, …) |
-| `podo remove <module>` | Un-apply a module (inverse of add; keeps your edits) |
-| `podo status` | Version, modules, file tiers, and local edits |
-| `podo diff` | Managed files you've edited since generation |
-| `podo doctor` | Framework versions vs. supported ranges |
-| `podo locale <command>` | Add, validate, activate, deactivate, or list JSON locales |
-| `podo update [--apply]` | Preview or apply a version update (3-way merges your edits) |
+| `podo create <name>` | Scaffold a Bun 1.4 project |
+| `podo add <module>` | Add a feature module and its dependencies |
+| `podo remove <module>` | Remove a module while preserving local edits |
+| `podo status` | Show version, modules, file tiers, and local edits |
+| `podo diff` | List edited managed files |
+| `podo doctor` | Check Elysia, Svelte, and Better Auth ranges |
+| `podo locale <command>` | Manage JSON locales |
+| `podo update [--apply]` | Preview or apply a v1 update |
 | `podo eject <path…>` | Take ownership of a managed file |
-| `podo dev <action>` | Run container development through the shared portless `*.localhost` gateway (`npx @podosoft/podokit dev …` without a global install) |
-| `podo deploy <action>` | Plan, apply, verify, or roll back an exact-image release on an existing Kubernetes cluster or Docker host |
+| `podo dev <action>` | Manage container development through the shared gateway |
+| `podo deploy <action>` | Plan, apply, verify, or roll back an exact-image release |
 
 ## Templates
 
 | Template | Description |
-| --- | --- |
-| `fullstack-nest-svelte` (default) | Clean NestJS + SvelteKit starter: config validation, health checks, Swagger, TypeORM wired (no domain code) + Docker Compose and k3s |
-| `todo` | The fullstack starter plus a Todo CRUD example (DB entity, migration, UI) — a runnable reference |
-| `base` | Minimal npm workspace to build up from scratch |
-
-Pick one interactively, or pass `--template <name>`:
+|---|---|
+| `fullstack` (default) | Bun + Elysia + SvelteKit foundation with Bun.SQL, merged OpenAPI, Docker Compose, and k3s |
+| `todo` | The fullstack foundation plus a tested Bun.SQL Todo CRUD example |
+| `base` | Minimal Bun workspace |
 
 ```bash
-npx @podosoft/podokit create my-app                    # clean fullstack (default)
-npx @podosoft/podokit create my-app --template todo    # worked todo example
-npx @podosoft/podokit create my-app --template base    # minimal
+npx @podosoft/podokit create my-app
+npx @podosoft/podokit create my-app --template todo
+npx @podosoft/podokit create my-app --template base
 ```
 
-### Preview — the `todo` template
+The generated API uses Elysia on the request path, Bun.SQL for application
+queries, Bun's Redis and S3 clients where those modules are installed, and a
+small TypeORM layer only for versioned migrations. API documentation is
+available at `/api-docs`; `/api-docs-json` merges Elysia routes, PodoKit module
+routes, and Better Auth's dynamic OpenAPI document.
 
-`--template todo` generates a working todo app (SvelteKit UI + NestJS API + PostgreSQL) with API docs:
-
-| Web (SvelteKit) | API docs (Swagger) |
-| --- | --- |
-| ![Generated todo app](docs/images/todo-app.png) | ![Generated API docs](docs/images/api-docs.png) |
-
-### What the fullstack starter gives you
-
-```
+```text
 my-app/
 ├── apps/
-│   ├── api/     # NestJS: zod env validation, /health + /health/ready,
-│   │            # Swagger at /api-docs, TypeORM wired (add your entities),
-│   │            # global ValidationPipe, standard { success, error } envelope
-│   └── web/     # SvelteKit: Tailwind v4, shadcn-svelte, typesafe-i18n,
-│                # server-side API proxy (browser never calls the API directly)
+│   ├── api/     # Bun + Elysia, Bun.SQL, health, OpenAPI, error envelope
+│   └── web/     # SvelteKit 5, Tailwind v4, shadcn-svelte, i18n, API proxy
 ├── infra/
-│   ├── docker/  # docker-compose: PostgreSQL, Redis (healthchecks)
-│   └── k3s/     # namespace, deployments, service, ingress, secret example
-├── .env.example
-├── package.json # npm workspace
-└── README.md
+│   ├── docker/  # PostgreSQL and optional Redis/MinIO/worker profiles
+│   └── k3s/     # reference Kubernetes resources
+├── tests/       # Playwright API and UI e2e suites
+├── bun.lock
+└── package.json
 ```
+
+## Add features with modules
+
+Bundled modules are applied directly:
+
+```bash
+cd my-app
+bunx --bun @podosoft/podokit add auth
+bun install
+bun run --cwd apps/api migration:run
+```
+
+External modules are installed with Bun first:
+
+```bash
+bun add --dev @podosoft/podokit-module-blog
+bunx --bun @podosoft/podokit add blog
+
+bun add --dev @podosoft/podokit-module-analytics
+bunx --bun @podosoft/podokit add analytics
+```
+
+`podo add` copies managed code, merges dependencies and environment examples,
+and registers a `PodokitModule` in `apps/api/src/app.ts`. Routes are protected
+by default. Modules explicitly register public or API-key access and use
+`AuthService.requireSession()` or `requireAdmin()` where identity is needed.
+See [Modules](docs/modules.md) for capabilities and endpoints.
+
+The `admin-dashboard` module adds user/session administration, account security,
+profile images, audit views, and runtime Settings for authentication providers,
+SMTP, sign-up policy, and feature flags. Secrets are encrypted in PostgreSQL
+and never returned to the browser.
+
+## Validation and runtime policy
+
+Generated projects use:
+
+```bash
+bun run lint
+bun run test
+bun run build
+bun run --cwd apps/api contract
+```
+
+Playwright officially supports Node rather than Bun. The generated
+`bun run test:e2e` command uses Bun as the package manager, while `bunx
+playwright` respects Playwright's Node shebang. Node LTS is therefore required
+only for browser e2e tooling, not for any application runtime or build path.
+See [Testing](docs/testing.md).
+
+## Updating
+
+PodoKit records every generated file and its ownership tier in `.podokit/`:
+
+```bash
+podo status
+podo diff
+podo update
+podo update --apply
+```
+
+PodoKit v1 updates Bun/Elysia v1 applications only. A manifest created by
+PodoKit 0.x is rejected with guidance to pin `@podosoft/podokit@0.17.4`.
+There is no automatic NestJS-to-Elysia conversion because doing so safely
+requires application-specific API, middleware, and persistence decisions.
+See [Updating](docs/updating.md).
+
+## Deploy
+
+Production API and web images use `oven/bun:1.4.0-alpine`. Initialize a profile,
+review an immutable plan, and apply the exact confirmation hash it prints:
+
+```bash
+podo deploy init --profile production --context production --host app.example.com
+podo deploy doctor --profile production
+podo deploy plan --profile production --release v1.2.3 --json
+```
+
+Public traffic enters through the SvelteKit proxy. See
+[Deployment](docs/deployment.md) for secrets, migrations, verification, and
+rollback.
 
 ## Repository layout
 
-This repo is an npm workspace. Published packages:
+This public repository remains an npm workspace for maintaining and publishing
+the CLI packages. Generated applications are Bun workspaces.
 
-- `packages/cli` — the `@podosoft/podokit` CLI (`podo`)
-- `packages/template-engine` — `@podosoft/podokit-template-engine`: token rendering, in-memory assembly, fenced-region wiring, and 3-way merge
-- `packages/api-client` — `@podosoft/podokit-api-client`: typed API client the generated frontend uses (better-auth + JSON/multipart error-envelope request layer)
-- `packages/contracts` — `@podosoft/podokit-contracts`: capabilities, upload policies, the error envelope, and `AppException` shared by backend and frontend
-- `packages/podokit-auth` — `@podosoft/podokit-auth`: the DB-backed auth configuration pipeline (encrypted secrets, config store)
-- `packages/podokit-module-blog` — `@podosoft/podokit-module-blog`: draft-first publishing, visibility controls, image uploads, comments, ownership, and admin management as an external updateable module
-- `packages/podokit-module-analytics` — `@podosoft/podokit-module-analytics`: provider-neutral collection, consent, encrypted configuration, and aggregate administrator reports with GA4 as the first provider
-- `templates/` — project templates copied by the CLI
-- `examples/` — how to generate example apps
+- `packages/cli` — `@podosoft/podokit`
+- `packages/template-engine` — deterministic assembly and update merging
+- `packages/api-client` — typed frontend request client
+- `packages/contracts` — error and capability contracts
+- `packages/podokit-auth` — encrypted auth configuration primitives
+- `packages/podokit-module-blog` — publishing, images, comments, and admin tools
+- `packages/podokit-module-analytics` — GA4 consent, configuration, and reports
+- `templates/` — Bun/Elysia project templates and bundled modules
 
 ```bash
 npm install
@@ -114,161 +193,31 @@ npm run lint
 npm test
 ```
 
-## Status
-
-PodoKit is early (`0.x`). The CLI and templates work end-to-end, but APIs and templates may change before `1.0`. Feedback and issues are welcome.
-
-## Add features with modules
-
-Grow a project feature by feature without swapping templates:
-
-```bash
-cd my-app
-npx @podosoft/podokit add auth      # full auth (better-auth): email/password, sessions, OAuth, 2FA
-```
-
-`podo add` overlays files, merges dependencies, appends env vars, and wires the
-module into the NestJS app. See [docs/modules.md](docs/modules.md).
-
-External package modules use the same workflow after installation. For example:
-
-```bash
-npm install --save-dev @podosoft/podokit-module-blog
-podo add blog
-```
-
-For privacy-aware visitor measurement and administrator reports:
-
-```bash
-npm install --save-dev @podosoft/podokit-module-analytics
-podo add analytics
-```
-
-The **`admin-dashboard`** module adds a full admin console on top of `auth`:
-user & session management, self-service profile-image uploads, an audit log, and a Settings page where OAuth
-providers, SMTP, provider-independent sign-up approval, automatic logout, and server toggles are
-configured at runtime (encrypted in the DB, applied without a restart). Pending
-registrations are approved from `/admin/users`, and the generated
-`admin:bootstrap` command creates or verifies the first administrator without
-using the public sign-up page. Its shared avatar menu is installed on the starter
-landing page and reused by the default blog layout. The separate `auth:configure` command automates
-applying provider/SMTP credentials. Both workflows keep passwords and provider
-secrets out of source files and logs; see [the module guide](docs/modules.md#admin-dashboard).
-The generated `(admin)` route group and `admin-sidebar.svelte` are reserved for
-the `/admin/*` console. Put signed-in product pages in the shell-free `(app)`
-group or in an application-owned protected layout.
-
-![PodoKit admin dashboard — Settings, social login](docs/images/admin-settings-social.png)
-
-## Keep your project up to date
-
-Every generated project records how it was assembled in a committed `.podokit/`
-directory (template, modules, and a per-file ownership tier), so it can receive
-template and module improvements later without losing your work:
-
-```bash
-podo status          # version, modules, and which managed files you've edited
-podo update          # preview what a newer PodoKit version would change
-podo update --apply  # apply it — clean updates written, your edits 3-way merged
-```
-
-Files you own (routes, your components, shadcn UI) are never touched. See
-[docs/updating.md](docs/updating.md).
-
-## Deploy
-
-PodoKit binds an application-owned deployment profile to an explicit target —
-a Kubernetes context, or a Docker host when one machine is the whole deployment —
-renders module-aware resources, runs migrations with the exact API image, and
-rolls out matching API/web SemVer tags:
-
-```bash
-podo deploy init --profile production --context production --host app.example.com
-podo deploy doctor --profile production
-podo deploy plan --profile production --release v1.2.3 --json
-```
-
-Applying or rolling back requires the exact hash from a freshly computed plan.
-The profile contains secret names, never secret values, and public traffic always
-enters through the SvelteKit web proxy.
-
-Generated projects also ship `.github/workflows/release.yml`, which builds and
-pushes both images when you tag `vX.Y.Z`. **Check which runner it uses before the
-first tag**: GitHub-hosted runners are free for public repositories only, and a
-private repository is billed for them. And while developing against a Compose
-deployment, `podo deploy sync` copies local build output into the running
-containers instead of round-tripping a release.
-
-See [deployment](docs/deployment.md).
-
 ## AI coding agents
 
-Generated projects come ready for AI coding tools. `podo create` writes an
-[`AGENTS.md`](https://agents.md) — the open standard read by Codex, Cursor,
-Copilot, Gemini, and more — describing the stack, commands (web :5001 / api
-:5002), code style (Svelte 5 runes, shadcn-svelte + shared `DataTable`, the
-error-code envelope), and the `podo` tooling. `CLAUDE.md` imports it
-(`@AGENTS.md`) for Claude Code, with thin `.cursor/rules` and
-`.github/copilot-instructions.md` pointers included too. Claude Code **skills**
-(`.claude/skills/`) add procedural know-how (scaffolding a NestJS endpoint or a
-SvelteKit route, using the DataTable, running `podo add`/`podo update`, and safely
-configuring Google/Apple OAuth plus SMTP); modules
-extend `AGENTS.md` with their own conventions as you add them. Skip it all with
-`podo create --no-ai`.
-
-Projects also ship a `.mcp.json` wiring up the **PodoKit MCP server**
-([`@podosoft/podokit-mcp`](packages/mcp/README.md)) — run locally via `npx`, no
-hosting — so agents can list/add modules, check project status, preview updates,
-and search the docs. And you can point any MCP-capable tool at the docs remotely
-with **GitMCP** (no install): register the URL
-`https://gitmcp.io/podosoft-dev/podokit`, e.g. for Cursor/Claude Code:
-
-```json
-{ "mcpServers": { "podokit-docs": { "url": "https://gitmcp.io/podosoft-dev/podokit" } } }
-```
-
-A repo-root [`llms.txt`](llms.txt) gives LLMs a curated index of these docs.
-
-### Start a project from scratch with an AI agent
-
-Register the MCP server **globally** so it's available before any project exists:
+Generated projects include `AGENTS.md`, `CLAUDE.md`, editor pointers, and focused
+skills for Elysia endpoints, SvelteKit routes, modules, updates, and deployment.
+The optional PodoKit MCP server can be launched with either CLI host:
 
 ```bash
-claude mcp add --scope user podokit -- npx -y @podosoft/podokit-mcp
-# Cursor/Codex: add the same command in their MCP settings
+npx -y @podosoft/podokit-mcp
+bunx --bun @podosoft/podokit-mcp
 ```
 
-Then, in an empty folder, tell your agent:
-
-> "Create a fullstack PodoKit app called **blog** with auth and admin-dashboard."
-
-It calls `list_templates` → `create_project` → `add_module` and runs
-`npm install` — from nothing to a running starter in one prompt, with the
-conventions already loaded from `AGENTS.md`.
+These tools describe and manage Bun/Elysia v1 projects; they do not migrate
+legacy PodoKit 0.x applications.
 
 ## Documentation
 
 - [Getting Started](docs/getting-started.md)
 - [Templates](docs/templates.md)
-- [Modules (`podo add`)](docs/modules.md)
-- [Localization and JSON catalogs](docs/localization.md)
-- [Updating a project (`podo update`)](docs/updating.md)
-- [Examples](examples/README.md)
-- [Development](docs/development.md) · [Testing](docs/testing.md)
+- [Modules and endpoints](docs/modules.md)
+- [Updating](docs/updating.md)
+- [Development](docs/development.md)
+- [Testing](docs/testing.md)
+- [Deployment](docs/deployment.md)
 - [Reporting a bug](docs/reporting-bugs.md)
 - [Changelog](CHANGELOG.md)
 
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
-
-**Found a bug?** See [how to report a bug](docs/reporting-bugs.md) — a person or an
-AI coding agent can file one straight from the terminal with `gh`.
-
-## Security
-
-See [SECURITY.md](SECURITY.md) for how to report vulnerabilities.
-
-## License
-
-[Apache-2.0](LICENSE)
+See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and the
+[Apache-2.0 license](LICENSE).

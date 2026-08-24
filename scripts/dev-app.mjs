@@ -8,7 +8,7 @@
 //
 // It builds the monorepo, generates the app with the local CLI, points the
 // web app's @podosoft/podokit-api-client at the local package (file:), applies
-// any requested modules, and runs npm install.
+// any requested modules, and runs bun install.
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -28,7 +28,7 @@ if (!targetDir) {
   process.exit(1);
 }
 const target = resolve(targetDir);
-const template = flag("template") ?? "fullstack-nest-svelte";
+const template = flag("template") ?? "fullstack";
 const modules = (flag("add") ?? "").split(",").map((m) => m.trim()).filter(Boolean);
 const name = target.split("/").pop();
 
@@ -67,7 +67,7 @@ for (const mod of modules) {
   run("node", [join(repoRoot, "packages/cli/dist/index.js"), "add", mod], target);
 }
 
-// Pin the unpublished @podosoft packages to their local builds via root npm
+// Pin the unpublished @podosoft packages to their local builds via root
 // overrides, so nested resolution (e.g. api-client's dependency on contracts)
 // also uses the local copy instead of hitting the registry. Skipped for
 // --published (containerized apps use the registry versions).
@@ -86,12 +86,9 @@ if (!usePublished) {
   console.log("• using published @podosoft packages (container-friendly)");
 }
 
-console.log("• npm install…");
-// Pack file: dependencies like registry packages instead of symlinking them.
-// Vite treats linked CommonJS packages as source and requires them to be ESM;
-// install-links keeps the local validation path faithful to an npm install.
-run("npm", ["install", "--install-links", "--no-audit", "--no-fund"], target);
+console.log("• bun install…");
+run("bun", ["install"], target);
 
 console.log(`\nDone. Local dev app at ${target}`);
-console.log("After editing api-client:  npm run build -w @podosoft/podokit-api-client  (in the monorepo),");
-console.log(`then re-run npm install --install-links in ${target} to pick up the change.`);
+console.log("After editing api-client: npm run build -w @podosoft/podokit-api-client (in the monorepo),");
+console.log(`then re-run bun install in ${target} to pick up the change.`);

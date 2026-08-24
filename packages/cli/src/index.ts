@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { join, relative } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { create, assertValidName, type PackageManager } from "./create";
+import { create, assertValidName } from "./create";
 import { resolveCreateOptions, type Ask } from "./prompt";
 import { templateListText } from "./templates";
 import { addModule, listModules } from "./add";
@@ -71,7 +71,7 @@ Usage:
 Options:
   --template <t> Template to scaffold (see below)
   --dir <path>   Target directory (default: ./<name>)
-  --pm <name>    Package manager: npm | pnpm | yarn (default: npm)
+  --runtime bun  Optional explicit Bun runtime selection
   --name <label> Display name for a locale
   --direction <direction>  Text direction: ltr | rtl (default: ltr)
   --profile <name>         Deployment profile name
@@ -93,7 +93,8 @@ ${templateListText()}
 Example:
   npx @podosoft/podokit create my-app
   npx @podosoft/podokit create my-app --template todo
-  cd my-app && npx @podosoft/podokit add auth
+  bunx --bun @podosoft/podokit create my-app
+  cd my-app && bunx --bun @podosoft/podokit add auth
 `;
 
 const DEPLOY_HELP = `podo deploy — release an application to Kubernetes or Docker Compose
@@ -133,7 +134,8 @@ interface ParsedArgs {
   name?: string;
   template?: string;
   dir?: string;
-  pm?: PackageManager;
+  pm?: string;
+  runtime?: string;
   from?: string;
   apply: boolean;
   adopt: boolean;
@@ -192,7 +194,9 @@ export function parseArgs(argv: string[]): ParsedArgs {
     } else if (arg === "--from") {
       parsed.from = argv[++i];
     } else if (arg === "--pm") {
-      parsed.pm = argv[++i] as PackageManager;
+      parsed.pm = argv[++i];
+    } else if (arg === "--runtime") {
+      parsed.runtime = argv[++i];
     } else if (arg === "--name") {
       parsed.localeName = argv[++i];
     } else if (arg === "--direction") {
@@ -472,11 +476,13 @@ async function main(argv: string[]): Promise<void> {
         module.version ? `${module.name}@${module.version}` : module.name,
       );
       process.stdout.write(
-        `PodoKit ${s.podokitVersion}  (template: ${s.template}, ${s.packageManager})\n` +
-          `Modules: ${modules.length ? modules.join(", ") : "(none)"}\n` +
-          `Files:   ${tiers}\n` +
-          `Edited:  ${s.drifted.length} managed file(s)${s.missing.length ? `, ${s.missing.length} missing` : ""}\n` +
-          (s.drifted.length ? s.drifted.map((f) => `  ~ ${f}`).join("\n") + "\n" : ""),
+        args.json
+          ? `${JSON.stringify(s, null, 2)}\n`
+          : `PodoKit ${s.podokitVersion}  (template: ${s.template}, ${s.runtime} ${s.runtimeVersion}, ${s.packageManager})\n` +
+              `Modules: ${modules.length ? modules.join(", ") : "(none)"}\n` +
+              `Files:   ${tiers}\n` +
+              `Edited:  ${s.drifted.length} managed file(s)${s.missing.length ? `, ${s.missing.length} missing` : ""}\n` +
+              (s.drifted.length ? s.drifted.map((f) => `  ~ ${f}`).join("\n") + "\n" : ""),
       );
     } catch (err) {
       fail((err as Error).message);
@@ -806,7 +812,7 @@ async function main(argv: string[]): Promise<void> {
   const templatesDir = join(__dirname, "templates");
   try {
     const resolved = await resolveCreateOptions(
-      { template: args.template, pm: args.pm },
+      { template: args.template, pm: args.pm, runtime: args.runtime },
       ask,
       interactive,
     );
@@ -815,7 +821,7 @@ async function main(argv: string[]): Promise<void> {
       templatesDir,
       template: resolved.template,
       targetDir: args.dir,
-      packageManager: resolved.packageManager,
+      runtime: resolved.toolchain.runtime,
       ai: args.ai,
     });
     const relPath = relative(process.cwd(), result.projectDir) || ".";

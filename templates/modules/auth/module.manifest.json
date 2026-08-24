@@ -1,6 +1,6 @@
 {
   "name": "auth",
-  "description": "Full authentication (better-auth): email/password, sessions, and \u2014 via config \u2014 OAuth and 2FA. Installs a global guard so the API is secure by default; health and /api/auth stay public.",
+  "description": "Full authentication with Better Auth on Elysia: email/password, sessions, OAuth, organizations, passkeys, API keys, and optional two-factor policies. Installs a secure-by-default request guard.",
   "requires": ["mailer"],
   "targetApp": "api",
   "managedOverrides": [
@@ -10,7 +10,6 @@
     "@podosoft/podokit-auth": "^0.3.0",
     "@podosoft/podokit-contracts": "^0.4.0",
     "better-auth": "^1.6.23",
-    "@thallesp/nestjs-better-auth": "^2.7.0",
     "pg": "^8.12.0",
     "@better-auth/api-key": "^1.6.23",
     "@better-auth/passkey": "^1.6.23",
@@ -20,25 +19,19 @@
     "@types/pg": "^8.11.10"
   },
   "scripts": {
-    "migrate:all": "node dist/migrate",
-    "auth:configure": "node scripts/configure-auth.mjs"
+    "migrate:all": "bun dist/migrate.js",
+    "auth:configure": "bun scripts/configure-auth.mjs"
   },
   "env": [
-    "# \u2500\u2500 Auth (better-auth) \u2014 the only required secrets \u2500\u2500",
+    "# ── Auth (Better Auth) — required secrets ──",
     "# BETTER_AUTH_SECRET also derives the key that encrypts config secrets stored in the",
     "# DB (OAuth client secrets, SMTP password). Keep it stable and secret; rotating it",
-    "# makes previously-saved DB secrets undecryptable.",
+    "# makes previously saved DB secrets undecryptable.",
     "BETTER_AUTH_SECRET=change-me-in-production-min-32-characters",
     "BETTER_AUTH_URL=http://localhost:5002",
-    "# Everything below is OPTIONAL. OAuth providers, SMTP, and the server-enforced",
-    "# toggles (email verification, sign-up approval, breached-password check, self-delete) \u2014 plus the",
-    "# feature flags \u2014 are configured on the admin Settings page, stored encrypted in",
-    "# the DB and applied live (no restart). These env vars still work as a fallback/",
-    "# override (e.g. for secrets-manager injection in production); the DB takes",
-    "# precedence when set.",
-    "# --- Optional overrides / local development ---",
+    "# Everything below is optional. OAuth providers, SMTP, and server-enforced",
+    "# toggles are configured on the admin Settings page and applied without restart.",
     "# Email/SMTP is provided by the mailer module (see its .env block).",
-    "# Phone-number SMS webhook (dev: SMS sink on port 8095)",
     "# SMS_WEBHOOK_URL=http://localhost:8095/sms",
     "# AUTH_HIBP=false",
     "# AUTH_EMAIL_VERIFICATION=false",
@@ -52,75 +45,30 @@
   ],
   "inject": [
     {
-      "file": "apps/api/src/app.module.ts",
+      "file": "apps/api/src/app.ts",
       "marker": "// podokit:end:imports",
-      "text": "import { APP_GUARD } from \"@nestjs/core\";"
+      "text": "import { authModule } from \"./auth/auth.module\";"
     },
     {
-      "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:end:imports",
-      "text": "import { AuthModule, AuthGuard } from \"@thallesp/nestjs-better-auth\";"
-    },
-    {
-      "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:end:imports",
-      "text": "import { authRuntime } from \"./auth/auth-provider\";"
-    },
-    {
-      "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:end:imports",
-      "text": "import { AccountModule } from \"./account/account.module\";"
-    },
-    {
-      "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:end:imports",
-      "text": "import { AuthConfigModule } from \"./auth-config/auth-config.module\";"
-    },
-    {
-      "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:end:imports",
-      "text": "import { TwoFactorRequiredGuard } from \"./auth/two-factor-required.guard\";"
-    },
-    {
-      "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:end:module-imports",
-      "text": "AuthModule.forRoot(authRuntime),"
-    },
-    {
-      "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:end:module-imports",
-      "text": "AccountModule,"
-    },
-    {
-      "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:end:module-imports",
-      "text": "AuthConfigModule,"
-    },
-    {
-      "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:end:providers",
-      "text": "{ provide: APP_GUARD, useClass: AuthGuard },"
-    },
-    {
-      "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:end:providers",
-      "text": "{ provide: APP_GUARD, useClass: TwoFactorRequiredGuard },"
+      "file": "apps/api/src/app.ts",
+      "marker": "// podokit:end:modules",
+      "text": "authModule,"
     },
     {
       "file": "AGENTS.md",
       "marker": "<!-- podokit:end:agents-modules -->",
       "optional": true,
-      "text": "### auth (better-auth)\n- The API is **secure by default**: every route needs a session except `/health` and `/api/auth/*`. Opt a route out with `@Public()`; read the user with `@Session()`.\n- Configure OAuth providers, SMTP, sign-up approval, automatic logout, and the other server toggles on the admin **Settings** page (DB-backed, applied live \u2014 not via env). Only `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are required env vars.\n- Use `npm run auth:configure -w <app>-api -- ...` and `.claude/skills/podokit-configure-auth` to apply OAuth/SMTP credentials without committing secrets. The sign-up approval gate is provider-independent; do not add provider-specific approval checks.\n- Development setup: create auth tables with `npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts`, then run TypeORM migrations. Production images can run both from compiled output with `npm run migrate:all`.\n"
+      "text": "### auth (Better Auth + Elysia)\n- The API is secure by default: every application route needs a session except health, OpenAPI, `/api/auth/*`, and routes explicitly registered in `ACCESS_POLICY`.\n- Register a public route during module configuration with `services.resolve(ACCESS_POLICY).register(\"GET\", \"/path\", \"public\")`; use `AUTH` and `AuthService.requireSession()` or `requireAdmin()` when a handler needs the current user.\n- Configure OAuth providers, SMTP, sign-up approval, automatic logout, and server toggles on the admin Settings page. Only `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are required environment variables.\n- Use `{{apiRun}} auth:configure{{apiWorkspaceArg}} -- ...` and `.claude/skills/podokit-configure-auth` to apply OAuth/SMTP credentials without committing secrets.\n- Development setup: create Better Auth tables with `bunx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts`, then run the TypeORM migration layer. Production images run both with `{{apiRun}} migrate:all`.\n"
     }
   ],
   "instructions": [
-    "Set BETTER_AUTH_SECRET in .env (>= 32 chars). This also derives the key that encrypts config secrets stored in the DB, so keep it stable and secret.",
-    "Create the auth tables:  npx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts",
-    "Create the app tables (auth_config, app_setting):  npm run migration:run",
-    "After building a production image, run all Better Auth and TypeORM migrations:  npm run migrate:all",
-    "Sign up:  curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-up/email -H 'content-type: application/json' -d '{\"email\":\"a@example.com\",\"password\":\"password123\",\"name\":\"A\"}'",
-    "Call a protected route with the session:  curl -b cookies.txt localhost:5002/account/me",
-    "Use npm run auth:configure -w <app>-api -- --help for redacted OAuth, SMTP, and sign-up approval automation.",
-    "Everything is protected by default; mark public routes with @Public(). Configure OAuth providers, SMTP, automatic logout, and server-enforced toggles on the admin Settings page \u2014 stored in the DB and applied live (no restart). Environment variables (GOOGLE_CLIENT_*, SMTP_*, AUTH_*) still work as an optional fallback/override."
+    "Set BETTER_AUTH_SECRET in .env (at least 32 characters). Keep it stable because it also protects encrypted DB configuration secrets.",
+    "Create the Better Auth tables: bunx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts",
+    "Create the application tables: {{apiRun}} migration:run",
+    "After building a production image, run all migrations: {{apiRun}} migrate:all",
+    "Sign up: curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-up/email -H 'content-type: application/json' -d '{\"email\":\"a@example.com\",\"password\":\"password123\",\"name\":\"A\"}'",
+    "Call a protected route with the session: curl -b cookies.txt localhost:5002/account/me",
+    "Use {{apiRun}} auth:configure{{apiWorkspaceArg}} -- --help for redacted OAuth, SMTP, and sign-up approval automation.",
+    "Routes are protected by default. Register intentional public or API-key routes in ACCESS_POLICY during module configuration."
   ]
 }

@@ -1,7 +1,7 @@
 {
   "name": "@podosoft/podokit-mcp",
   "version": "0.3.1",
-  "description": "Model Context Protocol server for PodoKit: lists/adds modules, reports project status, previews updates, and searches the docs — run locally via npx (no hosting).",
+  "description": "Local Model Context Protocol server for creating and managing Bun and Elysia PodoKit projects.",
   "license": "Apache-2.0",
   "type": "module",
   "repository": {

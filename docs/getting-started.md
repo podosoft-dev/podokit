@@ -1,218 +1,163 @@
 # Getting Started
 
-> PodoKit is pre-1.0. The CLI and templates are under active development.
+PodoKit v1 generates Bun 1.4 applications with an Elysia API. The published CLI
+can be launched by Node or Bun, but the generated application is Bun-only.
 
 ## Prerequisites
 
-- Node.js >= 22.22.1
-- npm (or pnpm / yarn)
-- Docker (optional, for local PostgreSQL and Redis)
+- Bun 1.4.0 exactly
+- Docker for PostgreSQL and optional Redis/MinIO services
+- Node.js 22 LTS only when running Playwright browser tests
 
 ## Create a project
 
-```bash
-npx @podosoft/podokit create my-app
-```
-
-Run in a terminal, PodoKit prompts for the template and package manager. To skip prompts:
+Use either CLI host:
 
 ```bash
-npx @podosoft/podokit create my-app --template fullstack-nest-svelte --pm npm --yes
+npx @podosoft/podokit create my-app --template fullstack --yes
+# or
+bunx --bun @podosoft/podokit create my-app --template fullstack --yes
 ```
 
-Then:
+Then install and start the container development loop:
 
 ```bash
 cd my-app
-npm install
+bun install
 cp .env.example .env
-npx @podosoft/podokit dev watch
+bunx --bun @podosoft/podokit dev watch
 ```
 
-Open **http://my-app.localhost**. The first running project starts a user-level,
-socket-free Traefik gateway on `127.0.0.1:80`. Each additional project reuses
-that gateway with its own hostname, so no project-specific host port is needed.
+Open **http://my-app.localhost**. One user-level Traefik gateway listens on
+loopback port 80 and routes each PodoKit project by hostname.
 
-Use a second terminal for lifecycle and container commands:
+Use a second terminal for lifecycle operations:
 
 ```bash
-npx @podosoft/podokit dev url
-npx @podosoft/podokit dev ps
-npx @podosoft/podokit dev logs
-npx @podosoft/podokit dev exec api npm run migration:run -w my-app-api
-npx @podosoft/podokit dev down
+bunx --bun @podosoft/podokit dev url
+bunx --bun @podosoft/podokit dev ps
+bunx --bun @podosoft/podokit dev logs
+bunx --bun @podosoft/podokit dev exec api bun run --cwd apps/api migration:run
+bunx --bun @podosoft/podokit dev down
 ```
 
-`dev down` removes only the current project, including services started with any
-Compose profile; you do not need to repeat the earlier `--profile` flags. When it
-removes the last registered project, it also removes the shared gateway and network.
-Hostname collisions and an unrelated process already owning loopback port 80 fail
-with an actionable error instead of silently remapping a port. See
-[development.md](development.md) for module profiles, HMR, multi-project routing,
-and HTTPS OAuth tunnels.
-
-For a quick host-process loop instead, start the dependencies and run the app on
-the traditional ports:
+For host processes instead of Compose Watch:
 
 ```bash
 docker compose -f infra/docker/docker-compose.yml up -d
-npm run dev
+bun run --cwd apps/api migration:run
+bun run dev
 ```
 
-- API: http://localhost:5002 — health check at `/health`
+- API: http://localhost:5002 (`/health`, `/health/ready`, `/api-docs`)
 - Web: http://localhost:5001
 
 ## Templates
 
-- **`fullstack-nest-svelte`** (default) — NestJS API + SvelteKit web + Docker/k3s.
-- **`todo`** — the fullstack starter plus a runnable Todo CRUD example.
-- **`base`** — a minimal npm workspace when you want to build up from scratch.
+- `fullstack` — Bun + Elysia + SvelteKit foundation with no domain feature.
+- `todo` — the foundation plus a tested Bun.SQL Todo CRUD example.
+- `base` — a minimal Bun workspace.
 
-See [templates.md](templates.md) for what each generates.
+See [Templates](templates.md) for the generated structure.
 
-## Add features (`podo add`)
-
-Grow a project feature by feature — add authentication, an admin dashboard,
-Redis, queues, and more without swapping templates:
+## Add modules
 
 ```bash
-cd my-app
-npx @podosoft/podokit add auth              # better-auth: email/password, sessions, OAuth, 2FA
-npx @podosoft/podokit add admin-dashboard   # a full admin console (also adds auth)
+bunx --bun @podosoft/podokit add auth
+bunx --bun @podosoft/podokit add admin-dashboard
+bun install
+bun run --cwd apps/api migration:run
 ```
 
-External modules use the same command after their package is installed. For
-example, add privacy-aware GA4 collection and administrator reports with:
+External modules must be installed before they are applied:
 
 ```bash
-npm install --save-dev @podosoft/podokit-module-analytics
-npx @podosoft/podokit add analytics
+bun add --dev @podosoft/podokit-module-blog
+bunx --bun @podosoft/podokit add blog
+
+bun add --dev @podosoft/podokit-module-analytics
+bunx --bun @podosoft/podokit add analytics
 ```
 
-See [modules.md](modules.md) for the full list.
-
-After adding `admin-dashboard`, set `ADMIN_EMAILS`, build and migrate the API,
-then create the initial administrator without using the public sign-up page:
+After adding `admin-dashboard`, set `ADMIN_EMAILS`, migrate, and bootstrap the
+first administrator using environment injection from your shell or secret
+manager:
 
 ```bash
 export ADMIN_BOOTSTRAP_EMAIL="admin@example.com"
 IFS= read -r -s ADMIN_BOOTSTRAP_PASSWORD && export ADMIN_BOOTSTRAP_PASSWORD
-npm run admin:bootstrap -w my-app-api
+bun run --cwd apps/api admin:bootstrap
 unset ADMIN_BOOTSTRAP_PASSWORD
 ```
 
-The email must be listed in `ADMIN_EMAILS`. The command is idempotent and never
-prints or stores the password. See the [`admin-dashboard` module](modules.md#admin-dashboard)
-for dry-run, verification, migration order, and secret-manager usage.
+The command is idempotent and does not print the password. See
+[Modules](modules.md) for module dependencies, environment settings, and API
+endpoints.
 
-## AI coding agents
-
-Your project ships with agent guidance so tools like Claude Code, Codex, and
-Cursor follow the conventions from the start: an `AGENTS.md` at the root (the
-open standard), a `CLAUDE.md` that imports it, `.cursor`/`.github` pointers, and
-Claude Code skills under `.claude/skills/`. As you `podo add` modules, they
-extend `AGENTS.md` with their own rules. Don't want them? `podo create --no-ai`.
-
-A `.mcp.json` also wires up the **PodoKit MCP server** (`@podosoft/podokit-mcp`,
-run locally via `npx` — no hosting): agents can list/add modules, check the
-project status, preview updates, and search the docs directly. See
-[`@podosoft/podokit-mcp`](https://www.npmjs.com/package/@podosoft/podokit-mcp).
-
-For docs search without any install, register **GitMCP** as a remote MCP server —
-`https://gitmcp.io/podosoft-dev/podokit` — which lets an AI tool query the PodoKit
-docs and code straight from the public repo.
-
-### Start a project from scratch with an AI agent
-
-You don't even need an existing project. Register the MCP server **globally**:
+## Validate the generated app
 
 ```bash
-claude mcp add --scope user podokit -- npx -y @podosoft/podokit-mcp
+bun run lint
+bun run test
+bun run build
+bun run --cwd apps/api contract
 ```
 
-Then, in an empty folder, ask your agent to build one:
+The contract command creates the assembled Elysia application, merges Better
+Auth's generated OpenAPI document, and fails if any expected template or module
+route is missing.
 
-> "Create a fullstack PodoKit app called **blog** with auth and admin-dashboard."
-
-The agent uses the MCP tools `list_templates` → `create_project` → `add_module`
-(auth, admin-dashboard) and runs `npm install` — going from an empty directory to
-a running starter in a single prompt, with the conventions already loaded.
-
-## Keep your project up to date
-
-Your project records how it was assembled in a committed `.podokit/` directory,
-so it can receive template and module improvements later without losing your
-changes:
+For the shipped browser and HTTP e2e suite:
 
 ```bash
-podo status          # version, modules, and which managed files you've edited
-podo update          # preview what a newer PodoKit version would change
-podo update --apply  # apply it (files you own are never touched)
+bun run test:e2e
 ```
 
-See [updating.md](updating.md).
+`bunx playwright` follows Playwright's Node shebang because Playwright's official
+runtime requirement is Node. This is a test-tool exception; generated services,
+workers, migrations, builds, and unit tests remain Bun-only.
 
-## Local services (PostgreSQL, Redis)
-
-The fullstack template ships a Docker Compose file:
+## Update a v1 project
 
 ```bash
-docker compose -f infra/docker/docker-compose.yml up -d
+podo status
+podo diff
+podo update
+podo update --apply
 ```
 
-## Configuration
+Always review the dry run before applying. PodoKit updates managed and assembled
+files, 3-way merges edited managed files, and never overwrites owned routes or
+components.
 
-All configuration uses environment variables with safe example values in `.env.example`:
+PodoKit v1 does not convert PodoKit 0.x projects. A legacy manifest is rejected
+with instructions to keep using:
 
 ```bash
-cp .env.example .env
+npx @podosoft/podokit@0.17.4 <command>
 ```
 
-The API validates required variables on startup and fails fast if something is missing. **Never commit real secrets** — `.env` is gitignored by default.
+Build a new v1 application and migrate product-specific behavior deliberately
+when you want to adopt Bun and Elysia.
 
-## Project scripts
+## Deploy
 
-The generated workspace forwards scripts to `apps/*`:
-
-```bash
-npm run dev     # run api + web in watch mode
-npm run build   # build all apps
-npm run lint    # type-check / lint all apps
-npm test        # run tests
-```
-
-## Deployment
-
-`podo deploy` plans and operates a release on a target you already run. Pick a driver:
-
-- **`docker-compose`** — one Docker host, local or over `ssh://`. Reach for it when a
-  single machine is the whole deployment and a reverse proxy in front of it
-  terminates TLS.
-- **`kubernetes-helm`** — a cluster context and namespace. Reach for it when you
-  already operate a cluster, or need more than one node.
-
-Build both images with the repository root as the context, tagged with the same
-stable SemVer tag and pushed where the target can pull them:
+Both production images are based on Bun 1.4.0 Alpine:
 
 ```bash
 docker build -f apps/api/Dockerfile -t registry.example.com/my-app-api:v1.2.3 .
 docker build -f apps/web/Dockerfile -t registry.example.com/my-app-web:v1.2.3 .
-docker push registry.example.com/my-app-api:v1.2.3
-docker push registry.example.com/my-app-web:v1.2.3
 ```
 
-Then initialize a profile, review the plan, and apply the exact hash it prints. The
-full procedure — secrets, the migration ordering, verification, and rollback — is in
-[deployment.md](deployment.md).
+Use `podo deploy init`, `doctor`, `plan`, and `apply` for one Docker host or a
+Kubernetes cluster. See [Deployment](deployment.md).
 
-`infra/docker/` and `infra/k3s/` are **development and reference material**, not a
-deployment: the Compose file there runs PostgreSQL and the local mail catcher, and the
-k3s manifests are illustrative examples the tooling does not apply.
+## AI coding agents
 
-## Next steps
+Generated repositories include `AGENTS.md`, `CLAUDE.md`, editor pointers, and
+skills for Elysia, SvelteKit, modules, updates, and deployment. `.mcp.json`
+configures `@podosoft/podokit-mcp` so compatible agents can inspect and manage
+the project without guessing its conventions.
 
-- Explore the generated `apps/api` and `apps/web`.
-- Add features with [Modules (`podo add`)](modules.md).
-- Add or translate languages with [Localization](localization.md).
-- Learn how to [update a project (`podo update`)](updating.md).
-- Read [Examples](../examples/README.md) for feature-focused walkthroughs.
+Next, read [Development](development.md), [Testing](testing.md), and
+[Modules](modules.md).

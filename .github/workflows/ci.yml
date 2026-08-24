@@ -24,3 +24,37 @@ jobs:
       - run: npm run build
       - run: npm run lint
       - run: npm test
+
+  generated-bun-app:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.22.1
+          cache: npm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+      - name: Verify a Bun-only generated app
+        run: |
+          app_dir="$(mktemp -d)"
+          node packages/cli/dist/index.js create app --dir "$app_dir" --no-ai --yes
+          (
+            cd "$app_dir"
+            node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" add admin-dashboard
+            node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" add job-progress
+            node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" add api-key-auth
+            node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" add audit-log
+            node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" add file-upload
+            node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" add logging
+            node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" add rate-limit
+            bun install
+            bun run lint
+            bun run test
+            bun run build
+            node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" status --json | grep -q '"runtime": "bun"'
+          )

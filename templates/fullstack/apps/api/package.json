@@ -1,0 +1,35 @@
+{
+  "name": "{{projectName}}-api",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "bun --watch src/main.ts",
+    "build": "bun scripts/build.mjs",
+    "start": "bun dist/main.js",
+    "lint": "bunx tsc -p tsconfig.json --noEmit",
+    "test": "bun test src",
+    "contract": "bun scripts/verify-api-contract.ts",
+    "migrate:all": "bun dist/database/migrate.js",
+    "typeorm": "bunx typeorm-ts-node-commonjs -d src/database/data-source.ts",
+    "migration:run": "bun run typeorm -- migration:run",
+    "migration:revert": "bun run typeorm -- migration:revert",
+    "migration:generate": "bun run typeorm -- migration:generate"
+  },
+  "dependencies": {
+    "@podosoft/podokit-contracts": "^0.4.0",
+    "@elysia/cors": "^1.4.2",
+    "@elysia/openapi": "^1.4.15",
+    "dotenv": "^16.4.5",
+    "elysia": "^1.4.29",
+    "pg": "^8.12.0",
+    "pino": "^9.6.0",
+    "typeorm": "^0.3.20",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.9",
+    "@types/node": "^20.17.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.3"
+  }
+}

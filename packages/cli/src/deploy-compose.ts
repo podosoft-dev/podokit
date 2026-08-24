@@ -32,6 +32,8 @@ import {
   type ComposeImages,
 } from "./deploy-compose-render";
 import { assertAnyReleaseTag } from "./deploy-driver";
+import { readManifest } from "./lockfile";
+import { resolveToolchain, toolchainMigrationCommand } from "./toolchain";
 
 /**
  * The Docker Compose deployment driver.
@@ -582,7 +584,10 @@ export function planComposeDeployment(
   actions.push({
     order: order++,
     kind: "migration",
-    description: `Run ${(profile.migration?.command ?? ["npm", "run", "migrate:all"]).join(" ")} using ${images.api}.`,
+    description: `Run ${(
+      profile.migration?.command ??
+      toolchainMigrationCommand(readManifest(projectRoot)?.toolchain ?? resolveToolchain())
+    ).join(" ")} using ${images.api}.`,
   });
   actions.push({
     order: order++,

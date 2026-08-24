@@ -544,6 +544,7 @@ export function initializeDeploymentProfile(
       ...(modules.has("rate-limit")
         ? {
             RATE_LIMIT_TTL: "60",
+            RATE_LIMIT_KEY_PREFIX: "podokit:rate-limit",
             RATE_LIMIT_MAX: "300",
             RATE_LIMIT_AUTH_TTL: "60",
             RATE_LIMIT_AUTH_MAX: "20",

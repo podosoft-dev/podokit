@@ -2,7 +2,7 @@
 
 Full-stack TypeScript app generated with [PodoKit](https://github.com/podosoft-dev/podokit).
 
-- `apps/api` — NestJS API: schema-validated env, `/health` + `/health/ready`, a `todos` CRUD resource (TypeORM + PostgreSQL), Swagger docs at `/api-docs`, and a standard error envelope.
+- `apps/api` — Bun 1.4 + Elysia API: schema-validated env, `/health` + `/health/ready`, a Bun.SQL Todo CRUD resource backed by PostgreSQL, merged OpenAPI at `/api-docs`, and a standard error envelope.
 - `apps/web` — SvelteKit app (TailwindCSS v4, shadcn-svelte, typesafe-i18n) with a todo UI that talks to the API through a server-side proxy.
 - `infra/` — Docker Compose (PostgreSQL, Redis) and k3s manifests.
 
@@ -13,7 +13,7 @@ Full-stack TypeScript app generated with [PodoKit](https://github.com/podosoft-d
 ```bash
 {{packageManager}} install
 cp .env.example .env
-npx @podosoft/podokit dev watch
+{{packageExecutor}} @podosoft/podokit dev watch
 ```
 
 Open the URL printed by the command; a new project defaults to
@@ -26,12 +26,12 @@ the same topology, with one route and no project-specific host port.
 In a second terminal, apply the included Todo migration and use the lifecycle helpers:
 
 ```bash
-npx @podosoft/podokit dev exec api npm run migration:run -w {{projectName}}-api
-npx @podosoft/podokit dev url
-npx @podosoft/podokit dev up -d # detached stack without source watching
-npx @podosoft/podokit dev ps
-npx @podosoft/podokit dev logs
-npx @podosoft/podokit dev down
+{{packageExecutor}} @podosoft/podokit dev exec api {{apiRun}} migration:run
+{{packageExecutor}} @podosoft/podokit dev url
+{{packageExecutor}} @podosoft/podokit dev up -d # detached stack without source watching
+{{packageExecutor}} @podosoft/podokit dev ps
+{{packageExecutor}} @podosoft/podokit dev logs
+{{packageExecutor}} @podosoft/podokit dev down
 ```
 
 `dev watch` reads `.podokit/manifest.json` and automatically activates `cache`,
@@ -41,7 +41,7 @@ Watch attached.
 You can still activate an additional Compose profile explicitly:
 
 ```bash
-npx @podosoft/podokit dev watch --profile dev
+{{packageExecutor}} @podosoft/podokit dev watch --profile dev
 ```
 
 Explicit profile flags are preserved for other lifecycle commands. `dev down`
@@ -59,7 +59,7 @@ Use this loop when you want only the web and API processes on the host:
 docker compose -f infra/docker/docker-compose.yml up -d
 
 # run database migrations
-{{packageManager}} run migration:run -w {{projectName}}-api
+{{apiRun}} migration:run
 
 # run api + web
 {{packageManager}} run dev
@@ -73,11 +73,12 @@ tunnel, see the PodoKit [development guide](https://github.com/podosoft-dev/podo
 
 ## Database & migrations
 
-The API uses TypeORM with PostgreSQL. A sample `Todo` entity and an initial migration are included — replace them with your own domain model.
+The API uses Bun.SQL with PostgreSQL. TypeORM is limited to the migration layer;
+a sample Todo repository and initial migration are included.
 
 ```bash
-{{packageManager}} run migration:run -w {{projectName}}-api      # apply migrations
-{{packageManager}} run migration:revert -w {{projectName}}-api   # roll back the last one
+{{apiRun}} migration:run      # apply migrations
+{{apiRun}} migration:revert   # roll back the last one
 ```
 
 ## Deploy

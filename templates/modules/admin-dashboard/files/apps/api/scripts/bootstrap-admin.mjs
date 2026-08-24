@@ -17,9 +17,9 @@ function usage() {
   console.log(`Create or verify the initial PodoKit administrator.
 
 Usage:
-  npm run admin:bootstrap -w <app>-api
-  npm run admin:bootstrap -w <app>-api -- --dry-run
-  npm run admin:bootstrap -w <app>-api -- --check-only
+  {{apiRun}} admin:bootstrap
+  {{apiRun}} admin:bootstrap -- --dry-run
+  {{apiRun}} admin:bootstrap -- --check-only
 
 Required environment:
   ADMIN_EMAILS               Allowed administrator emails (comma-separated)

@@ -1,6 +1,7 @@
 import { isIP } from "node:net";
 
 export interface RateLimitConfig {
+  keyPrefix: string;
   ttlSeconds: number;
   limit: number;
   authTtlSeconds: number;
@@ -10,6 +11,16 @@ export interface RateLimitConfig {
   proxyHeader: string;
   storageTimeoutMs: number;
   unavailableRetryAfterSeconds: number;
+}
+
+function keyPrefix(value: string | undefined): string {
+  const normalized = (value || "podokit:rate-limit").trim();
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9:_-]{0,127}$/.test(normalized)) {
+    throw new Error(
+      "RATE_LIMIT_KEY_PREFIX must be 1-128 characters using letters, numbers, colons, underscores, or hyphens",
+    );
+  }
+  return normalized;
 }
 
 function positiveInteger(name: string, value: string | undefined, fallback: number): number {
@@ -40,6 +51,7 @@ function headerName(value: string | undefined): string {
 
 export function rateLimitConfig(env: NodeJS.ProcessEnv = process.env): RateLimitConfig {
   return {
+    keyPrefix: keyPrefix(env.RATE_LIMIT_KEY_PREFIX),
     ttlSeconds: positiveInteger("RATE_LIMIT_TTL", env.RATE_LIMIT_TTL, 60),
     limit: positiveInteger("RATE_LIMIT_MAX", env.RATE_LIMIT_MAX, 300),
     authTtlSeconds: positiveInteger(
@@ -82,6 +94,7 @@ function normalizeIp(value: string | undefined): string | undefined {
 }
 
 function headerValue(headers: unknown, name: string): string | undefined {
+  if (headers instanceof Headers) return headers.get(name) ?? undefined;
   if (!headers || typeof headers !== "object") return undefined;
   const value = (headers as Record<string, unknown>)[name];
   if (typeof value === "string") return value;

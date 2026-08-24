@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // PodoKit MCP server (stdio). Wraps the `podo` CLI library + docs so AI coding
 // tools can list/add modules, inspect a project, preview updates, and search
-// the conventions — run locally via `npx @podosoft/podokit-mcp` (no hosting).
+// the conventions — run locally via npx (Node) or bunx --bun (Bun), with no hosting.
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -83,21 +83,31 @@ server.registerTool(
   "create_project",
   {
     description:
-      "Scaffold a new PodoKit project from scratch (= `podo create`). Creates the app files in a new directory; then run `add_module` for features and `npm install`. Use this to start a project in an empty folder.",
+      "Scaffold a new Bun 1.4.0 PodoKit project from scratch (= `podo create`). Creates the app files in a new directory; then run `add_module` for features and install with Bun. Use this to start a project in an empty folder.",
     inputSchema: {
       name: z.string().describe("Project name (also the default directory name)"),
-      template: z.string().optional().describe("Template: fullstack-nest-svelte (default), todo, or base"),
+      template: z.string().optional().describe("Template: fullstack (default), todo, or base"),
+      runtime: z.literal("bun").optional().describe("Runtime: Bun 1.4.0"),
+      packageManager: z.literal("bun").optional().describe("Package manager: Bun 1.4.0"),
       targetDir: z.string().optional().describe("Where to create it; defaults to <cwd>/<name>"),
       ai: z.boolean().optional().describe("Include AI agent guidance (AGENTS.md, skills, .mcp.json). Default true."),
     },
   },
-  async ({ name, template, targetDir, ai }) => {
+  async ({ name, template, runtime, packageManager, targetDir, ai }) => {
     try {
       const dir = targetDir ?? join(process.cwd(), name);
-      const r = create({ name, template, targetDir: dir, templatesDir: builtinTemplatesDir(), ai });
+      const r = create({
+        name,
+        template,
+        runtime,
+        packageManager,
+        targetDir: dir,
+        templatesDir: builtinTemplatesDir(),
+        ai,
+      });
       return text(
         `Created ${r.template} project "${name}" at ${r.projectDir}.\n` +
-          `Next: add features with add_module (projectDir="${r.projectDir}"), then run \`npm install\` there.`,
+          `Next: add features with add_module (projectDir="${r.projectDir}"), then run \`${r.packageManager} install\` there.`,
       );
     } catch (err) {
       return fail(`create_project failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -145,7 +155,7 @@ server.registerTool(
   "check_versions",
   {
     description:
-      "Check the project's framework versions (NestJS, SvelteKit, …) against the ranges PodoKit supports (= `podo doctor`).",
+      "Check the project's framework versions (Elysia, SvelteKit, …) against the ranges PodoKit supports (= `podo doctor`).",
     inputSchema: projectDirSchema,
   },
   async ({ projectDir }) => {
@@ -366,7 +376,7 @@ server.registerTool(
     const r = inProject(projectDir, (dir) => addModule({ projectRoot: dir, module, modulesDir: builtinModulesDir() }));
     return "content" in r
       ? r
-      : text(`Added ${r.module}. Also added: ${r.added.join(", ") || "(none)"}. Run npm install.`);
+      : text(`Added ${r.module}. Also added: ${r.added.join(", ") || "(none)"}. Run bun install.`);
   },
 );
 

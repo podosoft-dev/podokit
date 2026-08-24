@@ -1,13 +1,14 @@
-import { describe, expect, it } from "@jest/globals";
+import { describe, expect, test } from "bun:test";
 import {
   clientAddressFromProxy,
   rateLimitConfig,
 } from "./rate-limit.config";
 
 describe("rate limit configuration", () => {
-  it("validates route limits and proxy settings", () => {
+  test("validates route limits and proxy settings", () => {
     expect(
       rateLimitConfig({
+        RATE_LIMIT_KEY_PREFIX: "podokit:tenant-a:rate-limit",
         RATE_LIMIT_TTL: "30",
         RATE_LIMIT_MAX: "250",
         RATE_LIMIT_AUTH_TTL: "45",
@@ -19,6 +20,7 @@ describe("rate limit configuration", () => {
         RATE_LIMIT_UNAVAILABLE_RETRY_AFTER: "3",
       }),
     ).toEqual({
+      keyPrefix: "podokit:tenant-a:rate-limit",
       ttlSeconds: 30,
       limit: 250,
       authTtlSeconds: 45,
@@ -38,9 +40,13 @@ describe("rate limit configuration", () => {
     expect(() =>
       rateLimitConfig({ RATE_LIMIT_PROXY_HEADER: "invalid header" }),
     ).toThrow("must be a valid HTTP header name");
+    expect(() => rateLimitConfig({ RATE_LIMIT_KEY_PREFIX: "invalid prefix!" })).toThrow(
+      "RATE_LIMIT_KEY_PREFIX must be 1-128 characters",
+    );
+    expect(rateLimitConfig({}).keyPrefix).toBe("podokit:rate-limit");
   });
 
-  it("selects only the address outside the configured trusted proxy depth", () => {
+  test("selects only the address outside the configured trusted proxy depth", () => {
     const headers = {
       "x-forwarded-for": "203.0.113.7, 198.51.100.8",
     };
@@ -64,7 +70,7 @@ describe("rate limit configuration", () => {
     ).toBe("10.0.0.9");
   });
 
-  it("ignores malformed or incomplete forwarded chains", () => {
+  test("ignores malformed or incomplete forwarded chains", () => {
     expect(
       clientAddressFromProxy(
         { "x-forwarded-for": "attacker-controlled" },

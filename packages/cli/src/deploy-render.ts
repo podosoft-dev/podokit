@@ -8,6 +8,8 @@ import type {
   WorkloadProfile,
 } from "./deploy-profile";
 import { profilePath } from "./deploy-profile";
+import { readManifest } from "./lockfile";
+import { resolveToolchain, toolchainMigrationCommand } from "./toolchain";
 
 export interface DeploymentRuntime {
   root: string;
@@ -683,9 +685,10 @@ function migrationManifest(
   profile: DeployProfileV1,
   release: string,
   images: DeploymentImages,
+  defaultCommand: string[],
 ): string {
   const releaseSlug = release.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-  const command = profile.migration?.command ?? ["npm", "run", "migrate:all"];
+  const command = profile.migration?.command ?? defaultCommand;
   return `apiVersion: batch/v1
 kind: Job
 metadata:
@@ -772,7 +775,13 @@ export function renderDeployment(
     rolloutStateDigest ?? offlineRolloutStateDigest(profile);
   const dependencies = dependencyManifest(profile, images, effectiveRolloutStateDigest);
   const application = applicationManifest(profile, images, effectiveRolloutStateDigest);
-  const migration = migrationManifest(profile, release, images);
+  const toolchain = readManifest(projectRoot)?.toolchain ?? resolveToolchain();
+  const migration = migrationManifest(
+    profile,
+    release,
+    images,
+    toolchainMigrationCommand(toolchain),
+  );
   chart(dependencyChart, "podokit-dependencies", dependencies);
   chart(applicationChart, "podokit-application", application);
   writeFileSync(join(root, "migration.yaml"), migration);
