@@ -110,6 +110,9 @@ describe("create (integration against templates)", () => {
     expect(readFileSync(join(target, "apps/api/package.json"), "utf8")).toContain(
       '"test": "bun test src"',
     );
+    const apiMain = readFileSync(join(target, "apps/api/src/main.ts"), "utf8");
+    expect(apiMain).toContain("async function bootstrap(): Promise<void>");
+    expect(apiMain).toContain("await services.start()");
     for (const workspace of ["api", "web"]) {
       const dockerfile = readFileSync(join(target, `apps/${workspace}/Dockerfile`), "utf8");
       expect(dockerfile).toContain("FROM oven/bun:1.4.0-alpine");
