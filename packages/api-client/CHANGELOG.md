@@ -1,5 +1,17 @@
 # @podosoft/podokit-api-client
 
+## 0.8.1
+
+### Patch Changes
+
+- [#169](https://github.com/podosoft-dev/podokit/pull/169) [`eb0c707`](https://github.com/podosoft-dev/podokit/commit/eb0c707d484c6458e8c8c99866e9973875649654) Thanks [@dependabot](https://github.com/apps/dependabot)! - Align generated authentication dependencies with Better Auth 1.7.1 and use local account row IDs when unlinking providers.
+
+- [#163](https://github.com/podosoft-dev/podokit/pull/163) [`c225b20`](https://github.com/podosoft-dev/podokit/commit/c225b206508e486f37dbbc12fb67195bd978c02e) Thanks [@korone00](https://github.com/korone00)! - Refresh the Better Auth client dependency floor and the PostgreSQL verification toolchain while preserving the packages' existing public compatibility ranges.
+
+- [#167](https://github.com/podosoft-dev/podokit/pull/167) [`196278a`](https://github.com/podosoft-dev/podokit/commit/196278aa7aa29d17d549d653e95e27b8e9df7958) Thanks [@dependabot](https://github.com/apps/dependabot)! - Raise the API key client dependency floor to Better Auth 1.7.1.
+
+- [#168](https://github.com/podosoft-dev/podokit/pull/168) [`8f2a9d4`](https://github.com/podosoft-dev/podokit/commit/8f2a9d476de9bc24e8016b106dfe7973c86faf37) Thanks [@dependabot](https://github.com/apps/dependabot)! - Raise the passkey client dependency floor to Better Auth 1.7.1.
+
 ## 0.8.0
 
 ### Minor Changes
