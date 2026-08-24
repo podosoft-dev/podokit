@@ -58,7 +58,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      E2E_BUN_CACHE: /home/runner/.bun/install/cache
       POSTGRES_HOST: localhost
       POSTGRES_PORT: "5432"
       POSTGRES_USER: podokit
@@ -134,13 +133,6 @@ jobs:
           docker exec podokit-e2e-minio mc alias set local http://localhost:9000 podokit podokitsecret
           docker exec podokit-e2e-minio mc mb --ignore-existing local/podokit
       - run: npm ci
-      - name: Cache generated app Bun downloads
-        uses: actions/cache@v6
-        with:
-          path: ~/.bun/install/cache
-          key: e2e-generated-bun-${{ runner.os }}-${{ hashFiles('package-lock.json', 'templates/**/package.json', 'templates/**/module.manifest.json') }}
-          restore-keys: |
-            e2e-generated-bun-${{ runner.os }}-
       - name: Cache Playwright browsers
         if: >-
           (github.event_name != 'pull_request' || github.head_ref != 'changeset-release/main') &&
