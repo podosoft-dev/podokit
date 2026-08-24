@@ -73,7 +73,7 @@ export interface DoctorFinding {
  */
 export const SUPPORTED_FRAMEWORKS: Record<string, { app: "api" | "web"; range: string; majors: number[] }> = {
   elysia: { app: "api", range: "^1.4", majors: [1] },
-  "better-auth": { app: "api", range: ">=1.6.23 <1.7", majors: [1] },
+  "better-auth": { app: "api", range: ">=1.7.1 <1.8", majors: [1] },
   svelte: { app: "web", range: "^5", majors: [5] },
 };
 
@@ -87,7 +87,7 @@ function declaredVersion(projectRoot: string, app: "api" | "web", pkg: string): 
   return json.dependencies?.[pkg] ?? json.devDependencies?.[pkg] ?? null;
 }
 
-/** Parse the leading major from a semver range like `^1.4.29` or `>=1.6.23 <1.7`. */
+/** Parse the leading major from a semver range like `^1.4.29` or `>=1.7.1 <1.8`. */
 export function leadingMajor(range: string): number | null {
   const match = range.match(/(\d+)\./);
   return match ? Number(match[1]) : null;
