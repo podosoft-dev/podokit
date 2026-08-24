@@ -143,6 +143,13 @@ policy, and add Bun tests plus an API contract entry.
 |---|---|
 | `elysia` | `^1.4` |
 | `svelte` | `^5` |
-| `better-auth` | `>=1.6.23 <1.7` |
+| `better-auth` | `>=1.7.1 <1.8` |
 
 `podo doctor` warns when an application moves outside these ranges.
+
+Better Auth 1.7 adds issuer-scoped account identities and a required `issuer`
+column. Fresh PodoKit v1 applications receive the complete schema through their
+initial migration. Before pointing v1 code at an existing Better Auth 1.6
+database, complete the issuer backfill described in the
+[Better Auth 1.7 upgrade guide](https://github.com/better-auth/better-auth/blob/main/docs/content/docs/guides/1-7-upgrade-guide.mdx);
+the migration command cannot safely choose an issuer for existing accounts.

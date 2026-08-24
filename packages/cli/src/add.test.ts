@@ -832,7 +832,8 @@ describe("addModule (auth / better-auth)", () => {
       join(project, "apps/web/src/lib/components/account-page.svelte"),
       "utf8",
     );
-    expect(accountPage).toContain("unlinkAccount({ accountId: account.accountId })");
+    expect(accountPage).toContain("unlinkAccount({ accountId: account.id })");
+    expect(accountPage).not.toContain("unlinkAccount({ accountId: account.accountId })");
     expect(accountPage).not.toContain("unlinkAccount({ providerId:");
     expect(readManifest(project)?.managedOverrides).toContain(
       ".claude/skills/podokit-configure-auth/**",

@@ -164,6 +164,12 @@ curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-up/email \
 curl -b cookies.txt localhost:5002/account/me
 ```
 
+Better Auth 1.7 requires an `issuer` for every account. Fresh applications get
+that schema from the command above. Existing Better Auth 1.6 databases need the
+trusted issuer backfill in the
+[Better Auth 1.7 upgrade guide](https://github.com/better-auth/better-auth/blob/main/docs/content/docs/guides/1-7-upgrade-guide.mdx)
+before running v1 code; the migration command cannot infer issuers safely.
+
 For a built production image, run both the Better Auth schema migration and all
 TypeORM migrations without downloading a CLI or copying TypeScript source into
 the image:

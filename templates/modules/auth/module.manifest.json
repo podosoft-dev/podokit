@@ -9,11 +9,11 @@
   "dependencies": {
     "@podosoft/podokit-auth": "^0.3.0",
     "@podosoft/podokit-contracts": "^0.4.0",
-    "better-auth": "^1.6.23",
+    "better-auth": "^1.7.1",
     "pg": "^8.12.0",
-    "@better-auth/api-key": "^1.6.23",
-    "@better-auth/passkey": "^1.6.23",
-    "@better-auth/oauth-provider": "^1.6.23"
+    "@better-auth/api-key": "^1.7.1",
+    "@better-auth/passkey": "^1.7.1",
+    "@better-auth/oauth-provider": "^1.7.1"
   },
   "devDependencies": {
     "@types/pg": "^8.11.10"
