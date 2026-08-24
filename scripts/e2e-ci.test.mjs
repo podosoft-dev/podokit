@@ -88,6 +88,16 @@ test("publishes and installs external modules in the faithful generated app", ()
   assert.ok(add > install);
 });
 
+test("isolates Bun package resolution from previously published local packages", () => {
+  const source = readFileSync(join(repoRoot, "scripts/e2e-ci.mjs"), "utf8");
+
+  assert.match(
+    source,
+    /const bunCacheDir = process\.env\.E2E_BUN_CACHE[\s\S]*: join\(appDir, "\.bun-cache"\);/,
+  );
+  assert.equal(source.match(/"--cache-dir",\s*bunCacheDir/g)?.length, 2);
+});
+
 test("requires dependency readiness only when object storage is configured", () => {
   const source = readFileSync(join(repoRoot, "scripts/e2e-ci.mjs"), "utf8");
 
