@@ -1,10 +1,10 @@
 import { error } from "@sveltejs/kit";
 import type { Handle } from "@sveltejs/kit/hooks";
-import { serverApiClient } from "$lib/server/api";
-import { resolveLocale } from "$lib/i18n/messages";
-import { applySearchIndexingHeaders } from "$lib/server/search-indexing";
-import { isPublicPath } from "$lib/server/guards";
-import type { SiteSettings } from "$lib/site.svelte";
+import { serverApiClient } from "#lib/server/api.js";
+import { resolveLocale } from "#lib/i18n/messages.js";
+import { applySearchIndexingHeaders } from "#lib/server/search-indexing.js";
+import { isPublicPath } from "#lib/server/guards.js";
+import type { SiteSettings } from "#lib/site.svelte.js";
 import { ApiError } from "@podosoft/podokit-api-client";
 
 function isTemporaryServiceFailure(cause: unknown): boolean {

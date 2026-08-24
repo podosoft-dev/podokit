@@ -2,16 +2,16 @@
   import { page } from "$app/state";
   import { onMount } from "svelte";
   import CookieIcon from "@lucide/svelte/icons/cookie";
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
   import {
     registerAnalyticsRuntime,
     type AnalyticsConsent,
     type AnalyticsEventParams,
-  } from "$lib/analytics";
-  import { analyticsAppConfig } from "$lib/analytics.config";
-  import type { AnalyticsPublicConfig } from "$lib/analytics/types";
-  import { getI18n } from "$lib/i18n";
+  } from "#lib/analytics.js";
+  import { analyticsAppConfig } from "#lib/analytics.config.js";
+  import type { AnalyticsPublicConfig } from "#lib/analytics/types.js";
+  import { getI18n } from "#lib/i18n/index.js";
 
   const CONSENT_KEY = "podokit.analytics.consent.v1";
   const SCRIPT_ID = "podokit-google-analytics";

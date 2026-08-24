@@ -1,5 +1,5 @@
 <script lang="ts">
-  import * as Pagination from "$lib/components/ui/pagination";
+  import * as Pagination from "#lib/components/ui/pagination/index.js";
 
   // Shared table footer: a count label plus shadcn-svelte pagination. The pager
   // is always shown (even for a single page or an empty list) so the footer stays

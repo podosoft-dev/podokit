@@ -48,7 +48,7 @@
     {
       "file": "apps/web/src/lib/admin/registry.svelte.ts",
       "marker": "// podokit:end:admin-nav-imports",
-      "text": "import ChartNoAxesCombinedIcon from \"@lucide/svelte/icons/chart-no-axes-combined\";\nimport AnalyticsSettings from \"$lib/components/settings/analytics-settings.svelte\";"
+      "text": "import ChartNoAxesCombinedIcon from \"@lucide/svelte/icons/chart-no-axes-combined\";\nimport AnalyticsSettings from \"#lib/components/settings/analytics-settings.svelte\";"
     },
     {
       "file": "apps/web/src/lib/admin/registry.svelte.ts",
@@ -63,7 +63,7 @@
     {
       "file": "apps/web/src/lib/components/site-runtime.svelte",
       "marker": "// podokit:end:site-runtime-imports",
-      "text": "import AnalyticsRuntime from \"$lib/components/analytics-runtime.svelte\";"
+      "text": "import AnalyticsRuntime from \"#lib/components/analytics-runtime.svelte\";"
     },
     {
       "file": "apps/web/src/lib/components/site-runtime.svelte",
@@ -74,7 +74,7 @@
       "file": "AGENTS.md",
       "marker": "<!-- podokit:end:agents-modules -->",
       "optional": true,
-      "text": "### analytics\n- Analytics is configured by administrators under Settings → Analytics and reported at `/admin/analytics`. It sends anonymous aggregate GA4 data only; never pass user IDs, names, email addresses, secrets, or sensitive values to analytics events.\n- Track application goals with `trackAnalyticsEvent` from `$lib/analytics`. Public and signed-in product pages are included by default; customize sensitive routes in the owned `$lib/analytics.config.ts`.\n- Consent Mode v2 runs in advanced mode, so denied analytics storage can still produce cookieless pings. Keep the application privacy notice accurate and leave a visible way to reopen analytics consent settings.\n"
+      "text": "### analytics\n- Analytics is configured by administrators under Settings → Analytics and reported at `/admin/analytics`. It sends anonymous aggregate GA4 data only; never pass user IDs, names, email addresses, secrets, or sensitive values to analytics events.\n- Track application goals with `trackAnalyticsEvent` from `#lib/analytics.js`. Public and signed-in product pages are included by default; customize sensitive routes in the owned `#lib/analytics.config.js`.\n- Consent Mode v2 runs in advanced mode, so denied analytics storage can still produce cookieless pings. Keep the application privacy notice accurate and leave a visible way to reopen analytics consent settings.\n"
     }
   ],
   "instructions": [

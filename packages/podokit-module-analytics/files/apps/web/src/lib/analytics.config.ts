@@ -1,4 +1,4 @@
-import type { AnalyticsAppConfig } from "$lib/analytics";
+import type { AnalyticsAppConfig } from "#lib/analytics.js";
 
 const excludedPathPrefixes = [
   "/admin",

@@ -1,5 +1,5 @@
 import type { PageServerLoad } from "./$types";
-import { loadBlogComments, loadBlogPost } from "$lib/blog/blog-data.server";
+import { loadBlogComments, loadBlogPost } from "#lib/blog/blog-data.server.js";
 
 export const load: PageServerLoad = async (event) => {
   const requested = Number(event.url.searchParams.get("commentPage") ?? "1");

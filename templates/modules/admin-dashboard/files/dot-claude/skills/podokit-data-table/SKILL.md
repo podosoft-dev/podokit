@@ -5,15 +5,15 @@ description: Use when building ANY list or table view in this project (users, se
 
 # Build a list with the shared DataTable
 
-**Every** list/table in this project must use `$lib/components/data-table.svelte`
+**Every** list/table in this project must use `#lib/components/data-table.svelte`
 (`DataTable`) — it provides sortable headers and a footer pagination, consistently.
 Do **not** assemble `Table.Root` / `Table.Header` / `Table.Body` by hand, and don't
 put pagination outside the table.
 
 ```svelte
 <script lang="ts">
-  import DataTable from "$lib/components/data-table.svelte";
-  import { cn } from "$lib/utils";
+  import DataTable from "#lib/components/data-table.svelte";
+  import { cn } from "#lib/utils.js";
   const columns = [
     { key: "name", label: "Name", sortable: true },
     { key: "email", label: "Email", sortable: true },

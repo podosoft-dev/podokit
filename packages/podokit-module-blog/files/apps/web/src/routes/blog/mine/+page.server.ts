@@ -1,6 +1,6 @@
 import { redirect } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
-import { loadMyBlogPosts } from "$lib/blog/blog-data.server";
+import { loadMyBlogPosts } from "#lib/blog/blog-data.server.js";
 
 export const load: PageServerLoad = async (event) => {
   event.setHeaders({ "X-Robots-Tag": "noindex, nofollow" });

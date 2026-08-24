@@ -1,5 +1,5 @@
 import type { PageServerLoad } from "./$types";
-import { loadBlogPosts } from "$lib/blog/blog-data.server";
+import { loadBlogPosts } from "#lib/blog/blog-data.server.js";
 
 export const load: PageServerLoad = async (event) => {
   const requested = Number(event.url.searchParams.get("page") ?? "1");

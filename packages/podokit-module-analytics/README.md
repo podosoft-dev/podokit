@@ -54,7 +54,7 @@ browser history events** to prevent duplicate page views.
 ## Application events
 
 ```ts
-import { trackAnalyticsEvent } from "$lib/analytics";
+import { trackAnalyticsEvent } from "#lib/analytics.js";
 
 trackAnalyticsEvent("generate_lead", { method: "contact_form" });
 ```

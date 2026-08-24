@@ -1,8 +1,8 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
-  import { api } from "$lib/api";
-  import { Button } from "$lib/components/ui/button";
-  import { getI18n } from "$lib/i18n";
+  import { api } from "#lib/api.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { getI18n } from "#lib/i18n/index.js";
   import { toast } from "svelte-sonner";
 
   let { email }: { email: string } = $props();

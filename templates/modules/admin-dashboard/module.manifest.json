@@ -75,8 +75,8 @@
         },
         {
           "path": "apps/web/src/routes/(admin)/+layout.svelte",
-          "from": "$lib/components/app-sidebar.svelte",
-          "to": "$lib/components/admin-sidebar.svelte",
+          "from": "#lib/components/app-sidebar.svelte",
+          "to": "#lib/components/admin-sidebar.svelte",
           "expected": 1
         }
       ]
@@ -87,7 +87,7 @@
       "file": "apps/web/src/routes/+page.svelte",
       "marker": "// podokit:end:landing-imports",
       "optional": true,
-      "text": "import { page } from \"$app/state\";\n  import AccountMenu from \"$lib/components/account-menu.svelte\";\n  import LanguageSwitch from \"$lib/components/language-switch.svelte\";\n  import ThemeToggle from \"$lib/components/theme-toggle.svelte\";"
+      "text": "import { page } from \"$app/state\";\n  import AccountMenu from \"#lib/components/account-menu.svelte\";\n  import LanguageSwitch from \"#lib/components/language-switch.svelte\";\n  import ThemeToggle from \"#lib/components/theme-toggle.svelte\";"
     },
     {
       "file": "apps/web/src/routes/+page.svelte",
@@ -119,7 +119,7 @@
       "file": "AGENTS.md",
       "marker": "<!-- podokit:end:agents-modules -->",
       "optional": true,
-      "text": "### admin-dashboard\n- The `(admin)` route group and `admin-sidebar.svelte` are the admin-console shell for `/admin/*` only. Put signed-in product pages in `(app)` or in a separate route group with its own layout; do not place them under `(admin)`.\n- Admin console lives at `/admin/*` (users, sessions, organizations, audit, settings, account). Set `ADMIN_EMAILS`, then create or verify the initial account with `{{apiRun}} admin:bootstrap{{apiWorkspaceArg}}`; never commit or persist `ADMIN_BOOTSTRAP_PASSWORD`. When sign-up approval is enabled, self-registered users stay pending until an administrator approves them on `/admin/users`; administrator-created users bypass the queue.\n- Signed-in users can upload, replace, or remove their profile image from `/account` or `/admin/account`. Keep the shared policy visible in custom account UI: PNG, JPEG, or WebP; at most 2 MB and 2048 by 2048 pixels. Use the managed `/api/account/profile-image` endpoints instead of writing directly to storage or `user.image`.\n- `sidebar-user-menu.svelte` is specific to the admin sidebar. For a product shell outside `Sidebar.Provider`, use the managed `<AccountMenu {user} variant=\"identity\" side=\"top\" />` component.\n- Custom protected server layouts must call `requireBackendAvailable(locals)` from `$lib/server/guards` before redirecting anonymous users. This preserves sessions and returns 503 when authentication or maintenance policy cannot be checked.\n- **Every list/table MUST use the shared `$lib/components/data-table.svelte` (`DataTable`)** \u2014 it gives sortable headers + a footer pagination. Add search/filters with `$lib/components/table-toolbar.svelte`. Never assemble `Table.Root`/`Table.Header`/`Table.Body` by hand. For responsive columns, use `hideBelow` and apply the row context's `cellClass(columnKey)` to the matching cell.\n"
+      "text": "### admin-dashboard\n- The `(admin)` route group and `admin-sidebar.svelte` are the admin-console shell for `/admin/*` only. Put signed-in product pages in `(app)` or in a separate route group with its own layout; do not place them under `(admin)`.\n- Admin console lives at `/admin/*` (users, sessions, organizations, audit, settings, account). Set `ADMIN_EMAILS`, then create or verify the initial account with `{{apiRun}} admin:bootstrap{{apiWorkspaceArg}}`; never commit or persist `ADMIN_BOOTSTRAP_PASSWORD`. When sign-up approval is enabled, self-registered users stay pending until an administrator approves them on `/admin/users`; administrator-created users bypass the queue.\n- Signed-in users can upload, replace, or remove their profile image from `/account` or `/admin/account`. Keep the shared policy visible in custom account UI: PNG, JPEG, or WebP; at most 2 MB and 2048 by 2048 pixels. Use the managed `/api/account/profile-image` endpoints instead of writing directly to storage or `user.image`.\n- `sidebar-user-menu.svelte` is specific to the admin sidebar. For a product shell outside `Sidebar.Provider`, use the managed `<AccountMenu {user} variant=\"identity\" side=\"top\" />` component.\n- Custom protected server layouts must call `requireBackendAvailable(locals)` from `#lib/server/guards.js` before redirecting anonymous users. This preserves sessions and returns 503 when authentication or maintenance policy cannot be checked.\n- **Every list/table MUST use the shared `#lib/components/data-table.svelte` (`DataTable`)** \u2014 it gives sortable headers + a footer pagination. Add search/filters with `#lib/components/table-toolbar.svelte`. Never assemble `Table.Root`/`Table.Header`/`Table.Body` by hand. For responsive columns, use `hideBelow` and apply the row context's `cellClass(columnKey)` to the matching cell.\n"
     },
     {
       "file": "apps/api/src/app.ts",

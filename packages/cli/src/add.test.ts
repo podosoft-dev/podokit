@@ -163,7 +163,7 @@ describe("module project baseline requirements", () => {
 describe("module-declared ownedGlobs", () => {
   it("merges into the manifest so the module's public path stays owned", () => {
     const project = generate("fullstack");
-    // a throwaway fixture module that ships a $lib file and declares it owned
+    // a throwaway fixture module that ships a #lib file and declares it owned
     const modulesDir = join(tmp(), "modules");
     const fileRel = "apps/web/src/lib/widget/Widget.svelte";
     writeFile(join(modulesDir, "widget", "files", fileRel), "<p>widget</p>");
@@ -720,9 +720,9 @@ describe("addModule (auth / better-auth)", () => {
     expect(result.preserved).toEqual(expect.arrayContaining(["apps/web/src/routes/+page.svelte"]));
     const landingPage = readFileSync(join(project, "apps/web/src/routes/+page.svelte"), "utf8");
     expect(landingPage).toContain("API health");
-    expect(landingPage).toContain('import AccountMenu from "$lib/components/account-menu.svelte";');
-    expect(landingPage).toContain('import LanguageSwitch from "$lib/components/language-switch.svelte";');
-    expect(landingPage).toContain('import ThemeToggle from "$lib/components/theme-toggle.svelte";');
+    expect(landingPage).toContain('import AccountMenu from "#lib/components/account-menu.svelte";');
+    expect(landingPage).toContain('import LanguageSwitch from "#lib/components/language-switch.svelte";');
+    expect(landingPage).toContain('import ThemeToggle from "#lib/components/theme-toggle.svelte";');
     expect(landingPage).toContain("<LanguageSwitch />");
     expect(landingPage).toContain("<ThemeToggle />");
     expect(landingPage).toContain("<AccountMenu user={page.data.user ?? null} />");
@@ -732,7 +732,7 @@ describe("addModule (auth / better-auth)", () => {
     );
     expect(accountMenu).toContain('variant?: "avatar" | "identity"');
     expect(accountMenu).toContain('variant === "identity"');
-    expect(accountMenu).not.toContain('from "$lib/components/ui/sidebar"');
+    expect(accountMenu).not.toContain('from "#lib/components/ui/sidebar/index.js"');
     const playwrightConfig = readFileSync(join(project, "tests/playwright.config.ts"), "utf8");
     expect(playwrightConfig).toContain("loadPlaywrightProjects(coreProjects)");
     expect(playwrightConfig).toContain('teardown: "cleanup"');

@@ -1,15 +1,15 @@
 <script lang="ts">
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Button } from "$lib/components/ui/button";
-  import { Switch } from "$lib/components/ui/switch";
-  import * as Select from "$lib/components/ui/select";
-  import * as Card from "$lib/components/ui/card";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
   import { toast } from "svelte-sonner";
-  import { api } from "$lib/api";
-  import { getI18n } from "$lib/i18n";
-  import { defaultLocale, LOCALES, localeNames, resolveLocale } from "$lib/i18n/messages";
-  import { site, type SiteSettings } from "$lib/site.svelte";
+  import { api } from "#lib/api.js";
+  import { getI18n } from "#lib/i18n/index.js";
+  import { defaultLocale, LOCALES, localeNames, resolveLocale } from "#lib/i18n/messages.js";
+  import { site, type SiteSettings } from "#lib/site.svelte.js";
 
   const i18n = getI18n();
   const t = $derived(i18n.t.general);

@@ -58,7 +58,7 @@
       "file": "AGENTS.md",
       "marker": "<!-- podokit:end:agents-modules -->",
       "optional": true,
-      "text": "### blog\n- Public reads are paginated under `/blog`; authenticated users create private drafts by default and manage them under `/blog/mine`. The Show post switch controls public visibility without changing the first publication time. Admins can manage all content under `/admin/blog`.\n- Keep public route wrappers app-owned for visual design and SEO. Reusable types, loaders, editor, and API behavior live under managed `$lib/blog/` and `apps/api/src/blog/`.\n"
+      "text": "### blog\n- Public reads are paginated under `/blog`; authenticated users create private drafts by default and manage them under `/blog/mine`. The Show post switch controls public visibility without changing the first publication time. Admins can manage all content under `/admin/blog`.\n- Keep public route wrappers app-owned for visual design and SEO. Reusable types, loaders, editor, and API behavior live under managed `#lib/blog/` and `apps/api/src/blog/`.\n"
     }
   ],
   "instructions": [

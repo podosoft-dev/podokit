@@ -1,6 +1,6 @@
 import { redirect } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
-import { requireBackendAvailable } from "$lib/server/guards";
+import { requireBackendAvailable } from "#lib/server/guards.js";
 
 // The mandatory two-factor enrolment page (reached via the require-2fa gate).
 // Must be signed in; already-enrolled users have nothing to do here.

@@ -222,9 +222,18 @@ describe("create (integration against templates)", () => {
     expect(viteConfig).toContain('import adapter from "@sveltejs/adapter-bun"');
     expect(viteConfig).toContain("sveltekit({");
     expect(viteConfig).toContain("preprocess: vitePreprocess()");
-    expect(readFileSync(join(target, "apps", "web", "tsconfig.json"), "utf8")).toContain(
-      '"extends": "$app/tsconfig"',
-    );
+    expect(viteConfig).not.toContain("alias:");
+    const webPkg = JSON.parse(
+      readFileSync(join(target, "apps", "web", "package.json"), "utf8"),
+    ) as { imports: Record<string, string> };
+    expect(webPkg.imports).toEqual({ "#lib/*": "./src/lib/*" });
+    expect(readFileSync(join(target, "apps", "web", "src", "routes", "+page.svelte"), "utf8"))
+      .toContain('from "#lib/api.js"');
+    const webTsconfig = JSON.parse(
+      readFileSync(join(target, "apps", "web", "tsconfig.json"), "utf8"),
+    ) as { extends: string; include: string[] };
+    expect(webTsconfig.extends).toBe("$app/tsconfig");
+    expect(webTsconfig.include).toEqual(["src", "vite.config.ts"]);
     expect(existsSync(join(target, "infra", "k3s", "ingress.yaml"))).toBe(true);
     const gitignore = readFileSync(join(target, ".gitignore"), "utf8");
     expect(gitignore).toContain("playwright/.auth/");

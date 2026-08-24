@@ -155,10 +155,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   are tuned independently and dark is never disturbed by a light edit. New public
   site settings keys `themePreset`, `themeRadius`, `themeOverrides` (validated to
   prevent CSS injection); reuses the existing `brandColor`. New reusable modules
-  `$lib/site/themes.ts` and `$lib/site/apply-theme.ts`. i18n (en/ko) and Playwright
+  `#lib/site/themes.js` and `#lib/site/apply-theme.js`. i18n (en/ko) and Playwright
   (ui + api) tests included. No DB migration (uses the existing `app_setting` store).
 
 ### Fixed
+- **SvelteKit 3 source resolution and bundled web synchronization.** Generated
+  web applications now declare `#lib/*` through package imports, include explicit
+  file extensions, and limit type checking to source/config files so a completed
+  production build is not rechecked as source. Compose artifact sync treats the
+  official adapter output as a self-contained web payload while retaining runtime
+  dependency drift protection for API and worker containers. Faithful local
+  package verification also uses an isolated Bun cache so republishing the same
+  development version cannot reuse stale external-module contents.
 - **Stable analytics consent regression test.** The inherited browser test now
   resets consent once per page session instead of clearing it again on reload,
   so it verifies the persisted denied choice and settings control without a
@@ -457,7 +465,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **DB-backed runtime auth config** — OAuth providers, SMTP, and server-enforced toggles (email verification, breached-password check, self-delete, audit log) move to a DB-backed `auth_config` with per-field env fallback, applied without a restart. Config secrets are AES-256-GCM envelope-encrypted (key derived from `BETTER_AUTH_SECRET`), never returned to clients, and never logged.
 - **`admin-dashboard` module** — a ready-made admin dashboard on top of `auth`: login/signup/password-reset pages, a shadcn-svelte sidebar shell, and user + session management via the better-auth admin plugin (`ADMIN_EMAILS` are promoted to admin on sign-up). All API access goes through the ApiClient; routes are server-guarded. Verified end-to-end.
 - **`@podosoft/podokit-api-client`** — a new published package so frontends never call the backend with a raw `fetch`. `client.auth` is the better-auth client (email/password, sessions, admin plugin); `client.get/post/put/patch/del` call the app's REST endpoints, parse the standard error envelope, and throw `ApiError`. `baseUrl`/`fetch` are injectable for browser (same-origin proxy) and SSR (internal URL, cookie forwarding).
-- The `fullstack-nest-svelte` and `todo` templates now use `@podosoft/podokit-api-client` for all API access, with SvelteKit proxy routes (`/api/auth/[...all]`, `/api/[...path]`) that forward cookies and relay `Set-Cookie`. A `$lib/api.ts` (browser) and `$lib/server/api.ts` (SSR) factory ship in the templates.
+- The `fullstack-nest-svelte` and `todo` templates now use `@podosoft/podokit-api-client` for all API access, with SvelteKit proxy routes (`/api/auth/[...all]`, `/api/[...path]`) that forward cookies and relay `Set-Cookie`. A `#lib/api.js` (browser) and `#lib/server/api.js` (SSR) factory ship in the templates.
 
 ### Fixed
 - CLI build now cleans `dist/templates` before copying, so files removed from a template no longer linger in the published package.

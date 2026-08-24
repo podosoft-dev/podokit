@@ -1,11 +1,11 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
-  import type { BlogPost } from "$lib/blog";
-  import DataTable, { type DataTableColumn, type SortState } from "$lib/components/data-table.svelte";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
-  import * as Table from "$lib/components/ui/table";
-  import { fmt, getI18n } from "$lib/i18n";
+  import type { BlogPost } from "#lib/blog.js";
+  import DataTable, { type DataTableColumn, type SortState } from "#lib/components/data-table.svelte";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Table from "#lib/components/ui/table/index.js";
+  import { fmt, getI18n } from "#lib/i18n/index.js";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();

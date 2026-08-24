@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import { api } from "$lib/api";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { api } from "#lib/api.js";
   import { ApiError } from "@podosoft/podokit-api-client";
   // podokit:begin:landing-imports
   // podokit:end:landing-imports

@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import { cn } from "$lib/utils";
+  import { cn } from "#lib/utils.js";
 
   export type DataTableBreakpoint = "sm" | "md" | "lg" | "xl";
   export type DataTableColumn<Row> = {
@@ -38,9 +38,9 @@
 
 <script lang="ts" generics="Row">
   import type { Snippet } from "svelte";
-  import { Button } from "$lib/components/ui/button";
-  import * as Table from "$lib/components/ui/table";
-  import TablePagination from "$lib/components/table-pagination.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Table from "#lib/components/ui/table/index.js";
+  import TablePagination from "#lib/components/table-pagination.svelte";
   import ChevronUpIcon from "@lucide/svelte/icons/chevron-up";
   import ChevronDownIcon from "@lucide/svelte/icons/chevron-down";
   import ChevronsUpDownIcon from "@lucide/svelte/icons/chevrons-up-down";

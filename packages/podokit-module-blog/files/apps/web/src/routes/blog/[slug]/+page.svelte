@@ -1,13 +1,13 @@
 <script lang="ts">
   import { goto, invalidateAll } from "$app/navigation";
   import { toast } from "svelte-sonner";
-  import { BlogProse, blogClient, formatBlogDate, type BlogComment } from "$lib/blog";
-  import * as Avatar from "$lib/components/ui/avatar";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Textarea } from "$lib/components/ui/textarea";
-  import { getI18n } from "$lib/i18n";
+  import { BlogProse, blogClient, formatBlogDate, type BlogComment } from "#lib/blog.js";
+  import * as Avatar from "#lib/components/ui/avatar/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import { getI18n } from "#lib/i18n/index.js";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();

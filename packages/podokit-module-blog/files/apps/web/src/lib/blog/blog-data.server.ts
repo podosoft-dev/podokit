@@ -1,5 +1,5 @@
 import type { RequestEvent } from "@sveltejs/kit";
-import { serverApiClient } from "$lib/server/api";
+import { serverApiClient } from "#lib/server/api.js";
 import type { BlogComment, BlogDraft, BlogPost, Paginated } from "./types";
 
 export function loadBlogPosts(

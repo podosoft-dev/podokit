@@ -1,5 +1,5 @@
 import type { PageServerLoad } from "./$types";
-import { requireAdmin } from "$lib/server/guards";
+import { requireAdmin } from "#lib/server/guards.js";
 
 // Non-secret view of the DB-backed auth config (OAuth providers, SMTP, server
 // toggles). Secrets are never sent — only a `hasSecret` flag per credential.
