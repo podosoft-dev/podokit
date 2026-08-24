@@ -1,5 +1,5 @@
 import type { RequestHandler } from "@sveltejs/kit";
-import { backendBaseUrl, proxyRequest, resolveClientIp } from "$lib/server/backend-proxy";
+import { backendBaseUrl, proxyRequest, resolveClientIp } from "#lib/server/backend-proxy.js";
 
 // Proxy the better-auth handler, keeping the /api/auth prefix.
 const handler: RequestHandler = ({ request, params, url, getClientAddress }) =>

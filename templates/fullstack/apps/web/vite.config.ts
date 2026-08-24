@@ -17,10 +17,6 @@ export default defineConfig({
       adapter: adapter(),
       preprocess: vitePreprocess(),
       ...(publicOrigin ? { paths: { origin: publicOrigin } } : {}),
-      alias: {
-        $lib: "src/lib",
-        $i18n: "src/lib/i18n",
-      },
     }),
   ],
   server: {

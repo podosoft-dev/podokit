@@ -47,7 +47,7 @@ podo add blog
 The project manifest records the package name and applied version. After
 upgrading the package, `podo update` resolves it from the generated project's
 `node_modules` and previews its managed-file changes. Public presentation routes
-can remain app-owned while reusable API and `$lib` paths continue to update.
+can remain app-owned while reusable API and `#lib` paths continue to update.
 
 If an application already has the same feature and the package declares explicit
 `managedGlobs`, use `--adopt` to hand only those paths back to the module. Existing
@@ -73,7 +73,7 @@ bun install
 bun run --cwd apps/api migration:run
 ```
 
-The module keeps `apps/api/src/blog/**`, reusable `$lib/blog/**`, and its tests
+The module keeps `apps/api/src/blog/**`, reusable `#lib/blog/**`, and its tests
 managed. Public `/blog` route wrappers and `/admin/blog` presentation files are
 owned so applications can implement their own design and SEO. The additive
 migration preserves an existing `blog_posts` table, adds author snapshots and
@@ -132,7 +132,7 @@ sensitive application paths in the owned
 provider-neutral helper:
 
 ```ts
-import { trackAnalyticsEvent } from "$lib/analytics";
+import { trackAnalyticsEvent } from "#lib/analytics.js";
 
 trackAnalyticsEvent("generate_lead", { method: "contact_form" });
 ```
@@ -553,7 +553,7 @@ rerun. All API access goes through the typed ApiClient; routes are guarded
 server-side.
 
 The generated `routes/(admin)` group and
-`$lib/components/admin-sidebar.svelte` form the admin-only console shell for
+`#lib/components/admin-sidebar.svelte` form the admin-only console shell for
 `/admin/*`; its parent loader rejects non-admin users. The separate
 `routes/(app)` group keeps the shared backend and two-factor checks but adds no
 visual shell, so applications can place signed-in product pages there. A
@@ -602,7 +602,7 @@ private and transitional screens out of search results without relying on
 and structured data remain application-owned because their content and production
 domain are specific to each application.
 
-Use the managed `$lib/components/account-menu.svelte` in a public header to show
+Use the managed `#lib/components/account-menu.svelte` in a public header to show
 a sign-in action to guests and an avatar menu to signed-in users. The avatar menu
 links to `/account` and adds the admin dashboard entry only for administrators.
 For a product-shell footer outside `Sidebar.Provider`, use
@@ -676,7 +676,7 @@ runtime — no rebuild, no DB migration (settings live in the existing
   primaryForeground`) into ~25 CSS variables (including the `--sidebar*` set),
   and injects a mode-scoped `<style id="podokit-theme">`
   (`:root:not(.dark)` / `:root.dark`) from the managed
-  `$lib/components/site-runtime.svelte`. The application-owned root layout keeps
+  `#lib/components/site-runtime.svelte`. The application-owned root layout keeps
   this stable runtime slot while public route content remains untouched. Clearing
   the theme removes the stylesheet so `app.css` defaults win.
 - **Validation** — the site-settings Elysia plugin whitelists `themePreset`

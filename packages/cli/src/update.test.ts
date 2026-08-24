@@ -417,7 +417,7 @@ describe("applyUpdate", () => {
     ).toContain("local shell edit");
     expect(
       readFileSync(join(project, "apps/web/src/routes/(admin)/+layout.svelte"), "utf8"),
-    ).toContain('AdminSidebar from "$lib/components/admin-sidebar.svelte"');
+    ).toContain('AdminSidebar from "#lib/components/admin-sidebar.svelte"');
     expect(
       readFileSync(
         join(project, "apps/web/src/routes/(admin)/admin/reports/+page.svelte"),

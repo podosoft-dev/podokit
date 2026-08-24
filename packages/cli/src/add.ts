@@ -78,7 +78,7 @@ export interface ModuleManifest {
   /** App-relative globs this module's files should own (durably user-editable,
    *  never touched by `podo update`). Merged into the project's ownedGlobs so
    *  they survive lock recompute. Use for public presentation pages a consumer
-   *  restyles, while keeping the module's `$lib` logic managed. */
+   *  restyles, while keeping the module's `#lib` logic managed. */
   ownedGlobs?: string[];
   /** Paths that an existing app may explicitly hand back to this module with
    *  `podo add --adopt`. Broad app-owned route globs are never removed. */

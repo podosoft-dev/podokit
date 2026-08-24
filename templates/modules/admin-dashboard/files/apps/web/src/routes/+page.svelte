@@ -1,11 +1,11 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import AccountMenu from "$lib/components/account-menu.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import LanguageSwitch from "$lib/components/language-switch.svelte";
-  import ThemeToggle from "$lib/components/theme-toggle.svelte";
-  import SiteFooter from "$lib/components/site-footer.svelte";
-  import { getI18n } from "$lib/i18n";
+  import AccountMenu from "#lib/components/account-menu.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import LanguageSwitch from "#lib/components/language-switch.svelte";
+  import ThemeToggle from "#lib/components/theme-toggle.svelte";
+  import SiteFooter from "#lib/components/site-footer.svelte";
+  import { getI18n } from "#lib/i18n/index.js";
 
   const i18n = getI18n();
   const user = $derived(page.data.user ?? null);

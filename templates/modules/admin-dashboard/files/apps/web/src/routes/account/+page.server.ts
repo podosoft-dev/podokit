@@ -1,5 +1,5 @@
-import { loadAccountData } from "$lib/account-data.server";
-import { loadProtectedLayout } from "$lib/server/protected-layout";
+import { loadAccountData } from "#lib/account-data.server.js";
+import { loadProtectedLayout } from "#lib/server/protected-layout.js";
 import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ locals, fetch }) => {

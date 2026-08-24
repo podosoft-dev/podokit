@@ -46,6 +46,9 @@ const registry = `http://localhost:${env.REGISTRY_PORT}`;
 const webURL = `http://localhost:${env.WEB_PORT}`;
 const outageWebURL = `http://localhost:${env.OUTAGE_WEB_PORT}`;
 const appDir = process.env.APP_DIR ? resolve(process.env.APP_DIR) : mkdtempSync(join(tmpdir(), "podokit-e2e-"));
+const bunCacheDir = process.env.E2E_BUN_CACHE
+  ? resolve(process.env.E2E_BUN_CACHE)
+  : join(appDir, ".bun-cache");
 const rateLimitKeyPrefix = `podokit:e2e:${process.pid}:${Date.now()}:rate-limit`;
 const EXTERNAL_MODULES = [
   {
@@ -182,9 +185,8 @@ async function main() {
         external.packageName,
         "--registry",
         registry,
-        ...(process.env.E2E_BUN_CACHE
-          ? ["--cache-dir", process.env.E2E_BUN_CACHE]
-          : []),
+        "--cache-dir",
+        bunCacheDir,
       ],
       { cwd: target, env: npmEnv },
     );
@@ -195,12 +197,7 @@ async function main() {
   }
 
   step("install (resolving @podosoft/* from the registry)");
-  run("bun", [
-    "install",
-    ...(process.env.E2E_BUN_CACHE
-      ? ["--cache-dir", process.env.E2E_BUN_CACHE]
-      : []),
-  ], { cwd: target });
+  run("bun", ["install", "--cache-dir", bunCacheDir], { cwd: target });
 
   step("write .env");
   writeFileSync(

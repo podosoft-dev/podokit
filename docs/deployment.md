@@ -287,18 +287,19 @@ listed first compiles against a workspace package's previous output.
   writable layer does not survive recreation. The drift heals itself, which is what
   keeps this from becoming a second deployment path.
 
-What it copies is exactly what the images copy in beside their dependency tree: each
-`packages/*/dist`, `apps/api/dist` and `apps/api/scripts`, `apps/web/build`, and the
-two things the web image ships as source rather than bundle — `apps/web/server.js`
-and `apps/web/src/lib/server`. The API payload goes to the worker container too: it
-runs the same image but is a different container, and writable layers are per
-container. `node_modules` is never copied.
+What it copies is exactly what the images run: `packages/*/dist`, `apps/api/dist`,
+and `apps/api/scripts` for API/worker containers, plus `apps/web/build` for the web
+container. The official Bun adapter bundles the web application and its dependencies,
+so the web build is self-contained and has no runtime `node_modules` or package
+manifest to compare. The API payload goes to the worker container too: it runs the
+same image but is a different container, and writable layers are per container.
+`node_modules` is never copied.
 
 **It refuses rather than warns** when the result could not be trusted:
 
 | Refusal | Why |
 | --- | --- |
-| runtime dependencies differ from the container's manifests | the image installed `--omit=dev` from the old manifest, so the new code would import a package that is not there — a crash loop after the restart, not a copy error |
+| API/worker runtime dependencies differ from the container's manifests | those images installed the old dependency graph, so the new code could import a package that is not there — a crash loop after the restart, not a copy error; the bundled web build is exempt |
 | a release holds the deployment lock | an apply is in progress |
 | no running container for the project | there is nothing to sync into; deploy a release first |
 | `--clean` with an exclude beneath a synced path | emptying that destination would delete artifacts this machine cannot rebuild |

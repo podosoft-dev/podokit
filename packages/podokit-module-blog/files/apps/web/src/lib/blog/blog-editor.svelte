@@ -1,11 +1,11 @@
 <script lang="ts">
   import ImagePlus from "@lucide/svelte/icons/image-plus";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Switch } from "$lib/components/ui/switch";
-  import * as Tabs from "$lib/components/ui/tabs";
-  import { Textarea } from "$lib/components/ui/textarea";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import * as Tabs from "#lib/components/ui/tabs/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
   import BlogProse from "./blog-prose.svelte";
   import * as blogClient from "./blog-client";
   import type { BlogDraft, BlogEditorLabels } from "./types";

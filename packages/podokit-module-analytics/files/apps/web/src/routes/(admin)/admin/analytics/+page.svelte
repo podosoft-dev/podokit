@@ -1,18 +1,18 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { onMount } from "svelte";
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import { Input } from "$lib/components/ui/input";
-  import * as Table from "$lib/components/ui/table";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import * as Table from "#lib/components/ui/table/index.js";
   import DataTable, {
     DEFAULT_PAGE_SIZE,
     type DataTableColumn,
-  } from "$lib/components/data-table.svelte";
+  } from "#lib/components/data-table.svelte";
   import {
     loadAnalyticsRealtime,
     loadAnalyticsReport,
-  } from "$lib/analytics/client";
+  } from "#lib/analytics/client.js";
   import type {
     AnalyticsChannelRow,
     AnalyticsDeviceRow,
@@ -20,8 +20,8 @@
     AnalyticsRealtime,
     AnalyticsReport,
     AnalyticsTrendRow,
-  } from "$lib/analytics/types";
-  import { getI18n } from "$lib/i18n";
+  } from "#lib/analytics/types.js";
+  import { getI18n } from "#lib/i18n/index.js";
 
   const i18n = getI18n();
   const number = new Intl.NumberFormat();

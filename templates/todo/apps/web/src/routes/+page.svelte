@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Checkbox } from "$lib/components/ui/checkbox";
-  import * as Card from "$lib/components/ui/card";
-  import { api } from "$lib/api";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { api } from "#lib/api.js";
   import { ApiError } from "@podosoft/podokit-api-client";
 
   type Todo = { id: string; title: string; completed: boolean };

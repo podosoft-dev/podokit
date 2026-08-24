@@ -1,19 +1,19 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import * as Card from "$lib/components/ui/card";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
-  import { Switch } from "$lib/components/ui/switch";
-  import { Textarea } from "$lib/components/ui/textarea";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Card from "#lib/components/ui/card/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
   import {
     deleteAnalyticsCredentials,
     loadAnalyticsConfig,
     testAnalyticsConnection,
     updateAnalyticsConfig,
-  } from "$lib/analytics/client";
-  import type { AnalyticsAdminConfig } from "$lib/analytics/types";
-  import { formatDateTime, getI18n } from "$lib/i18n";
+  } from "#lib/analytics/client.js";
+  import type { AnalyticsAdminConfig } from "#lib/analytics/types.js";
+  import { formatDateTime, getI18n } from "#lib/i18n/index.js";
   import { toast } from "svelte-sonner";
 
   const i18n = getI18n();

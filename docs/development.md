@@ -27,6 +27,16 @@ bun install
 The PodoKit monorepo itself continues to use npm and Node-based release tooling.
 Generated PodoKit v1 applications use Bun 1.4.0.
 
+### SvelteKit source imports
+
+SvelteKit 3 projects use the `#lib/*` package import declared in
+`apps/web/package.json`; Vite aliases and the removed legacy alias are not part of
+the generated project. Include the real extension in every specifier, for example
+`#lib/api.js`, `#lib/components/account-menu.svelte`, or
+`#lib/components/ui/button/index.js`. The web TypeScript project intentionally
+includes only `src` and `vite.config.ts`, so a production `build/` is never checked
+again as application source by `svelte-check`.
+
 Container image builds can resolve unpublished packages through a local
 Verdaccio registry by setting `PODOKIT_NPM_REGISTRY` to a container-reachable
 address. Use this only with a read-open local registry and never pass registry
@@ -161,7 +171,7 @@ cloud credentials must document their manual verification boundary.
 
 Admin list views (users, sessions, audit log, organizations, and the API
 keys / passkeys / sessions tables on the account page) share one table
-component, `$lib/components/data-table.svelte`, so the header, sortable columns
+component, `#lib/components/data-table.svelte`, so the header, sortable columns
 (asc/desc), and the pagination footer behave the same everywhere. Use it for
 **every** table — do not assemble `Table.Root`/`Table.Header`/`Table.Body`
 primitives by hand, whether the table is on a page or inside a dialog/modal, and
@@ -181,9 +191,9 @@ Define columns and render each row's cells with a `row` snippet:
 
 ```svelte
 <script lang="ts">
-  import * as Table from "$lib/components/ui/table";
-  import DataTable, { type DataTableColumn, type SortState } from "$lib/components/data-table.svelte";
-  import { cn } from "$lib/utils";
+  import * as Table from "#lib/components/ui/table/index.js";
+  import DataTable, { type DataTableColumn, type SortState } from "#lib/components/data-table.svelte";
+  import { cn } from "#lib/utils.js";
 
   let rows = $state<Item[]>([]);
   let page = $state(1);

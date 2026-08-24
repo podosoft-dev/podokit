@@ -135,8 +135,6 @@ function project(options: { packages?: string[]; worker?: boolean } = {}): strin
   file("apps/web/build/index.js", "compiled web\n");
   file("apps/web/build/client/app.js", "client chunk\n");
   file("apps/web/build/client/agent/1.0.0/binary", "a binary this machine cannot rebuild\n");
-  file("apps/web/server.js", "entry\n");
-  file("apps/web/src/lib/server/upgrade.js", "upgrade proxy\n");
   for (const name of options.packages ?? []) {
     file(`packages/${name}/package.json`, appManifest);
     file(`packages/${name}/dist/index.js`, "compiled package\n");
@@ -173,8 +171,6 @@ describe("sync payload", () => {
       "packages/core/dist",
       "apps/api/dist",
       "apps/web/build",
-      "apps/web/server.js",
-      "apps/web/src/lib/server",
     ]);
     // node_modules is production-only, workspace-scoped and platform-specific in the
     // image. Copying a developer's tree over it is the one thing that must not happen.
@@ -182,11 +178,13 @@ describe("sync payload", () => {
   });
 
   it("sends the API build to the worker as well, and the web build to neither", () => {
-    const artifacts = composeSyncArtifacts(project());
+    const artifacts = composeSyncArtifacts(project({ packages: ["core"] }));
     const api = artifacts.find((artifact) => artifact.source === "apps/api/dist");
     const web = artifacts.find((artifact) => artifact.source === "apps/web/build");
+    const workspacePackage = artifacts.find((artifact) => artifact.source === "packages/core/dist");
     expect(api?.roles).toEqual(["api", "worker"]);
     expect(web?.roles).toEqual(["web"]);
+    expect(workspacePackage?.roles).toEqual(["api", "worker"]);
   });
 
   it("omits artifacts the project has not built", () => {
@@ -238,6 +236,15 @@ describe("dependency drift guard", () => {
       }),
     });
     await expect(syncComposeDeployment(root, "production", {}, runner)).resolves.toBeDefined();
+  });
+
+  it("treats the bundled web build as independent of container manifests", async () => {
+    const root = initialized();
+    const { lines, runner } = recordingRunner({
+      "cat /app/apps/web/package.json": "!manifest is intentionally absent",
+    });
+    await expect(syncComposeDeployment(root, "production", {}, runner)).resolves.toBeDefined();
+    expect(lines.some((line) => line.includes("/app/apps/web/package.json"))).toBe(false);
   });
 });
 

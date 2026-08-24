@@ -36,7 +36,7 @@ cannot detect, which is why they are your job.
 
 | Situation | Why |
 | --- | --- |
-| runtime dependencies changed | the container's `node_modules` was installed `--omit=dev` from the old manifest, so the new code imports something that is not there |
+| API/worker runtime dependencies changed | those containers installed the old dependency graph, so the new code imports something that is not there; the bundled web build carries its own dependencies |
 | a release holds the deployment lock | an apply is in progress |
 | nothing is running for that project | there is no container to copy into |
 | **the change needs a migration** | sync never migrates, and a migration belongs with the release whose code needs it |

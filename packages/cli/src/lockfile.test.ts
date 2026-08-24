@@ -161,7 +161,7 @@ describe("recordModules", () => {
     write(root, "apps/api/src/main.ts", "x");
     write(root, "apps/web/src/lib/blog/PostCard.svelte", "<p/>");
     initLockfile(root, { template: "base", answers: {}, version: "1.0.0" });
-    // by default a $lib file is managed
+    // by default a #lib file is managed
     expect(readFilesLock(root)?.files["apps/web/src/lib/blog/PostCard.svelte"].tier).toBe("managed");
 
     // a module declares a public path owned

@@ -1,12 +1,12 @@
 <script lang="ts">
-  import AccountPage from "$lib/components/account-page.svelte";
-  import ImpersonationBanner from "$lib/components/impersonation-banner.svelte";
-  import LanguageSwitch from "$lib/components/language-switch.svelte";
-  import SiteFooter from "$lib/components/site-footer.svelte";
-  import ThemeToggle from "$lib/components/theme-toggle.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { Toaster } from "$lib/components/ui/sonner";
-  import { getI18n } from "$lib/i18n";
+  import AccountPage from "#lib/components/account-page.svelte";
+  import ImpersonationBanner from "#lib/components/impersonation-banner.svelte";
+  import LanguageSwitch from "#lib/components/language-switch.svelte";
+  import SiteFooter from "#lib/components/site-footer.svelte";
+  import ThemeToggle from "#lib/components/theme-toggle.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Toaster } from "#lib/components/ui/sonner/index.js";
+  import { getI18n } from "#lib/i18n/index.js";
   import type { Capabilities } from "@podosoft/podokit-api-client";
   import type { SessionUser } from "../../app.d.ts";
 

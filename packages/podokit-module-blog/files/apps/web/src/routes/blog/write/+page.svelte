@@ -1,8 +1,8 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { toast } from "svelte-sonner";
-  import { BlogEditor, blogClient, emptyBlogDraft, type BlogDraft, type BlogEditorLabels } from "$lib/blog";
-  import { getI18n } from "$lib/i18n";
+  import { BlogEditor, blogClient, emptyBlogDraft, type BlogDraft, type BlogEditorLabels } from "#lib/blog.js";
+  import { getI18n } from "#lib/i18n/index.js";
 
   const i18n = getI18n();
   let draft = $state(emptyBlogDraft());

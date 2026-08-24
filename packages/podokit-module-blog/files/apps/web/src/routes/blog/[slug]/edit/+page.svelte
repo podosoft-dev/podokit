@@ -2,8 +2,8 @@
   import { goto } from "$app/navigation";
   import { untrack } from "svelte";
   import { toast } from "svelte-sonner";
-  import { BlogEditor, blogClient, draftFromPost, type BlogDraft, type BlogEditorLabels } from "$lib/blog";
-  import { getI18n } from "$lib/i18n";
+  import { BlogEditor, blogClient, draftFromPost, type BlogDraft, type BlogEditorLabels } from "#lib/blog.js";
+  import { getI18n } from "#lib/i18n/index.js";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();

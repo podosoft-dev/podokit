@@ -1,7 +1,7 @@
 import type { PageServerLoad } from "./$types";
-import { requireAdmin } from "$lib/server/guards";
-import { serverApiClient } from "$lib/server/api";
-import type { BlogPost, Paginated } from "$lib/blog";
+import { requireAdmin } from "#lib/server/guards.js";
+import { serverApiClient } from "#lib/server/api.js";
+import type { BlogPost, Paginated } from "#lib/blog.js";
 
 export const load: PageServerLoad = async (event) => {
   requireAdmin(event.locals.user, event.locals);

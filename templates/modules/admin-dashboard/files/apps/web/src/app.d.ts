@@ -1,5 +1,5 @@
-import type { Locale } from "$lib/i18n/messages";
-import type { SiteSettings } from "$lib/site.svelte";
+import type { Locale } from "#lib/i18n/messages.js";
+import type { SiteSettings } from "#lib/site.svelte.js";
 
 export type SessionUser = {
   id: string;

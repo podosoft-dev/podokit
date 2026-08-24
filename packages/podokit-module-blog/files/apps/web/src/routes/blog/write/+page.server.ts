@@ -1,6 +1,6 @@
 import { redirect } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
-import { requireBackendAvailable } from "$lib/server/guards";
+import { requireBackendAvailable } from "#lib/server/guards.js";
 
 export const load: PageServerLoad = async (event) => {
   event.setHeaders({ "X-Robots-Tag": "noindex, nofollow" });

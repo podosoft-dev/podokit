@@ -8,11 +8,11 @@ description: Use when adding or changing a SvelteKit page/route in apps/web — 
 1. **Route**: add a folder under `apps/web/src/routes/`. Load data in
    `+page.server.ts` / `+layout.server.ts` (SSR), not in the browser.
 2. **Call the API only through the server proxy** — never a direct browser
-   `fetch` to `:5002`. Use the app's `ApiClient`: `$lib/api.ts` (browser,
-   same-origin `/api/*` proxy) and `$lib/server/api.ts` (SSR, internal URL +
+   `fetch` to `:5002`. Use the app's `ApiClient`: `#lib/api.js` (browser,
+   same-origin `/api/*` proxy) and `#lib/server/api.js` (SSR, internal URL +
    cookie forwarding). It throws `ApiError` — branch on `err.code`.
 3. **Svelte 5 runes only**: `$state`, `$derived`, `$effect`, `$props`. Never `$:`.
-4. **UI**: use shadcn-svelte components (`$lib/components/ui/*`) over raw HTML.
+4. **UI**: use shadcn-svelte components (`#lib/components/ui/*/index.js`) over raw HTML.
    Do **not** edit `ui/**` — wrap it if you need to customize. Semantic Tailwind
    classes (`bg-background`, `text-foreground`); responsive (`sm:`/`md:`/`lg:`).
    For any list/table, use the shared `DataTable` (see the podokit-data-table

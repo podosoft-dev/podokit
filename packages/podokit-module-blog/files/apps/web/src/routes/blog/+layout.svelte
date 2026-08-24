@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import AccountMenu from "$lib/components/account-menu.svelte";
+  import AccountMenu from "#lib/components/account-menu.svelte";
 
   let { children } = $props();
   const user = $derived(page.data.user ?? null);
