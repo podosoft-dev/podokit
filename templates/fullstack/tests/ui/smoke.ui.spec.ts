@@ -5,4 +5,5 @@ test("app is reachable @smoke", async ({ page }) => {
   const res = await page.goto("/");
   expect(res?.status()).toBeLessThan(400);
   await expect(page.locator("body")).toBeVisible();
+  await expect(page.getByText("Your PodoKit application is ready.", { exact: true })).toBeVisible();
 });

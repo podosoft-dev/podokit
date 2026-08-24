@@ -113,6 +113,9 @@ describe("create (integration against templates)", () => {
     const apiMain = readFileSync(join(target, "apps/api/src/main.ts"), "utf8");
     expect(apiMain).toContain("async function bootstrap(): Promise<void>");
     expect(apiMain).toContain("await services.start()");
+    const landingPage = readFileSync(join(target, "apps/web/src/routes/+page.svelte"), "utf8");
+    expect(landingPage).toContain("Your PodoKit application is ready.");
+    expect(landingPage).not.toMatch(/\b(?:Bun|Elysia|SvelteKit)\b/);
     for (const workspace of ["api", "web"]) {
       const dockerfile = readFileSync(join(target, `apps/${workspace}/Dockerfile`), "utf8");
       expect(dockerfile).toContain("FROM oven/bun:1.4.0-alpine");
@@ -170,6 +173,9 @@ describe("create (integration against templates)", () => {
       expect(readFileSync(join(target, "apps/web/Dockerfile"), "utf8")).toContain(
         "oven/bun:1.4.0-alpine",
       );
+      const landingPage = readFileSync(join(target, "apps/web/src/routes/+page.svelte"), "utf8");
+      expect(landingPage).toContain("Create, complete, and remove items.");
+      expect(landingPage).not.toMatch(/\b(?:Bun|Elysia|SvelteKit)\b/);
     }
   });
 

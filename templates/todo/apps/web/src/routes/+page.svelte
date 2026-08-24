@@ -56,13 +56,13 @@
 <main class="mx-auto flex min-h-full max-w-xl flex-col gap-6 p-8">
   <div>
     <h1 class="text-3xl font-bold">{{projectName}}</h1>
-    <p class="text-muted-foreground text-sm">Full-stack starter generated with PodoKit.</p>
+    <p class="text-muted-foreground text-sm">Your PodoKit application is ready.</p>
   </div>
 
   <Card.Root>
     <Card.Header>
       <Card.Title>Todos</Card.Title>
-      <Card.Description>An Elysia + SvelteKit CRUD example via the typed ApiClient.</Card.Description>
+      <Card.Description>Create, complete, and remove items.</Card.Description>
     </Card.Header>
     <Card.Content class="flex flex-col gap-4">
       <form class="flex gap-2" onsubmit={add}>
