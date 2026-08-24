@@ -25,13 +25,13 @@
 <main class="mx-auto flex min-h-full max-w-2xl flex-col gap-6 p-8">
   <div>
     <h1 class="text-3xl font-bold">{{projectName}}</h1>
-    <p class="text-muted-foreground text-sm">Full-stack starter generated with PodoKit.</p>
+    <p class="text-muted-foreground text-sm">Your PodoKit application is ready.</p>
   </div>
 
   <Card.Root>
     <Card.Header>
       <Card.Title>API health</Card.Title>
-      <Card.Description>Check the Elysia API through the typed ApiClient.</Card.Description>
+      <Card.Description>Verify that the application service is available.</Card.Description>
     </Card.Header>
     <Card.Content class="flex flex-col gap-4">
       <Button class="w-fit" onclick={check}>Check API health</Button>
