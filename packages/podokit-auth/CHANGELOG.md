@@ -1,5 +1,13 @@
 # @podosoft/podokit-auth
 
+## 0.3.1
+
+### Patch Changes
+
+- [#163](https://github.com/podosoft-dev/podokit/pull/163) [`c225b20`](https://github.com/podosoft-dev/podokit/commit/c225b206508e486f37dbbc12fb67195bd978c02e) Thanks [@korone00](https://github.com/korone00)! - Refresh the Better Auth client dependency floor and the PostgreSQL verification toolchain while preserving the packages' existing public compatibility ranges.
+
+- [#166](https://github.com/podosoft-dev/podokit/pull/166) [`9855ba8`](https://github.com/podosoft-dev/podokit/commit/9855ba8f5703b459231bf10cb3b1a96f842f4987) Thanks [@dependabot](https://github.com/apps/dependabot)! - Refresh PostgreSQL development type definitions while updating the repository test and release tooling.
+
 ## 0.3.0
 
 ### Minor Changes

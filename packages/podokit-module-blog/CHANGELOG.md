@@ -1,5 +1,24 @@
 # @podosoft/podokit-module-blog
 
+## 1.0.0
+
+### Major Changes
+
+- [#171](https://github.com/podosoft-dev/podokit/pull/171) [`46352bc`](https://github.com/podosoft-dev/podokit/commit/46352bc6187dcc1aabff86789c214ccf7efad36a) Thanks [@korone00](https://github.com/korone00)! - Generate Bun 1.4.0 applications with an Elysia request path, native Bun SQL,
+  Redis, and S3 integrations, Alpine production images, merged OpenAPI documents,
+  and executable endpoint-contract verification.
+
+  Replace the former runtime-selection and conversion surface with a Bun-only v1
+  project model. Existing PodoKit 0.x applications must remain on the final 0.x
+  CLI instead of being converted in place.
+
+  Port the Blog and Analytics external modules to the Elysia service registry and
+  Bun SQL while preserving their documented HTTP behavior and UI features.
+
+### Patch Changes
+
+- [#174](https://github.com/podosoft-dev/podokit/pull/174) [`d010fd9`](https://github.com/podosoft-dev/podokit/commit/d010fd9466617d4219a0573eefa90031066df3fb) Thanks [@korone00](https://github.com/korone00)! - Complete SvelteKit 3 package-import migration and synchronize self-contained web builds safely.
+
 ## 0.5.0
 
 ### Minor Changes

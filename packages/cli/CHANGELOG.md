@@ -1,5 +1,36 @@
 # @podosoft/podokit
 
+## 1.0.0
+
+### Major Changes
+
+- [#171](https://github.com/podosoft-dev/podokit/pull/171) [`46352bc`](https://github.com/podosoft-dev/podokit/commit/46352bc6187dcc1aabff86789c214ccf7efad36a) Thanks [@korone00](https://github.com/korone00)! - Generate Bun 1.4.0 applications with an Elysia request path, native Bun SQL,
+  Redis, and S3 integrations, Alpine production images, merged OpenAPI documents,
+  and executable endpoint-contract verification.
+
+  Replace the former runtime-selection and conversion surface with a Bun-only v1
+  project model. Existing PodoKit 0.x applications must remain on the final 0.x
+  CLI instead of being converted in place.
+
+  Port the Blog and Analytics external modules to the Elysia service registry and
+  Bun SQL while preserving their documented HTTP behavior and UI features.
+
+### Minor Changes
+
+- [#173](https://github.com/podosoft-dev/podokit/pull/173) [`d4a7ca4`](https://github.com/podosoft-dev/podokit/commit/d4a7ca4e432a6b410e98b1eeb8456fe6d3ef13ac) Thanks [@korone00](https://github.com/korone00)! - Use the official SvelteKit Bun adapter and route explicitly allowed WebSocket paths through development and Kubernetes gateways.
+
+### Patch Changes
+
+- [#169](https://github.com/podosoft-dev/podokit/pull/169) [`eb0c707`](https://github.com/podosoft-dev/podokit/commit/eb0c707d484c6458e8c8c99866e9973875649654) Thanks [@dependabot](https://github.com/apps/dependabot)! - Align generated authentication dependencies with Better Auth 1.7.1 and use local account row IDs when unlinking providers.
+
+- [#174](https://github.com/podosoft-dev/podokit/pull/174) [`d010fd9`](https://github.com/podosoft-dev/podokit/commit/d010fd9466617d4219a0573eefa90031066df3fb) Thanks [@korone00](https://github.com/korone00)! - Complete SvelteKit 3 package-import migration and synchronize self-contained web builds safely.
+
+- [#163](https://github.com/podosoft-dev/podokit/pull/163) [`c225b20`](https://github.com/podosoft-dev/podokit/commit/c225b206508e486f37dbbc12fb67195bd978c02e) Thanks [@korone00](https://github.com/korone00)! - Update generated fullstack and Todo dependency floors and narrowly override vulnerable transitive packages so fresh npm installs pass the security audit.
+
+- [#165](https://github.com/podosoft-dev/podokit/pull/165) [`1070954`](https://github.com/podosoft-dev/podokit/commit/10709541c3f8b257db97fbcd6c4153abfd659a58) Thanks [@korone00](https://github.com/korone00)! - Keep generated authentication tests isolated and align the impersonation, passkey, OIDC, and audit-log flows with their production routes and defaults.
+
+- [#172](https://github.com/podosoft-dev/podokit/pull/172) [`b5c6b55`](https://github.com/podosoft-dev/podokit/commit/b5c6b55365de5d4ab2b187cb8362908bc4462257) Thanks [@korone00](https://github.com/korone00)! - Keep generated starter landing pages focused on product actions instead of framework implementation details.
+
 ## 0.17.4
 
 ### Patch Changes

@@ -1,5 +1,25 @@
 # @podosoft/podokit-mcp
 
+## 1.0.0
+
+### Major Changes
+
+- [#171](https://github.com/podosoft-dev/podokit/pull/171) [`46352bc`](https://github.com/podosoft-dev/podokit/commit/46352bc6187dcc1aabff86789c214ccf7efad36a) Thanks [@korone00](https://github.com/korone00)! - Generate Bun 1.4.0 applications with an Elysia request path, native Bun SQL,
+  Redis, and S3 integrations, Alpine production images, merged OpenAPI documents,
+  and executable endpoint-contract verification.
+
+  Replace the former runtime-selection and conversion surface with a Bun-only v1
+  project model. Existing PodoKit 0.x applications must remain on the final 0.x
+  CLI instead of being converted in place.
+
+  Port the Blog and Analytics external modules to the Elysia service registry and
+  Bun SQL while preserving their documented HTTP behavior and UI features.
+
+### Patch Changes
+
+- Updated dependencies [[`eb0c707`](https://github.com/podosoft-dev/podokit/commit/eb0c707d484c6458e8c8c99866e9973875649654), [`d4a7ca4`](https://github.com/podosoft-dev/podokit/commit/d4a7ca4e432a6b410e98b1eeb8456fe6d3ef13ac), [`d010fd9`](https://github.com/podosoft-dev/podokit/commit/d010fd9466617d4219a0573eefa90031066df3fb), [`c225b20`](https://github.com/podosoft-dev/podokit/commit/c225b206508e486f37dbbc12fb67195bd978c02e), [`1070954`](https://github.com/podosoft-dev/podokit/commit/10709541c3f8b257db97fbcd6c4153abfd659a58), [`b5c6b55`](https://github.com/podosoft-dev/podokit/commit/b5c6b55365de5d4ab2b187cb8362908bc4462257), [`46352bc`](https://github.com/podosoft-dev/podokit/commit/46352bc6187dcc1aabff86789c214ccf7efad36a)]:
+  - @podosoft/podokit@1.0.0
+
 ## 0.3.1
 
 ### Patch Changes
