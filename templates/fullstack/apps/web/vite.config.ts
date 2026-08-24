@@ -1,4 +1,6 @@
+import adapter from "@sveltejs/adapter-bun";
 import { sveltekit } from "@sveltejs/kit/vite";
+import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 
@@ -6,24 +8,22 @@ import { defineConfig } from "vite";
 // HTTPS tunnel hostnames. Vite derives HMR's protocol, host, and port from the
 // browser origin so the same configuration works for both entry points.
 const inDocker = process.env.VITE_DOCKER === "1";
-
-// Dev parity for WebSocket upgrades. In production `server.js` proxies these paths to
-// the API; without the same allowlist here, a feature would work in one and not the
-// other -- which is exactly how a WebSocket gateway used to reach production dead.
-// Set WS_PROXY_PATHS in the shell that runs vite; a .env file cannot reach this file.
-const wsProxyPaths = (process.env.WS_PROXY_PATHS ?? "")
-  .split(",")
-  .map((entry) => entry.trim())
-  .filter((entry) => entry.startsWith("/"));
-const backendTarget = process.env.BACKEND_INTERNAL_URL ?? "http://localhost:5002";
-const wsProxy = Object.fromEntries(
-  wsProxyPaths.map((path) => [path, { target: backendTarget, ws: true, changeOrigin: false }]),
-);
+const publicOrigin = process.env.PODOKIT_BUILD_ORIGIN;
 
 export default defineConfig({
-  plugins: [tailwindcss(), sveltekit()],
+  plugins: [
+    tailwindcss(),
+    sveltekit({
+      adapter: adapter(),
+      preprocess: vitePreprocess(),
+      ...(publicOrigin ? { paths: { origin: publicOrigin } } : {}),
+      alias: {
+        $lib: "src/lib",
+        $i18n: "src/lib/i18n",
+      },
+    }),
+  ],
   server: {
     ...(inDocker ? { host: true, port: 5001, allowedHosts: true } : {}),
-    ...(wsProxyPaths.length ? { proxy: wsProxy } : {}),
   },
 });

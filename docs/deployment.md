@@ -224,27 +224,41 @@ schema, roll forward instead.
 
 ## WebSocket endpoints
 
-Public traffic enters through the web app, and a SvelteKit route cannot answer an
-upgrade — `+server.ts` handlers never see one, and the `/api/*` proxy is `fetch`-based,
-which cannot carry a 101. An API WebSocket gateway is therefore unreachable in a
-deployment unless the web server relays it.
-
-Generated projects ship `apps/web/server.js`, which is the image's entry point. It
-keeps adapter-node in charge of listening and graceful shutdown and adds an upgrade
-proxy for the paths named in `WS_PROXY_PATHS`:
+Public WebSocket upgrades bypass the web service and go from the ingress directly to
+the API service. List every permitted endpoint under `exposure.webSocketPaths` in a
+Kubernetes deployment profile:
 
 ```json
-{ "runtimeConfig": { "WS_PROXY_PATHS": "/events/ws" } }
+{
+  "exposure": {
+    "mode": "ingress",
+    "webSocketPaths": ["/events/ws"]
+  }
+}
 ```
 
-Empty by default, so a deployment with no WebSocket behaves exactly as before. Each
-entry is matched **whole** — not as a prefix or a pattern — and anything else asking
-to upgrade is destroyed rather than proxied. Adding a path is a security decision: the
-API must authorise that socket at handshake time, because the relay forwards whatever
-the caller sent.
+The list is empty by default. The rendered Ingress uses `pathType: Exact` for each
+entry and keeps the `/` prefix route on the web service, so a sibling path cannot
+reach the API accidentally. Root, wildcard, query, fragment, encoded-separator, and
+traversal values are rejected while the profile is loaded. This option requires
+`exposure.mode: "ingress"`; a NodePort cannot split traffic between two services.
 
-Set the same value in the shell that runs `vite dev`, or the feature works in
-development and fails only once deployed.
+The ingress preserves the request cookie and forwarding headers during the upgrade.
+The API must still authenticate and authorize the handshake. Docker Compose
+deployments publish only the web service, so configure the host's external reverse
+proxy with the same exact-path rule when WebSocket endpoints are required there.
+
+Kubernetes deployments configure the web server to trust the ingress-provided
+`x-forwarded-proto` and `x-forwarded-host` headers. This keeps SvelteKit's
+same-origin form protection correct for multipart uploads and other form content.
+For a Docker Compose deployment behind a trusted reverse proxy, add matching
+`PROTOCOL_HEADER` and `HOST_HEADER` values to `runtimeConfig`. Do not enable those
+settings when untrusted clients can reach the container directly. A directly served
+plain-HTTP image can instead set its origin while building:
+
+```bash
+docker build --build-arg PODOKIT_BUILD_ORIGIN=https://example.com -f apps/web/Dockerfile -t example-web .
+```
 
 ## Fast development sync (`docker-compose` only)
 

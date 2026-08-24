@@ -91,3 +91,42 @@ describe("deployment profile migration command", () => {
     expect(() => loadDeploymentProfile(root, "production")).toThrow(message);
   });
 });
+
+describe("deployment profile WebSocket exposure", () => {
+  it("defaults to no public WebSocket paths", () => {
+    const root = initializedProfile();
+
+    expect(loadDeploymentProfile(root, "production").exposure.webSocketPaths).toEqual([]);
+  });
+
+  it.each([
+    [["/events/*"], "only static absolute paths"],
+    [["/events/ws?token=value"], "only static absolute paths"],
+    [["/events/ws", "/events/ws"], "duplicate path"],
+  ])("rejects unsafe ingress paths %#", (webSocketPaths, message) => {
+    const root = initializedProfile();
+    const path = profilePath(root, "production");
+    const value = JSON.parse(readFileSync(path, "utf8")) as {
+      exposure: { webSocketPaths: unknown };
+    };
+    value.exposure.webSocketPaths = webSocketPaths;
+    writeFileSync(path, JSON.stringify(value));
+
+    expect(() => loadDeploymentProfile(root, "production")).toThrow(message);
+  });
+
+  it("rejects API path routing without an ingress gateway", () => {
+    const root = initializedProfile();
+    const path = profilePath(root, "production");
+    const value = JSON.parse(readFileSync(path, "utf8")) as {
+      exposure: { mode: string; webSocketPaths: string[] };
+    };
+    value.exposure.mode = "nodePort";
+    value.exposure.webSocketPaths = ["/events/ws"];
+    writeFileSync(path, JSON.stringify(value));
+
+    expect(() => loadDeploymentProfile(root, "production")).toThrow(
+      "requires exposure.mode ingress",
+    );
+  });
+});

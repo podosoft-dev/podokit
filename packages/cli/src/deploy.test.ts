@@ -192,6 +192,8 @@ describe("deployment rendering and planning", () => {
     expect(runtime.applicationManifest).toContain(
       'BACKEND_INTERNAL_URL: "http://example-app-api:3000"',
     );
+    expect(runtime.applicationManifest).toContain('PROTOCOL_HEADER: "x-forwarded-proto"');
+    expect(runtime.applicationManifest).toContain('HOST_HEADER: "x-forwarded-host"');
     expect(runtime.applicationManifest).not.toContain(
       "name: example-app-web\n          image",
     );

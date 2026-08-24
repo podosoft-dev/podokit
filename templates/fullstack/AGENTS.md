@@ -11,7 +11,8 @@ A Bun 1.4 full-stack TypeScript monorepo ({{packageManager}} workspaces):
 - `apps/api` — **Elysia** backend (`{{projectName}}-api`), Bun.SQL + PostgreSQL, merged OpenAPI at `/api-docs`.
 - `apps/web` — **SvelteKit** frontend (`{{projectName}}-web`), Tailwind v4 + shadcn-svelte + typesafe-i18n.
 - `infra/` — Docker Compose (PostgreSQL/Redis) and example k3s manifests.
-- `.podokit/` — PodoKit's generation lockfile (see "PodoKit tooling" below). Do not edit by hand.
+- `.podokit/` — PodoKit generation metadata plus application-owned development and
+  deployment profiles (see "PodoKit tooling" below).
 
 ## Setup & commands
 
@@ -68,6 +69,9 @@ in `.podokit/files.lock` — respect it:
 
 Useful commands:
 
+- `podo dev watch|up|ps|logs|exec|down` — run container development through the
+  shared loopback gateway. `.podokit/dev.json` owns the local/public hosts and the
+  exact API WebSocket allowlist; never use a prefix or wildcard for that allowlist.
 - `podo add <module>` — add a feature (auth, admin-dashboard, redis, bullmq, …). It wires itself into the app; run `podo add` with no argument to list modules.
 - `podo remove <module>` — un-apply a module (inverse of add; refuses if another module needs it, keeps files you edited).
 - `podo status` / `podo diff` — see your local edits vs. what PodoKit generated.

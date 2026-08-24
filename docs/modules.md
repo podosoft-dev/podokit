@@ -631,7 +631,7 @@ cache headers. Replacing, removing, or self-deleting the account removes managed
 objects on a best-effort basis. Existing external/social avatar URLs are never
 deleted.
 
-The generated adapter-node container and Kubernetes config set
+The generated web container and Kubernetes config set
 `BODY_SIZE_LIMIT=3M`. This leaves room for multipart framing while the API
 continues to enforce the 2 MiB file limit and return stable validation codes.
 Set the same value when running the built web server outside the generated

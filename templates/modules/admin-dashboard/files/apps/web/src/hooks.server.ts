@@ -1,4 +1,5 @@
-import { error, type Handle } from "@sveltejs/kit";
+import { error } from "@sveltejs/kit";
+import type { Handle } from "@sveltejs/kit/hooks";
 import { serverApiClient } from "$lib/server/api";
 import { resolveLocale } from "$lib/i18n/messages";
 import { applySearchIndexingHeaders } from "$lib/server/search-indexing";

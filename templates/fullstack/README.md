@@ -23,6 +23,11 @@ one user-level Traefik gateway on `127.0.0.1:80`; additional projects reuse it a
 route by that hostname. Even a single app uses
 the same topology, with one route and no project-specific host port.
 
+When the API exposes WebSocket endpoints, add their exact paths to
+`.podokit/dev.json` under `webSocketPaths`. The shared gateway sends only those paths
+directly to the API and leaves every other path on the web app. Add `publicUrl` to the
+same file when an HTTPS tunnel preserves its public `Host` header.
+
 Run lifecycle and container commands from a second terminal:
 
 ```bash
@@ -101,3 +106,17 @@ lockfile and all workspace package manifests:
 docker build -f apps/api/Dockerfile -t {{projectName}}-api .
 docker build -f apps/web/Dockerfile -t {{projectName}}-web .
 ```
+
+The generated Kubernetes deployment trusts the ingress-provided
+`x-forwarded-proto` and `x-forwarded-host` headers so the web server can enforce
+same-origin form submissions. If the web container is served directly over plain
+HTTP, fix its public origin at build time instead:
+
+```bash
+docker build --build-arg PODOKIT_BUILD_ORIGIN=https://example.com -f apps/web/Dockerfile -t {{projectName}}-web .
+```
+
+For a Docker Compose deployment behind a trusted reverse proxy, set
+`PROTOCOL_HEADER=x-forwarded-proto` and `HOST_HEADER=x-forwarded-host` in the
+deployment profile runtime configuration. Never trust client-controlled forwarded
+headers on a directly exposed container.

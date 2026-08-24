@@ -45,8 +45,11 @@ afterEach(() => {
 describe("PodoKit development gateway", () => {
   it("uses a project-name localhost default and validates an HTTPS public origin", () => {
     const root = project();
-    expect(readDevConfig(root)).toEqual({ schemaVersion: 1, hostname: "example-app.localhost" });
-
+    expect(readDevConfig(root)).toEqual({
+      schemaVersion: 1,
+      hostname: "example-app.localhost",
+      webSocketPaths: [],
+    });
     writeFileSync(
       join(root, ".podokit", "dev.json"),
       JSON.stringify({ schemaVersion: 1, hostname: "app.localhost", publicUrl: "https://dev.example.com" }),
@@ -55,13 +58,28 @@ describe("PodoKit development gateway", () => {
       schemaVersion: 1,
       hostname: "app.localhost",
       publicUrl: "https://dev.example.com",
+      webSocketPaths: [],
     });
+    const publicRoute = renderRoute(resolveDevRuntime(root));
+    expect(publicRoute).toContain(
+      "Host(`app.localhost`) || Host(`dev.example.com`)",
+    );
 
     writeFileSync(
       join(root, ".podokit", "dev.json"),
       JSON.stringify({ schemaVersion: 1, hostname: "app.localhost:5080" }),
     );
     expect(() => readDevConfig(root)).toThrow("without a scheme or port");
+
+    writeFileSync(
+      join(root, ".podokit", "dev.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        hostname: "app.localhost",
+        publicUrl: "https://user:password@dev.example.com",
+      }),
+    );
+    expect(() => readDevConfig(root)).toThrow("HTTPS origin without a path");
   });
 
   it("renders a socket-free shared route and disables the legacy proxy", () => {
@@ -74,6 +92,49 @@ describe("PodoKit development gateway", () => {
     expect(route).not.toContain("docker.sock");
     expect(compose).toContain("profiles: [podokit-legacy-proxy]");
     expect(compose).toContain("external: true");
+    expect(compose).not.toContain(`${runtime.alias}-api`);
+  });
+
+  it("routes only configured exact WebSocket paths to the API", () => {
+    const root = project();
+    writeFileSync(
+      join(root, ".podokit", "dev.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        hostname: "example-app.localhost",
+        publicUrl: "https://ws.example.com",
+        webSocketPaths: ["/events/ws", "/notifications/socket"],
+      }),
+    );
+    const runtime = resolveDevRuntime(root);
+    const route = renderRoute(runtime);
+    const compose = renderRuntimeCompose(runtime);
+
+    expect(route).toContain(
+      "(Host(`example-app.localhost`) || Host(`ws.example.com`)) && Path(`/events/ws`, `/notifications/socket`)",
+    );
+    expect(route).toContain("priority: 100");
+    expect(route).toContain(`url: http://${runtime.alias}-api:5002`);
+    expect(route).not.toContain("PathPrefix");
+    expect(compose).toContain(`aliases: [${runtime.alias}-api]`);
+  });
+
+  it.each([
+    ["a string", "must be an array"],
+    [["/"], "only static absolute paths"],
+    [["/events/*"], "only static absolute paths"],
+    [["/events/ws?token=value"], "only static absolute paths"],
+    [["/events/%2fadmin"], "only static absolute paths"],
+    [["/events/../admin"], "only static absolute paths"],
+    [["/events/ws", "/events/ws"], "duplicate path"],
+  ])("rejects unsafe WebSocket path configuration %#", (webSocketPaths, message) => {
+    const root = project();
+    writeFileSync(
+      join(root, ".podokit", "dev.json"),
+      JSON.stringify({ schemaVersion: 1, hostname: "app.localhost", webSocketPaths }),
+    );
+
+    expect(() => readDevConfig(root)).toThrow(message);
   });
 
   it("activates profiles required by installed modules", () => {
@@ -104,7 +165,7 @@ describe("PodoKit development gateway", () => {
         return { status: 0, stdout: "present\n", stderr: "" };
       }
       if (args[0] === "inspect") {
-        return { status: 0, stdout: "1 true\n", stderr: "" };
+        return { status: 0, stdout: "1 true 2\n", stderr: "" };
       }
       return { status: 0, stdout: "", stderr: "" };
     };
@@ -148,7 +209,7 @@ describe("PodoKit development gateway", () => {
       if (args[0] === "inspect") {
         return {
           status: gatewayExists ? 0 : 1,
-          stdout: gatewayExists ? "1 true\n" : "",
+          stdout: gatewayExists ? "1 true 2\n" : "",
           stderr: "",
         };
       }
@@ -164,6 +225,11 @@ describe("PodoKit development gateway", () => {
     expect(readFileSync(runtime.runtimeComposePath, "utf8")).toContain(runtime.alias);
     expect(calls.some(({ args }) => args.includes("watch") && args.includes("cache"))).toBe(true);
     expect(calls.filter(({ args }) => args[0] === "run")).toHaveLength(1);
+    expect(
+      calls.some(({ args }) =>
+        args.includes("--entrypoints.web.forwardedheaders.insecure=true"),
+      ),
+    ).toBe(true);
 
     runDevCommand(root, "exec", ["api", "npm", "test"], runner);
     const execCall = calls.find(({ args }) => args.includes("exec"));
@@ -174,6 +240,43 @@ describe("PodoKit development gateway", () => {
     expect(downCall?.args.slice(-6)).toEqual(["--profile", "*", "--profile", "cache", "down", "--volumes"]);
     expect(existsSync(join(devHome, "projects", `${runtime.routeId}.json`))).toBe(false);
     expect(calls.some(({ args }) => args[0] === "rm" && args.includes("podokit-dev-gateway"))).toBe(true);
+  });
+
+  it("replaces an older managed gateway before starting the stack", () => {
+    const root = project();
+    const devHome = temporaryDirectory("podokit-dev-home-");
+    process.env.PODOKIT_DEV_HOME = devHome;
+    const calls: string[][] = [];
+    let gatewayExists = true;
+    const runner: CommandRunner = (_command, args) => {
+      calls.push(args);
+      if (args[0] === "info") return { status: 0, stdout: "27.0.0\n", stderr: "" };
+      if (args[0] === "network" && args[1] === "inspect") {
+        return { status: 0, stdout: "present\n", stderr: "" };
+      }
+      if (args[0] === "inspect") {
+        return {
+          status: gatewayExists ? 0 : 1,
+          stdout: gatewayExists ? "1 true 1\n" : "",
+          stderr: "",
+        };
+      }
+      if (args[0] === "rm") gatewayExists = false;
+      if (args[0] === "run") gatewayExists = true;
+      return { status: 0, stdout: "", stderr: "" };
+    };
+
+    runDevCommand(root, "up", ["-d"], runner);
+
+    expect(calls.some((args) => args.slice(0, 3).join(" ") === "rm --force podokit-dev-gateway"))
+      .toBe(true);
+    const run = calls.find((args) => args[0] === "run");
+    expect(run).toEqual(
+      expect.arrayContaining([
+        "io.podosoft.podokit.dev-gateway.version=2",
+        "--entrypoints.web.forwardedheaders.insecure=true",
+      ]),
+    );
   });
 
   it("starts a detached stack through the shared gateway", () => {
@@ -196,7 +299,7 @@ describe("PodoKit development gateway", () => {
       if (args[0] === "inspect") {
         return {
           status: gatewayExists ? 0 : 1,
-          stdout: gatewayExists ? "1 true\n" : "",
+          stdout: gatewayExists ? "1 true 2\n" : "",
           stderr: "",
         };
       }
@@ -223,6 +326,41 @@ describe("PodoKit development gateway", () => {
     expect(existsSync(join(devHome, "projects", `${originalRuntime.routeId}.json`))).toBe(false);
     expect(existsSync(join(devHome, "routes", `${originalRuntime.routeId}.yml`))).toBe(false);
     expect(existsSync(join(devHome, "projects", `${renamedRuntime.routeId}.json`))).toBe(true);
+  });
+
+  it("rejects a public host already registered by another project", () => {
+    const first = project("first-app");
+    const second = project("second-app");
+    for (const [root, hostname] of [
+      [first, "first-app.localhost"],
+      [second, "second-app.localhost"],
+    ]) {
+      writeFileSync(
+        join(root, ".podokit", "dev.json"),
+        JSON.stringify({
+          schemaVersion: 1,
+          hostname,
+          publicUrl: "https://shared.example.com",
+          webSocketPaths: [],
+        }),
+      );
+    }
+    const devHome = temporaryDirectory("podokit-dev-home-");
+    process.env.PODOKIT_DEV_HOME = devHome;
+    const runner: CommandRunner = (_command, args) => {
+      if (args[0] === "info") return { status: 0, stdout: "27.0.0\n", stderr: "" };
+      if (args[0] === "network" && args[1] === "inspect") {
+        return { status: 0, stdout: "present\n", stderr: "" };
+      }
+      if (args[0] === "inspect") return { status: 0, stdout: "1 true 2\n", stderr: "" };
+      return { status: 0, stdout: "", stderr: "" };
+    };
+
+    runDevCommand(first, "up", ["-d"], runner);
+
+    expect(() => runDevCommand(second, "up", ["-d"], runner)).toThrow(
+      `Development host shared.example.com is already registered by ${first}`,
+    );
   });
 
   it("activates every compose profile when stopping a project", () => {

@@ -411,6 +411,8 @@ function derivedRuntimeConfig(profile: DeployProfileV1): Record<string, string> 
   const result: Record<string, string> = {
     PORT: "3000",
     BACKEND_INTERNAL_URL: `http://${profile.target.release}-api:3000`,
+    PROTOCOL_HEADER: "x-forwarded-proto",
+    HOST_HEADER: "x-forwarded-host",
     ...profile.runtimeConfig,
   };
   if (profile.dependencies.postgres.mode === "inCluster") {
@@ -598,16 +600,17 @@ spec:
 }
 
 function exposure(profile: DeployProfileV1): string {
-  const service = `${profile.target.release}-web`;
+  const webService = `${profile.target.release}-web`;
+  const apiService = `${profile.target.release}-api`;
   if (profile.exposure.mode === "nodePort") {
     return `apiVersion: v1
 kind: Service
 metadata:
-  name: ${service}-public
+  name: ${webService}-public
 spec:
   type: NodePort
   selector:
-    app.kubernetes.io/name: ${service}
+    app.kubernetes.io/name: ${webService}
   ports:
     - { name: http, port: 80, targetPort: 3000 }
 `;
@@ -618,6 +621,17 @@ spec:
       secretName: ${quote(profile.exposure.tlsSecretName)}
 `
     : "";
+  const webSocketPaths = profile.exposure.webSocketPaths
+    .map(
+      (path) => `          - path: ${quote(path)}
+            pathType: Exact
+            backend:
+              service:
+                name: ${apiService}
+                port: { number: 3000 }
+`,
+    )
+    .join("");
   return `apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -628,11 +642,11 @@ ${tls}  rules:
     - host: ${quote(profile.exposure.host)}
       http:
         paths:
-          - path: /
+${webSocketPaths}          - path: /
             pathType: Prefix
             backend:
               service:
-                name: ${service}
+                name: ${webService}
                 port: { number: 3000 }
 `;
 }

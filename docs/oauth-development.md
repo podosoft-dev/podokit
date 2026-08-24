@@ -40,6 +40,18 @@ Add both the local and HTTPS origins to the API's `CORS_ORIGIN` and set
 origin and return on another because state cookies are scoped to the origin that
 created them.
 
+When the tunnel targets the shared loopback gateway, also declare the stable origin
+in `.podokit/dev.json` so its public `Host` header matches the generated route:
+
+```json
+{
+  "schemaVersion": 1,
+  "hostname": "myapp.localhost",
+  "publicUrl": "https://myapp-dev.example.com",
+  "webSocketPaths": []
+}
+```
+
 ## Linking an existing email account
 
 When a signed-in email/password user connects an OAuth provider from the account
@@ -65,7 +77,7 @@ that Google account.
 
 - A Cloudflare Named Tunnel is a good fit when a Cloudflare-managed domain is already
   available. Pin `cloudflared`, store its connector token in a secret manager, and
-  route the stable hostname to the web container. Protect development content with
+  route the stable hostname to the loopback gateway. Protect development content with
   Access, but bypass the exact callback path so the provider can reach it.
 - A reserved ngrok domain provides the same stable callback shape for teams that do
   not use Cloudflare.

@@ -42,7 +42,12 @@ export const STABLE_SEMVER_TAG_PATTERN =
   "^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$";
 
 /** Keys PodoKit derives itself, so a profile may not set them. */
-export const MANAGED_RUNTIME_CONFIG_KEYS = ["PORT", "BACKEND_INTERNAL_URL"];
+export const MANAGED_RUNTIME_CONFIG_KEYS = [
+  "PORT",
+  "BACKEND_INTERNAL_URL",
+  "PROTOCOL_HEADER",
+  "HOST_HEADER",
+];
 
 export function containsUrlCredentials(value: string): boolean {
   if (!value.includes("://")) return false;
