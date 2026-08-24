@@ -17,7 +17,7 @@ function project(): string {
   const main = join(root, "apps/api/src/main.ts");
   mkdirSync(join(main, ".."), { recursive: true });
   writeFileSync(main, "bootstrap()");
-  initLockfile(root, { template: "base", packageManager: "npm", answers: {}, version: "0.4.0" });
+  initLockfile(root, { template: "base", answers: {}, version: "0.4.0" });
   return root;
 }
 afterEach(() => {

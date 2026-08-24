@@ -1,24 +1,21 @@
 {
   "name": "rate-limit",
-  "description": "Distributed request limiting by authenticated user, validated API key, or trusted-proxy client address. Uses Redis across API replicas and returns stable 429/503 errors.",
+  "description": "Distributed Elysia request limiting by authenticated user, validated API key, or trusted-proxy client address. Uses Bun Redis across replicas and returns stable 429/503 errors.",
   "requires": ["redis", "api-key-auth"],
   "targetApp": "api",
   "managedGlobs": [
     "apps/api/src/rate-limit/**",
     "tests/api/rate-limit.api.spec.ts"
   ],
-  "dependencies": {
-    "@nestjs/throttler": "^6.5.0",
-    "@nest-lab/throttler-storage-redis": "^1.2.0"
-  },
   "env": [
     "# rate limit (window in seconds, max requests per identity)",
+    "RATE_LIMIT_KEY_PREFIX=podokit:rate-limit",
     "RATE_LIMIT_TTL=60",
     "RATE_LIMIT_MAX=300",
     "# stricter authentication endpoint ceiling",
     "RATE_LIMIT_AUTH_TTL=60",
     "RATE_LIMIT_AUTH_MAX=20",
-    "# higher ceiling for SSR runtime settings reads (maintenance, sign-up, branding)",
+    "# higher ceiling for SSR runtime settings reads",
     "RATE_LIMIT_RUNTIME_MAX=1000",
     "# trust no proxy hop by default; set the exact production proxy depth",
     "RATE_LIMIT_TRUSTED_PROXY_HOPS=0",
@@ -27,17 +24,26 @@
     "RATE_LIMIT_UNAVAILABLE_RETRY_AFTER=1"
   ],
   "inject": [
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:imports", "text": "import { RateLimitModule } from \"./rate-limit/rate-limit.module\";" },
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:module-imports", "text": "RateLimitModule," }
+    {
+      "file": "apps/api/src/app.ts",
+      "marker": "// podokit:end:imports",
+      "text": "import { rateLimitModule } from \"./rate-limit/rate-limit.module\";"
+    },
+    {
+      "file": "apps/api/src/app.ts",
+      "marker": "// podokit:end:modules",
+      "text": "rateLimitModule,"
+    }
   ],
   "instructions": [
-    "Ensure Redis is running:  docker compose -f infra/docker/docker-compose.yml up -d",
+    "Ensure Redis is running: docker compose -f infra/docker/docker-compose.yml up -d",
     "Tune the general, authentication, and runtime limits in .env.",
+    "Give each deployment that shares Redis a distinct RATE_LIMIT_KEY_PREFIX.",
     "Set RATE_LIMIT_TRUSTED_PROXY_HOPS to the exact number of trusted reverse proxies; keep 0 for direct API access.",
     "Authenticated users and validated X-API-Key clients receive independent opaque counters; other traffic uses the trusted client address.",
     "Exceeded limits return RATE_LIMIT_EXCEEDED with HTTP 429 and Retry-After. Redis failures return RATE_LIMIT_UNAVAILABLE with HTTP 503.",
-    "Provide RateLimitIdentityExtension from app.extensions.ts when an application has another validated machine-key source; keep the single managed RateLimitModule import.",
+    "Register a RateLimitIdentityExtension under RATE_LIMIT_IDENTITY_EXTENSION in app.extensions.ts for another validated machine-key source.",
     "GET /health and GET /health/ready bypass request quotas so orchestrator probes remain reliable.",
-    "The limit is shared across API replicas because it is stored in Redis."
+    "The atomic counter is shared across API replicas in Redis."
   ]
 }

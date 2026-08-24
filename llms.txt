@@ -1,12 +1,13 @@
 # PodoKit
 
 > An opinionated but extensible starter toolkit and CLI for full-stack TypeScript
-> apps with NestJS, SvelteKit, TailwindCSS, shadcn-svelte, PostgreSQL, Redis,
+> apps with Bun 1.4.0, Elysia, SvelteKit, TailwindCSS, shadcn-svelte,
+> PostgreSQL, Redis,
 > Docker, and k3s. `podo create` scaffolds a production-minded foundation;
 > `podo add` layers in feature modules; `podo update` keeps projects current.
 
-Generated projects are a monorepo: `apps/api` (NestJS — config validation,
-global `ValidationPipe`, a stable `{ success, error: { code, ... } }` envelope)
+Generated projects are a Bun monorepo: `apps/api` (Elysia — typed validation,
+native `Bun.SQL`, OpenAPI, and a stable `{ success, error: { code, ... } }` envelope)
 and `apps/web` (SvelteKit — Tailwind v4, shadcn-svelte, typesafe-i18n, a
 server-side API proxy). Conventions: TypeScript strict (no `any`/`@ts-ignore`),
 Svelte 5 runes (no `$:`), every list uses the shared `DataTable`, all
@@ -16,7 +17,7 @@ user-facing strings go through i18n, and the backend returns stable error
 ## Docs
 
 - [Getting started](https://github.com/podosoft-dev/podokit/blob/main/docs/getting-started.md): create a project, run it, add AI agent guidance and the MCP server.
-- [Templates](https://github.com/podosoft-dev/podokit/blob/main/docs/templates.md): `fullstack-nest-svelte`, `todo`, and `base`.
+- [Templates](https://github.com/podosoft-dev/podokit/blob/main/docs/templates.md): `fullstack`, `todo`, and `base`.
 - [Modules](https://github.com/podosoft-dev/podokit/blob/main/docs/modules.md): auth, admin-dashboard, redis, rate-limit, audit-log, bullmq, sse, object-storage-s3, file-upload, and more (`podo add`).
 - [Development](https://github.com/podosoft-dev/podokit/blob/main/docs/development.md): the host-process loop and the containerized dev environment (Traefik + `compose.dev.yaml`), plus DataTable/TableToolbar conventions.
 - [Kubernetes deployment](https://github.com/podosoft-dev/podokit/blob/main/docs/deployment.md): explicit profiles, plan hashes, Helm apply/rollback, and public verification.

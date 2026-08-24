@@ -117,7 +117,7 @@ const waitApi = async () => {
   for (let i = 0; i < 30; i++) {
     try {
       const logs = capture("docker", ["compose", "-f", compose, "logs", "api"], { cwd: appDir });
-      if (logs.includes("Nest application successfully started")) return true;
+      if (logs.includes("API listening on http://")) return true;
     } catch { /* retry */ }
     await new Promise((r) => setTimeout(r, 2000));
   }
@@ -128,14 +128,14 @@ if (hasAuth) {
   try {
     sh("docker", [
       "compose", "-f", compose, "exec", "-T", "api",
-      "npx", "@better-auth/cli", "migrate", "-y", "--config", "apps/api/src/auth/auth.ts",
+      "bunx", "@better-auth/cli", "migrate", "-y", "--config", "apps/api/src/auth/auth.ts",
     ], { cwd: appDir });
   } catch {
     console.warn("! Better Auth migration failed (check api logs and rerun manually)");
   }
 }
 try {
-  sh("docker", ["compose", "-f", compose, "exec", "-T", "api", "sh", "-c", "cd /app && npm run migration:run -w apps/api"], { cwd: appDir });
+  sh("docker", ["compose", "-f", compose, "exec", "-T", "api", "bun", "run", "--cwd", "apps/api", "migration:run"], { cwd: appDir });
 } catch {
   console.warn("! migration:run failed (may be up to date or need manual run)");
 }

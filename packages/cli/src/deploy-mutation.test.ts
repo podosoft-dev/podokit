@@ -27,8 +27,7 @@ function initializedProject(): string {
   created.push(root);
   mkdirSync(join(root, "apps", "api"), { recursive: true });
   initLockfile(root, {
-    template: "fullstack-nest-svelte",
-    packageManager: "npm",
+    template: "fullstack",
     answers: { projectName: "example-app" },
     version: "0.15.0",
   });

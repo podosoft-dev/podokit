@@ -35,8 +35,7 @@ describe("create (integration against templates)", () => {
     const target = join(tmp(), "different-directory-name");
     create({
       name: "manifest-project-name",
-      template: "fullstack-nest-svelte",
-      packageManager: "pnpm",
+      template: "fullstack",
       templatesDir: REPO_TEMPLATES,
       targetDir: target,
     });
@@ -50,7 +49,7 @@ describe("create (integration against templates)", () => {
 
     const readme = readFileSync(join(target, "README.md"), "utf8");
     expect(readme).toContain("# manifest-project-name");
-    expect(readme).toContain("pnpm install");
+    expect(readme).toContain("bun install");
     expect(readme).not.toContain("{{packageManager}}");
     expect(readFileSync(join(target, ".podokit", "dev.json"), "utf8")).toContain("custom.localhost");
   });
@@ -60,15 +59,15 @@ describe("create (integration against templates)", () => {
     const result = create({ name: "my-app", template: "base", templatesDir: REPO_TEMPLATES, targetDir: target });
 
     expect(result.projectDir).toBe(target);
-    expect(result.packageManager).toBe("npm");
+    expect(result.packageManager).toBe("bun");
     expect(result.template).toBe("base");
 
     const pkg = JSON.parse(readFileSync(join(target, "package.json"), "utf8")) as {
       name: string;
-      engines: { node: string };
+      engines: { bun: string };
     };
     expect(pkg.name).toBe("my-app");
-    expect(pkg.engines.node).toBe(">=22.22.1");
+    expect(pkg.engines.bun).toBe("1.4.0");
     expect(existsSync(join(target, ".gitignore"))).toBe(true);
     expect(existsSync(join(target, ".env.example"))).toBe(true);
     expect(readFileSync(join(target, "README.md"), "utf8")).toContain("my-app");
@@ -106,7 +105,7 @@ describe("create (integration against templates)", () => {
     };
     expect(rootPackage.packageManager).toBe("bun@1.4.0");
     expect(rootPackage.engines).toEqual({ bun: "1.4.0" });
-    expect(rootPackage.trustedDependencies).toEqual(["@swc/core"]);
+    expect(rootPackage.trustedDependencies).toBeUndefined();
     expect(readFileSync(join(target, "bunfig.toml"), "utf8")).toContain('auto = "disable"');
     expect(readFileSync(join(target, "apps/api/package.json"), "utf8")).toContain(
       '"test": "bun test src"',
@@ -178,7 +177,7 @@ describe("create (integration against templates)", () => {
     expect(readFileSync(join(withAi, "CLAUDE.md"), "utf8")).toContain("@AGENTS.md");
     expect(existsSync(join(withAi, ".cursor/rules/podokit.mdc"))).toBe(true);
     expect(existsSync(join(withAi, ".github/copilot-instructions.md"))).toBe(true);
-    expect(existsSync(join(withAi, ".claude/skills/podokit-nest-endpoint/SKILL.md"))).toBe(true);
+    expect(existsSync(join(withAi, ".claude/skills/podokit-elysia-endpoint/SKILL.md"))).toBe(true);
     expect(existsSync(join(withAi, ".agents/skills/podokit-deploy/SKILL.md"))).toBe(true);
     expect(existsSync(join(withAi, ".claude/skills/podokit-deploy/SKILL.md"))).toBe(true);
     // AI files are user-owned so `podo update` never touches them
@@ -202,7 +201,7 @@ describe("create (integration against templates)", () => {
     const target = join(tmp(), "app");
     const result = create({ name: "app", templatesDir: REPO_TEMPLATES, targetDir: target });
 
-    expect(result.template).toBe("fullstack-nest-svelte");
+    expect(result.template).toBe("fullstack");
     expect(existsSync(join(target, "apps", "api", "src", "main.ts"))).toBe(true);
     expect(existsSync(join(target, "apps", "api", "src", "database", "data-source.ts"))).toBe(true);
     expect(existsSync(join(target, "apps", "web", "svelte.config.js"))).toBe(true);
@@ -230,31 +229,30 @@ describe("create (integration against templates)", () => {
 
     for (const workspace of ["api", "web"]) {
       const dockerfile = readFileSync(join(target, "apps", workspace, "Dockerfile"), "utf8");
-      expect(dockerfile).toContain("FROM node:22-alpine AS deps");
-      expect(dockerfile).toContain("RUN npm ci --no-audit --no-fund");
-      expect(dockerfile).toContain(`RUN npm run build --workspace=apps/${workspace}`);
-      expect(dockerfile).not.toContain("npm install --omit=dev=false");
+      expect(dockerfile).toContain("FROM oven/bun:1.4.0-alpine AS deps");
+      expect(dockerfile).toContain("RUN bun ci");
+      expect(dockerfile).toContain(`RUN bun run --cwd apps/${workspace} build`);
+      expect(dockerfile).not.toContain("FROM node:");
 
       // Every workspace manifest must reach `npm ci`. Listing them by hand silently
       // installs a different tree for a project that adds one.
-      expect(dockerfile).toContain("FROM node:22-alpine AS manifests");
+      expect(dockerfile).toContain("FROM oven/bun:1.4.0-alpine AS manifests");
       expect(dockerfile).toContain('find . -name package.json -not -path "*/node_modules/*"');
       // The whole install output, not just the root node_modules, so nested
       // directories npm creates for unhoistable versions survive into the build.
       expect(dockerfile).toContain("COPY --from=deps /app ./");
       expect(dockerfile).not.toContain("COPY --from=deps /app/node_modules");
       // Local workspace packages compile before the app that imports them.
-      expect(dockerfile).toContain("npm run build --if-present --workspace");
+      expect(dockerfile).toContain('bun run --cwd "$(dirname "$manifest")" --if-present build');
       // Local workspace packages ship as real directories. node_modules only holds
       // symlinks to them, and a dangling link fails at boot rather than at build.
       expect(dockerfile).toContain("COPY --from=build /app/packages ./packages");
       expect(dockerfile).toContain("RUN mkdir -p /app/packages");
       // The runtime tree comes from prod-deps, never from a stage holding dev deps.
-      expect(dockerfile).toContain("FROM node:22-alpine AS prod-deps");
+      expect(dockerfile).toContain("FROM oven/bun:1.4.0-alpine AS prod-deps");
       expect(dockerfile).toContain("COPY --from=prod-deps /app/node_modules ./node_modules");
       expect(dockerfile).not.toContain("COPY --from=build /app/node_modules");
-      // The lockfile is read by the npm major that wrote it.
-      expect(dockerfile).toContain('RUN npm i -g "npm@${NPM_VERSION}"');
+      expect(dockerfile).toContain("--frozen-lockfile");
       expect(dockerfile).toContain("HEALTHCHECK");
       if (workspace === "api") {
         expect(dockerfile).toContain(
@@ -266,13 +264,13 @@ describe("create (integration against templates)", () => {
       }
     }
     const rootPkg = JSON.parse(readFileSync(join(target, "package.json"), "utf8")) as {
-      engines: { node: string };
+      engines: { bun: string };
     };
-    expect(rootPkg.engines.node).toBe(">=22.22.1");
+    expect(rootPkg.engines.bun).toBe("1.4.0");
 
-    const healthController = readFileSync(join(target, "apps", "api", "src", "health", "health.controller.ts"), "utf8");
-    expect(healthController).toContain("ServiceUnavailableException");
-    expect(healthController).toContain("readinessService.run()");
+    const healthPlugin = readFileSync(join(target, "apps", "api", "src", "health", "health.plugin.ts"), "utf8");
+    expect(healthPlugin).toContain('"/health/ready"');
+    expect(healthPlugin).toContain("readiness.run()");
     expect(existsSync(join(target, "apps", "api", "src", "health", "readiness.service.ts"))).toBe(true);
     expect(existsSync(join(target, "apps", "api", "src", "config", "redis.connection.ts"))).toBe(true);
   });
@@ -295,8 +293,8 @@ describe("create (integration against templates)", () => {
     ).toHaveLength(2);
     // project name is rendered into the workspace commands / stack name
     expect(compose).toContain("name: app-dev");
-    expect(compose).toContain("npm run dev -w app-web");
-    expect(compose).toContain("npm run dev -w app-api");
+    expect(compose).toContain("bun run --cwd apps/web dev");
+    expect(compose).toContain("bun run --cwd apps/api dev");
     // The legacy per-project proxy remains available only as an explicit profile;
     // podo dev normally connects the web service to one shared loopback gateway.
     expect(compose).toContain("profiles: [podokit-legacy-proxy]");
@@ -319,7 +317,7 @@ describe("create (integration against templates)", () => {
     expect(compose).toMatch(/profiles: \[storage\]/);
     const devDockerfile = readFileSync(join(target, "Dockerfile.dev"), "utf8");
     expect(devDockerfile).toContain('ARG PODOKIT_NPM_REGISTRY=""');
-    expect(devDockerfile).toContain('npm config set registry "$PODOKIT_NPM_REGISTRY"');
+    expect(devDockerfile).toContain('bun install --frozen-lockfile --registry "$PODOKIT_NPM_REGISTRY"');
 
     // web proxies /api to the api container by service name (Traefik only routes web)
     expect(readFileSync(join(target, ".env.docker"), "utf8")).toContain("BACKEND_INTERNAL_URL=http://api:5002");
@@ -392,7 +390,7 @@ describe("create (integration against templates)", () => {
     const result = create({ name: "app", template: "todo", templatesDir: REPO_TEMPLATES, targetDir: target });
 
     expect(result.template).toBe("todo");
-    expect(existsSync(join(target, "apps", "api", "src", "todos", "todos.controller.ts"))).toBe(true);
+    expect(existsSync(join(target, "apps", "api", "src", "todos", "todo.plugin.ts"))).toBe(true);
     expect(existsSync(join(target, "apps", "api", "src", "migrations"))).toBe(true);
     // API access goes through the generic proxy + ApiClient (no per-resource proxy route)
     expect(existsSync(join(target, "apps", "web", "src", "routes", "api", "[...path]", "+server.ts"))).toBe(true);
@@ -421,7 +419,7 @@ describe("create (integration against templates)", () => {
     );
   });
 
-  it.each(["fullstack-nest-svelte", "todo"])(
+  it.each(["fullstack", "todo"])(
     "scaffolds audited dependency floors in the %s template",
     (template) => {
       const target = join(tmp(), "secure-app");
@@ -437,25 +435,24 @@ describe("create (integration against templates)", () => {
         readFileSync(join(target, "apps", "web", "package.json"), "utf8"),
       ) as { devDependencies: Record<string, string> };
 
-      expect(rootPkg.overrides["@nestjs/swagger"]?.["js-yaml"]).toBe("5.2.3");
       expect(rootPkg.overrides["@sveltejs/kit"]?.cookie).toBe("0.7.2");
-      expect(apiPkg.devDependencies["@swc/cli"]).toBe("^0.8.1");
+      expect(apiPkg.devDependencies["@types/bun"]).toBe("^1.3.9");
       expect(webPkg.devDependencies["@sveltejs/vite-plugin-svelte"]).toBe("^7.3.0");
       expect(webPkg.devDependencies.vite).toBe("^8.2.1");
     },
   );
 
-  it.each(["fullstack-nest-svelte", "todo"])(
+  it.each(["fullstack", "todo"])(
     "documents the shared development gateway in the %s generated README",
     (template) => {
       const target = join(tmp(), "documented-app");
       create({ name: "documented-app", template, templatesDir: REPO_TEMPLATES, targetDir: target });
 
       const readme = readFileSync(join(target, "README.md"), "utf8");
-      expect(readme).toContain("npx @podosoft/podokit dev watch");
+      expect(readme).toContain("bunx --bun @podosoft/podokit dev watch");
       expect(readme).toContain("http://documented-app.localhost");
       expect(readme).toContain("Even a single app uses");
-      expect(readme).toContain("npx @podosoft/podokit dev down");
+      expect(readme).toContain("bunx --bun @podosoft/podokit dev down");
       expect(readme).toContain("final registered");
       expect(readme).toContain("Alternative: host processes");
 

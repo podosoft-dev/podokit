@@ -681,7 +681,6 @@ export function applyUpdate(
     ...manifest,
     answers: options.targetAnswers ?? manifestTemplateVars(manifest),
     toolchain: options.targetToolchain ?? manifest.toolchain,
-    packageManager: undefined,
     ownedGlobs: migratedOwnedGlobs,
     managedOverrides: migratedManagedOverrides,
     modules: refreshedModules,

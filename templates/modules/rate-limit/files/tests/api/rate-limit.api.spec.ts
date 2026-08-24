@@ -13,10 +13,26 @@ const origin = { origin: base };
 // to the module default and allow a little headroom.
 const limit = Number(process.env.RATE_LIMIT_MAX ?? 300);
 
+async function session(
+  playwright: import("@playwright/test").PlaywrightWorkerArgs["playwright"],
+) {
+  const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  const email = `rate-limit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
+  const signup = await ctx.post("/api/auth/sign-up/email", {
+    data: {
+      email,
+      password: "Podokit3e-Str0ng!pw",
+      name: "Rate Limit",
+    },
+  });
+  expect(signup.ok()).toBeTruthy();
+  return ctx;
+}
+
 test("rate limit: health probes stay available while ordinary routes return 429 @smoke", async ({
   playwright,
 }) => {
-  const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  const ctx = await session(playwright);
   for (const path of ["/api/health", "/api/health/ready"]) {
     for (let i = 0; i < limit + 5; i++) {
       const response = await ctx.get(path);

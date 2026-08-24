@@ -1,15 +1,11 @@
 {
   "name": "object-storage-s3",
-  "description": "S3-compatible object storage (AWS S3 or MinIO, chosen by STORAGE_PROVIDER) with a StorageService and presigned URLs.",
+  "description": "Bun-native S3-compatible object storage for AWS S3 or MinIO with a StorageService and presigned URLs.",
   "requires": [],
   "requiredProjectFiles": [
     "apps/api/src/health/readiness.service.ts"
   ],
   "targetApp": "api",
-  "dependencies": {
-    "@aws-sdk/client-s3": "^3.700.0",
-    "@aws-sdk/s3-request-presigner": "^3.700.0"
-  },
   "env": [
     "# object storage — STORAGE_PROVIDER: minio | aws",
     "STORAGE_PROVIDER=minio",
@@ -21,8 +17,8 @@
     "S3_FORCE_PATH_STYLE=true"
   ],
   "inject": [
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:imports", "text": "import { StorageModule } from \"./storage/storage.module\";" },
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:module-imports", "text": "StorageModule," }
+    { "file": "apps/api/src/app.ts", "marker": "// podokit:end:imports", "text": "import { storageModule } from \"./storage/storage.module\";" },
+    { "file": "apps/api/src/app.ts", "marker": "// podokit:end:modules", "text": "storageModule," }
   ],
   "instructions": [
     "Start MinIO for local dev:  docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml up -d",

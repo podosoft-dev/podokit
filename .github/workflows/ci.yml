@@ -25,7 +25,7 @@ jobs:
       - run: npm run lint
       - run: npm test
 
-  bun-compatibility:
+  generated-bun-app:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -39,7 +39,7 @@ jobs:
           bun-version: 1.4.0
       - run: npm ci --no-audit --no-fund
       - run: npm run build
-      - name: Verify Node to Bun to Node conversion
+      - name: Verify a Bun-only generated app
         run: |
           app_dir="$(mktemp -d)"
           node packages/cli/dist/index.js create app --dir "$app_dir" --no-ai --yes
@@ -52,22 +52,9 @@ jobs:
             node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" add file-upload
             node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" add logging
             node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" add rate-limit
-            docker run --rm \
-              --user "$(id -u):$(id -g)" \
-              -e BUN_INSTALL_CACHE_DIR=/tmp/bun-cache \
-              -v "$app_dir:/app" \
-              -v "$GITHUB_WORKSPACE:/workspace:ro" \
-              -w /app \
-              oven/bun:1.4.0-alpine \
-              bun /workspace/packages/cli/dist/index.js runtime set bun --apply
-            docker run --rm \
-              --user "$(id -u):$(id -g)" \
-              -e BUN_INSTALL_CACHE_DIR=/tmp/bun-cache \
-              -v "$app_dir:/app" \
-              -v "$GITHUB_WORKSPACE:/workspace:ro" \
-              -w /app \
-              oven/bun:1.4.0-alpine \
-              bun /workspace/packages/cli/dist/index.js status --json | grep -q '"runtime": "bun"'
-            node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" runtime set node --apply
-            node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" status --json | grep -q '"runtime": "node"'
+            bun install
+            bun run lint
+            bun run test
+            bun run build
+            node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" status --json | grep -q '"runtime": "bun"'
           )

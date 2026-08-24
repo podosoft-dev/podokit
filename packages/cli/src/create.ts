@@ -7,7 +7,6 @@ import { renderProjectTemplate } from "./assemble";
 import {
   resolveToolchain,
   toolchainTemplateVars,
-  type NodePackageManager,
   type Runtime,
   type Toolchain,
 } from "./toolchain";
@@ -22,7 +21,7 @@ const AI_ARTIFACTS = [
   ".github/copilot-instructions.md",
 ];
 
-export type PackageManager = NodePackageManager;
+export type PackageManager = "bun";
 
 export { DEFAULT_TEMPLATE };
 
@@ -31,13 +30,13 @@ export interface CreateOptions {
   name: string;
   /** Directory that holds the template sets (each in its own subfolder). */
   templatesDir: string;
-  /** Template subfolder to use. Defaults to `fullstack-nest-svelte`. */
+  /** Public template name. Defaults to `fullstack`. */
   template?: string;
   /** Where to create the project. Defaults to `<cwd>/<name>`. */
   targetDir?: string;
-  /** Package manager recorded in the generated project. Defaults to `npm`. */
+  /** Deprecated compatibility input. PodoKit v1 accepts only Bun. */
   packageManager?: PackageManager;
-  /** Application runtime. Defaults to Node.js. */
+  /** Application runtime. PodoKit v1 accepts only Bun. */
   runtime?: Runtime;
   /** PodoKit version stamped into the lockfile. Defaults to the CLI version. */
   podokitVersion?: string;

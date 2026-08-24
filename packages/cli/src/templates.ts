@@ -6,16 +6,16 @@ export interface TemplateInfo {
 // Order matters: the first entry is the default and prompts list them in order.
 export const TEMPLATES: TemplateInfo[] = [
   {
-    name: "fullstack-nest-svelte",
-    description: "NestJS + SvelteKit starter — TypeORM wired, Swagger, no domain code (clean)",
+    name: "fullstack",
+    description: "Bun + Elysia + SvelteKit starter — Bun.SQL, OpenAPI, no domain code",
   },
   {
     name: "todo",
-    description: "Fullstack starter plus a Todo CRUD example (DB entity, migration, UI)",
+    description: "Fullstack starter plus a Bun.SQL Todo CRUD example and UI",
   },
   {
     name: "base",
-    description: "Minimal npm workspace to build up from scratch",
+    description: "Minimal Bun workspace to build up from scratch",
   },
 ];
 

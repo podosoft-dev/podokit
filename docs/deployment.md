@@ -140,7 +140,7 @@ rejects keys that look like passwords, tokens, private keys, or credentials, and
 values containing URL user information.
 
 Profiles omit `migration` by default, which runs the selected project's package
-manager (`npm run migrate:all` or `bun run migrate:all`) in the exact API image.
+manager (`bun run migrate:all`) in the exact API image.
 Applications with a different compiled entry point declare one:
 
 ```json

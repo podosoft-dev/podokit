@@ -9,7 +9,7 @@
 //   OUTAGE_WEB_PORT,
 //   SECONDARY_API_PORT,
 //   POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB,
-//   APP_DIR, E2E_NPM_CACHE, KEEP.
+//   APP_DIR, E2E_BUN_CACHE, KEEP.
 import { spawn, execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir, homedir } from "node:os";
@@ -17,7 +17,6 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createPhaseTimer,
-  npmInstallArguments,
   playwrightArguments,
   resolveE2eOptions,
 } from "./e2e-ci-lib.mjs";
@@ -47,7 +46,12 @@ const registry = `http://localhost:${env.REGISTRY_PORT}`;
 const webURL = `http://localhost:${env.WEB_PORT}`;
 const outageWebURL = `http://localhost:${env.OUTAGE_WEB_PORT}`;
 const appDir = process.env.APP_DIR ? resolve(process.env.APP_DIR) : mkdtempSync(join(tmpdir(), "podokit-e2e-"));
+const rateLimitKeyPrefix = `podokit:e2e:${process.pid}:${Date.now()}:rate-limit`;
 const EXTERNAL_MODULES = [
+  {
+    name: "blog",
+    packageName: "@podosoft/podokit-module-blog",
+  },
   {
     name: "analytics",
     packageName: "@podosoft/podokit-module-analytics",
@@ -155,28 +159,32 @@ async function main() {
   rmSync(join(homedir(), ".npm", "_npx"), { recursive: true, force: true });
   const target = join(appDir, "app");
   const npmEnv = { ...process.env, npm_config_registry: registry, npm_config_userconfig: npmrc };
-  run("npx", ["--yes", "@podosoft/podokit", "create", "app", "--dir", target, "--template", "fullstack-nest-svelte", "--yes"], { cwd: appDir, env: npmEnv });
+  run("npx", ["--yes", "@podosoft/podokit", "create", "app", "--dir", target, "--template", "fullstack", "--yes"], { cwd: appDir, env: npmEnv });
   run("npx", ["--yes", "@podosoft/podokit", "add", "admin-dashboard"], { cwd: target, env: npmEnv });
   // Backend modules whose shipped api specs need Redis / MinIO — added so their
   // tests run in the Outer loop (they self-skip when a backing service is absent).
-  // rate-limit is intentionally omitted: its global throttler guard would rate-limit
-  // every other spec in the shared app.
+  // Blog pulls in rate-limit. Auth and runtime traffic receive high ceilings in
+  // the shared suite, while the ordinary limit stays at its production default
+  // so the rate-limit spec can exercise a real 200 -> 429 transition.
   for (const mod of ["redis", "bullmq", "sse", "file-upload", "api-key-auth", "job-progress"]) {
     run("npx", ["--yes", "@podosoft/podokit", "add", mod], { cwd: target, env: npmEnv });
   }
+  writeFileSync(
+    join(target, ".npmrc"),
+    `registry=${registry}\n//localhost:${env.REGISTRY_PORT}/:_authToken=e2e\n`,
+  );
   for (const external of EXTERNAL_MODULES) {
     run(
-      "npm",
+      "bun",
       [
-        "install",
-        "--save-dev",
+        "add",
+        "--dev",
         external.packageName,
         "--registry",
         registry,
-        "--userconfig",
-        npmrc,
-        "--no-audit",
-        "--no-fund",
+        ...(process.env.E2E_BUN_CACHE
+          ? ["--cache-dir", process.env.E2E_BUN_CACHE]
+          : []),
       ],
       { cwd: target, env: npmEnv },
     );
@@ -187,8 +195,12 @@ async function main() {
   }
 
   step("install (resolving @podosoft/* from the registry)");
-  writeFileSync(join(target, ".npmrc"), `registry=${registry}\n//localhost:${env.REGISTRY_PORT}/:_authToken=e2e\n`);
-  run("npm", npmInstallArguments(process.env.E2E_NPM_CACHE), { cwd: target });
+  run("bun", [
+    "install",
+    ...(process.env.E2E_BUN_CACHE
+      ? ["--cache-dir", process.env.E2E_BUN_CACHE]
+      : []),
+  ], { cwd: target });
 
   step("write .env");
   writeFileSync(
@@ -214,6 +226,10 @@ async function main() {
       // The audit-log module ships with this fallback enabled. Preserve that
       // module default after the faithful harness replaces the generated .env.
       "AUDIT_LOG_ENABLED=true",
+      `RATE_LIMIT_KEY_PREFIX=${rateLimitKeyPrefix}`,
+      "RATE_LIMIT_MAX=300",
+      "RATE_LIMIT_AUTH_MAX=10000",
+      "RATE_LIMIT_RUNTIME_MAX=10000",
       // Point mail at the CI Mailpit service when present so the email specs run;
       // otherwise the app logs mail and those specs skip.
       ...(process.env.SMTP_HOST
@@ -259,10 +275,14 @@ async function main() {
     POSTGRES_DB: env.POSTGRES_DB,
     BETTER_AUTH_SECRET: "e2e-secret-please-change-32-characters",
     ADMIN_EMAILS: "admin@example.com",
-    // Runtime env for the built api (`node dist/main` below). Auth feature flags
+    // Runtime env for the built Bun API. Auth feature flags
     // are DB-backed (migration-seeded), so only server-enforced env remains.
     AUTH_HIBP: "true",
     AUDIT_LOG_ENABLED: "true",
+    RATE_LIMIT_KEY_PREFIX: rateLimitKeyPrefix,
+    RATE_LIMIT_MAX: "300",
+    RATE_LIMIT_AUTH_MAX: "10000",
+    RATE_LIMIT_RUNTIME_MAX: "10000",
     // Route phone-number OTPs to the local SMS sink so the phone spec can read them.
     SMS_WEBHOOK_URL: `${smsSinkURL}/sms`,
     // Backend-module runtime config (present only when the CI service is up).
@@ -286,17 +306,20 @@ async function main() {
   };
 
   step("build api");
-  run("npm", ["run", "build", "-w", "app-api"], { cwd: target });
+  run("bun", ["run", "--cwd", "apps/api", "build"], { cwd: target });
 
   step("migrate auth and app tables from compiled output");
-  run("npm", ["run", "migrate:all", "-w", "app-api"], { cwd: target, env: pgEnv });
+  run("bun", ["run", "--cwd", "apps/api", "migrate:all"], { cwd: target, env: pgEnv });
+
+  step("verify generated API contract");
+  run("bun", ["run", "--cwd", "apps/api", "contract"], { cwd: target, env: pgEnv });
 
   step("build web");
-  run("npm", ["run", "build", "-w", "app-web"], { cwd: target });
+  run("bun", ["run", "--cwd", "apps/web", "build"], { cwd: target });
 
   if (!packageSmoke) {
     step("verify protected routes fail closed during a backend outage");
-    const unavailableWeb = bg("node", ["build"], {
+    const unavailableWeb = bg("bun", ["build/index.js"], {
       cwd: join(target, "apps/web"),
       env: {
         ...process.env,
@@ -327,16 +350,16 @@ async function main() {
   }
 
   step("start api + web");
-  bg("node", [join(target, "infra/docker/sms-sink.mjs")], { cwd: target, env: { ...process.env, PORT: smsSinkPort } });
+  bg("bun", [join(target, "infra/docker/sms-sink.mjs")], { cwd: target, env: { ...process.env, PORT: smsSinkPort } });
   await waitFor(`${smsSinkURL}/readyz`, "sms-sink");
-  bg("node", ["dist/main"], {
+  bg("bun", ["dist/main.js"], {
     cwd: join(target, "apps/api"),
     env: { ...pgEnv, PORT: env.API_PORT, BETTER_AUTH_URL: `http://localhost:${env.API_PORT}`, CORS_ORIGIN: webURL },
   });
   await waitFor(`http://localhost:${env.API_PORT}/health`, "api");
   const hasRedis = Boolean(process.env.REDIS_URL || process.env.REDIS_HOST);
   if (hasRedis) {
-    bg("node", ["dist/main"], {
+    bg("bun", ["dist/main.js"], {
       cwd: join(target, "apps/api"),
       env: {
         ...pgEnv,
@@ -352,9 +375,9 @@ async function main() {
     );
   }
   // BullMQ worker (bullmq/job-progress) — separate process; harmless (idle) if Redis is absent.
-  const worker = bg("node", ["dist/main-worker"], { cwd: join(target, "apps/api"), env: pgEnv });
+  const worker = bg("bun", ["dist/main-worker.js"], { cwd: join(target, "apps/api"), env: pgEnv });
   await assertProcessRunning(worker, "BullMQ worker");
-  bg("node", ["build"], {
+  bg("bun", ["build/index.js"], {
     cwd: join(target, "apps/web"),
     env: {
       ...process.env,
@@ -377,7 +400,7 @@ async function main() {
   }
 
   step("install Playwright Chromium");
-  run("npx", ["playwright", "install", "--with-deps", "chromium"], { cwd: join(target, "tests") });
+  run("bunx", ["playwright", "install", "--with-deps", "chromium"], { cwd: join(target, "tests") });
   step(`run Playwright${smoke ? " smoke" : " full suite"}`);
   // --grep wins when given (run just one feature's specs); otherwise --smoke runs
   // the @smoke subset, and the default runs everything.
@@ -388,12 +411,13 @@ async function main() {
   const mailpitURL = process.env.SMTP_HOST
     ? (process.env.MAILPIT_URL ?? "http://localhost:8025")
     : "http://127.0.0.1:1";
-  run("npx", testArgs, {
+  run("bunx", testArgs, {
     cwd: join(target, "tests"),
     env: {
       ...process.env,
       E2E_BASE_URL: webURL,
       E2E_API_URL: `http://localhost:${env.API_PORT}`,
+      RATE_LIMIT_MAX: pgEnv.RATE_LIMIT_MAX,
       ...(hasRedis
         ? { E2E_SECONDARY_API_URL: `http://localhost:${env.SECONDARY_API_PORT}` }
         : {}),

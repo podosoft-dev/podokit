@@ -1,4 +1,3 @@
-import { Injectable } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import { AppException } from "../common/app-exception";
 import { StorageService } from "../storage/storage.service";
@@ -51,7 +50,6 @@ function contentTypeFor(id: string): string {
   return "image/avif";
 }
 
-@Injectable()
 export class BlogImageService {
   constructor(private readonly storage: StorageService) {}
 

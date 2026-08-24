@@ -47,25 +47,25 @@ afterEach(() => {
 describe("assembleProject", () => {
   it("matches what create+add write to disk (app.module wiring)", () => {
     const onDisk = join(tmp(), "app");
-    create({ name: "app", template: "fullstack-nest-svelte", templatesDir: REPO_TEMPLATES, targetDir: onDisk });
+    create({ name: "app", template: "fullstack", templatesDir: REPO_TEMPLATES, targetDir: onDisk });
     addModule({ projectRoot: onDisk, module: "auth", modulesDir: join(REPO_TEMPLATES, "modules") });
 
     const tree = assembleProject({
       templatesDir: REPO_TEMPLATES,
-      template: "fullstack-nest-svelte",
+      template: "fullstack",
       answers: { projectName: "app", packageManager: "npm" },
       modules: ["auth"],
     });
 
-    const diskAppModule = readFileSync(join(onDisk, "apps/api/src/app.module.ts"), "utf8");
-    expect(String(tree.get("apps/api/src/app.module.ts")?.content)).toBe(diskAppModule);
+    const diskAppModule = readFileSync(join(onDisk, "apps/api/src/app.ts"), "utf8");
+    expect(String(tree.get("apps/api/src/app.ts")?.content)).toBe(diskAppModule);
   });
 });
 
 describe("planUpdate (dry-run)", () => {
   it("reports everything up to date for a same-version project", () => {
     const dir = join(tmp(), "app");
-    create({ name: "app", template: "fullstack-nest-svelte", templatesDir: REPO_TEMPLATES, targetDir: dir });
+    create({ name: "app", template: "fullstack", templatesDir: REPO_TEMPLATES, targetDir: dir });
     const plan = planUpdate(dir, REPO_TEMPLATES);
     const counts = summarize(plan);
     expect(counts.update).toBe(0);
@@ -75,7 +75,7 @@ describe("planUpdate (dry-run)", () => {
 
   it("flags a user-edited managed file as a conflict", () => {
     const dir = join(tmp(), "app");
-    create({ name: "app", template: "fullstack-nest-svelte", templatesDir: REPO_TEMPLATES, targetDir: dir });
+    create({ name: "app", template: "fullstack", templatesDir: REPO_TEMPLATES, targetDir: dir });
     // edit a managed file
     const mainPath = join(dir, "apps/api/src/main.ts");
     writeFileSync(mainPath, readFileSync(mainPath, "utf8") + "\n// my edit\n");
@@ -100,7 +100,7 @@ describe("planUpdate (dry-run)", () => {
     const dir = join(tmp(), "app");
     create({
       name: "app",
-      template: "fullstack-nest-svelte",
+      template: "fullstack",
       templatesDir: REPO_TEMPLATES,
       targetDir: dir,
     });
@@ -141,7 +141,7 @@ describe("planUpdate (dry-run)", () => {
     const dir = join(tmp(), "app");
     create({
       name: "app",
-      template: "fullstack-nest-svelte",
+      template: "fullstack",
       templatesDir: REPO_TEMPLATES,
       targetDir: dir,
     });
@@ -162,7 +162,7 @@ describe("planUpdate (dry-run)", () => {
 describe("external module updates", () => {
   it("replays an installed package module and records its applied version", () => {
     const project = join(tmp(), "app");
-    create({ name: "app", template: "fullstack-nest-svelte", templatesDir: REPO_TEMPLATES, targetDir: project });
+    create({ name: "app", template: "fullstack", templatesDir: REPO_TEMPLATES, targetDir: project });
     const packageDir = join(project, "node_modules/@podosoft/podokit-module-blog");
     const rootPackagePath = join(project, "package.json");
     const rootPackage = JSON.parse(readFileSync(rootPackagePath, "utf8")) as {
@@ -213,7 +213,7 @@ describe("external module updates", () => {
 
   it("replays the recorded external module version for the merge base", () => {
     const project = join(tmp(), "app");
-    create({ name: "app", template: "fullstack-nest-svelte", templatesDir: REPO_TEMPLATES, targetDir: project });
+    create({ name: "app", template: "fullstack", templatesDir: REPO_TEMPLATES, targetDir: project });
     const packageDir = join(project, "node_modules/@podosoft/podokit-module-blog");
     mkdirSync(packageDir, { recursive: true });
     writeFileSync(
@@ -314,13 +314,13 @@ describe("applyUpdate", () => {
     const extension = "apps/api/src/app.extensions.ts";
     const settingsComponent =
       "apps/web/src/routes/(admin)/admin/settings/general-settings.svelte";
-    rmSync(join(oldTemplates, "fullstack-nest-svelte", extension));
+    rmSync(join(oldTemplates, "fullstack", extension));
     rmSync(join(oldTemplates, "modules/admin-dashboard/files", settingsComponent));
 
     const project = join(tmp(), "app");
     create({
       name: "app",
-      template: "fullstack-nest-svelte",
+      template: "fullstack",
       templatesDir: oldTemplates,
       targetDir: project,
     });
@@ -361,7 +361,7 @@ describe("applyUpdate", () => {
     const project = join(tmp(), "legacy-admin-app");
     create({
       name: "legacy-admin-app",
-      template: "fullstack-nest-svelte",
+      template: "fullstack",
       templatesDir: templates,
       targetDir: project,
     });
@@ -546,7 +546,7 @@ describe("applyUpdate", () => {
     writeFileSync(newManifestPath, `${JSON.stringify(newManifest, null, 2)}\n`);
 
     const dir = join(tmp(), "app");
-    create({ name: "app", template: "fullstack-nest-svelte", templatesDir: oldTemplates, targetDir: dir });
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: dir });
     addModule({ projectRoot: dir, module: "admin-dashboard", modulesDir: join(oldTemplates, "modules") });
 
     expect(readFilesLock(dir)?.files[ownedFile]?.tier).toBe("managed");
@@ -610,7 +610,7 @@ describe("applyUpdate", () => {
     const project = join(tmp(), "app");
     create({
       name: "app",
-      template: "fullstack-nest-svelte",
+      template: "fullstack",
       templatesDir: oldTemplates,
       targetDir: project,
     });
@@ -653,7 +653,7 @@ describe("applyUpdate", () => {
 
   it("promotes newly declared default-owned paths during update", () => {
     const dir = join(tmp(), "app");
-    create({ name: "app", template: "fullstack-nest-svelte", templatesDir: REPO_TEMPLATES, targetDir: dir });
+    create({ name: "app", template: "fullstack", templatesDir: REPO_TEMPLATES, targetDir: dir });
     const manifestPath = join(dir, ".podokit/manifest.json");
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { ownedGlobs: string[] };
     manifest.ownedGlobs = manifest.ownedGlobs.filter((glob) => glob !== ".podokit/dev.json");
@@ -690,7 +690,7 @@ describe("applyUpdate", () => {
     );
 
     const dir = join(tmp(), "app");
-    create({ name: "app", template: "fullstack-nest-svelte", templatesDir: oldTemplates, targetDir: dir });
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: dir });
     addModule({ projectRoot: dir, module: "auth", modulesDir: join(oldTemplates, "modules") });
     const skill = ".claude/skills/podokit-configure-auth/SKILL.md";
     expect(readFilesLock(dir)?.files[skill]?.tier).toBe("owned");
@@ -740,7 +740,7 @@ describe("applyUpdate", () => {
     const project = join(tmp(), "app");
     create({
       name: "app",
-      template: "fullstack-nest-svelte",
+      template: "fullstack",
       templatesDir: oldTemplates,
       targetDir: project,
     });
@@ -805,7 +805,7 @@ describe("applyUpdate", () => {
     const project = join(tmp(), "app");
     create({
       name: "app",
-      template: "fullstack-nest-svelte",
+      template: "fullstack",
       templatesDir: oldTemplates,
       targetDir: project,
     });
@@ -836,9 +836,9 @@ describe("applyUpdate", () => {
     const oldTemplates = oldTemplatesCopy();
     const dir = join(tmp(), "app");
     // generate from the OLD templates
-    create({ name: "app", template: "fullstack-nest-svelte", templatesDir: oldTemplates, targetDir: dir });
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: dir });
     // NEW templates change a managed file
-    const tplMain = join(REPO_TEMPLATES, "fullstack-nest-svelte/apps/api/src/main.ts");
+    const tplMain = join(REPO_TEMPLATES, "fullstack/apps/api/src/main.ts");
     const original = readFileSync(tplMain, "utf8");
     try {
       writeFileSync(tplMain, original + "\n// new in this version\n");
@@ -854,11 +854,11 @@ describe("applyUpdate", () => {
   it("3-way merges a user edit with an upstream change without losing either", () => {
     const oldTemplates = oldTemplatesCopy();
     const dir = join(tmp(), "app");
-    create({ name: "app", template: "fullstack-nest-svelte", templatesDir: oldTemplates, targetDir: dir });
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: dir });
     // user edits the FIRST line region; upstream edits the END — disjoint => clean 3-way
     const appMain = join(dir, "apps/api/src/main.ts");
     writeFileSync(appMain, "// my header\n" + readFileSync(appMain, "utf8"));
-    const tplMain = join(REPO_TEMPLATES, "fullstack-nest-svelte/apps/api/src/main.ts");
+    const tplMain = join(REPO_TEMPLATES, "fullstack/apps/api/src/main.ts");
     const original = readFileSync(tplMain, "utf8");
     try {
       writeFileSync(tplMain, original + "\n// upstream footer\n");
@@ -884,7 +884,7 @@ describe("applyUpdate", () => {
   it("does not adopt unrelated application files as managed during update", () => {
     const oldTemplates = oldTemplatesCopy();
     const dir = join(tmp(), "app");
-    create({ name: "app", template: "fullstack-nest-svelte", templatesDir: oldTemplates, targetDir: dir });
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: dir });
     const custom = join(dir, "apps/api/src/customer-domain.ts");
     writeFileSync(custom, "export const customerDomain = true;\n");
 
@@ -897,11 +897,11 @@ describe("applyUpdate", () => {
 
   it("leaves an edited file untouched and reports a conflict when no old version is given", () => {
     const dir = join(tmp(), "app");
-    create({ name: "app", template: "fullstack-nest-svelte", templatesDir: REPO_TEMPLATES, targetDir: dir });
+    create({ name: "app", template: "fullstack", templatesDir: REPO_TEMPLATES, targetDir: dir });
     const appMain = join(dir, "apps/api/src/main.ts");
     const edited = readFileSync(appMain, "utf8") + "\n// precious edit\n";
     writeFileSync(appMain, edited);
-    const tplMain = join(REPO_TEMPLATES, "fullstack-nest-svelte/apps/api/src/main.ts");
+    const tplMain = join(REPO_TEMPLATES, "fullstack/apps/api/src/main.ts");
     const original = readFileSync(tplMain, "utf8");
     try {
       writeFileSync(tplMain, original + "\n// upstream\n");

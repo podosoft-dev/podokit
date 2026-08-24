@@ -33,15 +33,6 @@ export function playwrightArguments({ mode, grep }) {
   ];
 }
 
-export function npmInstallArguments(cacheDirectory) {
-  return [
-    "install",
-    "--no-audit",
-    "--no-fund",
-    ...(cacheDirectory ? ["--cache", cacheDirectory] : []),
-  ];
-}
-
 function formatDuration(milliseconds) {
   return `${(milliseconds / 1000).toFixed(1)}s`;
 }

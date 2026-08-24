@@ -7,9 +7,6 @@
     "apps/api/src/health/readiness.service.ts"
   ],
   "targetApp": "api",
-  "dependencies": {
-    "ioredis": "^5.4.1"
-  },
   "env": [
     "# Server-Sent Events transport: memory for one API replica, redis for multiple replicas",
     "SSE_TRANSPORT=memory",
@@ -17,8 +14,8 @@
     "SSE_MAX_EVENT_BYTES=65536"
   ],
   "inject": [
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:imports", "text": "import { EventsModule } from \"./events/events.module\";" },
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:module-imports", "text": "EventsModule," }
+    { "file": "apps/api/src/app.ts", "marker": "// podokit:end:imports", "text": "import { eventsModule } from \"./events/events.module\";" },
+    { "file": "apps/api/src/app.ts", "marker": "// podokit:end:modules", "text": "eventsModule," }
   ],
   "instructions": [
     "Stream events:  curl -N localhost:5002/events/stream",

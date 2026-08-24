@@ -2,16 +2,17 @@
   "name": "{{projectName}}",
   "version": "0.0.0",
   "private": true,
+  "packageManager": "bun@1.4.0",
   "engines": {
-    "node": ">=22.22.1"
+    "bun": "1.4.0"
   },
   "workspaces": [
     "apps/*"
   ],
   "scripts": {
     "dev": "echo \"Run 'dev' in apps/api and apps/web\" && exit 0",
-    "build": "npm run build --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present"
+    "build": "bun run --workspaces --if-present build",
+    "lint": "bun run --workspaces --if-present lint",
+    "test": "bun run --workspaces --if-present test"
   }
 }

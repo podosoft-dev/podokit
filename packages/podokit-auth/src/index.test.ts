@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import type { Pool } from "pg";
+import { describe, it, expect, vi } from "vitest";
 import {
   DEFAULT_SESSION_IDLE_TIMEOUT_MINUTES,
   MAX_SESSION_IDLE_TIMEOUT_MINUTES,
@@ -11,6 +12,7 @@ import {
   sessionIdleOptions,
   socialKey,
   SUPPORTED_PROVIDER_IDS,
+  createConfigStore,
 } from "./index";
 
 describe("secret envelope", () => {
@@ -74,5 +76,23 @@ describe("auth-config helpers", () => {
   it("SUPPORTED_PROVIDER_IDS gates provider keys and socialKey formats", () => {
     expect(SUPPORTED_PROVIDER_IDS.has("google")).toBe(true);
     expect(socialKey("google")).toBe("social.google");
+  });
+
+  it("normalizes JSON text returned by Bun's pg compatibility layer", async () => {
+    const query = vi.fn().mockResolvedValue({
+      rows: [{
+        key: "server",
+        enabled: true,
+        config: '{"auditLog":false,"allowDelete":true}',
+        secret: null,
+        updatedAt: new Date("2026-01-01T00:00:00Z"),
+      }],
+    });
+    const store = createConfigStore({ query } as unknown as Pool);
+
+    await expect(store.capabilitiesSnapshot()).resolves.toMatchObject({
+      auditLog: false,
+      allowDelete: true,
+    });
   });
 });

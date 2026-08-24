@@ -1,4 +1,3 @@
-import { Injectable } from "@nestjs/common";
 import { BetaAnalyticsDataClient } from "@google-analytics/data";
 import type {
   AnalyticsProvider,
@@ -38,7 +37,6 @@ function property(config: AnalyticsProviderConfig): string {
   return `properties/${config.propertyId}`;
 }
 
-@Injectable()
 export class Ga4AnalyticsProvider implements AnalyticsProvider {
   async verify(config: AnalyticsProviderConfig): Promise<void> {
     const analytics = client(config);

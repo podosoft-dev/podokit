@@ -89,7 +89,7 @@ describe("podokit-mcp server", () => {
 
   it("list_templates lists the templates", async () => {
     const r = (await client.callTool({ name: "list_templates", arguments: {} })) as TextResult;
-    expect(r.content[0].text).toContain("fullstack-nest-svelte");
+    expect(r.content[0].text).toContain("fullstack");
     expect(r.content[0].text).toContain("base");
   });
 
@@ -98,7 +98,7 @@ describe("podokit-mcp server", () => {
     tmpDirs.push(target);
     await client.callTool({
       name: "create_project",
-      arguments: { name: "app", template: "fullstack-nest-svelte", targetDir: target },
+      arguments: { name: "app", template: "fullstack", targetDir: target },
     });
     const initialized = (await client.callTool({
       name: "initialize_deployment_profile",

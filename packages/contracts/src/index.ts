@@ -1,6 +1,6 @@
 /**
  * Shared PodoKit contracts. Pure types and small classes with zero runtime
- * dependencies, imported by both the NestJS backend and the SvelteKit frontend
+ * dependencies, imported by both the Elysia backend and the SvelteKit frontend
  * so a single source defines the capability flags and the error shape.
  */
 

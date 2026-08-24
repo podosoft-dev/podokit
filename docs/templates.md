@@ -1,160 +1,123 @@
 # Templates
 
-`podo create --template <name>` selects what gets scaffolded. Three templates ship today:
+`podo create --template <name>` selects one of three Bun 1.4 templates.
 
 | Template | Description |
-| --- | --- |
-| `fullstack-nest-svelte` (default) | Clean NestJS + SvelteKit starter — no domain code |
-| `todo` | The fullstack starter plus a Todo CRUD example |
-| `base` | Minimal workspace for the selected runtime profile |
+|---|---|
+| `fullstack` (default) | Bun + Elysia + SvelteKit foundation without domain code |
+| `todo` | Fullstack plus a tested Bun.SQL Todo CRUD example |
+| `base` | Minimal Bun workspace |
 
-## Runtime profiles
-
-Every template can be rendered for either supported toolchain:
-
-| Profile | Selection | Generated package/runtime surface |
-| --- | --- | --- |
-| Node.js 22.22.1+ (default) | `--runtime node` or no flag | npm by default; pnpm/yarn via `--pm`; package-manager lockfile, Node Docker images, `setup-node` CI |
-| Bun 1.4.0 | `--runtime bun` | `bun.lock`, hoisted workspace install, Bun Docker images, `setup-bun` CI, Bun-native API and web tests |
+The CLI accepts `--runtime bun` as an explicit selection. Node and alternative
+package-manager targets do not exist in PodoKit v1.
 
 ```bash
 npx @podosoft/podokit create my-app
-bunx --bun @podosoft/podokit create my-app --runtime bun
+bunx --bun @podosoft/podokit create my-app --template todo
 ```
 
-Bun is both the runtime and package manager; `--runtime bun --pm ...` is
-rejected. Runtime-specific overlays replace scripts, Dockerfiles, Compose, and
-release CI while the application source remains shared.
+## `fullstack`
 
-## `fullstack-nest-svelte` (default)
-
-A clean full-stack workspace: everything wired (config, health, Swagger, TypeORM connection, SvelteKit + Tailwind + shadcn + i18n + server proxy) but **no domain code** — you add your own entities and routes.
-
-```
+```text
 apps/
-  api/                 # NestJS
+  api/
     src/
-      main.ts          # global ValidationPipe + exception filter, CORS
-      app.module.ts
-      config/          # typed environment validation
-      health/          # GET /health (liveness)
-      common/          # AppException + standard error envelope
-    Dockerfile
-  web/                 # SvelteKit (adapter-node)
-    src/
-      routes/          # (+layout, +page, api/ server proxy)
-      lib/server/      # backend-proxy: header allowlist to the API
-      lib/i18n/        # typesafe-i18n scaffold (en, ko)
-      app.css          # TailwindCSS v4 (@import "tailwindcss")
-    lib/components/ui/ # shadcn-svelte components (button, dialog, table, sonner, …)
-    components.json    # shadcn-svelte config (nova / zinc)
-    Dockerfile
+      main.ts              # Elysia startup and Bun.serve
+      app.ts               # assembled module/plugin registrations
+      app.extensions.ts    # application-owned service/module extension point
+      core/                # service registry, access policy, API contract
+      database/            # Bun.SQL runtime connection + migration DataSource
+      health/              # GET /health and /health/ready
+      common/              # AppException and standard error envelope
+    scripts/build.mjs      # Bun.build API, worker, and migrations
+    Dockerfile             # oven/bun:1.4.0-alpine
+  web/
+    src/routes/            # SvelteKit pages and API proxy
+    src/lib/i18n/          # English and Korean JSON catalogs
+    src/lib/components/ui/ # vendored shadcn-svelte primitives
+    Dockerfile             # oven/bun:1.4.0-alpine
 infra/
-  docker/docker-compose.yml   # PostgreSQL + Redis (healthchecks)
-  k3s/                        # namespace, deployments, service, ingress, secret example
-.env.example
-package.json                  # Node/npm or Bun workspace
+  docker/                  # PostgreSQL and module-aware profiles
+  k3s/                     # reference resources
+tests/                     # Playwright API and UI e2e suites
+bun.lock
 ```
 
-Conventions baked in:
+The request path uses Elysia and Bun.SQL. TypeORM is present only to execute
+versioned migrations. The merged OpenAPI document at `/api-docs-json` includes
+Elysia, module, and Better Auth routes. `bun run --cwd apps/api contract`
+compares that document with the generated project manifest.
 
-- **Backend** returns a stable error envelope `{ success: false, error: { code, message, statusCode, path, timestamp } }`; clients branch on `code`, not the message.
-- **Frontend** talks to the API only through the typed **`@podosoft/podokit-api-client`** (`$lib/api.ts`), which calls SvelteKit proxy routes (`routes/api/**`) that forward to the backend — the browser never hits the API directly, and tokens/cookies stay server-side. Use `client.get/post(...)` for REST and `client.auth.*` for auth.
-- **Env** uses `SCREAMING_SNAKE` names grouped by service; the API validates them before listening.
-- **Production images** are built from the repository root (`docker build -f apps/api/Dockerfile .` and `docker build -f apps/web/Dockerfile .`) so the selected toolchain uses its committed workspace lockfile reproducibly.
+Routes are session-protected by default when `auth` is installed. Modules use
+the startup service registry and explicitly register public or API-key access.
+The backend always renders failures as:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "STABLE_CODE",
+    "message": "Readable message",
+    "statusCode": 400,
+    "path": "/example",
+    "timestamp": "2026-08-24T00:00:00.000Z"
+  }
+}
+```
+
+The browser calls only the SvelteKit `/api/*` proxy. Cookies and internal API
+origins stay server-side.
 
 ## `todo`
 
-The `fullstack-nest-svelte` starter plus a worked **Todo** example: a `todos`
-CRUD resource (TypeORM entity + versioned migration), Swagger, and a SvelteKit
-todo UI wired through the server proxy. A runnable reference you can learn from
-or strip down.
+The Todo template adds:
 
-| Web (SvelteKit todo UI) | API docs (Swagger) |
-| --- | --- |
-| ![Generated todo app](images/todo-app.png) | ![Generated API docs](images/api-docs.png) |
+- an Elysia plugin for `GET/POST/PATCH/DELETE /todos`;
+- a Bun.SQL repository;
+- a numbered PostgreSQL migration;
+- a SvelteKit Todo page; and
+- unit/API/UI tests.
 
 ```bash
 npx @podosoft/podokit create my-app --template todo
-cd my-app && npm install && cp .env.example .env
-npx @podosoft/podokit dev watch
-# in a second terminal:
-npx @podosoft/podokit dev exec api npm run migration:run -w my-app-api
+cd my-app
+bun install
+cp .env.example .env
+bun run --cwd apps/api migration:run
+bun run dev
 ```
 
-With Bun, create the same example with `--runtime bun`, install with `bun
-install`, and run the migration as `bun run --cwd apps/api migration:run`.
-
-Open `http://my-app.localhost`. See [development.md](development.md) for the
-shared gateway lifecycle and the alternative host-process loop.
+| Web | API docs |
+|---|---|
+| ![Generated Todo app](images/todo-app.png) | ![Generated API docs](images/api-docs.png) |
 
 ## `base`
 
-A minimal workspace for the selected runtime (root `package.json`, `apps/api`
-and `apps/web` placeholders, `.env.example`, `.gitignore`). Use it when you want
-to assemble a project yourself.
+The base template contains the Bun workspace metadata and a minimal API entry
+point. Use it when the full Elysia/SvelteKit foundation is unnecessary.
 
-## UI: shadcn-svelte
+## UI foundation
 
-The `fullstack-nest-svelte` and `todo` templates come with [shadcn-svelte](https://shadcn-svelte.com) set up and a broad set of components **already installed** in `apps/web/src/lib/components/ui/`:
+`fullstack` and `todo` include Svelte 5, Tailwind v4, mode-watcher,
+typesafe-i18n, and shadcn-svelte primitives for forms, cards, dialogs, menus,
+tables, tabs, feedback, and navigation.
 
-- Forms & inputs: `button`, `input`, `label`, `checkbox`, `select`
-- Layout & content: `card`, `separator`, `tabs`, `table`, `avatar`, `badge`, `skeleton`
-- Overlays & feedback: `dialog`, `dropdown-menu`, `tooltip`, `alert`, `sonner` (toasts)
-
-To show toasts, mount the toaster once in `apps/web/src/routes/+layout.svelte`:
-
-```svelte
-<script lang="ts">
-  import { Toaster } from "$lib/components/ui/sonner";
-</script>
-<Toaster />
-```
-Then call `toast("Saved")` from `svelte-sonner` anywhere.
-
-Use them directly (no raw HTML form controls needed):
-
-```svelte
-<script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import * as Card from "$lib/components/ui/card";
-</script>
-
-<Card.Root>
-  <Card.Header><Card.Title>Hello</Card.Title></Card.Header>
-  <Card.Content class="flex gap-2">
-    <Input placeholder="Name" />
-    <Button>Save</Button>
-  </Card.Content>
-</Card.Root>
-```
-
-### Add more components
+Add another official component from `apps/web`:
 
 ```bash
-cd apps/web
-npx shadcn-svelte@latest add dialog dropdown-menu badge
+bunx --bun shadcn-svelte@latest add dialog badge
 ```
 
-Components are copied into `src/lib/components/ui/` — they are yours to edit.
+Application components should wrap the vendored primitives rather than editing
+`src/lib/components/ui/**`. Colors and radius are CSS variables in `app.css`.
 
-### Theming
+## Dotfile convention
 
-Colors, radius, and dark-mode values are CSS variables in `apps/web/src/app.css` (`:root` for light, `.dark` for dark). Change them to restyle everything — for example a different primary color:
+Template paths named `dot-<name>` become `.<name>` in generated applications,
+for example `dot-gitignore` becomes `.gitignore`.
 
-```css
-:root { --primary: oklch(0.55 0.2 260); }   /* blue-ish */
-```
+## Modules
 
-Dark mode is handled by [`mode-watcher`](https://github.com/svecosystem/mode-watcher) (mounted in `+layout.svelte`); toggle with its `toggleMode()` helper. The base color palette was generated with `baseColor: zinc` (see `components.json`).
-
-## The `dot-` convention
-
-Template files named `dot-<name>` are written as `.<name>` (for example `dot-gitignore` → `.gitignore`). This lets templates ship dotfiles that package managers would otherwise strip.
-
-## Add features with modules
-
-Grow a project feature by feature with composable modules (`podo add <module>`) —
-auth, admin-dashboard, redis, queue (BullMQ), object storage (S3), file upload,
-rate limiting, SSE, logging, and more. See [modules.md](modules.md).
+Use `podo add <module>` to extend either fullstack template with authentication,
+administration, Redis, queues, SSE, S3 storage, uploads, rate limiting, logging,
+audit, Blog, Analytics, and other features. See [Modules](modules.md).

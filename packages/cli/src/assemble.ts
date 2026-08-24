@@ -123,23 +123,34 @@ export function assembleProject(options: AssembleOptions): VfsTree {
   return tree;
 }
 
-/** Render the shared template, then replace runtime-owned files from an overlay. */
+/** Render a Bun-native project template. */
 export function renderProjectTemplate(
   templatesDir: string,
   template: string,
   answers: TemplateVars,
 ): VfsTree {
-  const tree = renderTemplate(join(templatesDir, template), answers);
-  const runtime = answers.runtime ?? "node";
-  const overlayDirs = [
-    ...(template === "fullstack-nest-svelte" || template === "todo"
-      ? [join(templatesDir, "_runtimes", runtime, "_fullstack")]
-      : []),
-    join(templatesDir, "_runtimes", runtime, template),
-  ];
-  for (const overlayDir of overlayDirs) {
-    if (!existsSync(overlayDir)) continue;
-    for (const [path, file] of renderTemplate(overlayDir, answers)) tree.set(path, file);
+  const tree = template === "todo"
+    ? renderTemplate(join(templatesDir, "fullstack"), answers)
+    : renderTemplate(join(templatesDir, template), answers);
+  if (template === "todo") {
+    for (const [path, file] of renderTemplate(join(templatesDir, template), answers)) {
+      tree.set(path, file);
+    }
+    const appPath = "apps/api/src/app.ts";
+    const appSource = textOf(tree, appPath);
+    setText(
+      tree,
+      appPath,
+      insertAtMarker(
+        insertAtMarker(
+          appSource,
+          "// podokit:end:imports",
+          'import { todoPlugin } from "./todos/todo.plugin";',
+        ),
+        "// podokit:end:modules",
+        '{ name: "todo", plugin: todoPlugin },',
+      ),
+    );
   }
   return tree;
 }

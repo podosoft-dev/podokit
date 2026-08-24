@@ -5,13 +5,10 @@
   "targetApp": "api",
   "env": [],
   "inject": [
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:imports", "text": "import { JobProgressModule } from \"./progress/job-progress.module\";" },
-    { "file": "apps/api/src/app.module.ts", "marker": "// podokit:end:module-imports", "text": "JobProgressModule," },
-    { "file": "apps/api/src/jobs/worker.module.ts", "marker": "// podokit:end:worker-imports", "text": "import { ProgressProcessor } from \"../progress/progress.processor\";" },
-    { "file": "apps/api/src/jobs/worker.module.ts", "marker": "// podokit:end:worker-imports", "text": "import { RedisModule } from \"../redis/redis.module\";" },
-    { "file": "apps/api/src/jobs/worker.module.ts", "marker": "// podokit:end:worker-queues", "text": "RedisModule," },
-    { "file": "apps/api/src/jobs/worker.module.ts", "marker": "// podokit:end:worker-queues", "text": "BullModule.registerQueue({ name: \"progress\" })," },
-    { "file": "apps/api/src/jobs/worker.module.ts", "marker": "// podokit:end:worker-providers", "text": "ProgressProcessor," }
+    { "file": "apps/api/src/app.ts", "marker": "// podokit:end:imports", "text": "import { jobProgressModule } from \"./progress/job-progress.module\";" },
+    { "file": "apps/api/src/app.ts", "marker": "// podokit:end:modules", "text": "jobProgressModule," },
+    { "file": "apps/api/src/jobs/worker.module.ts", "marker": "// podokit:end:worker-imports", "text": "import { processProgressJob } from \"../progress/progress.processor\";" },
+    { "file": "apps/api/src/jobs/worker.module.ts", "marker": "// podokit:end:worker-processors", "text": "{ queue: \"progress\", processor: processProgressJob }," }
   ],
   "instructions": [
     "Start Redis + Postgres:  docker compose -f infra/docker/docker-compose.yml up -d",

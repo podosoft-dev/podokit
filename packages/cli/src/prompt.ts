@@ -1,16 +1,12 @@
-import { type PackageManager } from "./create";
 import { DEFAULT_TEMPLATE, TEMPLATE_NAMES, isKnownTemplate } from "./templates";
-import { isRuntime, resolveToolchain, type Runtime, type Toolchain } from "./toolchain";
+import { resolveToolchain, type Toolchain } from "./toolchain";
 
-export const PACKAGE_MANAGERS: PackageManager[] = ["npm", "pnpm", "yarn"];
-
-/** Asks a single question and resolves to the trimmed answer (empty if skipped). */
 export type Ask = (question: string) => Promise<string>;
 
 export interface RawCreateArgs {
   template?: string;
-  pm?: PackageManager;
-  runtime?: Runtime;
+  pm?: string;
+  runtime?: string;
 }
 
 export interface ResolvedCreateOptions {
@@ -18,17 +14,7 @@ export interface ResolvedCreateOptions {
   toolchain: Toolchain;
 }
 
-function isPackageManager(value: string): value is PackageManager {
-  return (PACKAGE_MANAGERS as string[]).includes(value);
-}
-
-/**
- * Resolve the template and package manager for `create`.
- *
- * Precedence: an explicit flag wins; otherwise, when `interactive` is true the
- * user is prompted (blank answer = default); otherwise the default is used.
- * Kept free of I/O — the caller injects `ask` — so it is unit-testable.
- */
+/** Resolve a Bun-only v1 project create request without runtime/package prompts. */
 export async function resolveCreateOptions(
   args: RawCreateArgs,
   ask: Ask,
@@ -43,32 +29,6 @@ export async function resolveCreateOptions(
   if (!isKnownTemplate(template)) {
     throw new Error(`Unknown template "${template}". Choose one of: ${TEMPLATE_NAMES.join(", ")}.`);
   }
-
-  let runtime: string | undefined = args.runtime;
-  if (!runtime && interactive) {
-    const answer = await ask("Runtime (node / bun) [node]: ");
-    runtime = answer || undefined;
-  }
-  runtime = runtime ?? "node";
-  if (!isRuntime(runtime)) {
-    throw new Error('Invalid runtime. Choose one of: node, bun.');
-  }
-
-  let pm: string | undefined = args.pm;
-  if (runtime === "bun") {
-    if (pm) throw new Error('Bun runtime requires the "bun" package manager. Remove --pm.');
-    const toolchain = resolveToolchain(runtime);
-    return { template, toolchain };
-  }
-  if (!pm && interactive) {
-    const answer = await ask(`Package manager (${PACKAGE_MANAGERS.join(" / ")}) [npm]: `);
-    pm = answer || undefined;
-  }
-  pm = pm ?? "npm";
-  if (!isPackageManager(pm)) {
-    throw new Error(`Invalid package manager "${pm}". Choose one of: ${PACKAGE_MANAGERS.join(", ")}.`);
-  }
-
-  const toolchain = resolveToolchain(runtime, pm);
-  return { template, toolchain };
+  if (args.pm) throw new Error("PodoKit v1 uses Bun as its package manager; remove --pm.");
+  return { template, toolchain: resolveToolchain(args.runtime ?? "bun") };
 }

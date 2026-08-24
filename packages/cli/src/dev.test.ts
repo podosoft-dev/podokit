@@ -27,8 +27,7 @@ function project(name = "example-app"): string {
   mkdirSync(join(root, "apps", "web"), { recursive: true });
   writeFileSync(join(root, "apps", "web", "placeholder.txt"), "web\n");
   initLockfile(root, {
-    template: "fullstack-nest-svelte",
-    packageManager: "npm",
+    template: "fullstack",
     answers: { projectName: name },
     version: "0.11.2",
   });

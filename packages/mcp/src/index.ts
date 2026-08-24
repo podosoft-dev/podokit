@@ -83,15 +83,12 @@ server.registerTool(
   "create_project",
   {
     description:
-      "Scaffold a new Node or Bun PodoKit project from scratch (= `podo create`). Creates the app files in a new directory; then run `add_module` for features and install with the selected package manager. Use this to start a project in an empty folder.",
+      "Scaffold a new Bun 1.4.0 PodoKit project from scratch (= `podo create`). Creates the app files in a new directory; then run `add_module` for features and install with Bun. Use this to start a project in an empty folder.",
     inputSchema: {
       name: z.string().describe("Project name (also the default directory name)"),
-      template: z.string().optional().describe("Template: fullstack-nest-svelte (default), todo, or base"),
-      runtime: z.enum(["node", "bun"]).optional().describe("Runtime: node (default) or bun 1.4.0"),
-      packageManager: z
-        .enum(["npm", "pnpm", "yarn"])
-        .optional()
-        .describe("Node package manager; omit for Bun"),
+      template: z.string().optional().describe("Template: fullstack (default), todo, or base"),
+      runtime: z.literal("bun").optional().describe("Runtime: Bun 1.4.0"),
+      packageManager: z.literal("bun").optional().describe("Package manager: Bun 1.4.0"),
       targetDir: z.string().optional().describe("Where to create it; defaults to <cwd>/<name>"),
       ai: z.boolean().optional().describe("Include AI agent guidance (AGENTS.md, skills, .mcp.json). Default true."),
     },
@@ -158,7 +155,7 @@ server.registerTool(
   "check_versions",
   {
     description:
-      "Check the project's framework versions (NestJS, SvelteKit, …) against the ranges PodoKit supports (= `podo doctor`).",
+      "Check the project's framework versions (Elysia, SvelteKit, …) against the ranges PodoKit supports (= `podo doctor`).",
     inputSchema: projectDirSchema,
   },
   async ({ projectDir }) => {
@@ -379,7 +376,7 @@ server.registerTool(
     const r = inProject(projectDir, (dir) => addModule({ projectRoot: dir, module, modulesDir: builtinModulesDir() }));
     return "content" in r
       ? r
-      : text(`Added ${r.module}. Also added: ${r.added.join(", ") || "(none)"}. Run npm install.`);
+      : text(`Added ${r.module}. Also added: ${r.added.join(", ") || "(none)"}. Run bun install.`);
   },
 );
 

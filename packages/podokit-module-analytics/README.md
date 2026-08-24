@@ -9,10 +9,10 @@ It does not store raw visitor events in the application database.
 ## Install
 
 ```bash
-npm install --save-dev @podosoft/podokit-module-analytics
+bun add --dev @podosoft/podokit-module-analytics
 podo add analytics
-npm install
-npm run migration:run -w <app>-api
+bun install
+bun run --cwd apps/api migration:run
 ```
 
 Open **Settings → Analytics** as an administrator and enter:
@@ -67,7 +67,7 @@ are included in the dashboard's key-event totals.
 ## Update
 
 ```bash
-npm update @podosoft/podokit-module-analytics
+bun update @podosoft/podokit-module-analytics
 podo update
 podo update --apply
 ```

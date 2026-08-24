@@ -111,8 +111,7 @@ function project(options: { packages?: string[]; worker?: boolean } = {}): strin
   const root = mkdtempSync(join(tmpdir(), "podokit-project-"));
   created.push(root);
   initLockfile(root, {
-    template: "fullstack-nest-svelte",
-    packageManager: "npm",
+    template: "fullstack",
     answers: { projectName: "example-app" },
     version: "0.16.4",
   });

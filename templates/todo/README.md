@@ -2,7 +2,7 @@
 
 Full-stack TypeScript app generated with [PodoKit](https://github.com/podosoft-dev/podokit).
 
-- `apps/api` — NestJS API: schema-validated env, `/health` + `/health/ready`, a `todos` CRUD resource (TypeORM + PostgreSQL), Swagger docs at `/api-docs`, and a standard error envelope.
+- `apps/api` — Bun 1.4 + Elysia API: schema-validated env, `/health` + `/health/ready`, a Bun.SQL Todo CRUD resource backed by PostgreSQL, merged OpenAPI at `/api-docs`, and a standard error envelope.
 - `apps/web` — SvelteKit app (TailwindCSS v4, shadcn-svelte, typesafe-i18n) with a todo UI that talks to the API through a server-side proxy.
 - `infra/` — Docker Compose (PostgreSQL, Redis) and k3s manifests.
 
@@ -73,7 +73,8 @@ tunnel, see the PodoKit [development guide](https://github.com/podosoft-dev/podo
 
 ## Database & migrations
 
-The API uses TypeORM with PostgreSQL. A sample `Todo` entity and an initial migration are included — replace them with your own domain model.
+The API uses Bun.SQL with PostgreSQL. TypeORM is limited to the migration layer;
+a sample Todo repository and initial migration are included.
 
 ```bash
 {{apiRun}} migration:run      # apply migrations

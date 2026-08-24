@@ -62,7 +62,7 @@
   <Card.Root>
     <Card.Header>
       <Card.Title>Todos</Card.Title>
-      <Card.Description>A NestJS + SvelteKit CRUD example via the typed ApiClient.</Card.Description>
+      <Card.Description>An Elysia + SvelteKit CRUD example via the typed ApiClient.</Card.Description>
     </Card.Header>
     <Card.Content class="flex flex-col gap-4">
       <form class="flex gap-2" onsubmit={add}>

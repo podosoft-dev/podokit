@@ -26,7 +26,7 @@ function writeFile(path: string, content: string): void {
 
 function generate(): string {
   const target = join(tmp(), "app");
-  create({ name: "app", template: "fullstack-nest-svelte", templatesDir: REPO_TEMPLATES, targetDir: target });
+  create({ name: "app", template: "fullstack", templatesDir: REPO_TEMPLATES, targetDir: target });
   return target;
 }
 
@@ -49,8 +49,8 @@ function widgetModule(modulesDir: string, name: string, extra: Record<string, un
       targetApp: "api",
       inject: [
         {
-          file: "apps/api/src/app.module.ts",
-          marker: "// podokit:end:providers",
+          file: "apps/api/src/app.ts",
+          marker: "// podokit:end:modules",
           text: `// ${name}-wired`,
         },
       ],
@@ -68,14 +68,14 @@ describe("removeModule", () => {
 
     addModule({ projectRoot: project, module: "widget", modulesDir });
     expect(existsSync(join(project, fileRel))).toBe(true);
-    expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).toContain("// widget-wired");
+    expect(readFileSync(join(project, "apps/api/src/app.ts"), "utf8")).toContain("// widget-wired");
 
     const result = removeModule({ projectRoot: project, module: "widget", modulesDir });
     expect(result.removed).toContain(fileRel);
     expect(existsSync(join(project, fileRel))).toBe(false);
     expect(existsSync(join(project, "apps/api/src/widget"))).toBe(false); // empty dir pruned
-    expect(result.unwired).toContain("apps/api/src/app.module.ts");
-    expect(readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8")).not.toContain("// widget-wired");
+    expect(result.unwired).toContain("apps/api/src/app.ts");
+    expect(readFileSync(join(project, "apps/api/src/app.ts"), "utf8")).not.toContain("// widget-wired");
 
     expect(readManifest(project).modules.map((m) => m.name)).not.toContain("widget");
     expect(readLock(project).files[fileRel]).toBeUndefined();
@@ -196,8 +196,8 @@ describe("removeModule", () => {
       ownedGlobs: ["apps/web/src/lib/widget.config.ts"],
       inject: [
         {
-          file: "apps/api/src/app.module.ts",
-          marker: "// podokit:end:providers",
+          file: "apps/api/src/app.ts",
+          marker: "// podokit:end:modules",
           text: "// widget-import-one\n// widget-import-two",
         },
       ],
@@ -210,7 +210,7 @@ describe("removeModule", () => {
     addModule({ projectRoot: project, module: "widget", modulesDir });
     removeModule({ projectRoot: project, module: "widget", modulesDir });
 
-    const appModule = readFileSync(join(project, "apps/api/src/app.module.ts"), "utf8");
+    const appModule = readFileSync(join(project, "apps/api/src/app.ts"), "utf8");
     expect(appModule).not.toContain("widget-import-one");
     expect(appModule).not.toContain("widget-import-two");
     expect(readManifest(project).ownedGlobs).not.toContain("apps/web/src/lib/widget.config.ts");

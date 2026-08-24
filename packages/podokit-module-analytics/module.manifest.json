@@ -31,14 +31,14 @@
   },
   "inject": [
     {
-      "file": "apps/api/src/app.module.ts",
+      "file": "apps/api/src/app.ts",
       "marker": "// podokit:end:imports",
-      "text": "import { AnalyticsModule } from \"./analytics/analytics.module\";"
+      "text": "import { analyticsModule } from \"./analytics/analytics.module\";"
     },
     {
-      "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:end:module-imports",
-      "text": "AnalyticsModule,"
+      "file": "apps/api/src/app.ts",
+      "marker": "// podokit:end:modules",
+      "text": "analyticsModule,"
     },
     {
       "file": "apps/web/src/lib/i18n/messages.ts",
@@ -78,8 +78,8 @@
     }
   ],
   "instructions": [
-    "Install dependencies: npm install",
-    "Run migrations: npm run migration:run -w <app>-api",
+    "Install dependencies: bun install",
+    "Run migrations: bun run --cwd apps/api migration:run",
     "Configure GA4 under /admin/settings, test the connection, and open /admin/analytics for reports.",
     "Disable GA4 Enhanced measurement history-based page changes to prevent duplicate SvelteKit page views.",
     "Document advanced consent mode in the application privacy notice: denied analytics storage can still send cookieless pings."

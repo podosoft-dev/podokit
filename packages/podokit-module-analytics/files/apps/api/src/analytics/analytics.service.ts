@@ -1,9 +1,6 @@
-import { Injectable } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
 import { decryptSecret, encryptSecret } from "@podosoft/podokit-auth";
-import { Repository } from "typeorm";
+import type { SQL } from "bun";
 import { AppException } from "../common/app-exception";
-import { AnalyticsConfig } from "./analytics-config.entity";
 import {
   resolveAnalyticsProvider,
   type AnalyticsProviderConfig,
@@ -13,7 +10,6 @@ import {
   type AnalyticsServiceAccount,
 } from "./analytics.types";
 import { Ga4AnalyticsProvider } from "./ga4-analytics.provider";
-import type { UpdateAnalyticsConfigDto } from "./dto/update-analytics-config.dto";
 
 const CONFIG_ID = "default";
 const REPORT_CACHE_MS = 5 * 60 * 1000;
@@ -21,7 +17,27 @@ const REALTIME_CACHE_MS = 60 * 1000;
 
 type CacheEntry<T> = { expiresAt: number; value: T };
 
-export type AnalyticsAdminConfig = {
+interface AnalyticsConfigRow {
+  id: string;
+  enabled: boolean;
+  provider: "ga4";
+  measurementId: string | null;
+  propertyId: string | null;
+  encryptedCredentials: string | null;
+  lastVerifiedAt: Date | null;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+}
+
+export interface UpdateAnalyticsConfig {
+  enabled?: boolean;
+  provider?: "ga4";
+  measurementId?: string;
+  propertyId?: string;
+  serviceAccountJson?: string;
+}
+
+export interface AnalyticsAdminConfig {
   enabled: boolean;
   provider: "ga4";
   measurementId: string;
@@ -29,16 +45,16 @@ export type AnalyticsAdminConfig = {
   hasCredentials: boolean;
   lastVerifiedAt: string | null;
   updatedAt: string | null;
-};
+}
 
-export type AnalyticsPublicConfig = {
+export interface AnalyticsPublicConfig {
   enabled: boolean;
   provider: "ga4";
   measurementId: string | null;
   consentMode: "advanced";
-};
+}
 
-function parseServiceAccount(input: string): AnalyticsServiceAccount {
+export function parseServiceAccount(input: string): AnalyticsServiceAccount {
   let value: unknown;
   try {
     value = JSON.parse(input);
@@ -46,23 +62,22 @@ function parseServiceAccount(input: string): AnalyticsServiceAccount {
     throw new AppException(
       "ANALYTICS_CREDENTIALS_INVALID",
       "Service-account credentials must be valid JSON.",
-      400
+      400,
     );
   }
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new AppException(
       "ANALYTICS_CREDENTIALS_INVALID",
       "Service-account credentials must be a JSON object.",
-      400
+      400,
     );
   }
   const object = value as Record<string, unknown>;
-  const type = object.type;
   const clientEmail = object.client_email;
   const privateKey = object.private_key;
   const projectId = object.project_id;
   if (
-    type !== "service_account" ||
+    object.type !== "service_account" ||
     typeof clientEmail !== "string" ||
     !clientEmail.includes("@") ||
     typeof privateKey !== "string" ||
@@ -71,7 +86,7 @@ function parseServiceAccount(input: string): AnalyticsServiceAccount {
     throw new AppException(
       "ANALYTICS_CREDENTIALS_INVALID",
       "A Google service-account client_email and private_key are required.",
-      400
+      400,
     );
   }
   return {
@@ -86,8 +101,8 @@ function day(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
 
-function defaultRange(): AnalyticsRange {
-  const to = new Date();
+function defaultRange(now: Date): AnalyticsRange {
+  const to = new Date(now);
   const from = new Date(to);
   from.setUTCDate(from.getUTCDate() - 27);
   return { from: day(from), to: day(to) };
@@ -96,32 +111,45 @@ function defaultRange(): AnalyticsRange {
 function dateOnly(value: string): Date | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
   const parsed = new Date(`${value}T00:00:00.000Z`);
-  return Number.isNaN(parsed.getTime()) || day(parsed) !== value
-    ? null
-    : parsed;
+  return Number.isNaN(parsed.getTime()) || day(parsed) !== value ? null : parsed;
 }
 
-@Injectable()
+export function analyticsRange(from?: string, to?: string, now = new Date()): AnalyticsRange {
+  const fallback = defaultRange(now);
+  const resolved = { from: from ?? fallback.from, to: to ?? fallback.to };
+  const start = dateOnly(resolved.from);
+  const end = dateOnly(resolved.to);
+  const today = dateOnly(day(now));
+  const days = start && end
+    ? Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1
+    : 0;
+  if (!start || !end || !today || start > end || end > today || days < 1 || days > 366) {
+    throw new AppException(
+      "ANALYTICS_RANGE_INVALID",
+      "Report dates must be a valid range of at most 366 days ending today or earlier.",
+      400,
+    );
+  }
+  return resolved;
+}
+
+function iso(value: Date | null): string | null {
+  return value?.toISOString() ?? null;
+}
+
 export class AnalyticsService {
   private readonly reportCache = new Map<string, CacheEntry<AnalyticsReport>>();
-  private readonly realtimeCache = new Map<
-    string,
-    CacheEntry<AnalyticsRealtime>
-  >();
+  private readonly realtimeCache = new Map<string, CacheEntry<AnalyticsRealtime>>();
 
   constructor(
-    @InjectRepository(AnalyticsConfig)
-    private readonly repository: Repository<AnalyticsConfig>,
-    private readonly ga4: Ga4AnalyticsProvider
+    private readonly sql: SQL,
+    private readonly ga4 = new Ga4AnalyticsProvider(),
   ) {}
 
   async publicConfig(): Promise<AnalyticsPublicConfig> {
     const row = await this.getRow();
     const complete = Boolean(
-      row.enabled &&
-        row.measurementId &&
-        row.propertyId &&
-        row.encryptedCredentials
+      row.enabled && row.measurementId && row.propertyId && row.encryptedCredentials,
     );
     return {
       enabled: complete && process.env.NODE_ENV === "production",
@@ -135,9 +163,7 @@ export class AnalyticsService {
     return this.toAdmin(await this.getRow());
   }
 
-  async update(
-    update: UpdateAnalyticsConfigDto
-  ): Promise<AnalyticsAdminConfig> {
+  async update(update: UpdateAnalyticsConfig): Promise<AnalyticsAdminConfig> {
     const row = await this.getRow();
     if (update.provider !== undefined) row.provider = update.provider;
     if (update.measurementId !== undefined) {
@@ -149,24 +175,22 @@ export class AnalyticsService {
       row.lastVerifiedAt = null;
     }
     if (update.serviceAccountJson !== undefined) {
-      const credentials = parseServiceAccount(update.serviceAccountJson);
-      row.encryptedCredentials = encryptSecret(JSON.stringify(credentials));
+      row.encryptedCredentials = encryptSecret(JSON.stringify(
+        parseServiceAccount(update.serviceAccountJson),
+      ));
       row.lastVerifiedAt = null;
     }
     if (update.enabled !== undefined) {
-      if (
-        update.enabled &&
-        (!row.measurementId || !row.propertyId || !row.encryptedCredentials)
-      ) {
+      if (update.enabled && (!row.measurementId || !row.propertyId || !row.encryptedCredentials)) {
         throw new AppException(
           "ANALYTICS_NOT_CONFIGURED",
           "Measurement ID, property ID, and credentials are required before enabling analytics.",
-          400
+          400,
         );
       }
       row.enabled = update.enabled;
     }
-    const saved = await this.repository.save(row);
+    const saved = await this.save(row);
     this.clearCache();
     return this.toAdmin(saved);
   }
@@ -176,49 +200,46 @@ export class AnalyticsService {
     row.encryptedCredentials = null;
     row.lastVerifiedAt = null;
     row.enabled = false;
-    const saved = await this.repository.save(row);
+    const saved = await this.save(row);
     this.clearCache();
     return this.toAdmin(saved);
   }
 
   async verify(): Promise<AnalyticsAdminConfig> {
     const row = await this.getRow();
-    const config = this.providerConfig(row);
     try {
-      await resolveAnalyticsProvider(this.ga4).verify(config);
-    } catch {
+      await resolveAnalyticsProvider(this.ga4).verify(this.providerConfig(row));
+    } catch (error: unknown) {
+      if (error instanceof AppException) throw error;
       throw new AppException(
         "ANALYTICS_PROVIDER_UNAVAILABLE",
         "Google Analytics could not verify this property and credential.",
-        503
+        503,
       );
     }
     row.lastVerifiedAt = new Date();
-    return this.toAdmin(await this.repository.save(row));
+    return this.toAdmin(await this.save(row));
   }
 
   async report(from?: string, to?: string): Promise<AnalyticsReport> {
     const row = await this.getRow();
-    const range = this.range(from, to);
+    const range = analyticsRange(from, to);
     const cacheKey = `${row.propertyId ?? ""}:${range.from}:${range.to}`;
     const cached = this.reportCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) return cached.value;
     try {
       const value = await resolveAnalyticsProvider(this.ga4).report(
         this.providerConfig(row),
-        range
+        range,
       );
-      this.reportCache.set(cacheKey, {
-        expiresAt: Date.now() + REPORT_CACHE_MS,
-        value,
-      });
+      this.reportCache.set(cacheKey, { expiresAt: Date.now() + REPORT_CACHE_MS, value });
       return value;
     } catch (error: unknown) {
       if (error instanceof AppException) throw error;
       throw new AppException(
         "ANALYTICS_PROVIDER_UNAVAILABLE",
         "Google Analytics report data is temporarily unavailable.",
-        503
+        503,
       );
     }
   }
@@ -229,102 +250,89 @@ export class AnalyticsService {
     const cached = this.realtimeCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) return cached.value;
     try {
-      const value = await resolveAnalyticsProvider(this.ga4).realtime(
-        this.providerConfig(row)
-      );
-      this.realtimeCache.set(cacheKey, {
-        expiresAt: Date.now() + REALTIME_CACHE_MS,
-        value,
-      });
+      const value = await resolveAnalyticsProvider(this.ga4).realtime(this.providerConfig(row));
+      this.realtimeCache.set(cacheKey, { expiresAt: Date.now() + REALTIME_CACHE_MS, value });
       return value;
     } catch (error: unknown) {
       if (error instanceof AppException) throw error;
       throw new AppException(
         "ANALYTICS_PROVIDER_UNAVAILABLE",
         "Google Analytics realtime data is temporarily unavailable.",
-        503
+        503,
       );
     }
   }
 
-  private async getRow(): Promise<AnalyticsConfig> {
-    const existing = await this.repository.findOne({
-      where: { id: CONFIG_ID },
-    });
-    return (
-      existing ??
-      this.repository.create({
-        id: CONFIG_ID,
-        enabled: false,
-        provider: "ga4",
-        measurementId: null,
-        propertyId: null,
-        encryptedCredentials: null,
-        lastVerifiedAt: null,
-      })
-    );
+  private async getRow(): Promise<AnalyticsConfigRow> {
+    const [row] = await this.sql<AnalyticsConfigRow[]>`
+      SELECT * FROM "analytics_config" WHERE "id" = ${CONFIG_ID} LIMIT 1
+    `;
+    return row ?? {
+      id: CONFIG_ID,
+      enabled: false,
+      provider: "ga4",
+      measurementId: null,
+      propertyId: null,
+      encryptedCredentials: null,
+      lastVerifiedAt: null,
+      createdAt: null,
+      updatedAt: null,
+    };
   }
 
-  private providerConfig(row: AnalyticsConfig): AnalyticsProviderConfig {
+  private async save(row: AnalyticsConfigRow): Promise<AnalyticsConfigRow> {
+    const [saved] = await this.sql<AnalyticsConfigRow[]>`
+      INSERT INTO "analytics_config" (
+        "id", "enabled", "provider", "measurementId", "propertyId",
+        "encryptedCredentials", "lastVerifiedAt"
+      ) VALUES (
+        ${row.id}, ${row.enabled}, ${row.provider}, ${row.measurementId}, ${row.propertyId},
+        ${row.encryptedCredentials}, ${row.lastVerifiedAt}
+      )
+      ON CONFLICT ("id") DO UPDATE SET
+        "enabled" = EXCLUDED."enabled",
+        "provider" = EXCLUDED."provider",
+        "measurementId" = EXCLUDED."measurementId",
+        "propertyId" = EXCLUDED."propertyId",
+        "encryptedCredentials" = EXCLUDED."encryptedCredentials",
+        "lastVerifiedAt" = EXCLUDED."lastVerifiedAt",
+        "updatedAt" = CURRENT_TIMESTAMP
+      RETURNING *
+    `;
+    if (!saved) throw new Error("Analytics configuration write returned no row");
+    return saved;
+  }
+
+  private providerConfig(row: AnalyticsConfigRow): AnalyticsProviderConfig {
     if (!row.propertyId || !row.encryptedCredentials) {
       throw new AppException(
         "ANALYTICS_NOT_CONFIGURED",
         "Google Analytics property and credentials are not configured.",
-        400
+        400,
       );
     }
     let credentials: AnalyticsServiceAccount;
     try {
-      credentials = parseServiceAccount(
-        decryptSecret(row.encryptedCredentials)
-      );
+      credentials = parseServiceAccount(decryptSecret(row.encryptedCredentials));
     } catch {
       throw new AppException(
         "ANALYTICS_CREDENTIALS_INVALID",
         "Stored Google Analytics credentials cannot be read.",
-        400
+        400,
       );
     }
     return { propertyId: row.propertyId, credentials };
   }
 
-  private range(from?: string, to?: string): AnalyticsRange {
-    const fallback = defaultRange();
-    const resolved = { from: from ?? fallback.from, to: to ?? fallback.to };
-    const start = dateOnly(resolved.from);
-    const end = dateOnly(resolved.to);
-    const today = dateOnly(day(new Date()));
-    const days =
-      start && end
-        ? Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1
-        : 0;
-    if (
-      !start ||
-      !end ||
-      !today ||
-      start > end ||
-      end > today ||
-      days < 1 ||
-      days > 366
-    ) {
-      throw new AppException(
-        "ANALYTICS_RANGE_INVALID",
-        "Report dates must be a valid range of at most 366 days ending today or earlier.",
-        400
-      );
-    }
-    return resolved;
-  }
-
-  private toAdmin(row: AnalyticsConfig): AnalyticsAdminConfig {
+  private toAdmin(row: AnalyticsConfigRow): AnalyticsAdminConfig {
     return {
       enabled: row.enabled,
       provider: row.provider,
       measurementId: row.measurementId ?? "",
       propertyId: row.propertyId ?? "",
       hasCredentials: Boolean(row.encryptedCredentials),
-      lastVerifiedAt: row.lastVerifiedAt?.toISOString() ?? null,
-      updatedAt: row.updatedAt?.toISOString() ?? null,
+      lastVerifiedAt: iso(row.lastVerifiedAt),
+      updatedAt: iso(row.updatedAt),
     };
   }
 

@@ -25,14 +25,14 @@
   ],
   "inject": [
     {
-      "file": "apps/api/src/app.module.ts",
+      "file": "apps/api/src/app.ts",
       "marker": "// podokit:end:imports",
-      "text": "import { BlogModule } from \"./blog/blog.module\";"
+      "text": "import { blogModule } from \"./blog/blog.module\";"
     },
     {
-      "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:end:module-imports",
-      "text": "BlogModule,"
+      "file": "apps/api/src/app.ts",
+      "marker": "// podokit:end:modules",
+      "text": "blogModule,"
     },
     {
       "file": "apps/web/src/lib/i18n/messages.ts",
@@ -62,8 +62,8 @@
     }
   ],
   "instructions": [
-    "Install dependencies: npm install",
-    "Run migrations: npm run migration:run -w <app>-api",
+    "Install dependencies: bun install",
+    "Run migrations: bun run --cwd apps/api migration:run",
     "Open /blog to read posts, /blog/mine to manage your drafts and published posts, or /admin/blog to manage all content.",
     "After upgrading this package, run podo update and then podo update --apply."
   ]

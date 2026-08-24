@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { join, relative } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { create, assertValidName, type PackageManager } from "./create";
+import { create, assertValidName } from "./create";
 import { resolveCreateOptions, type Ask } from "./prompt";
 import { templateListText } from "./templates";
 import { addModule, listModules } from "./add";
@@ -51,8 +51,6 @@ import {
   verifyComposeDeployment,
 } from "./deploy-compose";
 import { revertComposeSync, syncComposeDeployment } from "./deploy-compose-sync";
-import { applyRuntimeSet, planRuntimeSet } from "./runtime";
-import { isRuntime, type Runtime } from "./toolchain";
 
 const HELP = `podo — PodoKit project generator
 
@@ -68,14 +66,12 @@ Usage:
                            (Kubernetes/Helm or Docker Compose)
   podo locale <command>    Add, validate, activate, or list JSON locales
   podo update [--apply]    Preview (or apply) what a version update would change
-  podo runtime set <runtime> [--apply]  Preview or apply a Node/Bun conversion
   podo eject <path...>     Take ownership of managed files (update skips them)
 
 Options:
   --template <t> Template to scaffold (see below)
   --dir <path>   Target directory (default: ./<name>)
-  --pm <name>    Package manager: npm | pnpm | yarn (default: npm)
-  --runtime <r>  Runtime: node | bun (default: node)
+  --runtime bun  Optional explicit Bun runtime selection
   --name <label> Display name for a locale
   --direction <direction>  Text direction: ltr | rtl (default: ltr)
   --profile <name>         Deployment profile name
@@ -97,8 +93,8 @@ ${templateListText()}
 Example:
   npx @podosoft/podokit create my-app
   npx @podosoft/podokit create my-app --template todo
-  bunx --bun @podosoft/podokit create my-app --runtime bun
-  cd my-app && npx @podosoft/podokit add auth
+  bunx --bun @podosoft/podokit create my-app
+  cd my-app && bunx --bun @podosoft/podokit add auth
 `;
 
 const DEPLOY_HELP = `podo deploy — release an application to Kubernetes or Docker Compose
@@ -138,8 +134,8 @@ interface ParsedArgs {
   name?: string;
   template?: string;
   dir?: string;
-  pm?: PackageManager;
-  runtime?: Runtime;
+  pm?: string;
+  runtime?: string;
   from?: string;
   apply: boolean;
   adopt: boolean;
@@ -198,9 +194,9 @@ export function parseArgs(argv: string[]): ParsedArgs {
     } else if (arg === "--from") {
       parsed.from = argv[++i];
     } else if (arg === "--pm") {
-      parsed.pm = argv[++i] as PackageManager;
+      parsed.pm = argv[++i];
     } else if (arg === "--runtime") {
-      parsed.runtime = argv[++i] as Runtime;
+      parsed.runtime = argv[++i];
     } else if (arg === "--name") {
       parsed.localeName = argv[++i];
     } else if (arg === "--direction") {
@@ -769,44 +765,6 @@ async function main(argv: string[]): Promise<void> {
     return;
   }
 
-  if (args.command === "runtime") {
-    const action = args.name;
-    const requested = args.positionals[2];
-    if (action !== "set" || !requested || !isRuntime(requested)) {
-      fail("Usage: podo runtime set <node|bun> [--pm npm|pnpm|yarn] [--apply]");
-    }
-    const templatesDir = join(__dirname, "templates");
-    try {
-      const plan = planRuntimeSet(process.cwd(), templatesDir, requested, args.pm);
-      if (!args.apply) {
-        const changes = plan.changes.filter(
-          (change) => change.action !== "skip" && change.action !== "up-to-date",
-        );
-        process.stdout.write(
-          args.json
-            ? `${JSON.stringify(plan, null, 2)}\n`
-            : `Runtime: ${plan.current.runtime} (${plan.current.packageManager}) -> ${plan.target.runtime} (${plan.target.packageManager})\n` +
-                `${changes.length ? changes.map((change) => `${change.action.padEnd(8)} ${change.path}`).join("\n") : "No managed file changes."}\n` +
-                `Validation: ${plan.commands.map((command) => `${command.command} ${command.args.join(" ")}`).join("; ")}\n` +
-                "Preview only. Re-run with --apply to convert.\n",
-        );
-        return;
-      }
-      const result = applyRuntimeSet(process.cwd(), templatesDir, requested, {
-        packageManager: args.pm,
-      });
-      process.stdout.write(
-        args.json
-          ? `${JSON.stringify(result, null, 2)}\n`
-          : `Converted to ${result.target.runtime} ${result.target.runtimeVersion} with ${result.target.packageManager}.\n` +
-              `Updated ${result.written.length}, merged ${result.merged.length}, removed ${result.removed.length} managed file(s).\n`,
-      );
-    } catch (err) {
-      fail((err as Error).message);
-    }
-    return;
-  }
-
   if (args.command === "eject") {
     const targets = args.positionals.slice(1);
     if (!targets.length) {
@@ -864,10 +822,6 @@ async function main(argv: string[]): Promise<void> {
       template: resolved.template,
       targetDir: args.dir,
       runtime: resolved.toolchain.runtime,
-      packageManager:
-        resolved.toolchain.packageManager === "bun"
-          ? undefined
-          : resolved.toolchain.packageManager,
       ai: args.ai,
     });
     const relPath = relative(process.cwd(), result.projectDir) || ".";

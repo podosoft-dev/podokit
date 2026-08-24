@@ -19,11 +19,11 @@ function write(root: string, rel: string, content: string): void {
 function project(): string {
   const root = tmp();
   write(root, "apps/api/src/main.ts", "bootstrap()");
-  write(root, "apps/api/src/app.module.ts", "// podokit:begin:imports\n// podokit:end:imports");
+  write(root, "apps/api/src/app.ts", "// podokit:begin:imports\n// podokit:end:imports");
   write(root, "apps/web/src/routes/+page.svelte", "<h1/>");
-  write(root, "apps/api/package.json", JSON.stringify({ dependencies: { "@nestjs/core": "^11.1.0", "better-auth": "^1.6.23" } }));
+  write(root, "apps/api/package.json", JSON.stringify({ dependencies: { elysia: "^1.4.29", "better-auth": "^1.6.23" } }));
   write(root, "apps/web/package.json", JSON.stringify({ dependencies: { svelte: "^5.0.0" } }));
-  initLockfile(root, { template: "fullstack-nest-svelte", packageManager: "npm", answers: {}, version: "0.4.0" });
+  initLockfile(root, { template: "fullstack", answers: {}, version: "0.4.0" });
   return root;
 }
 afterEach(() => {
@@ -57,19 +57,19 @@ describe("diff", () => {
 describe("doctor", () => {
   it("passes supported framework versions", () => {
     const findings = doctor(project());
-    expect(findings.find((f) => f.package === "@nestjs/core")?.ok).toBe(true);
+    expect(findings.find((f) => f.package === "elysia")?.ok).toBe(true);
     expect(findings.find((f) => f.package === "svelte")?.ok).toBe(true);
   });
   it("warns on an unsupported major", () => {
     const root = project();
-    write(root, "apps/api/package.json", JSON.stringify({ dependencies: { "@nestjs/core": "^13.0.0" } }));
-    expect(doctor(root).find((f) => f.package === "@nestjs/core")?.ok).toBe(false);
+    write(root, "apps/api/package.json", JSON.stringify({ dependencies: { elysia: "^2.0.0" } }));
+    expect(doctor(root).find((f) => f.package === "elysia")?.ok).toBe(false);
   });
 });
 
 describe("leadingMajor", () => {
   it("parses the leading major from ranges", () => {
-    expect(leadingMajor("^11.1.0")).toBe(11);
+    expect(leadingMajor("^1.4.29")).toBe(1);
     expect(leadingMajor(">=1.6.23 <1.7")).toBe(1);
     expect(leadingMajor("latest")).toBeNull();
   });

@@ -5,14 +5,13 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import {
   createPhaseTimer,
-  npmInstallArguments,
   playwrightArguments,
   resolveE2eOptions,
 } from "./e2e-ci-lib.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const outerTestRoots = [
-  "templates/fullstack-nest-svelte/tests",
+  "templates/fullstack/tests",
   "templates/modules/admin-dashboard/files/tests",
   "templates/modules/redis/files/tests",
   "templates/modules/bullmq/files/tests",
@@ -22,6 +21,7 @@ const outerTestRoots = [
   "templates/modules/api-key-auth/files/tests",
   "templates/modules/job-progress/files/tests",
   "packages/podokit-module-analytics/files/tests",
+  "packages/podokit-module-blog/files/tests",
 ];
 
 function specFiles(directory) {
@@ -72,27 +72,18 @@ test("builds Playwright arguments only for browser modes", () => {
   assert.throws(() => playwrightArguments({ mode: "package-smoke" }), /does not run Playwright/);
 });
 
-test("uses a dedicated generated-app npm download cache when configured", () => {
-  assert.deepEqual(npmInstallArguments(), ["install", "--no-audit", "--no-fund"]);
-  assert.deepEqual(npmInstallArguments("/tmp/e2e-npm"), [
-    "install",
-    "--no-audit",
-    "--no-fund",
-    "--cache",
-    "/tmp/e2e-npm",
-  ]);
-});
-
-test("publishes and installs external analytics in the faithful generated app", () => {
+test("publishes and installs external modules in the faithful generated app", () => {
   const source = readFileSync(join(repoRoot, "scripts/e2e-ci.mjs"), "utf8");
-  const packageName = "@podosoft/podokit-module-analytics";
-  const declaration = source.indexOf(`packageName: "${packageName}"`);
+  const analytics = source.indexOf('packageName: "@podosoft/podokit-module-analytics"');
+  const blog = source.indexOf('packageName: "@podosoft/podokit-module-blog"');
   const publish = source.indexOf("for (const pkg of PACKAGES)");
-  const install = source.indexOf('"--save-dev"');
+  const install = source.indexOf('"--dev"');
   const add = source.indexOf('external.name');
 
-  assert.ok(declaration >= 0);
-  assert.ok(publish > declaration);
+  assert.ok(analytics >= 0);
+  assert.ok(blog >= 0);
+  assert.ok(publish > analytics);
+  assert.ok(publish > blog);
   assert.ok(install > publish);
   assert.ok(add > install);
 });
@@ -112,6 +103,18 @@ test("preserves the audit-log module default in the generated app environment", 
 
   assert.match(source, /"AUDIT_LOG_ENABLED=true"/);
   assert.match(source, /AUDIT_LOG_ENABLED: "true"/);
+});
+
+test("isolates rate-limit counters and aligns the server and test ceilings", () => {
+  const source = readFileSync(join(repoRoot, "scripts/e2e-ci.mjs"), "utf8");
+
+  assert.match(
+    source,
+    /const rateLimitKeyPrefix = `podokit:e2e:\$\{process\.pid\}:\$\{Date\.now\(\)\}:rate-limit`/,
+  );
+  assert.match(source, /`RATE_LIMIT_KEY_PREFIX=\$\{rateLimitKeyPrefix\}`/);
+  assert.match(source, /RATE_LIMIT_KEY_PREFIX: rateLimitKeyPrefix/);
+  assert.match(source, /RATE_LIMIT_MAX: pgEnv\.RATE_LIMIT_MAX/);
 });
 
 test("records named phase durations and a total", () => {
@@ -139,7 +142,7 @@ test("keeps the ready-PR smoke suite within its reviewed risk budget", () => {
     .join("\n");
   const smokeCount = source.match(/@smoke/g)?.length ?? 0;
 
-  assert.equal(smokeCount, 32);
+  assert.equal(smokeCount, 34);
   for (const requiredScenario of [
     "GET /health is public and ok @smoke",
     "two-factor: enable with a real TOTP code and require it at sign-in @smoke",
@@ -150,6 +153,8 @@ test("keeps the ready-PR smoke suite within its reviewed risk budget", () => {
     "inactive browser sessions are signed out automatically @smoke",
     "redis cache: set, get, and miss @smoke",
     "file upload: multipart upload returns a key and url @smoke",
+    "public posts and comments use paginated envelopes @smoke",
+    "blog list renders pagination-ready content @smoke",
   ]) {
     assert.match(source, new RegExp(requiredScenario.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }

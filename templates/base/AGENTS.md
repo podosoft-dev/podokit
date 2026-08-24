@@ -5,7 +5,7 @@ by [PodoKit](https://github.com/podosoft-dev/podokit).
 
 ## Project overview
 
-A minimal {{runtime}}/{{packageManager}} workspace starter. Build it up from here — add features with the
+A minimal Bun 1.4 workspace starter. Build it up from here — add features with the
 `podo` CLI (`podo add <module>`; run `podo add` with no argument to list them).
 
 ## Commands
@@ -28,5 +28,5 @@ A minimal {{runtime}}/{{packageManager}} workspace starter. Build it up from her
 This project is managed by the `podo` CLI; `.podokit/` records how it was
 assembled (do not edit by hand). Use `podo status`/`podo diff` to see your local
 edits and `podo update` to pull in improvements without losing your work.
-Use `podo runtime set node|bun` to preview a runtime conversion and add
-`--apply` only after reviewing its managed-file and validation plan.
+PodoKit v1 projects are Bun-only. Projects created with PodoKit 0.x remain on
+their pinned 0.x CLI line and are not converted in place.

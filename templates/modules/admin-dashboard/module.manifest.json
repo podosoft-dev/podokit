@@ -38,11 +38,10 @@
         "probe-image-size": "^7.4.0"
       },
       "devDependencies": {
-        "@types/multer": "^1.4.12",
         "@types/probe-image-size": "^7.2.5"
       },
       "scripts": {
-        "admin:bootstrap": "{{runtimeCommand}} scripts/bootstrap-admin.mjs"
+        "admin:bootstrap": "bun scripts/bootstrap-admin.mjs"
       }
     }
   },
@@ -123,29 +122,19 @@
       "text": "### admin-dashboard\n- The `(admin)` route group and `admin-sidebar.svelte` are the admin-console shell for `/admin/*` only. Put signed-in product pages in `(app)` or in a separate route group with its own layout; do not place them under `(admin)`.\n- Admin console lives at `/admin/*` (users, sessions, organizations, audit, settings, account). Set `ADMIN_EMAILS`, then create or verify the initial account with `{{apiRun}} admin:bootstrap{{apiWorkspaceArg}}`; never commit or persist `ADMIN_BOOTSTRAP_PASSWORD`. When sign-up approval is enabled, self-registered users stay pending until an administrator approves them on `/admin/users`; administrator-created users bypass the queue.\n- Signed-in users can upload, replace, or remove their profile image from `/account` or `/admin/account`. Keep the shared policy visible in custom account UI: PNG, JPEG, or WebP; at most 2 MB and 2048 by 2048 pixels. Use the managed `/api/account/profile-image` endpoints instead of writing directly to storage or `user.image`.\n- `sidebar-user-menu.svelte` is specific to the admin sidebar. For a product shell outside `Sidebar.Provider`, use the managed `<AccountMenu {user} variant=\"identity\" side=\"top\" />` component.\n- Custom protected server layouts must call `requireBackendAvailable(locals)` from `$lib/server/guards` before redirecting anonymous users. This preserves sessions and returns 503 when authentication or maintenance policy cannot be checked.\n- **Every list/table MUST use the shared `$lib/components/data-table.svelte` (`DataTable`)** \u2014 it gives sortable headers + a footer pagination. Add search/filters with `$lib/components/table-toolbar.svelte`. Never assemble `Table.Root`/`Table.Header`/`Table.Body` by hand. For responsive columns, use `hideBelow` and apply the row context's `cellClass(columnKey)` to the matching cell.\n"
     },
     {
-      "file": "apps/api/src/app.module.ts",
+      "file": "apps/api/src/app.ts",
       "marker": "// podokit:end:imports",
-      "text": "import { SiteSettingsModule } from \"./site-settings/site-settings.module\";"
+      "text": "import { adminModule } from \"./admin.module\";"
     },
     {
-      "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:end:imports",
-      "text": "import { ProfileImageModule } from \"./profile-image/profile-image.module\";"
-    },
-    {
-      "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:end:module-imports",
-      "text": "SiteSettingsModule,"
-    },
-    {
-      "file": "apps/api/src/app.module.ts",
-      "marker": "// podokit:end:module-imports",
-      "text": "ProfileImageModule,"
+      "file": "apps/api/src/app.ts",
+      "marker": "// podokit:end:modules",
+      "text": "adminModule,"
     }
   ],
   "instructions": [
     "Set ADMIN_EMAILS in .env (comma-separated). After building and migrating, inject ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_PASSWORD for one command only, then run {{apiRun}} admin:bootstrap{{apiWorkspaceArg}}. The command creates a verified, approved admin or safely verifies an existing one.",
-    "Re-run the auth migration to add the admin and sign-up approval columns:  {{packageExecutor}} @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts",
+    "Re-run the auth migration to add the admin and sign-up approval columns: bunx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts",
     "Remove ADMIN_BOOTSTRAP_PASSWORD from the environment after bootstrap. Keep ADMIN_EMAILS so matching future sign-ups are promoted consistently.",
     "Admin pages: /admin/users (list, approve pending registrations, ban, set role, revoke sessions). Signed-in users manage their profile, profile image, and security at /account; /admin/account remains available in the admin shell. Profile images accept PNG, JPEG, and WebP up to 2 MB and 2048 by 2048 pixels. Admin, account, authentication, maintenance, and API responses include X-Robots-Tag: noindex, nofollow by default.",
     "Password reset emails go through the mailer module (installed automatically with auth); in dev without SMTP they are logged to the API console. Configure SMTP in admin settings or via SMTP_* env for production."

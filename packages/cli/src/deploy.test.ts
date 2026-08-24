@@ -36,8 +36,7 @@ function project(): string {
   created.push(root);
   mkdirSync(join(root, "apps", "api"), { recursive: true });
   initLockfile(root, {
-    template: "fullstack-nest-svelte",
-    packageManager: "npm",
+    template: "fullstack",
     answers: { projectName: "example-app" },
     version: "0.15.0",
   });
@@ -197,7 +196,7 @@ describe("deployment rendering and planning", () => {
       "name: example-app-web\n          image",
     );
     expect(readFileSync(runtime.migrationManifest, "utf8")).toContain(
-      "command: [npm, run, migrate:all]",
+      "command: [bun, run, migrate:all]",
     );
     expect(() =>
       renderDeployment(root, "../outside", profile, "v1.2.3"),
