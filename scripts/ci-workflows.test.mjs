@@ -36,8 +36,8 @@ test("uses package-only verification for the generated Changesets PR", () => {
   assert.match(e2e, /inputs\.mode == 'package-smoke'/);
   assert.match(e2e, /node scripts\/e2e-ci\.mjs --package-smoke/);
   assert.match(e2e, /node scripts\/e2e-ci\.mjs --smoke/);
-  assert.match(e2e, /Cache generated app Bun downloads/);
-  assert.match(e2e, /E2E_BUN_CACHE: \/home\/runner\/\.bun\/install\/cache/);
+  assert.doesNotMatch(e2e, /Cache generated app Bun downloads/);
+  assert.doesNotMatch(e2e, /E2E_BUN_CACHE:/);
   assert.match(e2e, /bun-version: 1\.4\.0/);
   assert.match(version, /actions: write/);
   assert.match(ci, /node-version: 22\.22\.1/);
