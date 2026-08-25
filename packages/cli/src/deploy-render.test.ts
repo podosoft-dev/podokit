@@ -184,6 +184,15 @@ describe("deployment ingress routing", () => {
 });
 
 describe("deployment migration command", () => {
+  it("runs workers with Bun", () => {
+    const { root, profile } = initializedProfile();
+    const runtime = renderDeployment(root, "production", profile, "v1.2.3");
+
+    expect(runtime.applicationManifest).toContain(
+      "command: [bun, dist/main-worker.js]",
+    );
+  });
+
   it("renders the default migration command when the profile omits it", () => {
     const { root, profile } = initializedProfile();
     const runtime = renderDeployment(root, "production", profile, "v1.2.3");

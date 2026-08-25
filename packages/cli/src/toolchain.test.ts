@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { resolveToolchain, toolchainTemplateVars } from "./toolchain";
+import {
+  resolveToolchain,
+  toolchainMigrationCommand,
+  toolchainTemplateVars,
+  toolchainWorkerCommand,
+} from "./toolchain";
 
 describe("toolchain", () => {
   it("pins Bun 1.4.0 and emits Bun-only commands", () => {
@@ -17,6 +22,8 @@ describe("toolchain", () => {
       webRun: "bun run --cwd apps/web",
       ciInstallCommand: "bun ci",
     });
+    expect(toolchainMigrationCommand(toolchain)).toEqual(["bun", "run", "migrate:all"]);
+    expect(toolchainWorkerCommand(toolchain)).toEqual(["bun", "dist/main-worker.js"]);
   });
 
   it("rejects Node and non-Bun package managers", () => {

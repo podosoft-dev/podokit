@@ -9,7 +9,11 @@ import type {
 } from "./deploy-profile";
 import { profilePath } from "./deploy-profile";
 import { readManifest } from "./lockfile";
-import { resolveToolchain, toolchainMigrationCommand } from "./toolchain";
+import {
+  resolveToolchain,
+  toolchainMigrationCommand,
+  toolchainWorkerCommand,
+} from "./toolchain";
 
 export interface DeploymentRuntime {
   root: string;
@@ -540,6 +544,7 @@ function workerDeployment(
   image: string,
   rolloutStateDigest: string,
   runtimeConfigDigest: string,
+  command: string[],
 ): string {
   const workload = profile.workloads.worker;
   if (!workload) return "";
@@ -573,7 +578,7 @@ ${labels(name, 8)}    spec:
         - name: worker
           image: ${quote(image)}
           imagePullPolicy: IfNotPresent
-          command: [node, dist/main-worker]
+          command: ${yamlStringSequence(command)}
           envFrom:
             - configMapRef: { name: ${profile.target.release}-runtime }
             - secretRef: { name: ${profile.secrets.api.name} }
@@ -655,6 +660,7 @@ function applicationManifest(
   profile: DeployProfileV1,
   images: DeploymentImages,
   rolloutStateDigest: string,
+  workerCommand: string[],
 ): string {
   const runtimeConfigDigest = derivedRuntimeConfigDigest(profile);
   return [
@@ -675,7 +681,13 @@ function applicationManifest(
       rolloutStateDigest,
       runtimeConfigDigest,
     ),
-    workerDeployment(profile, images.api, rolloutStateDigest, runtimeConfigDigest),
+    workerDeployment(
+      profile,
+      images.api,
+      rolloutStateDigest,
+      runtimeConfigDigest,
+      workerCommand,
+    ),
     disruptionBudget(profile, "api"),
     disruptionBudget(profile, "web"),
     profile.workloads.worker ? disruptionBudget(profile, "worker") : "",
@@ -788,8 +800,13 @@ export function renderDeployment(
   const effectiveRolloutStateDigest =
     rolloutStateDigest ?? offlineRolloutStateDigest(profile);
   const dependencies = dependencyManifest(profile, images, effectiveRolloutStateDigest);
-  const application = applicationManifest(profile, images, effectiveRolloutStateDigest);
   const toolchain = readManifest(projectRoot)?.toolchain ?? resolveToolchain();
+  const application = applicationManifest(
+    profile,
+    images,
+    effectiveRolloutStateDigest,
+    toolchainWorkerCommand(toolchain),
+  );
   const migration = migrationManifest(
     profile,
     release,
