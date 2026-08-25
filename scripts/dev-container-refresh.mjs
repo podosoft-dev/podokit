@@ -128,16 +128,17 @@ if (hasAuth) {
   try {
     sh("docker", [
       "compose", "-f", compose, "exec", "-T", "api",
-      "bunx", "@better-auth/cli", "migrate", "-y", "--config", "apps/api/src/auth/auth.ts",
+      "bun", "run", "--cwd", "apps/api", "migrate:all",
     ], { cwd: appDir });
   } catch {
-    console.warn("! Better Auth migration failed (check api logs and rerun manually)");
+    console.warn("! application migrations failed (check api logs and rerun manually)");
   }
-}
-try {
-  sh("docker", ["compose", "-f", compose, "exec", "-T", "api", "bun", "run", "--cwd", "apps/api", "migration:run"], { cwd: appDir });
-} catch {
-  console.warn("! migration:run failed (may be up to date or need manual run)");
+} else {
+  try {
+    sh("docker", ["compose", "-f", compose, "exec", "-T", "api", "bun", "run", "--cwd", "apps/api", "migration:run"], { cwd: appDir });
+  } catch {
+    console.warn("! migration:run failed (may be up to date or need manual run)");
+  }
 }
 
 // 8) health check via Traefik

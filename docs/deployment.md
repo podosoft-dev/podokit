@@ -82,8 +82,8 @@ docker push registry.example.com/example-app-api:v1.2.3
 docker push registry.example.com/example-app-web:v1.2.3
 ```
 
-The generated Node and Bun production Dockerfiles both install only the target
-application workspace. The Bun 1.4.0 profile uses its pinned Alpine image and
+The generated Bun production Dockerfiles install only the target application
+workspace. The Bun 1.4.0 profile uses its pinned Alpine image and
 `bun install --production --frozen-lockfile --filter './apps/api'` (or
 `./apps/web`) so one image does not carry the other application's runtime
 dependencies.

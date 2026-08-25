@@ -387,7 +387,23 @@ describe("addModule (auth / better-auth)", () => {
     expect(apiPkg.dependencies["better-auth"]).toBeDefined();
     expect(apiPkg.dependencies["@thallesp/nestjs-better-auth"]).toBeUndefined();
     expect(apiPkg.scripts["auth:configure"]).toBe("bun scripts/configure-auth.mjs");
+    expect(apiPkg.scripts["migrate:all"]).toBe("bun scripts/run-migrations.mjs");
     expect(existsSync(join(project, "apps/api/scripts/configure-auth.mjs"))).toBe(true);
+    expect(
+      readFileSync(join(project, "apps/api/scripts/configure-auth.mjs"), "utf8"),
+    ).toMatch(/^#!\/usr\/bin\/env bun$/m);
+    const migrationRunner = readFileSync(
+      join(project, "apps/api/scripts/run-migrations.mjs"),
+      "utf8",
+    );
+    expect(migrationRunner).toContain("src/migrate.ts");
+    expect(migrationRunner).toContain("dist/migrate.js");
+    expect(migrationRunner).toContain('process.env.NODE_ENV === "production"');
+    const rootLayout = readFileSync(
+      join(project, "apps/web/src/routes/+layout.svelte"),
+      "utf8",
+    );
+    expect(rootLayout).toContain('document.documentElement.dataset.hydrated = "true"');
     const app = readFileSync(join(project, "apps/api/src/app.ts"), "utf8");
     expect(app).toContain("authModule,");
     const authModule = readFileSync(join(project, "apps/api/src/auth/auth.module.ts"), "utf8");
@@ -800,6 +816,8 @@ describe("addModule (auth / better-auth)", () => {
       "utf8",
     );
     expect(setupTwoFactorPage).toContain('goto("/account", { invalidateAll: true })');
+    expect(setupTwoFactorPage).toContain("!data?.totpURI");
+    expect(setupTwoFactorPage).toContain("!Array.isArray(data.backupCodes)");
     const accountLoader = readFileSync(
       join(project, "apps/web/src/routes/account/+page.server.ts"),
       "utf8",
@@ -828,6 +846,9 @@ describe("addModule (auth / better-auth)", () => {
     expect(existsSync(join(project, "apps/api/src/admin.module.ts"))).toBe(true);
     expect(readFileSync(join(project, "apps/api/src/app.ts"), "utf8")).toContain("adminModule,");
     expect(existsSync(join(project, "apps/api/scripts/bootstrap-admin.mjs"))).toBe(true);
+    expect(
+      readFileSync(join(project, "apps/api/scripts/bootstrap-admin.mjs"), "utf8"),
+    ).toMatch(/^#!\/usr\/bin\/env bun$/m);
     const accountPage = readFileSync(
       join(project, "apps/web/src/lib/components/account-page.svelte"),
       "utf8",
@@ -835,6 +856,8 @@ describe("addModule (auth / better-auth)", () => {
     expect(accountPage).toContain("unlinkAccount({ accountId: account.id })");
     expect(accountPage).not.toContain("unlinkAccount({ accountId: account.accountId })");
     expect(accountPage).not.toContain("unlinkAccount({ providerId:");
+    expect(accountPage).toContain("!res?.totpURI");
+    expect(accountPage).toContain("!Array.isArray(res.backupCodes)");
     expect(readManifest(project)?.managedOverrides).toContain(
       ".claude/skills/podokit-configure-auth/**",
     );

@@ -29,4 +29,19 @@ export const USER = { name: "Normal User", email: "user@example.com", password: 
 export const adminState = "playwright/.auth/admin.json";
 export const userState = "playwright/.auth/user.json";
 export const userBaselineState = "playwright/.auth/user-baseline.json";
-export const anonState = { cookies: [], origins: [] } as const;
+const testUrl = new URL(process.env.E2E_BASE_URL ?? "http://localhost:5001");
+export const anonState = {
+  cookies: [
+    {
+      name: "locale",
+      value: "en",
+      domain: testUrl.hostname,
+      path: "/",
+      expires: -1,
+      httpOnly: false,
+      secure: testUrl.protocol === "https:",
+      sameSite: "Lax" as const,
+    },
+  ],
+  origins: [],
+};

@@ -61,6 +61,8 @@ schema are merged into one document.
 when a core, template, or installed-module endpoint is absent. This is the
 route-level parity gate used for the Elysia implementation; the
 expected inventory is documented in [modules.md](modules.md#api-endpoint-contract).
+It also rejects inconsistent parameter names at the same structural path
+position, such as combining `/hosts/:id` with `/hosts/:hostId/files`.
 
 A contract pass proves route presence and documentation. It does not replace
 behavior tests: new or changed endpoints still need Bun unit/integration coverage

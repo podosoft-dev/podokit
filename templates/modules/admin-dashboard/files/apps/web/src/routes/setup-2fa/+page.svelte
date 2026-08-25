@@ -39,7 +39,11 @@
       error = e.code === "INVALID_PASSWORD" ? i18n.t.setup2fa.wrongPassword : i18n.t.setup2fa.enableFailed;
       return;
     }
-    setup = { totpURI: data?.totpURI ?? "", backupCodes: (data?.backupCodes ?? []) as string[] };
+    if (!data?.totpURI || !Array.isArray(data.backupCodes)) {
+      error = i18n.t.setup2fa.enableFailed;
+      return;
+    }
+    setup = { totpURI: data.totpURI, backupCodes: data.backupCodes };
   }
 
   async function activate(): Promise<void> {

@@ -150,15 +150,15 @@ const blogPlugin: AppPlugin = ({ services }) => {
       params: t.Object({ slug: t.String({ minLength: 1 }) }),
       detail: { tags: ["blog"], summary: "Get an editable blog post" },
     })
-    .get("/blog/:slug/comments", ({ params, query }) => (
-      blog.listComments(params.slug, page(query, 20))
+    .get("/blog/:postRef/comments", ({ params, query }) => (
+      blog.listComments(params.postRef, page(query, 20))
     ), {
-      params: t.Object({ slug: t.String({ minLength: 1 }) }),
+      params: t.Object({ postRef: t.String({ minLength: 1 }) }),
       query: commentPageSchema,
       detail: { tags: ["blog"], summary: "List blog comments" },
     })
-    .get("/blog/:slug", ({ params }) => blog.getPublishedBySlug(params.slug), {
-      params: t.Object({ slug: t.String({ minLength: 1 }) }),
+    .get("/blog/:postRef", ({ params }) => blog.getPublishedBySlug(params.postRef), {
+      params: t.Object({ postRef: t.String({ minLength: 1 }) }),
       detail: { tags: ["blog"], summary: "Get a published blog post" },
     })
     .post("/blog", async ({ request, body, set }) => {
@@ -178,9 +178,9 @@ const blogPlugin: AppPlugin = ({ services }) => {
       body: createPostSchema,
       detail: { tags: ["blog"], summary: "Create a blog post" },
     })
-    .patch("/blog/:id", async ({ request, params, body }) => {
+    .patch("/blog/:postRef", async ({ request, params, body }) => {
       const session = await auth.requireSession(request);
-      const post = await blog.update(params.id, body as UpdateBlogPost, actorFrom(session));
+      const post = await blog.update(params.postRef, body as UpdateBlogPost, actorFrom(session));
       await audit.recordRequest("blog.post.update", request, session, {
         type: "blog-post",
         id: post.id,
@@ -188,28 +188,28 @@ const blogPlugin: AppPlugin = ({ services }) => {
       });
       return post;
     }, {
-      params: t.Object({ id: t.String({ format: "uuid" }) }),
+      params: t.Object({ postRef: t.String({ format: "uuid" }) }),
       body: updatePostSchema,
       detail: { tags: ["blog"], summary: "Update an owned blog post" },
     })
-    .delete("/blog/:id", async ({ request, params, set }) => {
+    .delete("/blog/:postRef", async ({ request, params, set }) => {
       const session = await auth.requireSession(request);
-      await blog.remove(params.id, actorFrom(session));
+      await blog.remove(params.postRef, actorFrom(session));
       await audit.recordRequest("blog.post.delete", request, session, {
         type: "blog-post",
-        id: params.id,
+        id: params.postRef,
       });
       set.status = 204;
     }, {
-      params: t.Object({ id: t.String({ format: "uuid" }) }),
+      params: t.Object({ postRef: t.String({ format: "uuid" }) }),
       detail: { tags: ["blog"], summary: "Delete an owned blog post" },
     })
-    .post("/blog/:slug/comments", async ({ request, params, body, set }) => {
+    .post("/blog/:postRef/comments", async ({ request, params, body, set }) => {
       const session = await auth.requireSession(request);
       await throttle("blog-comment", session.user.id, 60, 10, (name, value) => {
         set.headers[name] = value;
       });
-      const comment = await blog.addComment(params.slug, body.body, actorFrom(session));
+      const comment = await blog.addComment(params.postRef, body.body, actorFrom(session));
       await audit.recordRequest("blog.comment.create", request, session, {
         type: "blog-comment",
         id: comment.id,
@@ -217,7 +217,7 @@ const blogPlugin: AppPlugin = ({ services }) => {
       set.status = 201;
       return comment;
     }, {
-      params: t.Object({ slug: t.String({ minLength: 1 }) }),
+      params: t.Object({ postRef: t.String({ minLength: 1 }) }),
       body: commentSchema,
       detail: { tags: ["blog"], summary: "Add a blog comment" },
     })
@@ -310,8 +310,8 @@ export const blogModule: PodokitModule = {
     const policy = services.resolve(ACCESS_POLICY);
     policy.register("GET", "/blog", "public");
     policy.register("GET", "/blog/images/:id", "public");
-    policy.register("GET", "/blog/:slug/comments", "public");
-    policy.register("GET", "/blog/:slug", "public");
+    policy.register("GET", "/blog/:postRef/comments", "public");
+    policy.register("GET", "/blog/:postRef", "public");
   },
   plugin: blogPlugin,
 };

@@ -134,7 +134,7 @@
   ],
   "instructions": [
     "Set ADMIN_EMAILS in .env (comma-separated). After building and migrating, inject ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_PASSWORD for one command only, then run {{apiRun}} admin:bootstrap{{apiWorkspaceArg}}. The command creates a verified, approved admin or safely verifies an existing one.",
-    "Re-run the auth migration to add the admin and sign-up approval columns: bunx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts",
+    "Run all migrations to add the admin and sign-up approval columns: bun run --cwd apps/api migrate:all",
     "Remove ADMIN_BOOTSTRAP_PASSWORD from the environment after bootstrap. Keep ADMIN_EMAILS so matching future sign-ups are promoted consistently.",
     "Admin pages: /admin/users (list, approve pending registrations, ban, set role, revoke sessions). Signed-in users manage their profile, profile image, and security at /account; /admin/account remains available in the admin shell. Profile images accept PNG, JPEG, and WebP up to 2 MB and 2048 by 2048 pixels. Admin, account, authentication, maintenance, and API responses include X-Robots-Tag: noindex, nofollow by default.",
     "Password reset emails go through the mailer module (installed automatically with auth); in dev without SMTP they are logged to the API console. Configure SMTP in admin settings or via SMTP_* env for production."

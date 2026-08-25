@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { USER, adminState, userState } from "../helpers/accounts";
+import { USER, adminState, anonState, type Account } from "../helpers/accounts";
 import { ready } from "../helpers/hydration";
 
 const base = process.env.E2E_BASE_URL ?? "http://localhost:5001";
@@ -15,14 +15,30 @@ test("blog list renders pagination-ready content @smoke", async ({ page }) => {
 });
 
 test.describe("signed-in blog author", () => {
-  test.use({ storageState: userState });
+  test.use({ storageState: anonState });
+
+  let activeAccount: Account;
+
+  test.beforeEach(async ({ page }) => {
+    const marker = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    activeAccount = {
+      name: `Blog Author ${marker}`,
+      email: `blog-ui-${marker}@example.com`,
+      password: USER.password,
+    };
+    const signUp = await page.request.post(`${base}/api/auth/sign-up/email`, {
+      data: activeAccount,
+      headers: { origin: base },
+    });
+    expect(signUp.ok(), `sign up ${activeAccount.email}`).toBeTruthy();
+  });
 
   test("shows the signed-in account menu on blog pages", async ({ page }) => {
     await ready(page, "/blog");
     await page.getByTestId("account-menu").click();
     const label = page.getByRole("menu").locator('[data-slot="dropdown-menu-label"]');
-    await expect(label.getByText(USER.name, { exact: true })).toBeVisible();
-    await expect(label.getByText(USER.email, { exact: true })).toBeVisible();
+    await expect(label.getByText(activeAccount.name, { exact: true })).toBeVisible();
+    await expect(label.getByText(activeAccount.email, { exact: true })).toBeVisible();
     await expect(page.getByRole("menuitem", { name: /account|계정/i })).toBeVisible();
   });
 

@@ -73,7 +73,7 @@ export class BlogService {
     const slug = await this.availableSlug(dto.slug || dto.title);
     const status = dto.status ?? "draft";
     const excerpt = dto.excerpt?.trim() ?? "";
-    const tags = JSON.stringify(this.cleanTags(dto.tags ?? []));
+    const tags = this.cleanTags(dto.tags ?? []);
     const [post] = await this.sql<BlogPost[]>`
       INSERT INTO "blog_posts" (
         "title", "slug", "excerpt", "body", "coverImage", "authorId",
@@ -178,7 +178,7 @@ export class BlogService {
       ? await this.availableSlug(dto.slug, post.id)
       : post.slug;
     const status: BlogPostStatus = dto.status ?? post.status;
-    const tags = JSON.stringify(dto.tags === undefined ? post.tags : this.cleanTags(dto.tags));
+    const tags = dto.tags === undefined ? post.tags : this.cleanTags(dto.tags);
     const [updated] = await this.sql<BlogPost[]>`
       UPDATE "blog_posts" SET
         "title" = ${dto.title?.trim() ?? post.title},

@@ -51,12 +51,14 @@ test("OIDC provider: discovery, JWKS, client registration, authorize handoff", a
       `/api/auth/oauth2/authorize?client_id=${reg.client_id}&redirect_uri=${encodeURIComponent(REDIRECT)}` +
       `&response_type=code&scope=${encodeURIComponent("openid profile email")}&state=st` +
       `&code_challenge=${challenge}&code_challenge_method=S256`;
-    const authz = await (await page.request.get(authorizeUrl, { headers })).json();
-    expect(String(authz.url)).toContain("/oauth2/consent");
-    expect(String(authz.url)).toContain("client_id=");
+    const authz = await page.request.get(authorizeUrl, { headers, maxRedirects: 0 });
+    expect(authz.status()).toBe(302);
+    const consentUrl = authz.headers().location ?? "";
+    expect(consentUrl).toContain("/oauth2/consent");
+    expect(consentUrl).toContain("client_id=");
 
     // The consent page renders (reached in a real browser navigation).
-    await page.goto(authz.url);
+    await page.goto(consentUrl);
     await expect(page.getByRole("button", { name: "Allow" })).toBeVisible();
   } finally {
     await page.request.put("/api/account/settings", { data: { oidcProvider: false }, headers });

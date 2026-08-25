@@ -154,8 +154,8 @@ by registering a public access policy; read the current user through `AuthServic
 ```bash
 bunx @podosoft/podokit add auth
 bun install
-# create the auth tables (user/session/account/verification)
-bunx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
+# create the Better Auth and application tables
+bun run --cwd apps/api migrate:all
 bun run dev
 
 # sign up (sets a session cookie), then call a protected route
@@ -164,22 +164,23 @@ curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-up/email \
 curl -b cookies.txt localhost:5002/account/me
 ```
 
-Better Auth 1.7 requires an `issuer` for every account. Fresh applications get
-that schema from the command above. Existing Better Auth 1.6 databases need the
+Better Auth 1.7 requires an `issuer` for every account. The generated migration
+command uses the Better Auth version installed by the application, avoiding a
+schema mismatch with an independently resolved CLI. Existing Better Auth 1.6 databases need the
 trusted issuer backfill in the
 [Better Auth 1.7 upgrade guide](https://github.com/better-auth/better-auth/blob/main/docs/content/docs/guides/1-7-upgrade-guide.mdx)
 before running v1 code; the migration command cannot infer issuers safely.
 
-For a built production image, run both the Better Auth schema migration and all
-TypeORM migrations without downloading a CLI or copying TypeScript source into
-the image:
+Run the same command in development and from a built production image. It applies
+both the Better Auth schema and all TypeORM migrations without downloading a CLI:
 
 ```bash
 bun run --cwd apps/api migrate:all
 ```
 
-The command uses `dist/migrate.js`, exits non-zero on failure, and is suitable
-for a Kubernetes migration Job before a rolling deployment.
+The command selects `src/migrate.ts` during development and `dist/migrate.js`
+inside a built image, exits non-zero on failure, and is suitable for a Kubernetes
+migration Job before a rolling deployment.
 
 - **Secure by default**: all module endpoints (jobs, storage, files, cache, …) are protected once `auth` is added.
 - **Configure it in the admin Settings page, not env.** Social OAuth providers, SMTP, the
@@ -466,8 +467,7 @@ until an admin sets it (leave it `true` so the trail is on out of the box).
 npx @podosoft/podokit add audit-log   # also adds auth
 bun install
 docker compose -f infra/docker/docker-compose.yml up -d
-bunx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
-bun run --cwd apps/api migration:run   # creates audit_logs
+bun run --cwd apps/api migrate:all   # creates auth and audit tables
 bun run dev
 
 # sign in, make a change, then see who did it
@@ -844,13 +844,18 @@ hand-written list. Inspect the complete result at `/api-docs` or
 | `api-key-auth` | `GET /machine/ping` |
 | `audit-log` | `GET /audit-logs` |
 | `analytics` | `GET /analytics/config`<br>`GET /admin/analytics/config`<br>`PUT /admin/analytics/config`<br>`DELETE /admin/analytics/config/credentials`<br>`POST /admin/analytics/config/test`<br>`GET /admin/analytics/report`<br>`GET /admin/analytics/realtime` |
-| `blog` | `GET /blog`<br>`POST /blog/images`<br>`GET /blog/images/{id}`<br>`GET /blog/mine`<br>`GET /blog/manage/{slug}`<br>`GET /blog/{slug}/comments`<br>`GET /blog/{slug}`<br>`POST /blog`<br>`PATCH /blog/{id}`<br>`DELETE /blog/{id}`<br>`POST /blog/{slug}/comments`<br>`PATCH /blog/comments/{id}`<br>`DELETE /blog/comments/{id}`<br>`GET /admin/blog`<br>`GET /admin/blog/{id}`<br>`POST /admin/blog`<br>`PATCH /admin/blog/{id}`<br>`DELETE /admin/blog/{id}` |
+| `blog` | `GET /blog`<br>`POST /blog/images`<br>`GET /blog/images/{id}`<br>`GET /blog/mine`<br>`GET /blog/manage/{slug}`<br>`GET /blog/{postRef}/comments`<br>`GET /blog/{postRef}`<br>`POST /blog`<br>`PATCH /blog/{postRef}`<br>`DELETE /blog/{postRef}`<br>`POST /blog/{postRef}/comments`<br>`PATCH /blog/comments/{id}`<br>`DELETE /blog/comments/{id}`<br>`GET /admin/blog`<br>`GET /admin/blog/{id}`<br>`POST /admin/blog`<br>`PATCH /admin/blog/{id}`<br>`DELETE /admin/blog/{id}` |
 | `bullmq` | `POST /jobs`<br>`GET /jobs/{id}` |
 | `file-upload` | `POST /files`<br>`GET /files/{key}/url` |
 | `job-progress` | `POST /progress` |
 | `object-storage-s3` | `PUT /storage/{key}`<br>`GET /storage/{key}`<br>`GET /storage/{key}/presigned` |
 | `redis` | `PUT /cache/{key}`<br>`GET /cache/{key}` |
 | `sse` | `GET /events/stream`<br>`POST /events` |
+
+For blog routes, `postRef` is the post slug on public read and comment
+operations and the post UUID on owner update and delete operations. One neutral
+parameter name is required because Elysia shares the structural router position
+across HTTP methods.
 
 `mailer`, `logging`, and `rate-limit` modify shared application behavior and do
 not add endpoints of their own.
