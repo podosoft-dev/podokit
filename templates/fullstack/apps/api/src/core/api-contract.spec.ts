@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
   assertApiContract,
+  assertConsistentRouteParameters,
   documentedApiRoutes,
   expectedApiRoutes,
   missingApiRoutes,
@@ -17,6 +18,16 @@ describe("API contract inventory", () => {
     expect(expected).toContain("POST /files");
   });
 
+  it("uses one structural parameter name for every public blog post route", () => {
+    const expected = expectedApiRoutes("fullstack", ["blog"]);
+
+    expect(expected).toContain("GET /blog/{postRef}");
+    expect(expected).toContain("PATCH /blog/{postRef}");
+    expect(expected).toContain("POST /blog/{postRef}/comments");
+    expect(expected).not.toContain("GET /blog/{slug}");
+    expect(expected).not.toContain("PATCH /blog/{id}");
+  });
+
   it("normalizes OpenAPI operations and reports an exact missing route", () => {
     const document = { paths: { "/health": { get: {} }, "/health/ready": { get: {} } } };
 
@@ -28,5 +39,21 @@ describe("API contract inventory", () => {
     expect(() => assertApiContract(document, "fullstack", ["redis"])).toThrow(
       "OpenAPI contract is missing routes",
     );
+  });
+
+  it("rejects different parameter names at one router position", () => {
+    expect(() => assertConsistentRouteParameters([
+      { method: "GET", path: "/hosts/:hostId" },
+      { method: "GET", path: "/hosts/:hostId/files/:path" },
+      { method: "DELETE", path: "/hosts/:id/services/:serviceId" },
+    ])).toThrow(
+      "API routes at the same structural position must use one parameter name",
+    );
+
+    expect(() => assertConsistentRouteParameters([
+      { method: "GET", path: "/hosts/:hostId" },
+      { method: "GET", path: "/hosts/:hostId/files/:path" },
+      { method: "DELETE", path: "/hosts/:hostId/services/:serviceId" },
+    ])).not.toThrow();
   });
 });

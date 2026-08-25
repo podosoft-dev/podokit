@@ -145,6 +145,13 @@ describe("create (integration against templates)", () => {
       "RUN apk add --no-cache git python3 make g++ ca-certificates",
     );
     expect(devDockerfile).not.toContain("apt-get");
+    const infrastructure = readFileSync(
+      join(target, "infra/docker/docker-compose.yml"),
+      "utf8",
+    );
+    expect(infrastructure).toContain("image: oven/bun:1.4.0-alpine");
+    expect(infrastructure).toContain('command: ["bun", "/app/sms-sink.mjs"]');
+    expect(infrastructure).not.toContain("image: node:");
     const devcontainer = JSON.parse(
       readFileSync(join(target, ".devcontainer/devcontainer.json"), "utf8"),
     ) as { remoteUser: string };
@@ -191,6 +198,12 @@ describe("create (integration against templates)", () => {
     expect(existsSync(join(withAi, ".cursor/rules/podokit.mdc"))).toBe(true);
     expect(existsSync(join(withAi, ".github/copilot-instructions.md"))).toBe(true);
     expect(existsSync(join(withAi, ".claude/skills/podokit-elysia-endpoint/SKILL.md"))).toBe(true);
+    const endpointGuidance = readFileSync(
+      join(withAi, ".claude/skills/podokit-elysia-endpoint/SKILL.md"),
+      "utf8",
+    );
+    expect(endpointGuidance).toContain("same parameter name at the same structural route position");
+    expect(endpointGuidance).toContain("bun run --cwd apps/api contract");
     expect(existsSync(join(withAi, ".agents/skills/podokit-deploy/SKILL.md"))).toBe(true);
     expect(existsSync(join(withAi, ".claude/skills/podokit-deploy/SKILL.md"))).toBe(true);
     // AI files are user-owned so `podo update` never touches them
@@ -227,6 +240,9 @@ describe("create (integration against templates)", () => {
       readFileSync(join(target, "apps", "web", "package.json"), "utf8"),
     ) as { imports: Record<string, string> };
     expect(webPkg.imports).toEqual({ "#lib/*": "./src/lib/*" });
+    const appHtml = readFileSync(join(target, "apps", "web", "src", "app.html"), "utf8");
+    expect(appHtml).toContain("%sveltekit.head%");
+    expect(appHtml).not.toContain("<title>");
     expect(readFileSync(join(target, "apps", "web", "src", "routes", "+page.svelte"), "utf8"))
       .toContain('from "#lib/api.js"');
     const webTsconfig = JSON.parse(
@@ -263,12 +279,12 @@ describe("create (integration against templates)", () => {
       expect(dockerfile).toContain(`RUN bun run --cwd apps/${workspace} build`);
       expect(dockerfile).not.toContain("FROM node:");
 
-      // Every workspace manifest must reach `npm ci`. Listing them by hand silently
+      // Every workspace manifest must reach `bun ci`. Listing them by hand silently
       // installs a different tree for a project that adds one.
       expect(dockerfile).toContain("FROM oven/bun:1.4.0-alpine AS manifests");
       expect(dockerfile).toContain('find . -name package.json -not -path "*/node_modules/*"');
       // The whole install output, not just the root node_modules, so nested
-      // directories npm creates for unhoistable versions survive into the build.
+      // directories Bun creates for unhoistable versions survive into the build.
       expect(dockerfile).toContain("COPY --from=deps /app ./");
       expect(dockerfile).not.toContain("COPY --from=deps /app/node_modules");
       // Local workspace packages compile before the app that imports them.
@@ -276,6 +292,7 @@ describe("create (integration against templates)", () => {
       expect(dockerfile).toContain("RUN mkdir -p /app/packages");
       expect(dockerfile).not.toContain("COPY --from=build /app/node_modules");
       expect(dockerfile).toContain("HEALTHCHECK");
+      expect(dockerfile).toContain("process.env.PORT ?? '3000'");
       if (workspace === "api") {
         // Local workspace packages ship as real directories. node_modules only holds
         // symlinks to them, and a dangling link fails at boot rather than at build.

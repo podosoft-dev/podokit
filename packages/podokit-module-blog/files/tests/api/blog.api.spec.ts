@@ -121,6 +121,7 @@ test("authenticated author can manage draft visibility without changing publicat
   expect(post.publishedAt).toBeNull();
   expect(post.coverImage).toBe("/api/blog/images/example.png");
   expect(post.authorId).toBeTruthy();
+  expect(post.tags).toEqual(["e2e"]);
   expect((await context.get(`/api/blog/${post.slug}`)).status()).toBe(404);
 
   const mine = await context.get("/api/blog/mine?page=1&pageSize=10");
@@ -166,6 +167,12 @@ test("authenticated author can manage draft visibility without changing publicat
     status: "published",
     publishedAt: firstPublishedAt,
   });
+
+  const retagged = await context.patch(`/api/blog/${post.id}`, {
+    data: { tags: ["bun", "json"] },
+  });
+  expect(retagged.ok()).toBeTruthy();
+  expect((await retagged.json()).tags).toEqual(["bun", "json"]);
 
   const hidden = await context.patch(`/api/blog/${post.id}`, {
     data: { status: "draft" },

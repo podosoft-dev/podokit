@@ -19,7 +19,7 @@
     "@types/pg": "^8.11.10"
   },
   "scripts": {
-    "migrate:all": "bun dist/migrate.js",
+    "migrate:all": "bun scripts/run-migrations.mjs",
     "auth:configure": "bun scripts/configure-auth.mjs"
   },
   "env": [
@@ -58,14 +58,13 @@
       "file": "AGENTS.md",
       "marker": "<!-- podokit:end:agents-modules -->",
       "optional": true,
-      "text": "### auth (Better Auth + Elysia)\n- The API is secure by default: every application route needs a session except health, OpenAPI, `/api/auth/*`, and routes explicitly registered in `ACCESS_POLICY`.\n- Register a public route during module configuration with `services.resolve(ACCESS_POLICY).register(\"GET\", \"/path\", \"public\")`; use `AUTH` and `AuthService.requireSession()` or `requireAdmin()` when a handler needs the current user.\n- Configure OAuth providers, SMTP, sign-up approval, automatic logout, and server toggles on the admin Settings page. Only `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are required environment variables.\n- Use `{{apiRun}} auth:configure{{apiWorkspaceArg}} -- ...` and `.claude/skills/podokit-configure-auth` to apply OAuth/SMTP credentials without committing secrets.\n- Development setup: create Better Auth tables with `bunx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts`, then run the TypeORM migration layer. Production images run both with `{{apiRun}} migrate:all`.\n"
+      "text": "### auth (Better Auth + Elysia)\n- The API is secure by default: every application route needs a session except health, OpenAPI, `/api/auth/*`, and routes explicitly registered in `ACCESS_POLICY`.\n- Register a public route during module configuration with `services.resolve(ACCESS_POLICY).register(\"GET\", \"/path\", \"public\")`; use `AUTH` and `AuthService.requireSession()` or `requireAdmin()` when a handler needs the current user.\n- Configure OAuth providers, SMTP, sign-up approval, automatic logout, and server toggles on the admin Settings page. Only `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are required environment variables.\n- Use `{{apiRun}} auth:configure{{apiWorkspaceArg}} -- ...` and `.claude/skills/podokit-configure-auth` to apply OAuth/SMTP credentials without committing secrets.\n- Run `bun run --cwd apps/api migrate:all` in development and production so Better Auth and application migrations use the versions installed by the app.\n"
     }
   ],
   "instructions": [
     "Set BETTER_AUTH_SECRET in .env (at least 32 characters). Keep it stable because it also protects encrypted DB configuration secrets.",
-    "Create the Better Auth tables: bunx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts",
-    "Create the application tables: {{apiRun}} migration:run",
-    "After building a production image, run all migrations: {{apiRun}} migrate:all",
+    "Create the Better Auth and application tables: bun run --cwd apps/api migrate:all",
+    "Run the same migration command after building a production image: bun run --cwd apps/api migrate:all",
     "Sign up: curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-up/email -H 'content-type: application/json' -d '{\"email\":\"a@example.com\",\"password\":\"password123\",\"name\":\"A\"}'",
     "Call a protected route with the session: curl -b cookies.txt localhost:5002/account/me",
     "Use {{apiRun}} auth:configure{{apiWorkspaceArg}} -- --help for redacted OAuth, SMTP, and sign-up approval automation.",

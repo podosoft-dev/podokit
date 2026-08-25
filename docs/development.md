@@ -61,8 +61,7 @@ docker compose -f infra/docker/docker-compose.yml up -d
 docker compose -f infra/docker/docker-compose.yml --profile dev up -d
 
 # When auth is installed:
-bunx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
-bun run --cwd apps/api migration:run
+bun run --cwd apps/api migrate:all
 
 bun run dev
 ```
@@ -80,8 +79,7 @@ podo dev watch
 podo dev up -d
 
 # Run migrations inside the API container when auth/modules require them:
-podo dev exec api bunx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
-podo dev exec api bun run migration:run
+podo dev exec api bun run --cwd apps/api migrate:all
 ```
 
 Use `npx @podosoft/podokit dev ...` when `podo` is not installed globally.
@@ -130,7 +128,12 @@ bun run --cwd apps/api contract
 The API build, runtime, migrations, worker, and unit tests must use Bun 1.4.0.
 The contract command assembles the actual Elysia application, merges Better
 Auth's generated OpenAPI schema, and verifies every expected template/module
-route.
+route. Keep parameter names consistent at each structural position across the
+whole application. For example, `/hosts/:hostId` and
+`/hosts/:hostId/files/:path` are compatible, but mixing `/hosts/:id` with
+`/hosts/:hostId/files` is rejected because the underlying radix router stores
+one parameter name at that position. The contract gate checks this before the
+first request reaches the router.
 
 Playwright is the one Node-runtime test-tool exception. The package officially
 supports Node, and `bunx playwright` intentionally respects its Node shebang.

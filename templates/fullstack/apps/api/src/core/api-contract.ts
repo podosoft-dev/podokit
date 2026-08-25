@@ -53,12 +53,12 @@ const MODULE_ROUTES: Record<string, string[]> = {
     "GET /blog/images/{id}",
     "GET /blog/mine",
     "GET /blog/manage/{slug}",
-    "GET /blog/{slug}/comments",
-    "GET /blog/{slug}",
+    "GET /blog/{postRef}/comments",
+    "GET /blog/{postRef}",
     "POST /blog",
-    "PATCH /blog/{id}",
-    "DELETE /blog/{id}",
-    "POST /blog/{slug}/comments",
+    "PATCH /blog/{postRef}",
+    "DELETE /blog/{postRef}",
+    "POST /blog/{postRef}/comments",
     "PATCH /blog/comments/{id}",
     "DELETE /blog/comments/{id}",
     "GET /admin/blog",
@@ -79,10 +79,56 @@ const MODULE_ROUTES: Record<string, string[]> = {
   sse: ["GET /events/stream", "POST /events"],
 };
 
+interface RuntimeRoute {
+  path: string;
+}
+
 function record(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+}
+
+function runtimeRoutes(value: unknown): RuntimeRoute[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((route) => {
+    const path = record(route).path;
+    return typeof path === "string" ? [{ path }] : [];
+  });
+}
+
+/**
+ * Memoirist stores one parameter name at each structural radix-tree position.
+ * Routes such as `/hosts/:id` and `/hosts/:hostId/files` therefore cannot share
+ * an Elysia application even though their complete paths differ.
+ */
+export function assertConsistentRouteParameters(routes: unknown): void {
+  const names = new Map<string, { name: string; path: string }>();
+  const conflicts: string[] = [];
+
+  for (const route of runtimeRoutes(routes)) {
+    let position = "";
+    for (const segment of route.path.split("/").filter(Boolean)) {
+      const match = /^:([^?*]+)/.exec(segment);
+      position += `/${match ? ":" : segment}`;
+      const name = match?.[1];
+      if (!name) continue;
+      const existing = names.get(position);
+      if (!existing) {
+        names.set(position, { name, path: route.path });
+      } else if (existing.name !== name) {
+        conflicts.push(
+          `${route.path} uses :${name}; ${existing.path} uses :${existing.name} at ${position}`,
+        );
+      }
+    }
+  }
+
+  if (conflicts.length > 0) {
+    throw new Error(
+      `API routes at the same structural position must use one parameter name:\n${conflicts.join("\n")}`,
+    );
+  }
 }
 
 export function documentedApiRoutes(document: unknown): Set<string> {

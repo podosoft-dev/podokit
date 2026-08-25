@@ -11,6 +11,9 @@ description: Use when adding or changing an Elysia REST endpoint in apps/api. Co
    `// podokit:begin:imports` and `// podokit:begin:modules` fences.
 2. Validate path, query, headers, and bodies with Elysia `t` schemas. Keep
    TypeScript strict, avoid `any`, and declare function return types.
+   Use the same parameter name at the same structural route position throughout
+   one application: `/hosts/:hostId` and `/hosts/:hostId/files` are compatible,
+   while `/hosts/:id` and `/hosts/:hostId/files` are not.
 3. Throw `AppException("STABLE_CODE", "message", statusCode)` for domain
    failures. The global handler renders
    `{ success: false, error: { code, message, statusCode, path, timestamp } }`.
@@ -19,4 +22,6 @@ description: Use when adding or changing an Elysia REST endpoint in apps/api. Co
 5. Add route detail and response schemas so the endpoint is present in the
    merged OpenAPI document at `/api-docs-json`.
 6. Add a `bun:test` unit or integration test beside the feature. Verify with
-   `bun run lint`, `bun test`, and `bun run build` without starting a dev server.
+   `bun run lint`, `bun test`, `bun run build`, and
+   `bun run --cwd apps/api contract` without starting a dev server. The contract
+   gate assembles every plugin and rejects conflicting route parameter names.
