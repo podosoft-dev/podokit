@@ -1,5 +1,15 @@
 # @podosoft/podokit-module-blog
 
+## 1.0.1
+
+### Patch Changes
+
+- [#175](https://github.com/podosoft-dev/podokit/pull/175) [`610e542`](https://github.com/podosoft-dev/podokit/commit/610e542ba32226fc01dc4d2c132b78167da7e5c5) Thanks [@korone00](https://github.com/korone00)! - Bind blog tags as native JSON arrays with Bun SQL, isolate browser authors from
+  rate-limit state across repeated test runs, and let SvelteKit page metadata own
+  the document title without a conflicting static template title. Use one Elysia
+  route parameter name for blog post identifiers and slugs so the router can
+  compile every blog endpoint together.
+
 ## 1.0.0
 
 ### Major Changes

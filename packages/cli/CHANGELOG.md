@@ -1,5 +1,32 @@
 # @podosoft/podokit
 
+## 1.0.1
+
+### Patch Changes
+
+- [#175](https://github.com/podosoft-dev/podokit/pull/175) [`610e542`](https://github.com/podosoft-dev/podokit/commit/610e542ba32226fc01dc4d2c132b78167da7e5c5) Thanks [@korone00](https://github.com/korone00)! - Bind blog tags as native JSON arrays with Bun SQL, isolate browser authors from
+  rate-limit state across repeated test runs, and let SvelteKit page metadata own
+  the document title without a conflicting static template title. Use one Elysia
+  route parameter name for blog post identifiers and slugs so the router can
+  compile every blog endpoint together.
+
+- [#175](https://github.com/podosoft-dev/podokit/pull/175) [`610e542`](https://github.com/podosoft-dev/podokit/commit/610e542ba32226fc01dc4d2c132b78167da7e5c5) Thanks [@korone00](https://github.com/korone00)! - Use each container's configured `PORT` for generated API and web health checks.
+
+- [#175](https://github.com/podosoft-dev/podokit/pull/175) [`610e542`](https://github.com/podosoft-dev/podokit/commit/610e542ba32226fc01dc4d2c132b78167da7e5c5) Thanks [@korone00](https://github.com/korone00)! - Reject Elysia routes that use different parameter names at the same structural
+  router position during generated API contract verification, and document the
+  invariant in generated endpoint guidance.
+
+- [#175](https://github.com/podosoft-dev/podokit/pull/175) [`610e542`](https://github.com/podosoft-dev/podokit/commit/610e542ba32226fc01dc4d2c132b78167da7e5c5) Thanks [@korone00](https://github.com/korone00)! - Run the generated development SMS sink and application maintenance scripts on
+  the pinned Bun toolchain so every generated application-side JavaScript process
+  follows the Bun-only v1 runtime contract.
+
+- [#175](https://github.com/podosoft-dev/podokit/pull/175) [`610e542`](https://github.com/podosoft-dev/podokit/commit/610e542ba32226fc01dc4d2c132b78167da7e5c5) Thanks [@korone00](https://github.com/korone00)! - Keep generated authentication flows aligned with Better Auth 1.7 by narrowing
+  two-factor setup responses and running schema migrations through the version
+  installed by the application. Pin anonymous browser tests to English so a
+  custom site locale does not invalidate the generated accessibility locators.
+  Follow OIDC authorization redirects explicitly in browser tests and keep
+  module-agnostic smoke coverage compatible with application-owned home pages.
+
 ## 1.0.0
 
 ### Major Changes
