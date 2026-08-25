@@ -8,7 +8,11 @@ import type {
 } from "./deploy-compose-profile";
 import { profilePath } from "./deploy-schema";
 import { readManifest } from "./lockfile";
-import { resolveToolchain, toolchainMigrationCommand } from "./toolchain";
+import {
+  resolveToolchain,
+  toolchainMigrationCommand,
+  toolchainWorkerCommand,
+} from "./toolchain";
 
 /**
  * Compose project rendering.
@@ -328,6 +332,7 @@ export function renderComposeDocument(
   release: string,
   images: ComposeImages,
   stateDigest: string,
+  workerCommand: string[] = ["bun", "dist/main-worker.js"],
 ): string {
   const services: string[] = [];
   if (profile.dependencies.postgres.mode === "managed" && images.postgres) {
@@ -358,7 +363,7 @@ export function renderComposeDocument(
     // Kubernetes driver does.
     services.push(
       applicationService(profile, "worker", images.api, release, stateDigest, {
-        command: `["node", "dist/main-worker"]`,
+        command: `[${workerCommand.map((part) => quote(part)).join(", ")}]`,
       }),
     );
   }
@@ -392,7 +397,7 @@ export function renderMigrationDocument(
   profile: DockerComposeProfileV1,
   release: string,
   images: ComposeImages,
-  defaultCommand: string[] = ["npm", "run", "migrate:all"],
+  defaultCommand: string[] = ["bun", "run", "migrate:all"],
 ): string {
   const command = profile.migration?.command ?? defaultCommand;
   return (
@@ -448,8 +453,14 @@ export function renderComposeDeployment(
   const root = join(resolve(projectRoot), ".podokit", "runtime", "deploy", profileName);
   rmSync(root, { recursive: true, force: true });
   mkdirSync(root, { recursive: true });
-  const composeDocument = renderComposeDocument(profile, release, images, effectiveStateDigest);
   const toolchain = readManifest(projectRoot)?.toolchain ?? resolveToolchain();
+  const composeDocument = renderComposeDocument(
+    profile,
+    release,
+    images,
+    effectiveStateDigest,
+    toolchainWorkerCommand(toolchain),
+  );
   const migrationDocument = renderMigrationDocument(
     profile,
     release,

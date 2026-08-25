@@ -55,3 +55,7 @@ export function isRuntime(value: string): value is Runtime {
 export function toolchainMigrationCommand(_toolchain: Toolchain): string[] {
   return ["bun", "run", "migrate:all"];
 }
+
+export function toolchainWorkerCommand(_toolchain: Toolchain): string[] {
+  return ["bun", "dist/main-worker.js"];
+}

@@ -147,6 +147,19 @@ describe("compose rendering", () => {
     expect(document.match(/ports:/g)).toHaveLength(1);
   });
 
+  it("runs workers with Bun", () => {
+    const root = initialized(["auth", "bullmq"]);
+    const profile = composeProfileOf(root);
+    const document = renderComposeDocument(
+      profile,
+      "v1.2.3",
+      defaultComposeImages(profile, "v1.2.3"),
+      "sha256:0",
+    );
+
+    expect(document).toContain('command: ["bun", "dist/main-worker.js"]');
+  });
+
   it("declares data volumes external so a compose down cannot delete them", () => {
     const profile = composeProfileOf(initialized());
     const document = renderComposeDocument(
@@ -179,7 +192,7 @@ describe("compose rendering", () => {
     const images = { ...defaultComposeImages(profile, "v1.2.3"), api: `repo/api@${API_DIGEST}` };
     const document = renderMigrationDocument(profile, "v1.2.3", images);
     expect(document).toContain(`repo/api@${API_DIGEST}`);
-    expect(document).toContain('command: ["npm", "run", "migrate:all"]');
+    expect(document).toContain('command: ["bun", "run", "migrate:all"]');
     expect(document).toContain("external: true");
   });
 
