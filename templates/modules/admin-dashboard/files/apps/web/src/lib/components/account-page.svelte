@@ -265,7 +265,7 @@
     const { data: res, error } = await api.auth.twoFactor.enable({ password: twoFaPassword });
     twoFaBusy = false;
     if (error) return void toast.error(error.message ?? i18n.t.account.changeFailed);
-    if (!res?.totpURI || !Array.isArray(res.backupCodes)) {
+    if (!res || !("totpURI" in res) || !res.totpURI || !Array.isArray(res.backupCodes)) {
       return void toast.error(i18n.t.account.changeFailed);
     }
     setup = { totpURI: res.totpURI, backupCodes: res.backupCodes };

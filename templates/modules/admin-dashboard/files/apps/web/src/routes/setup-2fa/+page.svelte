@@ -39,7 +39,7 @@
       error = e.code === "INVALID_PASSWORD" ? i18n.t.setup2fa.wrongPassword : i18n.t.setup2fa.enableFailed;
       return;
     }
-    if (!data?.totpURI || !Array.isArray(data.backupCodes)) {
+    if (!data || !("totpURI" in data) || !data.totpURI || !Array.isArray(data.backupCodes)) {
       error = i18n.t.setup2fa.enableFailed;
       return;
     }
