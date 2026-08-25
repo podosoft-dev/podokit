@@ -262,13 +262,12 @@
   });
   async function enable2fa(): Promise<void> {
     twoFaBusy = true;
-    const { data: res, error } = await api.auth.twoFactor.enable({
-      password: twoFaPassword,
-      method: "totp",
-    });
+    const { data: res, error } = await api.auth.twoFactor.enable({ password: twoFaPassword });
     twoFaBusy = false;
     if (error) return void toast.error(error.message ?? i18n.t.account.changeFailed);
-    if (res?.method !== "totp") return void toast.error(i18n.t.account.changeFailed);
+    if (!res?.totpURI || !Array.isArray(res.backupCodes)) {
+      return void toast.error(i18n.t.account.changeFailed);
+    }
     setup = { totpURI: res.totpURI, backupCodes: res.backupCodes };
   }
   async function verify2fa(): Promise<void> {

@@ -816,8 +816,8 @@ describe("addModule (auth / better-auth)", () => {
       "utf8",
     );
     expect(setupTwoFactorPage).toContain('goto("/account", { invalidateAll: true })');
-    expect(setupTwoFactorPage).toContain('method: "totp"');
-    expect(setupTwoFactorPage).toContain('data?.method !== "totp"');
+    expect(setupTwoFactorPage).toContain("!data?.totpURI");
+    expect(setupTwoFactorPage).toContain("!Array.isArray(data.backupCodes)");
     const accountLoader = readFileSync(
       join(project, "apps/web/src/routes/account/+page.server.ts"),
       "utf8",
@@ -856,8 +856,8 @@ describe("addModule (auth / better-auth)", () => {
     expect(accountPage).toContain("unlinkAccount({ accountId: account.id })");
     expect(accountPage).not.toContain("unlinkAccount({ accountId: account.accountId })");
     expect(accountPage).not.toContain("unlinkAccount({ providerId:");
-    expect(accountPage).toContain('method: "totp"');
-    expect(accountPage).toContain('res?.method !== "totp"');
+    expect(accountPage).toContain("!res?.totpURI");
+    expect(accountPage).toContain("!Array.isArray(res.backupCodes)");
     expect(readManifest(project)?.managedOverrides).toContain(
       ".claude/skills/podokit-configure-auth/**",
     );
