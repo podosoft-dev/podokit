@@ -33,13 +33,17 @@
   async function begin(): Promise<void> {
     busy = true;
     error = null;
-    const { data, error: e } = await api.auth.twoFactor.enable({ password });
+    const { data, error: e } = await api.auth.twoFactor.enable({ password, method: "totp" });
     busy = false;
     if (e) {
       error = e.code === "INVALID_PASSWORD" ? i18n.t.setup2fa.wrongPassword : i18n.t.setup2fa.enableFailed;
       return;
     }
-    setup = { totpURI: data?.totpURI ?? "", backupCodes: (data?.backupCodes ?? []) as string[] };
+    if (data?.method !== "totp") {
+      error = i18n.t.setup2fa.enableFailed;
+      return;
+    }
+    setup = { totpURI: data.totpURI, backupCodes: data.backupCodes };
   }
 
   async function activate(): Promise<void> {

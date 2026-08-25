@@ -1,8 +1,9 @@
 import { expect, test } from "@playwright/test";
+import { anonState } from "../helpers/accounts";
 import { ready } from "../helpers/hydration";
 
 // Full passkey round trip on a throwaway account — never touches the shared admin.
-test.use({ storageState: { cookies: [], origins: [] } });
+test.use({ storageState: anonState });
 
 test("register a passkey and sign in with it", async ({ page, baseURL }) => {
   const origin = { origin: baseURL ?? "" };
