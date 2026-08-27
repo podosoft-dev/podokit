@@ -9,7 +9,7 @@
 //   OUTAGE_WEB_PORT,
 //   SECONDARY_API_PORT,
 //   POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB,
-//   APP_DIR, E2E_BUN_CACHE, KEEP.
+//   APP_DIR, E2E_BUN_CACHE, E2E_RATE_LIMIT_MAX, KEEP.
 import { spawn, execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir, homedir } from "node:os";
@@ -49,6 +49,10 @@ const appDir = process.env.APP_DIR ? resolve(process.env.APP_DIR) : mkdtempSync(
 const bunCacheDir = process.env.E2E_BUN_CACHE
   ? resolve(process.env.E2E_BUN_CACHE)
   : join(appDir, ".bun-cache");
+// The full shared suite uses one seeded administrator for many browser flows.
+// Keep enough headroom for that traffic while still crossing the real limiter
+// boundary in rate-limit.api.spec.ts with a separate disposable user.
+const rateLimitMax = process.env.E2E_RATE_LIMIT_MAX ?? "1000";
 const rateLimitKeyPrefix = `podokit:e2e:${process.pid}:${Date.now()}:rate-limit`;
 const EXTERNAL_MODULES = [
   {
@@ -224,7 +228,7 @@ async function main() {
       // module default after the faithful harness replaces the generated .env.
       "AUDIT_LOG_ENABLED=true",
       `RATE_LIMIT_KEY_PREFIX=${rateLimitKeyPrefix}`,
-      "RATE_LIMIT_MAX=300",
+      `RATE_LIMIT_MAX=${rateLimitMax}`,
       "RATE_LIMIT_AUTH_MAX=10000",
       "RATE_LIMIT_RUNTIME_MAX=10000",
       // Point mail at the CI Mailpit service when present so the email specs run;
@@ -277,7 +281,7 @@ async function main() {
     AUTH_HIBP: "true",
     AUDIT_LOG_ENABLED: "true",
     RATE_LIMIT_KEY_PREFIX: rateLimitKeyPrefix,
-    RATE_LIMIT_MAX: "300",
+    RATE_LIMIT_MAX: rateLimitMax,
     RATE_LIMIT_AUTH_MAX: "10000",
     RATE_LIMIT_RUNTIME_MAX: "10000",
     // Route phone-number OTPs to the local SMS sink so the phone spec can read them.

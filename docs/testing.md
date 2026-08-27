@@ -136,7 +136,10 @@ worker plus the SvelteKit server, and runs the shipped Playwright suite.
 Optional Mailpit, SMS, Redis, and MinIO tests run only when the harness explicitly
 configures those services. `KEEP=1` preserves the generated app for inspection.
 Ports and backing-service credentials can be overridden with the documented
-`E2E_*`, `POSTGRES_*`, Redis, and S3 environment variables.
+`E2E_*`, `POSTGRES_*`, Redis, and S3 environment variables. The shared suite's
+general request ceiling defaults to 1000; override it with
+`E2E_RATE_LIMIT_MAX` when extending or diagnosing the matrix. The rate-limit
+spec uses that same value so it still verifies a real 200-to-429 transition.
 
 ## Playwright project extensions
 

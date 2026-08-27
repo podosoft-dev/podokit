@@ -191,7 +191,13 @@ test.describe("signed-in blog author", () => {
     expect((await (await republished).json()).publishedAt).toBe(
       firstPublishedPost.publishedAt,
     );
-    expect((await page.request.delete(`/api/blog/${post.id}`)).status()).toBe(204);
+    expect(
+      (
+        await page.request.delete(`/api/blog/${post.id}`, {
+          headers: { origin: base },
+        })
+      ).status(),
+    ).toBe(204);
   });
 
   test("can create, edit, and delete a comment", async ({

@@ -120,10 +120,16 @@ test("isolates rate-limit counters and aligns the server and test ceilings", () 
 
   assert.match(
     source,
+    /const rateLimitMax = process\.env\.E2E_RATE_LIMIT_MAX \?\? "1000"/,
+  );
+  assert.match(
+    source,
     /const rateLimitKeyPrefix = `podokit:e2e:\$\{process\.pid\}:\$\{Date\.now\(\)\}:rate-limit`/,
   );
   assert.match(source, /`RATE_LIMIT_KEY_PREFIX=\$\{rateLimitKeyPrefix\}`/);
+  assert.match(source, /`RATE_LIMIT_MAX=\$\{rateLimitMax\}`/);
   assert.match(source, /RATE_LIMIT_KEY_PREFIX: rateLimitKeyPrefix/);
+  assert.match(source, /RATE_LIMIT_MAX: rateLimitMax/);
   assert.match(source, /RATE_LIMIT_MAX: pgEnv\.RATE_LIMIT_MAX/);
 });
 
