@@ -1,6 +1,6 @@
 {
   "name": "@podosoft/podokit",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "An opinionated Bun and Elysia full-stack TypeScript starter toolkit and CLI with SvelteKit, TailwindCSS, shadcn-svelte, Docker, and k3s.",
   "license": "Apache-2.0",
   "repository": {
