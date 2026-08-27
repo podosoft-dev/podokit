@@ -1,5 +1,13 @@
 # @podosoft/podokit
 
+## 1.0.2
+
+### Patch Changes
+
+- [#179](https://github.com/podosoft-dev/podokit/pull/179) [`12b51dd`](https://github.com/podosoft-dev/podokit/commit/12b51dd6978db53d89e1983309afc369f90618e9) Thanks [@korone00](https://github.com/korone00)! - Keep the faithful generated-app suite below its shared rate-limit ceiling, surface failed feature-toggle writes directly, and send same-origin headers for browser-context blog deletion checks.
+
+- [#177](https://github.com/podosoft-dev/podokit/pull/177) [`5138312`](https://github.com/podosoft-dev/podokit/commit/51383127bf262396b57e0a39fe12fd17fead09fd) Thanks [@korone00](https://github.com/korone00)! - Run generated Kubernetes and Docker Compose workers and migrations with Bun, and keep two-factor setup compatible with Better Auth response variants.
+
 ## 1.0.1
 
 ### Patch Changes
