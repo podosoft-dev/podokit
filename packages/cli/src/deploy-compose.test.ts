@@ -26,6 +26,7 @@ const created: string[] = [];
 const API_DIGEST = `sha256:${"1".repeat(64)}`;
 const WEB_DIGEST = `sha256:${"2".repeat(64)}`;
 const POSTGRES_DIGEST = `sha256:${"3".repeat(64)}`;
+const GATEWAY_DIGEST = `sha256:${"4".repeat(64)}`;
 
 function project(modules: string[] = ["auth"]): string {
   const root = mkdtempSync(join(tmpdir(), "podokit-compose-"));
@@ -75,6 +76,53 @@ describe("docker-compose profile", () => {
     expect(profile.driver).toBe("docker-compose");
     if (profile.driver !== "docker-compose") return;
     expect(profile.exposure.bindAddress).toBe("127.0.0.1");
+    expect(profile.exposure.webSocketPaths).toEqual([]);
+    expect(profile.exposure.trustedProxyCidrs).toEqual([]);
+  });
+
+  it.each<[string[], string]>([
+    [["/"], "static absolute paths"],
+    [["/events/*"], "static absolute paths"],
+    [["/events/ws", "/events/ws"], "duplicate path"],
+  ])("rejects unsafe WebSocket path configuration %#", (webSocketPaths, message) => {
+    const root = initialized();
+    const file = profilePath(root, "production");
+    const value = JSON.parse(readFileSync(file, "utf8")) as {
+      exposure: { webSocketPaths: string[] };
+    };
+    value.exposure.webSocketPaths = webSocketPaths;
+    writeFileSync(file, JSON.stringify(value));
+    expect(() => loadAnyDeploymentProfile(root, "production")).toThrow(message);
+  });
+
+  it.each<[unknown, string]>([
+    [["127.0.0.1"], "IP CIDR block"],
+    [["127.0.0.1/33"], "IP CIDR block"],
+    [["::1/129"], "IP CIDR block"],
+    [["127.0.0.1/32", "127.0.0.1/32"], "duplicate CIDR blocks"],
+  ])("rejects unsafe trusted proxy configuration %#", (trustedProxyCidrs, message) => {
+    const root = initialized();
+    const file = profilePath(root, "production");
+    const value = JSON.parse(readFileSync(file, "utf8")) as {
+      exposure: { trustedProxyCidrs: unknown; webSocketPaths: string[] };
+    };
+    value.exposure.webSocketPaths = ["/events/ws"];
+    value.exposure.trustedProxyCidrs = trustedProxyCidrs;
+    writeFileSync(file, JSON.stringify(value));
+    expect(() => loadAnyDeploymentProfile(root, "production")).toThrow(message);
+  });
+
+  it("rejects trusted proxy CIDRs when the gateway is disabled", () => {
+    const root = initialized();
+    const file = profilePath(root, "production");
+    const value = JSON.parse(readFileSync(file, "utf8")) as {
+      exposure: { trustedProxyCidrs: string[] };
+    };
+    value.exposure.trustedProxyCidrs = ["127.0.0.1/32"];
+    writeFileSync(file, JSON.stringify(value));
+    expect(() => loadAnyDeploymentProfile(root, "production")).toThrow(
+      "requires at least one exposure.webSocketPaths entry",
+    );
   });
 
   it("enables Redis and a worker only when a module needs them", () => {
@@ -144,6 +192,30 @@ describe("compose rendering", () => {
       "sha256:0",
     );
     expect(document).toContain('"127.0.0.1:8080:3000"');
+    expect(document.match(/ports:/g)).toHaveLength(1);
+  });
+
+  it("routes exact WebSocket paths to API through the published gateway", () => {
+    const profile = composeProfileOf(initialized());
+    profile.exposure.webSocketPaths = ["/agent/ws", "/terminal/ws"];
+    profile.exposure.trustedProxyCidrs = ["127.0.0.1/32", "::1/128"];
+    const images = {
+      ...defaultComposeImages(profile, "v1.2.3"),
+      gateway: `caddy:2.10-alpine@${GATEWAY_DIGEST}`,
+    };
+    const document = renderComposeDocument(profile, "v1.2.3", images, "sha256:0");
+    const web = document.split("example-app-web:")[1]?.split("example-app-gateway:")[0] ?? "";
+    const gateway = document.split("example-app-gateway:")[1] ?? "";
+
+    expect(web).not.toContain("ports:");
+    expect(gateway).toContain(`caddy:2.10-alpine@${GATEWAY_DIGEST}`);
+    expect(gateway).toContain("path /agent/ws /terminal/ws");
+    expect(gateway).toContain("trusted_proxies static 127.0.0.1/32 ::1/128");
+    expect(gateway).toContain("trusted_proxies_strict");
+    expect(gateway).toContain("reverse_proxy example-app-api:3000");
+    expect(gateway).toContain("reverse_proxy example-app-web:3000");
+    expect(gateway).not.toContain("header_up X-Forwarded");
+    expect(gateway).toContain('"127.0.0.1:8080:3000"');
     expect(document.match(/ports:/g)).toHaveLength(1);
   });
 
@@ -239,7 +311,13 @@ function scriptedRunner(overrides: Record<string, string> = {}): CommandRunner {
     }
     if (line.includes("info --format")) return reply("DAEMONID\n");
     if (line.includes("imagetools inspect")) {
-      const digest = line.includes("-web") ? WEB_DIGEST : line.includes("postgres") ? POSTGRES_DIGEST : API_DIGEST;
+      const digest = line.includes("caddy")
+        ? GATEWAY_DIGEST
+        : line.includes("-web")
+          ? WEB_DIGEST
+          : line.includes("postgres")
+            ? POSTGRES_DIGEST
+            : API_DIGEST;
       return reply(JSON.stringify({ digest }));
     }
     if (line.includes("sha256sum")) return reply(`${"f".repeat(64)}\n`);
@@ -293,6 +371,20 @@ describe("compose plan", () => {
     expect(plan.warnings.join(" ")).toContain("compatible with the release currently serving");
   });
 
+  it("pins the gateway image when WebSocket routing is enabled", () => {
+    const root = initialized();
+    const file = profilePath(root, "production");
+    const value = JSON.parse(readFileSync(file, "utf8")) as {
+      exposure: { webSocketPaths: string[] };
+    };
+    value.exposure.webSocketPaths = ["/agent/ws"];
+    writeFileSync(file, JSON.stringify(value));
+
+    const plan = planComposeDeployment(root, "production", "v1.2.3", scriptedRunner());
+
+    expect(plan.images.gateway).toBe(`caddy:2.10-alpine@${GATEWAY_DIGEST}`);
+  });
+
   it("rejects a release tag that is not a stable SemVer tag", () => {
     const root = initialized();
     expect(() => planComposeDeployment(root, "production", "latest", scriptedRunner())).toThrow(
@@ -327,6 +419,23 @@ describe("compose plan", () => {
     value.exposure.port = 9090;
     writeFileSync(file, JSON.stringify(parseComposeProfile(value)));
     const second = planComposeDeployment(root, "production", "v1.2.3", scriptedRunner());
+    expect(first.planHash).not.toBe(second.planHash);
+  });
+
+  it("produces a different hash when the trusted proxy boundary changes", () => {
+    const root = initialized();
+    const file = profilePath(root, "production");
+    const value = JSON.parse(readFileSync(file, "utf8")) as {
+      exposure: { trustedProxyCidrs: string[]; webSocketPaths: string[] };
+    };
+    value.exposure.webSocketPaths = ["/events/ws"];
+    writeFileSync(file, JSON.stringify(value));
+    const first = planComposeDeployment(root, "production", "v1.2.3", scriptedRunner());
+
+    value.exposure.trustedProxyCidrs = ["127.0.0.1/32"];
+    writeFileSync(file, JSON.stringify(value));
+    const second = planComposeDeployment(root, "production", "v1.2.3", scriptedRunner());
+
     expect(first.planHash).not.toBe(second.planHash);
   });
 });

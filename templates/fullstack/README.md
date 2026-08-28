@@ -118,5 +118,12 @@ docker build --build-arg PODOKIT_BUILD_ORIGIN=https://example.com -f apps/web/Do
 
 For a Docker Compose deployment behind a trusted reverse proxy, set
 `PROTOCOL_HEADER=x-forwarded-proto` and `HOST_HEADER=x-forwarded-host` in the
-deployment profile runtime configuration. Never trust client-controlled forwarded
-headers on a directly exposed container.
+deployment profile runtime configuration and list the proxy's direct CIDR blocks in
+`exposure.trustedProxyCidrs`. Never trust client-controlled forwarded headers on a
+directly exposed container.
+
+If the production API exposes WebSocket endpoints, list their exact paths under
+`exposure.webSocketPaths` in the deployment profile. The Compose driver then keeps a
+single published port, sends only those paths to API, and sends all other traffic to
+web. The external TLS proxy continues to use the same single upstream. Keep
+`trustedProxyCidrs` empty unless that upstream is a known reverse proxy.

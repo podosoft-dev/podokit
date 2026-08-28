@@ -42,7 +42,7 @@ PostgreSQL persistence:
 | `podo update [--apply]` | Preview or apply managed template and module updates. |
 | `podo eject <path...>` | Transfer managed files to application ownership. |
 | `podo dev <action>` | Manage the generated development containers. |
-| `podo deploy <action>` | Plan, apply, verify, or roll back an immutable Helm release. |
+| `podo deploy <action>` | Plan, apply, verify, or roll back an immutable Kubernetes or Docker Compose release. |
 
 ```text
 podo create <name> [options]

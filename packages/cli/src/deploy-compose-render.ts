@@ -35,6 +35,7 @@ export interface ComposeRuntime {
 export interface ComposeImages {
   api: string;
   web: string;
+  gateway: string | null;
   postgres: string | null;
   redis: string | null;
   objectStorage: string | null;
@@ -327,6 +328,55 @@ function applicationService(
   );
 }
 
+function gatewayService(
+  profile: DockerComposeProfileV1,
+  image: string,
+  release: string,
+  stateDigest: string,
+): string {
+  const globalOptions = profile.exposure.trustedProxyCidrs.length
+    ? `{
+  servers {
+    trusted_proxies static ${profile.exposure.trustedProxyCidrs.join(" ")}
+    trusted_proxies_strict
+  }
+}
+`
+    : "";
+  const caddyfile =
+    globalOptions +
+    `:3000 {\n` +
+    `  @api_websockets path ${profile.exposure.webSocketPaths.join(" ")}\n` +
+    `  handle @api_websockets {\n` +
+    `    reverse_proxy ${serviceName(profile, "api")}:${CONTAINER_PORT}\n` +
+    `  }\n` +
+    `  handle {\n` +
+    `    reverse_proxy ${serviceName(profile, "web")}:${CONTAINER_PORT}\n` +
+    `  }\n` +
+    `}\n`;
+  const start =
+    "printf '%s' \"$${CADDYFILE_CONTENT}\" > /tmp/Caddyfile\n" +
+    "exec caddy run --config /tmp/Caddyfile --adapter caddyfile";
+  return (
+    `  ${serviceName(profile, "gateway")}:\n` +
+    `    image: ${quote(image)}\n` +
+    `    restart: unless-stopped\n` +
+    `    entrypoint: ["sh", "-c", ${quote(start)}]\n` +
+    environmentBlock({ CADDYFILE_CONTENT: caddyfile }, "    ") +
+    `    depends_on:\n` +
+    `      ${serviceName(profile, "api")}:\n        condition: service_healthy\n` +
+    `      ${serviceName(profile, "web")}:\n        condition: service_healthy\n` +
+    `    ports:\n      - ${quote(
+      `${profile.exposure.bindAddress}:${profile.exposure.port}:${CONTAINER_PORT}`,
+    )}\n` +
+    `    networks: [${profile.target.project}]\n` +
+    `    healthcheck:\n` +
+    `      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]\n` +
+    `      interval: 10s\n      timeout: 5s\n      retries: 6\n      start_period: 10s\n` +
+    labelsBlock(profile, release, stateDigest, "    ")
+  );
+}
+
 export function renderComposeDocument(
   profile: DockerComposeProfileV1,
   release: string,
@@ -335,6 +385,7 @@ export function renderComposeDocument(
   workerCommand: string[] = ["bun", "dist/main-worker.js"],
 ): string {
   const services: string[] = [];
+  const hasGateway = profile.exposure.webSocketPaths.length > 0;
   if (profile.dependencies.postgres.mode === "managed" && images.postgres) {
     services.push(postgresService(profile, images.postgres));
   }
@@ -355,9 +406,15 @@ export function renderComposeDocument(
   services.push(
     applicationService(profile, "web", images.web, release, stateDigest, {
       healthcheckPath: "/",
-      publish: true,
+      publish: !hasGateway,
     }),
   );
+  if (hasGateway) {
+    if (!images.gateway) {
+      throw new Error("A resolved gateway image is required when WebSocket paths are configured.");
+    }
+    services.push(gatewayService(profile, images.gateway, release, stateDigest));
+  }
   if (profile.workloads.worker) {
     // The worker runs the API image with a different entry point, exactly as the
     // Kubernetes driver does.
@@ -422,6 +479,8 @@ export function defaultComposeImages(
   return {
     api: `${profile.release.apiRepository}:${release}`,
     web: `${profile.release.webRepository}:${release}`,
+    gateway:
+      profile.exposure.webSocketPaths.length > 0 ? profile.exposure.gatewayImage : null,
     postgres:
       profile.dependencies.postgres.mode === "managed"
         ? profile.dependencies.postgres.image
