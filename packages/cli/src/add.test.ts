@@ -380,6 +380,8 @@ describe("addModule (auth / better-auth)", () => {
     // files overlaid
     expect(existsSync(join(project, "apps/api/src/auth/auth.ts"))).toBe(true);
     expect(existsSync(join(project, "apps/api/src/auth/auth.module.ts"))).toBe(true);
+    expect(existsSync(join(project, "apps/api/src/auth/account-issuer-migration.ts"))).toBe(true);
+    expect(existsSync(join(project, "apps/api/src/auth/account-issuer-migration.spec.ts"))).toBe(true);
     // deps merged into the api workspace
     const apiPkg = JSON.parse(readFileSync(join(project, "apps/api/package.json"), "utf8")) as {
       dependencies: Record<string, string>;
@@ -399,6 +401,11 @@ describe("addModule (auth / better-auth)", () => {
     expect(migrationRunner).toContain("src/migrate.ts");
     expect(migrationRunner).toContain("dist/migrate.js");
     expect(migrationRunner).toContain('process.env.NODE_ENV === "production"');
+    const migrationSource = readFileSync(join(project, "apps/api/src/migrate.ts"), "utf8");
+    expect(migrationSource).toContain("migrateLegacyAccountIssuers");
+    expect(migrationSource.indexOf("migrateLegacyAccountIssuers(")).toBeLessThan(
+      migrationSource.indexOf("getMigrations(auth.options)"),
+    );
     const rootLayout = readFileSync(
       join(project, "apps/web/src/routes/+layout.svelte"),
       "utf8",

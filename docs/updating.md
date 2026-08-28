@@ -149,7 +149,14 @@ policy, and add Bun tests plus an API contract entry.
 
 Better Auth 1.7 adds issuer-scoped account identities and a required `issuer`
 column. Fresh PodoKit v1 applications receive the complete schema through their
-initial migration. Before pointing v1 code at an existing Better Auth 1.6
-database, complete the issuer backfill described in the
-[Better Auth 1.7 upgrade guide](https://github.com/better-auth/better-auth/blob/main/docs/content/docs/guides/1-7-upgrade-guide.mdx);
-the migration command cannot safely choose an issuer for existing accounts.
+initial migration. For a populated Better Auth 1.6 PostgreSQL database,
+`migrate:all` adds the column as nullable, backfills every safely derivable
+credential and built-in social-provider identity, checks collisions, installs a
+compatibility trigger for writes from the release that is still serving, and only
+then adds the required constraint and compound unique index.
+
+The migration fails closed for an unknown provider and for Microsoft accounts.
+Microsoft 1.7 identities change from `sub` to the directory `oid`, which cannot be
+derived safely when a verified ID token or trusted directory export is unavailable.
+Complete that mapping before the upgrade as described in the
+[Better Auth 1.7 upgrade guide](https://better-auth.com/docs/guides/1-7-upgrade-guide#account-identity-is-scoped-by-issuer).
