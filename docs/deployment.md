@@ -16,7 +16,7 @@ responsibilities.
 
 PodoKit manages:
 
-- API and web workloads, their service wiring, and web-only public exposure
+- API and web workloads, their service wiring, and exact WebSocket routing when configured
 - optional PodoKit-run PostgreSQL, Redis, and S3-compatible object storage
 - an exact-image migration step before an application rollout
 - deployment planning, status, public verification, and application rollback
@@ -200,7 +200,7 @@ Apply performs the same steps on both drivers:
    Lease, or a `set -C` lock file in a state volume.
 3. Reconcile and wait for PodoKit-run dependencies.
 4. Run the migration with the exact API image digest.
-5. Roll out API, web, and any worker, and wait for them to become healthy.
+5. Roll out API, web, any worker, and the optional Compose gateway, then wait for health.
 6. Verify each configured public check, then release the lock.
 
 A second apply or rollback fails while the lock is held, which is what prevents
@@ -224,9 +224,9 @@ schema, roll forward instead.
 
 ## WebSocket endpoints
 
-Public WebSocket upgrades bypass the web service and go from the ingress directly to
-the API service. List every permitted endpoint under `exposure.webSocketPaths` in a
-Kubernetes deployment profile:
+Public WebSocket upgrades bypass the web service and go directly to the API service.
+List every permitted endpoint under `exposure.webSocketPaths` in the deployment
+profile. For Kubernetes Ingress:
 
 ```json
 {
@@ -237,21 +237,44 @@ Kubernetes deployment profile:
 }
 ```
 
-The list is empty by default. The rendered Ingress uses `pathType: Exact` for each
-entry and keeps the `/` prefix route on the web service, so a sibling path cannot
-reach the API accidentally. Root, wildcard, query, fragment, encoded-separator, and
-traversal values are rejected while the profile is loaded. This option requires
-`exposure.mode: "ingress"`; a NodePort cannot split traffic between two services.
+For Docker Compose:
 
-The ingress preserves the request cookie and forwarding headers during the upgrade.
-The API must still authenticate and authorize the handshake. Docker Compose
-deployments publish only the web service, so configure the host's external reverse
-proxy with the same exact-path rule when WebSocket endpoints are required there.
+```json
+{
+  "exposure": {
+    "mode": "publishedPort",
+    "webSocketPaths": ["/events/ws"],
+    "trustedProxyCidrs": [],
+    "gatewayImage": "caddy:2.10-alpine"
+  }
+}
+```
+
+The list is empty by default. Kubernetes renders `pathType: Exact` routes. Compose
+inserts a small internal gateway on the one published port: exact listed paths go to
+API and every other request goes to web. The external TLS reverse proxy therefore
+keeps one upstream and does not need to duplicate the path split. Planning resolves
+the gateway image to an immutable digest like every other image. With an empty list,
+Compose keeps the previous layout and publishes web directly without a gateway.
+
+Root, wildcard, query, fragment, encoded-separator, and traversal values are rejected
+while the profile is loaded, so a sibling path cannot reach API accidentally. On
+Kubernetes this option requires `exposure.mode: "ingress"`; a NodePort cannot split
+traffic between two services.
+
+Both routers preserve the request cookie during the upgrade. The API must still
+authenticate and authorize the handshake. The Compose gateway trusts forwarded
+headers only from the IP networks listed in `trustedProxyCidrs`; keep the list empty
+when there is no external proxy. Configure the direct upstream proxy CIDRs, not
+arbitrary client networks, and keep the published address reachable only by those
+proxies. Caddy strict proxy parsing then derives the client address from the first
+untrusted hop and safely replaces spoofed forwarding headers from other peers.
 
 Kubernetes deployments configure the web server to trust the ingress-provided
 `x-forwarded-proto` and `x-forwarded-host` headers. This keeps SvelteKit's
 same-origin form protection correct for multipart uploads and other form content.
-For a Docker Compose deployment behind a trusted reverse proxy, add matching
+For a Docker Compose deployment behind a trusted reverse proxy, first list that
+proxy's direct CIDR blocks in `trustedProxyCidrs`, then add matching
 `PROTOCOL_HEADER` and `HOST_HEADER` values to `runtimeConfig`. Do not enable those
 settings when untrusted clients can reach the container directly. A directly served
 plain-HTTP image can instead set its origin while building:

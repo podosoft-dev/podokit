@@ -90,6 +90,11 @@ a sample Todo repository and initial migration are included.
 
 Docker Compose lives in `infra/docker`; the basic k3s manifests in `infra/k3s`
 route every public path through the web proxy. Use `podo deploy init`, `doctor`,
-and `plan` for an exact-image Helm release on an existing cluster. Applying or
-rolling back requires the exact confirmation hash from a fresh plan. See the
+and `plan` for an exact-image release on Kubernetes or one Docker host. Applying
+or rolling back requires the exact confirmation hash from a fresh plan. See the
 PodoKit [deployment guide](https://github.com/podosoft-dev/podokit/blob/main/docs/deployment.md).
+
+For a Docker Compose deployment with API WebSockets, list their exact paths under
+`exposure.webSocketPaths`. The driver keeps one published port, routes those paths
+to API, and sends every other request to web. If an external reverse proxy supplies
+forwarding headers, list only its direct CIDR blocks in `exposure.trustedProxyCidrs`.

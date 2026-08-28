@@ -311,6 +311,7 @@ function resolveComposeImages(
   return {
     api: resolveImage(defaults.api, runner),
     web: resolveImage(defaults.web, runner),
+    gateway: defaults.gateway ? resolveImage(defaults.gateway, runner) : null,
     postgres: defaults.postgres ? resolveImage(defaults.postgres, runner) : null,
     redis: defaults.redis ? resolveImage(defaults.redis, runner) : null,
     objectStorage: defaults.objectStorage ? resolveImage(defaults.objectStorage, runner) : null,
@@ -592,7 +593,7 @@ export function planComposeDeployment(
   actions.push({
     order: order++,
     kind: "application",
-    description: `Roll out api, web${profile.workloads.worker ? ", worker" : ""} and wait for health.`,
+    description: `Roll out api, web${profile.workloads.worker ? ", worker" : ""}${profile.exposure.webSocketPaths.length ? ", gateway" : ""} and wait for health.`,
   });
   actions.push({
     order: order++,

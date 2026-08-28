@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { isIP } from "node:net";
 import { readManifest } from "./lockfile";
 import {
   DNS_LABEL,
@@ -23,6 +24,7 @@ import {
   validateImage,
   STABLE_SEMVER_TAG_PATTERN,
 } from "./deploy-schema";
+import { parseExactWebSocketPaths } from "./websocket-paths";
 
 /**
  * The Docker Compose deployment driver.
@@ -101,6 +103,9 @@ export interface DockerComposeProfileV1 {
     host: string;
     bindAddress: string;
     port: number;
+    webSocketPaths: string[];
+    trustedProxyCidrs: string[];
+    gatewayImage: string;
   };
   workloads: {
     api: ComposeWorkloadProfile;
@@ -132,6 +137,40 @@ const PROJECT_NAME = /^[a-z0-9][a-z0-9_-]*$/;
 /** An absolute POSIX path on the target host, with no traversal or control bytes. */
 const ABSOLUTE_PATH = /^\/(?:[A-Za-z0-9._-]+\/?)+$/;
 const VOLUME_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
+
+function parseTrustedProxyCidrs(value: unknown, field: string): string[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`Deployment profile field "${field}" must be a string array.`);
+  }
+
+  const parsed = value.map((entry, index) => {
+    if (typeof entry !== "string" || entry !== entry.trim()) {
+      throw new Error(
+        `Deployment profile field "${field}[${index}]" must be an IP CIDR block.`,
+      );
+    }
+    const separator = entry.lastIndexOf("/");
+    const address = entry.slice(0, separator);
+    const prefixText = entry.slice(separator + 1);
+    const family = isIP(address);
+    if (
+      separator <= 0 ||
+      family === 0 ||
+      !/^(?:0|[1-9][0-9]*)$/.test(prefixText) ||
+      Number(prefixText) > (family === 4 ? 32 : 128)
+    ) {
+      throw new Error(
+        `Deployment profile field "${field}[${index}]" must be an IP CIDR block.`,
+      );
+    }
+    return entry;
+  });
+
+  if (new Set(parsed).size !== parsed.length) {
+    throw new Error(`Deployment profile field "${field}" contains duplicate CIDR blocks.`);
+  }
+  return parsed.sort();
+}
 
 function validateCpu(value: string, field: string): void {
   if (!CPU_VALUE.test(value)) {
@@ -283,7 +322,19 @@ export function parseComposeProfile(value: unknown): DockerComposeProfileV1 {
   const migration = value.migration === undefined ? undefined : requiredRecord(value, "migration");
   const sync = value.sync === undefined ? undefined : requiredRecord(value, "sync");
   assertOnlyKeys(target, ["context", "endpointFingerprint", "project"], "target");
-  assertOnlyKeys(exposure, ["mode", "host", "bindAddress", "port"], "exposure");
+  assertOnlyKeys(
+    exposure,
+    [
+      "mode",
+      "host",
+      "bindAddress",
+      "port",
+      "webSocketPaths",
+      "trustedProxyCidrs",
+      "gatewayImage",
+    ],
+    "exposure",
+  );
   assertOnlyKeys(workloads, ["api", "web", "worker"], "workloads");
   assertOnlyKeys(dependencies, ["postgres", "redis", "objectStorage"], "dependencies");
   assertOnlyKeys(secrets, ["api", "web", "registryLogin"], "secrets");
@@ -312,6 +363,24 @@ export function parseComposeProfile(value: unknown): DockerComposeProfileV1 {
   }
   const port = requiredNumber(exposure, "port");
   if (port > 65535) throw new Error("Deployment exposure.port must be a TCP port.");
+  const webSocketPaths = parseExactWebSocketPaths(
+    exposure.webSocketPaths ?? [],
+    "exposure.webSocketPaths",
+  );
+  const trustedProxyCidrs = parseTrustedProxyCidrs(
+    exposure.trustedProxyCidrs ?? [],
+    "exposure.trustedProxyCidrs",
+  );
+  if (trustedProxyCidrs.length > 0 && webSocketPaths.length === 0) {
+    throw new Error(
+      "Deployment exposure.trustedProxyCidrs requires at least one exposure.webSocketPaths entry.",
+    );
+  }
+  const gatewayImage =
+    exposure.gatewayImage === undefined
+      ? "caddy:2.10-alpine"
+      : requiredString(exposure, "gatewayImage");
+  validateImage(gatewayImage, "exposure.gatewayImage");
 
   const web = parseComposeWorkload(requiredRecord(workloads, "web"), "workloads.web");
   // Compose has no load balancer. Two replicas of the service that publishes the
@@ -345,7 +414,15 @@ export function parseComposeProfile(value: unknown): DockerComposeProfileV1 {
     driver: "docker-compose",
     target: { context, endpointFingerprint, project },
     release: parseReleaseProfile(requiredRecord(value, "release")),
-    exposure: { mode: "publishedPort", host, bindAddress, port },
+    exposure: {
+      mode: "publishedPort",
+      host,
+      bindAddress,
+      port,
+      webSocketPaths,
+      trustedProxyCidrs,
+      gatewayImage,
+    },
     workloads: {
       api: parseComposeWorkload(requiredRecord(workloads, "api"), "workloads.api"),
       web,
@@ -422,6 +499,9 @@ export function buildDefaultComposeProfile(
       // network before TLS exists.
       bindAddress: "127.0.0.1",
       port: 8080,
+      webSocketPaths: [],
+      trustedProxyCidrs: [],
+      gatewayImage: "caddy:2.10-alpine",
     },
     workloads: {
       api: { replicas: 2, resources: { cpuLimit: "1", memoryLimit: "1g" } },
