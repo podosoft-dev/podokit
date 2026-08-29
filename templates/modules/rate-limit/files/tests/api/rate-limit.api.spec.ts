@@ -12,6 +12,7 @@ const origin = { origin: base };
 // value so the window is crossed in a handful of requests); otherwise fall back
 // to the module default and allow a little headroom.
 const limit = Number(process.env.RATE_LIMIT_MAX ?? 300);
+const authLimit = Number(process.env.RATE_LIMIT_AUTH_MAX ?? 20);
 
 async function session(
   playwright: import("@playwright/test").PlaywrightWorkerArgs["playwright"],
@@ -61,5 +62,16 @@ test("rate limit: health probes stay available while ordinary routes return 429 
     success: false,
     error: { code: "RATE_LIMIT_EXCEEDED", statusCode: 429 },
   });
+  await ctx.dispose();
+});
+
+test("rate limit: session reads do not consume the strict authentication budget", async ({
+  playwright,
+}) => {
+  const ctx = await session(playwright);
+  for (let i = 0; i < authLimit + 5; i++) {
+    const response = await ctx.get("/api/auth/get-session");
+    expect(response.status(), `session request ${i + 1}`).toBe(200);
+  }
   await ctx.dispose();
 });
