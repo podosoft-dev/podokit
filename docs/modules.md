@@ -495,8 +495,9 @@ bun run dev
 # with RATE_LIMIT_MAX low, repeated requests return 429 once the window is exceeded
 ```
 
-General requests default to 300 per 60 seconds, authentication endpoints to 20
-per 60 seconds, and the public site-settings read to 1000 per 60 seconds.
+General requests default to 300 per 60 seconds, authentication mutations to 20
+per 60 seconds, and read-only session and public site-settings checks to 1000 per
+60 seconds.
 Configure these with `RATE_LIMIT_*`. Set `RATE_LIMIT_TRUSTED_PROXY_HOPS` to the
 exact number of proxies that replace or append the configured header; keep it at
 0 when the API accepts direct traffic. Malformed or incomplete forwarding chains

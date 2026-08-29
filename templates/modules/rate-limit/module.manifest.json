@@ -15,7 +15,7 @@
     "# stricter authentication endpoint ceiling",
     "RATE_LIMIT_AUTH_TTL=60",
     "RATE_LIMIT_AUTH_MAX=20",
-    "# higher ceiling for SSR runtime settings reads",
+    "# higher ceiling for SSR runtime settings and session reads",
     "RATE_LIMIT_RUNTIME_MAX=1000",
     "# trust no proxy hop by default; set the exact production proxy depth",
     "RATE_LIMIT_TRUSTED_PROXY_HOPS=0",

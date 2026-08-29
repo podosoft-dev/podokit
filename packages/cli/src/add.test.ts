@@ -654,6 +654,7 @@ describe("addModule (auth / better-auth)", () => {
     expect(rateLimitModule).toContain("RedisRateLimitStorage");
     expect(rateLimitModule).toContain('["/health", "/health/ready", "/api-docs"');
     expect(rateLimitModule).toContain('path.startsWith("/api/auth/")');
+    expect(rateLimitModule).toContain('path === "/api/auth/get-session"');
     expect(rateLimitModule).toContain('path === "/site/settings"');
     expect(rateLimitModule).toContain("RATE_LIMIT_EXCEEDED");
     expect(rateLimitModule).toContain("RATE_LIMIT_UNAVAILABLE");

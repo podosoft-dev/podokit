@@ -117,11 +117,14 @@ export class RateLimiter {
   }
 
   private profile(method: string, path: string): LimitProfile {
+    if (
+      method === "GET" &&
+      (path === "/api/auth/get-session" || path === "/site/settings")
+    ) {
+      return { name: "runtime", ttlSeconds: this.config.ttlSeconds, limit: this.config.runtimeLimit };
+    }
     if (path === "/api/auth" || path.startsWith("/api/auth/")) {
       return { name: "auth", ttlSeconds: this.config.authTtlSeconds, limit: this.config.authLimit };
-    }
-    if (method === "GET" && path === "/site/settings") {
-      return { name: "runtime", ttlSeconds: this.config.ttlSeconds, limit: this.config.runtimeLimit };
     }
     return { name: "general", ttlSeconds: this.config.ttlSeconds, limit: this.config.limit };
   }
