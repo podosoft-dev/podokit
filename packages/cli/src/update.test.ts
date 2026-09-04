@@ -438,8 +438,8 @@ describe("applyUpdate", () => {
       modules: { name: string; appliedMigrations?: string[] }[];
       managedOverrides: string[];
     };
-    expect(manifest.schemaVersion).toBe(3);
-    expect(readFilesLock(project)?.schemaVersion).toBe(3);
+    expect(manifest.schemaVersion).toBe(4);
+    expect(readFilesLock(project)?.schemaVersion).toBe(4);
     expect(
       manifest.modules.find((module) => module.name === "admin-dashboard")
         ?.appliedMigrations,

@@ -1,6 +1,7 @@
 # Templates
 
 `podo create --template <name>` selects one of three Bun 1.4 templates.
+`--database postgres|sqlite` independently selects the initial database provider.
 
 | Template | Description |
 |---|---|
@@ -26,7 +27,7 @@ apps/
       app.ts               # assembled module/plugin registrations
       app.extensions.ts    # application-owned service/module extension point
       core/                # service registry, access policy, API contract
-      database/            # Bun.SQL runtime connection + migration DataSource
+      database/            # provider-aware Bun.SQL connection and migrations
       health/              # GET /health and /health/ready
       common/              # AppException and standard error envelope
     scripts/build.mjs      # Bun.build API, worker, and migrations
@@ -37,14 +38,16 @@ apps/
     src/lib/components/ui/ # vendored shadcn-svelte primitives
     Dockerfile             # oven/bun:1.4.0-alpine
 infra/
-  docker/                  # PostgreSQL and module-aware profiles
+  docker/                  # provider-aware development services
   k3s/                     # reference resources
 tests/                     # Playwright API and UI e2e suites
 bun.lock
 ```
 
-The request path uses Elysia and Bun.SQL. TypeORM is present only to execute
-versioned migrations. The merged OpenAPI document at `/api-docs-json` includes
+The request path uses Elysia and Bun.SQL with PostgreSQL or SQLite. TypeORM is
+present only to execute versioned migrations. Other infrastructure is selected
+through the contracts described in [Runtime providers](providers.md). The merged
+OpenAPI document at `/api-docs-json` includes
 Elysia, module, and Better Auth routes. `bun run --cwd apps/api contract`
 compares that document with the generated project manifest.
 
@@ -74,7 +77,7 @@ The Todo template adds:
 
 - an Elysia plugin for `GET/POST/PATCH/DELETE /todos`;
 - a Bun.SQL repository;
-- a numbered PostgreSQL migration;
+- a numbered provider-aware migration;
 - a SvelteKit Todo page; and
 - unit/API/UI tests.
 

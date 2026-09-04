@@ -1,5 +1,5 @@
 import type { SQL } from "bun";
-import type { StorageService } from "../storage/storage.service";
+import type { ObjectData, ObjectStore } from "@podosoft/podokit-runtime";
 
 const PREFIX = "site.";
 const FAVICON_KEY = "site/favicon";
@@ -31,10 +31,16 @@ export interface SiteFavicon {
   contentType: string;
 }
 
+async function objectBuffer(object: ObjectData): Promise<Buffer> {
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of object.body) chunks.push(chunk);
+  return Buffer.concat(chunks);
+}
+
 export class SiteSettingsService {
   constructor(
     private readonly sql: SQL,
-    private readonly storage: StorageService,
+    private readonly storage: ObjectStore,
   ) {}
 
   async getAll(): Promise<Record<string, string>> {
@@ -66,7 +72,7 @@ export class SiteSettingsService {
   }
 
   async setFavicon(body: Uint8Array, contentType: string): Promise<void> {
-    await this.storage.put(FAVICON_KEY, body, contentType);
+    await this.storage.put(FAVICON_KEY, body, { contentType });
     await this.setMany({
       faviconContentType: contentType,
       faviconUpdatedAt: String(Date.now()),
@@ -77,7 +83,7 @@ export class SiteSettingsService {
     const contentType = await this.get("faviconContentType");
     if (!contentType) return null;
     try {
-      return { body: await this.storage.get(FAVICON_KEY), contentType };
+      return { body: await objectBuffer(await this.storage.get(FAVICON_KEY)), contentType };
     } catch {
       return null;
     }

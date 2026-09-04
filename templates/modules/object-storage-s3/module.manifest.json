@@ -1,7 +1,9 @@
 {
+  "manifestVersion": 3,
   "name": "object-storage-s3",
   "description": "Bun-native S3-compatible object storage for AWS S3 or MinIO with a StorageService and presigned URLs.",
   "requires": [],
+  "provides": { "object-storage": "s3" },
   "requiredProjectFiles": [
     "apps/api/src/health/readiness.service.ts"
   ],

@@ -1,20 +1,19 @@
 {
   "name": "job-progress",
-  "description": "Live job progress: a worker reports progress over Redis pub/sub and the API relays it to SSE clients (combines bullmq + redis + sse).",
-  "requires": ["bullmq", "sse", "redis"],
+  "manifestVersion": 3,
+  "description": "Live job progress over the selected jobs and events providers, streamed to clients with SSE.",
+  "requires": ["sse"],
+  "requiresCapabilities": ["jobs", "events"],
   "targetApp": "api",
   "env": [],
   "inject": [
     { "file": "apps/api/src/app.ts", "marker": "// podokit:end:imports", "text": "import { jobProgressModule } from \"./progress/job-progress.module\";" },
-    { "file": "apps/api/src/app.ts", "marker": "// podokit:end:modules", "text": "jobProgressModule," },
-    { "file": "apps/api/src/jobs/worker.module.ts", "marker": "// podokit:end:worker-imports", "text": "import { processProgressJob } from \"../progress/progress.processor\";" },
-    { "file": "apps/api/src/jobs/worker.module.ts", "marker": "// podokit:end:worker-processors", "text": "{ queue: \"progress\", processor: processProgressJob }," }
+    { "file": "apps/api/src/app.ts", "marker": "// podokit:end:modules", "text": "jobProgressModule," }
   ],
   "instructions": [
-    "Start Redis + Postgres:  docker compose -f infra/docker/docker-compose.yml up -d",
-    "Run API and worker in separate terminals:  {{rootRun}} dev   /   {{apiRun}} dev:worker{{apiWorkspaceArg}}",
+    "Configure the selected jobs and events providers before starting the API.",
     "Watch progress:  curl -N localhost:5002/events/stream",
     "Start a job:     curl -XPOST localhost:5002/progress -H 'content-type: application/json' -d '{\"steps\":5}'",
-    "The stream shows job-progress events 20 -> 40 -> ... -> 100 pushed from the worker via Redis."
+    "The stream shows job-progress events 20 -> 40 -> ... -> 100 through the selected events provider."
   ]
 }

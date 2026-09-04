@@ -22,13 +22,6 @@
   "engines": {
     "node": ">=20"
   },
-  "peerDependencies": {
-    "pg": "^8"
-  },
-  "devDependencies": {
-    "pg": "^8.23.0",
-    "@types/pg": "^8.23.1"
-  },
   "publishConfig": {
     "access": "public",
     "provenance": true

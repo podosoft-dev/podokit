@@ -114,6 +114,12 @@ registering changing local ports. See
 
 ## Verify template and module changes
 
+Provider implementations share contracts from `@podosoft/podokit-runtime`.
+Use `podo provider list` to inspect a generated app and verify both the selected
+provider and every feature module that consumes its capability. Local providers
+must be tested with one API process; distributed providers must still exercise
+their real backing services. See [Runtime providers](providers.md).
+
 Run static gates in a freshly generated app:
 
 ```bash

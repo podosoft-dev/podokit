@@ -105,8 +105,10 @@ E2E_BASE_URL=http://app.localhost \
   bunx playwright test api/<feature>.api.spec.ts
 ```
 
-Use a real PostgreSQL migration for database changes and real Redis/MinIO
-services for modules that depend on them. Authentication work must exercise
+Use a real migration for the selected database and real Redis/MinIO services for
+distributed provider modules that depend on them. SQLite, memory, local-file, and
+local-job tests must still run through a freshly generated application rather
+than only contract fixtures. Authentication work must exercise
 cookies or bearer tokens through the web proxy, not only call service classes.
 
 ### Tier 3: faithful Outer gate

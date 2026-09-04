@@ -21,4 +21,11 @@ export {
   socialKey,
   envAuthConfig,
 } from "./auth-config";
-export { type SmtpConfig, createConfigStore } from "./config-store";
+export {
+  type AuthConfigQueryClient,
+  type AuthConfigRepository,
+  type AuthConfigRow,
+  type SmtpConfig,
+  createConfigStore,
+  createQueryAuthConfigRepository,
+} from "./config-store";

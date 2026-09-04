@@ -45,6 +45,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@podosoft/podokit-runtime": "^0.1.0",
     "@podosoft/podokit-template-engine": "^0.4.2"
   }
 }

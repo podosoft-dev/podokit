@@ -16,7 +16,7 @@ test("file upload: multipart upload returns a key and url @smoke", async ({ play
     multipart: { file: { name: "hello.txt", mimeType: "text/plain", buffer: Buffer.from("hi there") } },
   });
   const responseText = await res.text();
-  test.skip(res.status() >= 500, "object storage (MinIO/S3) not reachable");
+  test.skip(res.status() >= 500, "selected object storage is not reachable");
   expect(res.ok(), `upload returned ${res.status()}: ${responseText}`).toBeTruthy();
   const body = JSON.parse(responseText) as unknown;
   expect(typeof body).toBe("object");

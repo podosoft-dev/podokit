@@ -1,19 +1,39 @@
-import { Queue } from "bullmq";
+import { JOBS, type JobQueue, type Unsubscribe } from "@podosoft/podokit-runtime";
 import { Elysia, t } from "elysia";
 import type { AppPlugin, PodokitModule, ServiceKey } from "../core/services";
-import { EVENTS } from "../events/events.module";
-import { redisConnection } from "../jobs/queue";
-import { REDIS } from "../redis/redis.module";
-import { ProgressBridge } from "./progress.bridge";
+import { SSE_EVENTS } from "../events/events.module";
+import { processProgress } from "./progress.processor";
 
-const PROGRESS_QUEUE = Symbol("progress-queue") as ServiceKey<Queue>;
-const PROGRESS_BRIDGE = Symbol("progress-bridge") as ServiceKey<ProgressBridge>;
+class ProgressWorker {
+  private unsubscribe?: Unsubscribe;
+
+  constructor(
+    private readonly queue: JobQueue,
+    private readonly publish: (event: unknown) => Promise<void>,
+  ) {}
+
+  async connect(): Promise<void> {
+    this.unsubscribe = await this.queue.process("progress", async (payload, job) => {
+      await processProgress(payload, (progress) => this.publish({
+        type: "job-progress",
+        jobId: job.id,
+        progress,
+      }));
+    });
+  }
+
+  async close(): Promise<void> {
+    await this.unsubscribe?.();
+  }
+}
+
+const PROGRESS_WORKER = Symbol("progress-worker") as ServiceKey<ProgressWorker>;
 
 const progressPlugin: AppPlugin = ({ services }) => {
-  const queue = services.resolve(PROGRESS_QUEUE);
+  const queue = services.resolve(JOBS);
   return new Elysia({ name: "podokit.job-progress" })
     .post("/progress", async ({ body, set }) => {
-      const job = await queue.add("progress", { steps: body.steps ?? 5 });
+      const job = await queue.enqueue("progress", { steps: body.steps ?? 5 });
       set.status = 201;
       return { jobId: job.id };
     }, {
@@ -25,11 +45,13 @@ const progressPlugin: AppPlugin = ({ services }) => {
 export const jobProgressModule: PodokitModule = {
   name: "job-progress",
   configure: (_env, services): void => {
-    const queue = new Queue("progress", { connection: redisConnection() });
-    const bridge = new ProgressBridge(services.resolve(REDIS), services.resolve(EVENTS));
-    services.register(PROGRESS_QUEUE, queue, () => queue.close());
-    services.register(PROGRESS_BRIDGE, bridge, () => bridge.close());
-    services.onStart(() => bridge.connect());
+    const events = services.resolve(SSE_EVENTS);
+    const worker = new ProgressWorker(
+      services.resolve(JOBS),
+      (event) => events.publishAsync(event),
+    );
+    services.register(PROGRESS_WORKER, worker, () => worker.close());
+    services.onStart(() => worker.connect());
   },
   plugin: progressPlugin,
 };

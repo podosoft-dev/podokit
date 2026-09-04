@@ -12,6 +12,7 @@ import {
   writeFilesLock,
   writeManifest,
 } from "./lockfile";
+import { applyProviderChange } from "./provider";
 
 const REPO_TEMPLATES = resolve(process.cwd(), "..", "..", "templates");
 const MODULES = join(REPO_TEMPLATES, "modules");
@@ -157,6 +158,44 @@ describe("module project baseline requirements", () => {
     expect(
       existsSync(join(project, "apps/api/src/first/first.module.ts")),
     ).toBe(false);
+  });
+});
+
+describe("provider capability requirements", () => {
+  it("adds the selected S3 provider for file upload by default", () => {
+    const project = generate("fullstack");
+    const result = addModule({ projectRoot: project, module: "file-upload", modulesDir: MODULES });
+    expect(result.added).toContain("object-storage-s3");
+    expect(readManifest(project)?.modules.map((entry) => entry.name)).toEqual([
+      "object-storage-s3",
+      "file-upload",
+    ]);
+  });
+
+  it("adds local object storage after changing the capability selection", () => {
+    const project = generate("fullstack");
+    applyProviderChange(project, "object-storage", "local");
+    const result = addModule({ projectRoot: project, module: "file-upload", modulesDir: MODULES });
+    expect(result.added).toContain("object-storage-local");
+    expect(result.added).not.toContain("object-storage-s3");
+    expect(existsSync(join(project, "apps/api/src/storage-local/storage-local.module.ts"))).toBe(true);
+  });
+
+  it("validates provider declarations in manifest v3", () => {
+    const project = generate("fullstack");
+    const modulesDir = join(tmp(), "modules");
+    writeFile(
+      join(modulesDir, "invalid-provider", "module.manifest.json"),
+      JSON.stringify({
+        manifestVersion: 3,
+        name: "invalid-provider",
+        description: "test",
+        targetApp: "api",
+        provides: { cache: "unknown" },
+      }),
+    );
+    expect(() => addModule({ projectRoot: project, module: "invalid-provider", modulesDir }))
+      .toThrow("declares invalid provider");
   });
 });
 
@@ -333,10 +372,10 @@ describe("mailer extraction", () => {
     const result = addModule({ projectRoot: project, module: "auth", modulesDir: MODULES });
     // auth requires mailer -> auto-added
     expect(result.added).toContain("mailer");
-    // mailer ships the mail library with its own pool (no dependency on auth)
+    // mailer ships the mail library without owning a database connection
     expect(existsSync(join(project, "apps/api/src/mail/mailer.ts"))).toBe(true);
-    expect(existsSync(join(project, "apps/api/src/mail/db.ts"))).toBe(true);
-    expect(readFileSync(join(project, "apps/api/src/mail/mailer.ts"), "utf8")).toContain('from "./db"');
+    expect(existsSync(join(project, "apps/api/src/mail/db.ts"))).toBe(false);
+    expect(readFileSync(join(project, "apps/api/src/mail/mailer.ts"), "utf8")).toContain("setMailConfigStore");
     // auth's email flows go through the mailer module's file
     expect(readFileSync(join(project, "apps/api/src/auth/auth.ts"), "utf8")).toContain('from "../mail/mailer"');
     // nodemailer ships via the mailer module (merged into the api workspace)
@@ -558,15 +597,15 @@ describe("addModule (auth / better-auth)", () => {
     addModule({ projectRoot: project, module: "sse", modulesDir: MODULES });
     expect(existsSync(join(project, "apps/api/src/events/events.module.ts"))).toBe(true);
     expect(existsSync(join(project, "apps/api/src/events/events.service.ts"))).toBe(true);
-    expect(existsSync(join(project, "apps/api/src/events/events.transport.ts"))).toBe(true);
+    expect(existsSync(join(project, "apps/api/src/events-provider-redis/redis-event.bus.ts"))).toBe(true);
     expect(readFileSync(join(project, "apps/api/src/app.ts"), "utf8")).toContain("eventsModule,");
     const apiPkg = JSON.parse(readFileSync(join(project, "apps/api/package.json"), "utf8")) as {
       dependencies: Record<string, string>;
     };
     expect(apiPkg.dependencies["ioredis"]).toBeUndefined();
     const envExample = readFileSync(join(project, ".env.example"), "utf8");
-    expect(envExample).toContain("SSE_TRANSPORT=memory");
-    expect(envExample).toContain("SSE_REDIS_CHANNEL=podokit:events");
+    expect(envExample).toContain("EVENTS_REDIS_CHANNEL=podokit:events");
+    expect(envExample).toContain("SSE_MAX_EVENT_BYTES=65536");
     const service = readFileSync(
       join(project, "apps/api/src/events/events.service.ts"),
       "utf8",
@@ -592,24 +631,21 @@ describe("addModule (auth / better-auth)", () => {
     expect(redisService).toContain('readiness?.register("redis"');
   });
 
-  it("job-progress composes bullmq + sse + redis and wires the worker", () => {
+  it("job-progress composes the selected jobs and events providers", () => {
     const project = generate("fullstack");
     const result = addModule({ projectRoot: project, module: "job-progress", modulesDir: MODULES });
 
-    expect(result.added).toEqual(expect.arrayContaining(["bullmq", "sse", "redis"]));
+    expect(result.added).toEqual(expect.arrayContaining(["bullmq", "sse", "events-redis"]));
+    expect(result.added).not.toContain("redis");
     expect(existsSync(join(project, "apps/api/src/progress/progress.processor.ts"))).toBe(true);
     // API wiring
     expect(readFileSync(join(project, "apps/api/src/app.ts"), "utf8")).toContain("jobProgressModule,");
-    // worker wiring (into bullmq's worker.module)
-    const worker = readFileSync(join(project, "apps/api/src/jobs/worker.module.ts"), "utf8");
-    expect(worker).toContain("processProgressJob");
-    expect(worker).toContain('{ queue: "progress", processor: processProgressJob },');
-    const bridge = readFileSync(
-      join(project, "apps/api/src/progress/progress.bridge.ts"),
+    const module = readFileSync(
+      join(project, "apps/api/src/progress/job-progress.module.ts"),
       "utf8",
     );
-    expect(bridge).toContain("events.publishLocal");
-    expect(bridge).not.toContain("events.publish({");
+    expect(module).toContain('queue.process("progress"');
+    expect(module).toContain("events.publishAsync");
   });
 
   it("adds structured pino logging with env and wiring", () => {
@@ -651,7 +687,7 @@ describe("addModule (auth / better-auth)", () => {
     expect(envExample).toContain("RATE_LIMIT_TRUSTED_PROXY_HOPS");
     expect(readFileSync(join(project, "apps/api/src/app.ts"), "utf8")).toContain("rateLimitModule,");
     const rateLimitModule = readFileSync(join(project, "apps/api/src/rate-limit/rate-limit.module.ts"), "utf8");
-    expect(rateLimitModule).toContain("RedisRateLimitStorage");
+    expect(rateLimitModule).toContain("CacheRateLimitStorage");
     expect(rateLimitModule).toContain('["/health", "/health/ready", "/api-docs"');
     expect(rateLimitModule).toContain('path.startsWith("/api/auth/")');
     expect(rateLimitModule).toContain('path === "/api/auth/get-session"');
@@ -659,7 +695,7 @@ describe("addModule (auth / better-auth)", () => {
     expect(rateLimitModule).toContain("RATE_LIMIT_EXCEEDED");
     expect(rateLimitModule).toContain("RATE_LIMIT_UNAVAILABLE");
     expect(rateLimitModule).toContain("REQUEST_GUARDS");
-    expect(rateLimitModule).toContain('this.client.send("EVAL"');
+    expect(rateLimitModule).toContain("incrementFixedWindow");
     const identity = readFileSync(
       join(project, "apps/api/src/rate-limit/rate-limit.identity.ts"),
       "utf8",

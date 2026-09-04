@@ -145,7 +145,6 @@ describe("deployment profiles", () => {
     expect(profile.runtimeConfig).toMatchObject({
       NODE_ENV: "production",
       BETTER_AUTH_URL: "https://app.example.com",
-      SSE_TRANSPORT: "redis",
       RATE_LIMIT_AUTH_MAX: "20",
       RATE_LIMIT_TRUSTED_PROXY_HOPS: "1",
     });
@@ -167,7 +166,34 @@ describe("deployment profiles", () => {
     const profile = loadDeploymentProfile(root, "production");
     expect(profile.workloads.api.replicas).toBe(2);
     expect(profile.dependencies.redis.mode).toBe("inCluster");
-    expect(profile.runtimeConfig.SSE_TRANSPORT).toBe("redis");
+    expect(profile.runtimeConfig.SSE_TRANSPORT).toBeUndefined();
+  });
+
+  it("disables external dependencies for local providers", () => {
+    const root = project();
+    const manifestPath = join(root, ".podokit", "manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+      providers: Record<string, string>;
+    };
+    manifest.providers = {
+      database: "sqlite",
+      cache: "memory",
+      "object-storage": "local",
+      events: "memory",
+      jobs: "local",
+    };
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+    initializeDeploymentProfile(root, "production", {
+      context: "production",
+      clusterFingerprint: fingerprint,
+      host: "app.example.com",
+    });
+    const profile = loadDeploymentProfile(root, "production");
+    expect(profile.workloads.api.replicas).toBe(1);
+    expect(profile.workloads.worker).toBeNull();
+    expect(profile.dependencies.postgres.mode).toBe("disabled");
+    expect(profile.dependencies.redis.mode).toBe("disabled");
+    expect(profile.dependencies.objectStorage.mode).toBe("disabled");
   });
 });
 

@@ -1,7 +1,8 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { RequestGuardContext } from "../core/services";
 import type { RateLimitIdentity } from "./rate-limit.identity";
-import { RateLimiter, type RateLimitStorage } from "./rate-limit.module";
+import { CacheRateLimitStorage, RateLimiter, type RateLimitStorage } from "./rate-limit.module";
+import { MemoryCacheStore } from "@podosoft/podokit-runtime";
 
 const config = {
   keyPrefix: "podokit:test:rate-limit",
@@ -32,6 +33,15 @@ function context(path: string, method = "GET"): {
 }
 
 describe("RateLimiter", () => {
+  test("uses the selected cache fixed-window primitive", async () => {
+    let now = 1_000;
+    const storage = new CacheRateLimitStorage(new MemoryCacheStore({ now: () => now }));
+    expect(await storage.increment("user", 60)).toMatchObject({ count: 1 });
+    expect(await storage.increment("user", 60)).toMatchObject({ count: 2 });
+    now += 60_000;
+    expect(await storage.increment("user", 60)).toMatchObject({ count: 1 });
+  });
+
   test("applies general, authentication, and runtime profiles", async () => {
     const increment = mock(async (_key: string, _ttlSeconds: number) => ({
       count: 1,

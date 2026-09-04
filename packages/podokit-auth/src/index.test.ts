@@ -1,4 +1,3 @@
-import type { Pool } from "pg";
 import { describe, it, expect, vi } from "vitest";
 import {
   DEFAULT_SESSION_IDLE_TIMEOUT_MINUTES,
@@ -88,11 +87,24 @@ describe("auth-config helpers", () => {
         updatedAt: new Date("2026-01-01T00:00:00Z"),
       }],
     });
-    const store = createConfigStore({ query } as unknown as Pool);
+    const store = createConfigStore({ query });
 
     await expect(store.capabilitiesSnapshot()).resolves.toMatchObject({
       auditLog: false,
       allowDelete: true,
     });
+  });
+
+  it("loads configuration through a database-neutral repository", async () => {
+    const list = vi.fn().mockResolvedValue([{
+      key: "server",
+      enabled: true,
+      config: { auditLog: true },
+      secret: null,
+      updatedAt: "2026-01-02T00:00:00Z",
+    }]);
+    const store = createConfigStore({ list });
+    await expect(store.capabilitiesSnapshot()).resolves.toMatchObject({ auditLog: true });
+    expect(list).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,0 +1,30 @@
+{
+  "manifestVersion": 3,
+  "name": "cache-memory",
+  "description": "Bounded in-process cache with TTL and fixed-window counters for a single API process.",
+  "provides": { "cache": "memory" },
+  "runtimeConstraints": { "maxApiReplicas": 1 },
+  "requiredProjectFiles": [
+    "apps/api/src/config/providers.ts"
+  ],
+  "managedGlobs": [
+    "apps/api/src/cache-memory/**"
+  ],
+  "targetApp": "api",
+  "env": [],
+  "inject": [
+    {
+      "file": "apps/api/src/app.ts",
+      "marker": "// podokit:end:imports",
+      "text": "import { cacheMemoryModule } from \"./cache-memory/cache-memory.module\";"
+    },
+    {
+      "file": "apps/api/src/app.ts",
+      "marker": "// podokit:end:modules",
+      "text": "cacheMemoryModule,"
+    }
+  ],
+  "instructions": [
+    "Memory cache is process-local. Keep the API at one replica or select the Redis provider."
+  ]
+}

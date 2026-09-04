@@ -1,16 +1,16 @@
 import { AppException } from "@podosoft/podokit-contracts";
-import { Queue } from "bullmq";
+import { JOBS } from "@podosoft/podokit-runtime";
 import { Elysia, t } from "elysia";
-import type { AppPlugin, PodokitModule, ServiceKey } from "../core/services";
-import { DEMO_QUEUE, redisConnection } from "./queue";
-
-export const JOB_QUEUE = Symbol("job-queue") as ServiceKey<Queue>;
+import { PROVIDERS } from "../config/providers";
+import type { AppPlugin, PodokitModule } from "../core/services";
+import { BullMqJobQueue } from "./bullmq-job.queue";
 
 const jobsPlugin: AppPlugin = ({ services }) => {
-  const queue = services.resolve(JOB_QUEUE);
+  if (PROVIDERS.jobs !== "bullmq") return new Elysia({ name: "podokit.jobs.inactive" });
+  const queue = services.resolve(JOBS);
   return new Elysia({ name: "podokit.jobs" })
     .post("/jobs", async ({ body, set }) => {
-      const job = await queue.add("demo", { text: body.text });
+      const job = await queue.enqueue("demo", { text: body.text });
       set.status = 201;
       return { id: job.id };
     }, {
@@ -18,9 +18,9 @@ const jobsPlugin: AppPlugin = ({ services }) => {
       detail: { tags: ["jobs"], summary: "Enqueue a job" },
     })
     .get("/jobs/:id", async ({ params }) => {
-      const job = await queue.getJob(params.id);
+      const job = await queue.get(params.id);
       if (!job) throw new AppException("JOB_NOT_FOUND", `Job ${params.id} not found`, 404);
-      return { id: job.id, state: await job.getState(), result: job.returnvalue ?? null };
+      return { id: job.id, state: job.status, result: job.result ?? null };
     }, {
       params: t.Object({ id: t.String({ minLength: 1 }) }),
       detail: { tags: ["jobs"], summary: "Read job status" },
@@ -30,8 +30,9 @@ const jobsPlugin: AppPlugin = ({ services }) => {
 export const jobsModule: PodokitModule = {
   name: "bullmq",
   configure: (_env, services): void => {
-    const queue = new Queue(DEMO_QUEUE, { connection: redisConnection() });
-    services.register(JOB_QUEUE, queue, () => queue.close());
+    if (PROVIDERS.jobs !== "bullmq") return;
+    const queue = new BullMqJobQueue();
+    services.register(JOBS, queue, () => queue.close());
   },
   plugin: jobsPlugin,
 };

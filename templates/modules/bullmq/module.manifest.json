@@ -1,9 +1,16 @@
 {
+  "manifestVersion": 3,
   "name": "bullmq",
   "description": "Background jobs with BullMQ: a demo queue, a separate worker process, and enqueue/status endpoints (needs Redis).",
   "requires": [],
+  "provides": { "jobs": "bullmq" },
   "requiredProjectFiles": [
+    "apps/api/src/config/providers.ts",
     "apps/api/src/config/redis.connection.ts"
+  ],
+  "managedGlobs": [
+    "apps/api/src/jobs/**",
+    "apps/api/src/main-worker.ts"
   ],
   "targetApp": "api",
   "dependencies": {

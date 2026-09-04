@@ -1,0 +1,30 @@
+{
+  "manifestVersion": 3,
+  "name": "events-memory",
+  "description": "In-process event bus for desktop and single API process applications.",
+  "provides": { "events": "memory" },
+  "runtimeConstraints": { "maxApiReplicas": 1 },
+  "requiredProjectFiles": [
+    "apps/api/src/config/providers.ts"
+  ],
+  "managedGlobs": [
+    "apps/api/src/events-provider-memory/**"
+  ],
+  "targetApp": "api",
+  "env": [],
+  "inject": [
+    {
+      "file": "apps/api/src/app.ts",
+      "marker": "// podokit:end:imports",
+      "text": "import { eventsMemoryModule } from \"./events-provider-memory/events-memory.module\";"
+    },
+    {
+      "file": "apps/api/src/app.ts",
+      "marker": "// podokit:end:modules",
+      "text": "eventsMemoryModule,"
+    }
+  ],
+  "instructions": [
+    "Memory events are process-local. Keep the API at one replica or select the Redis events provider."
+  ]
+}

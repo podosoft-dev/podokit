@@ -131,13 +131,19 @@ replicas and resources, dependency modes, the names (never the values) of the se
 it reads, an optional migration command, non-sensitive runtime configuration, and the
 public verification checks.
 
-Initialization reads the installed modules. Auth and API-key modules add their
-required secret key names, Redis-backed modules select Redis, object storage selects
-MinIO, SSE selects the Redis transport, and BullMQ adds a worker. Dependencies support
+Initialization reads the manifest's active providers and installed modules. Auth
+and API-key modules add their required secret key names, distributed providers
+select PostgreSQL, Redis, or MinIO, and BullMQ adds a worker. Local providers
+disable their managed external dependency, omit the separate worker, and constrain
+the API to one replica. Dependencies support
 `external` and `disabled` as well as PodoKit-managed. External endpoints and
 credentials belong in the referenced secret, not in the profile. `runtimeConfig`
 rejects keys that look like passwords, tokens, private keys, or credentials, and
 values containing URL user information.
+
+Provider selection is configuration, not data migration. A deployment plan does
+not copy or delete database rows, Redis state, queued jobs, or stored objects.
+See [Runtime providers](providers.md) before changing a deployed project.
 
 Profiles omit `migration` by default, which runs the selected project's package
 manager (`bun run migrate:all`) in the exact API image.

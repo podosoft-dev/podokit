@@ -1,8 +1,14 @@
 import { existsSync, readdirSync, rmSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { writeTree, type TemplateVars } from "@podosoft/podokit-template-engine";
+import {
+  isProviderName,
+  resolveProviderSelections,
+  type DatabaseProviderName,
+  type ProviderSelections,
+} from "@podosoft/podokit-runtime";
 import { DEFAULT_TEMPLATE } from "./templates";
-import { initLockfile } from "./lockfile";
+import { initLockfile, providerTemplateVars } from "./lockfile";
 import { renderProjectTemplate } from "./assemble";
 import {
   resolveToolchain,
@@ -42,6 +48,8 @@ export interface CreateOptions {
   podokitVersion?: string;
   /** Include AI agent guidance (AGENTS.md, CLAUDE.md, editor rules). Defaults to true. */
   ai?: boolean;
+  /** Database implementation selected for the generated project. */
+  database?: DatabaseProviderName;
 }
 
 export interface CreateResult {
@@ -49,6 +57,7 @@ export interface CreateResult {
   packageManager: Toolchain["packageManager"];
   toolchain: Toolchain;
   template: string;
+  providers: ProviderSelections;
 }
 
 const NAME_PATTERN = /^[a-z0-9](?:[a-z0-9-._]*[a-z0-9])?$/i;
@@ -76,6 +85,11 @@ export function create(options: CreateOptions): CreateResult {
 
   const template = options.template ?? DEFAULT_TEMPLATE;
   const toolchain = resolveToolchain(options.runtime, options.packageManager);
+  const database = options.database ?? "postgres";
+  if (!isProviderName("database", database)) {
+    throw new Error('Database provider must be either "postgres" or "sqlite".');
+  }
+  const providers = resolveProviderSelections({ database });
   const projectDir = options.targetDir
     ? isAbsolute(options.targetDir)
       ? options.targetDir
@@ -93,6 +107,7 @@ export function create(options: CreateOptions): CreateResult {
 
   const vars: TemplateVars = {
     projectName: name,
+    ...providerTemplateVars(providers),
     ...toolchainTemplateVars(toolchain),
   };
   writeTree(renderProjectTemplate(templatesDir, template, vars), projectDir);
@@ -106,6 +121,7 @@ export function create(options: CreateOptions): CreateResult {
     toolchain,
     answers: vars,
     version: options.podokitVersion,
+    providers,
   });
 
   return {
@@ -113,5 +129,6 @@ export function create(options: CreateOptions): CreateResult {
     packageManager: toolchain.packageManager,
     toolchain,
     template,
+    providers,
   };
 }

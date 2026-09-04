@@ -26,6 +26,7 @@ describe("AuditService", () => {
       expect(recorder.values).toHaveLength(1);
       expect(recorder.values[0]).toContain("invoice.paid");
       expect(recorder.values[0]).toContain('{"amount":42}');
+      expect(recorder.values[0]?.[0]).toBeString();
     } finally {
       service.close();
     }
@@ -38,6 +39,18 @@ describe("AuditService", () => {
       createdAt: new Date("2026-01-02T03:04:05.000Z"),
     }]);
     const entries = await new AuditService(recorder.sql).recent();
+    expect(entries[0]?.createdAt).toBe("2026-01-02T03:04:05.000Z");
+  });
+
+  test("normalizes SQLite timestamps and JSON text", async () => {
+    const recorder = sqlRecorder([{
+      id: "audit-1",
+      action: "auth.login",
+      metadata: '{"method":"password"}',
+      createdAt: "2026-01-02T03:04:05.000Z",
+    }]);
+    const entries = await new AuditService(recorder.sql).recent();
+    expect(entries[0]?.metadata).toEqual({ method: "password" });
     expect(entries[0]?.createdAt).toBe("2026-01-02T03:04:05.000Z");
   });
 

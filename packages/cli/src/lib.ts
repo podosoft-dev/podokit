@@ -4,6 +4,14 @@ import { join } from "node:path";
 
 export { create } from "./create";
 export type { CreateOptions, CreateResult } from "./create";
+export {
+  applyProviderChange,
+  listProviders,
+  planProviderChange,
+  providerSource,
+  PROVIDERS_SOURCE,
+} from "./provider";
+export type { ProviderChangePlan, ProviderListItem } from "./provider";
 export { TEMPLATES, DEFAULT_TEMPLATE, TEMPLATE_NAMES, isKnownTemplate } from "./templates";
 export type { TemplateInfo } from "./templates";
 export { listModules, addModule } from "./add";

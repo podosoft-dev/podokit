@@ -1,10 +1,14 @@
 import { Elysia } from "elysia";
 import pino, { type Logger } from "pino";
+import {
+  DATABASE as RUNTIME_DATABASE,
+  type ServiceKey,
+} from "@podosoft/podokit-runtime";
 import type { AppEnv } from "../config/env.validation";
 import { Database } from "../database/database";
 import { ReadinessService } from "../health/readiness.service";
 
-export type ServiceKey<T> = symbol & { readonly __service?: T };
+export type { ServiceKey } from "@podosoft/podokit-runtime";
 
 export class ServiceRegistry {
   private readonly values = new Map<symbol, unknown>();
@@ -142,7 +146,7 @@ export class OpenApiRegistry {
   }
 }
 
-export const DATABASE = Symbol("database") as ServiceKey<Database>;
+export const DATABASE = RUNTIME_DATABASE as ServiceKey<Database>;
 export const READINESS = Symbol("readiness") as ServiceKey<ReadinessService>;
 export const LOGGER = Symbol("logger") as ServiceKey<Logger>;
 export const ACCESS_POLICY = Symbol("access-policy") as ServiceKey<AccessPolicy>;
@@ -185,6 +189,7 @@ export function createCoreServices(env: AppEnv): ServiceRegistry {
   accessPolicy.register("*", "/api-docs-json", "public");
   accessPolicy.register("*", "/api-docs-elysia-json", "public");
   services.register(DATABASE, database, () => database.close());
+  services.onStart(() => database.connect());
   services.register(READINESS, readiness);
   services.register(LOGGER, logger);
   services.register(ACCESS_POLICY, accessPolicy);

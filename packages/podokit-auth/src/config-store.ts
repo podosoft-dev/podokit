@@ -1,4 +1,3 @@
-import type { Pool } from "pg";
 import { decryptSecret } from "./secret";
 import {
   type AuthConfig,
@@ -16,7 +15,40 @@ import {
 
 export type SmtpConfig = { host: string; port: number; secure: boolean; user?: string; pass?: string; from?: string };
 
-type Row = { key: string; enabled: boolean; config: unknown; secret: string | null; updatedAt: Date };
+export type AuthConfigRow = {
+  key: string;
+  enabled: boolean;
+  config: unknown;
+  secret: string | null;
+  updatedAt: Date | string | number;
+};
+
+export interface AuthConfigRepository {
+  list(): Promise<readonly AuthConfigRow[]>;
+}
+
+export interface AuthConfigQueryClient {
+  query<Row extends Record<string, unknown>>(
+    sql: string,
+  ): Promise<{ rows: Row[] }>;
+}
+
+export function createQueryAuthConfigRepository(
+  client: AuthConfigQueryClient,
+): AuthConfigRepository {
+  return {
+    list: async (): Promise<readonly AuthConfigRow[]> => {
+      const result = await client.query<AuthConfigRow>(
+        'SELECT "key", "enabled", "config", "secret", "updatedAt" FROM "auth_config"',
+      );
+      return result.rows;
+    },
+  };
+}
+
+function isRepository(source: AuthConfigRepository | AuthConfigQueryClient): source is AuthConfigRepository {
+  return "list" in source && typeof source.list === "function";
+}
 
 const TTL_MS = 3_000;
 
@@ -38,8 +70,9 @@ function object(value: unknown): Record<string, unknown> {
   return {};
 }
 
-export function createConfigStore(pool: Pool) {
-  let cache: Row[] = [];
+export function createConfigStore(source: AuthConfigRepository | AuthConfigQueryClient) {
+  const repository = isRepository(source) ? source : createQueryAuthConfigRepository(source);
+  let cache: readonly AuthConfigRow[] = [];
   let fetchedAt = 0;
 
   /** Drop the local TTL snapshot after an in-process configuration write. */
@@ -48,25 +81,24 @@ export function createConfigStore(pool: Pool) {
     fetchedAt = 0;
   }
 
-  async function rows(): Promise<Row[]> {
+  async function rows(): Promise<readonly AuthConfigRow[]> {
     if (fetchedAt !== 0 && Date.now() - fetchedAt < TTL_MS) return cache;
     fetchedAt = Date.now(); // set first so a slow/failing query still throttles retries
     try {
-      const res = await pool.query<Row>('SELECT "key", "enabled", "config", "secret", "updatedAt" FROM "auth_config"');
-      cache = res.rows;
+      cache = await repository.list();
     } catch {
       cache = []; // table not migrated yet / DB blip → env fallback
     }
     return cache;
   }
 
-  function versionOf(rs: Row[]): string {
+  function versionOf(rs: readonly AuthConfigRow[]): string {
     if (rs.length === 0) return "env";
     const latest = rs.reduce((max, r) => Math.max(max, new Date(r.updatedAt).getTime()), 0);
     return `db:${latest}`;
   }
 
-  function oauthFromRow(row: Row): OAuthProviderConfig {
+  function oauthFromRow(row: AuthConfigRow): OAuthProviderConfig {
     const config = object(row.config);
     const clientId = typeof config.clientId === "string" ? config.clientId : "";
     const redirectURI = typeof config.redirectURI === "string" ? config.redirectURI : undefined;
@@ -84,7 +116,7 @@ export function createConfigStore(pool: Pool) {
 
   // Resolve the full social-provider map: every `social.<id>` DB row for a
   // supported provider, then env fallback for google/github when they have no row.
-  function socialFrom(rs: Row[]): Record<string, OAuthProviderConfig> {
+  function socialFrom(rs: readonly AuthConfigRow[]): Record<string, OAuthProviderConfig> {
     const social: Record<string, OAuthProviderConfig> = {};
     for (const row of rs) {
       if (!row.key.startsWith("social.")) continue;

@@ -51,12 +51,15 @@ import {
   verifyComposeDeployment,
 } from "./deploy-compose";
 import { revertComposeSync, syncComposeDeployment } from "./deploy-compose-sync";
+import { applyProviderChange, listProviders, planProviderChange } from "./provider";
 
 const HELP = `podo — PodoKit project generator
 
 Usage:
   podo create <name> [options]
   podo add <module> [--adopt]
+  podo provider list        Show active runtime providers
+  podo provider set <capability> <provider> [--apply]
   podo remove <module>     Un-apply a module (inverse of add)
   podo status              Show version, modules, file tiers, and local edits
   podo diff                List PodoKit-managed files you have edited
@@ -72,6 +75,7 @@ Options:
   --template <t> Template to scaffold (see below)
   --dir <path>   Target directory (default: ./<name>)
   --runtime bun  Optional explicit Bun runtime selection
+  --database <provider>     Database provider: postgres | sqlite
   --name <label> Display name for a locale
   --direction <direction>  Text direction: ltr | rtl (default: ltr)
   --profile <name>         Deployment profile name
@@ -136,6 +140,7 @@ interface ParsedArgs {
   dir?: string;
   pm?: string;
   runtime?: string;
+  database?: string;
   from?: string;
   apply: boolean;
   adopt: boolean;
@@ -197,6 +202,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
       parsed.pm = argv[++i];
     } else if (arg === "--runtime") {
       parsed.runtime = argv[++i];
+    } else if (arg === "--database") {
+      parsed.database = argv[++i];
     } else if (arg === "--name") {
       parsed.localeName = argv[++i];
     } else if (arg === "--direction") {
@@ -398,6 +405,45 @@ async function main(argv: string[]): Promise<void> {
     return;
   }
   const modulesDir = join(__dirname, "templates", "modules");
+
+  if (args.command === "provider") {
+    const action = args.positionals[1] ?? "list";
+    try {
+      if (action === "list") {
+        const providers = listProviders(process.cwd());
+        process.stdout.write(
+          providers.map((item) =>
+            `${item.capability.padEnd(14)} ${item.selected.padEnd(10)} (${item.available.join(", ")})`
+          ).join("\n") + "\n",
+        );
+        return;
+      }
+      if (action === "set") {
+        const capability = args.positionals[2];
+        const provider = args.positionals[3];
+        if (!capability || !provider) {
+          fail("Usage: podo provider set <capability> <provider> [--apply]");
+        }
+        const plan = args.apply
+          ? applyProviderChange(process.cwd(), capability, provider, { modulesDir })
+          : planProviderChange(process.cwd(), capability, provider, modulesDir);
+        process.stdout.write(
+            `${plan.capability}: ${plan.from} -> ${plan.to}${plan.changed ? "" : " (unchanged)"}\n` +
+            plan.modulesToAdd.map((module) => `  ${args.apply ? "add" : "would add"} module ${module}`).join("\n") +
+            (plan.modulesToAdd.length ? "\n" : "") +
+            plan.files.map((file) => `  ${args.apply ? "write" : "would write"} ${file}`).join("\n") +
+            (plan.files.length ? "\n" : "") +
+            plan.warnings.map((warning) => `warning: ${warning}`).join("\n") +
+            (plan.warnings.length ? "\n" : "") +
+            (args.apply ? "Applied provider configuration.\n" : "Dry-run — nothing was written. Re-run with --apply to write.\n"),
+        );
+        return;
+      }
+      fail(`Unknown provider command "${action}". Use list or set.`);
+    } catch (err) {
+      fail((err as Error).message);
+    }
+  }
 
   if (args.command === "add") {
     const moduleName = args.name;
@@ -823,6 +869,7 @@ async function main(argv: string[]): Promise<void> {
       targetDir: args.dir,
       runtime: resolved.toolchain.runtime,
       ai: args.ai,
+      database: args.database === undefined ? undefined : args.database as "postgres" | "sqlite",
     });
     const relPath = relative(process.cwd(), result.projectDir) || ".";
     const rel = relPath.startsWith("..") ? result.projectDir : relPath;

@@ -6,7 +6,7 @@ can be launched by Node or Bun, but the generated application is Bun-only.
 ## Prerequisites
 
 - Bun 1.4.0 exactly
-- Docker for PostgreSQL and optional Redis/MinIO services
+- Docker when using PostgreSQL, Redis, or MinIO providers
 - Node.js 22 LTS only when running Playwright browser tests
 
 ## Create a project
@@ -18,6 +18,22 @@ npx @podosoft/podokit create my-app --template fullstack --yes
 # or
 bunx --bun @podosoft/podokit create my-app --template fullstack --yes
 ```
+
+For an embedded database, create with `--database sqlite`. Add the local cache,
+object storage, event, and job providers independently when the application must
+run without external infrastructure:
+
+```bash
+bunx --bun @podosoft/podokit create local-app --database sqlite --yes
+cd local-app
+bunx --bun @podosoft/podokit provider set cache memory --apply
+bunx --bun @podosoft/podokit provider set object-storage local --apply
+bunx --bun @podosoft/podokit provider set events memory --apply
+bunx --bun @podosoft/podokit provider set jobs local --apply
+```
+
+Local providers require one API process. Read [Runtime providers](providers.md)
+before changing an existing project or migrating data.
 
 Then install and start the container development loop:
 
