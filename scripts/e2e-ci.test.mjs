@@ -88,6 +88,19 @@ test("publishes and installs external modules in the faithful generated app", ()
   assert.ok(add > install);
 });
 
+test("publishes runtime providers before their generated app consumers", () => {
+  const source = readFileSync(join(repoRoot, "scripts/e2e-ci.mjs"), "utf8");
+  const contracts = source.indexOf('"@podosoft/podokit-contracts"');
+  const runtime = source.indexOf('"@podosoft/podokit-runtime"');
+  const auth = source.indexOf('"@podosoft/podokit-auth"');
+  const cli = source.indexOf('"@podosoft/podokit"');
+
+  assert.ok(contracts >= 0);
+  assert.ok(runtime > contracts);
+  assert.ok(auth > runtime);
+  assert.ok(cli > runtime);
+});
+
 test("isolates Bun package resolution from previously published local packages", () => {
   const source = readFileSync(join(repoRoot, "scripts/e2e-ci.mjs"), "utf8");
 
