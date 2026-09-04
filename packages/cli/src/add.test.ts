@@ -612,6 +612,12 @@ describe("addModule (auth / better-auth)", () => {
     );
     expect(service).toContain("publishAsync(data: unknown)");
     expect(service).toContain("publishLocal(data: unknown)");
+    expect(service).toContain('this.readiness.register("events"');
+    const providerModule = readFileSync(
+      join(project, "apps/api/src/events-provider-redis/events-redis.module.ts"),
+      "utf8",
+    );
+    expect(providerModule).not.toContain('register("events"');
   });
 
   it("adds redis with a client and cache endpoints", () => {
