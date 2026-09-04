@@ -1,19 +1,20 @@
 import { ReadinessService } from "../health/readiness.service";
-import type { EventsTransport } from "./events.transport";
+import type { EventBus, Unsubscribe } from "@podosoft/podokit-runtime";
 
 type LocalHandler = (data: unknown) => void;
 
 export class EventsService {
   private readonly handlers = new Set<LocalHandler>();
   private unregisterReadiness?: () => void;
+  private unsubscribe?: Unsubscribe;
 
   constructor(
-    private readonly transport: EventsTransport,
+    private readonly transport: EventBus,
     private readonly readiness: ReadinessService,
   ) {}
 
   async connect(): Promise<void> {
-    await this.transport.connect((data) => this.publishLocal(data));
+    this.unsubscribe = await this.transport.subscribe("sse", (data) => this.publishLocal(data));
     this.unregisterReadiness = this.readiness.register("events", () => this.transport.ready());
   }
 
@@ -25,7 +26,7 @@ export class EventsService {
   }
 
   publishAsync(data: unknown): Promise<void> {
-    return this.transport.publish(data);
+    return this.transport.publish("sse", data);
   }
 
   publishLocal(data: unknown): void {
@@ -66,7 +67,7 @@ export class EventsService {
 
   async close(): Promise<void> {
     this.unregisterReadiness?.();
+    await this.unsubscribe?.();
     this.handlers.clear();
-    await this.transport.close();
   }
 }

@@ -449,10 +449,19 @@ export function initializeDeploymentProfile(
   if (!releaseName) throw new Error("Project name cannot be converted to a Kubernetes release name.");
   const host = options.host ?? "app.example.com";
   const modules = new Set(manifest.modules.map((module) => module.name));
-  const usesRedis = [...modules].some((module) =>
-    ["redis", "bullmq", "job-progress", "rate-limit", "sse"].includes(module),
-  );
-  const usesObjectStorage = modules.has("object-storage-s3");
+  const providers = manifest.providers;
+  const usesPostgres = providers.database === "postgres";
+  const usesRedis = (providers.cache === "redis"
+      && ["redis", "rate-limit"].some((module) => modules.has(module)))
+    || (providers.events === "redis" && modules.has("sse"))
+    || (providers.jobs === "bullmq" && modules.has("bullmq"));
+  const usesObjectStorage = providers["object-storage"] === "s3"
+    && modules.has("object-storage-s3");
+  const usesEmbeddedProviders = providers.database === "sqlite"
+    || providers.cache === "memory"
+    || providers["object-storage"] === "local"
+    || providers.events === "memory"
+    || providers.jobs === "local";
   const usesAuth = modules.has("auth");
   const apiRequiredKeys = [
     ...(usesAuth ? ["BETTER_AUTH_SECRET"] : []),
@@ -483,7 +492,7 @@ export function initializeDeploymentProfile(
     },
     workloads: {
       api: {
-        replicas: 2,
+        replicas: usesEmbeddedProviders ? 1 : 2,
         resources: {
           cpuRequest: "250m",
           cpuLimit: "1000m",
@@ -500,7 +509,7 @@ export function initializeDeploymentProfile(
           memoryLimit: "1Gi",
         },
       },
-      worker: modules.has("bullmq")
+      worker: providers.jobs === "bullmq" && modules.has("bullmq")
         ? {
             replicas: 1,
             resources: {
@@ -514,7 +523,7 @@ export function initializeDeploymentProfile(
     },
     dependencies: {
       postgres: {
-        mode: "inCluster",
+        mode: usesPostgres ? "inCluster" : "disabled",
         image: "postgres:16.10-alpine",
         secretName: `${releaseName}-postgres`,
         storageClassName: "",
@@ -551,7 +560,6 @@ export function initializeDeploymentProfile(
       ADDRESS_HEADER: "x-forwarded-for",
       XFF_DEPTH: "1",
       ...(usesAuth ? { BETTER_AUTH_URL: `https://${host}` } : {}),
-      ...(modules.has("sse") && usesRedis ? { SSE_TRANSPORT: "redis" } : {}),
       ...(modules.has("rate-limit")
         ? {
             RATE_LIMIT_TTL: "60",

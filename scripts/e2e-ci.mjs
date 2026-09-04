@@ -64,9 +64,10 @@ const EXTERNAL_MODULES = [
     packageName: "@podosoft/podokit-module-analytics",
   },
 ];
-// Publish order: contracts first (api-client depends on it), then the rest.
+// Publish shared contracts and runtime providers before their consumers.
 const PACKAGES = [
   "@podosoft/podokit-contracts",
+  "@podosoft/podokit-runtime",
   "@podosoft/podokit-auth",
   "@podosoft/podokit-template-engine",
   "@podosoft/podokit-api-client",

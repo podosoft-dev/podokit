@@ -11,12 +11,13 @@
     "contract": "bun scripts/verify-api-contract.ts",
     "migrate:all": "bun dist/database/migrate.js",
     "typeorm": "bunx typeorm-ts-node-commonjs -d src/database/data-source.ts",
-    "migration:run": "bun run typeorm -- migration:run",
-    "migration:revert": "bun run typeorm -- migration:revert",
+    "migration:run": "bun src/database/migrate.ts",
+    "migration:revert": "bun src/database/migrate.ts --revert",
     "migration:generate": "bun run typeorm -- migration:generate"
   },
   "dependencies": {
     "@podosoft/podokit-contracts": "^0.4.0",
+    "@podosoft/podokit-runtime": "^0.1.0",
     "@elysia/cors": "^1.4.2",
     "@elysia/openapi": "^1.4.15",
     "dotenv": "^16.4.5",

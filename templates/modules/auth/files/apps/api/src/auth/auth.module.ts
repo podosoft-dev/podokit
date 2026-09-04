@@ -20,6 +20,8 @@ import { getAuth, authRuntime, primeAuth } from "./auth-provider";
 import { generateAuthOpenApiDocument } from "./auth.openapi";
 import { ROLE_NAMES } from "./permissions";
 import { AuthService } from "./auth.service";
+import { configureAuthQueryDatabase } from "./db";
+import { setMailConfigStore } from "../mail/mailer";
 
 export const AUTH = Symbol("auth") as ServiceKey<AuthService>;
 export const SETTINGS = Symbol("settings") as ServiceKey<SettingsService>;
@@ -146,6 +148,8 @@ export const authModule: PodokitModule = {
   name: "auth",
   configure: (_env, services): void => {
     const database = services.resolve(DATABASE);
+    configureAuthQueryDatabase(database.sql);
+    setMailConfigStore(authConfigStore);
     const accessPolicy = services.resolve(ACCESS_POLICY);
     const settings = new SettingsService(database.sql);
     const authService = new AuthService(settings, accessPolicy);

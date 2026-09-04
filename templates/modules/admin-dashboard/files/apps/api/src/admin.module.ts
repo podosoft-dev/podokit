@@ -3,6 +3,7 @@ import {
   PROFILE_IMAGE_REQUIRED,
   PROFILE_IMAGE_TOO_LARGE,
 } from "@podosoft/podokit-contracts";
+import { OBJECT_STORAGE } from "@podosoft/podokit-runtime";
 import { Elysia, t } from "elysia";
 import { AUTH } from "./auth/auth.module";
 import {
@@ -20,7 +21,6 @@ import {
   SiteSettingsService,
 } from "./site-settings/site-settings.service";
 import { validateSiteSetting } from "./site-settings/site-settings.validation";
-import { STORAGE } from "./storage/storage.module";
 
 export const SITE_SETTINGS = Symbol("site-settings") as ServiceKey<SiteSettingsService>;
 export const PROFILE_IMAGES = Symbol("profile-images") as ServiceKey<ProfileImageService>;
@@ -138,7 +138,7 @@ const adminPlugin: AppPlugin = ({ services }) => {
 export const adminModule: PodokitModule = {
   name: "admin-dashboard",
   configure: (_env, services): void => {
-    const storage = services.resolve(STORAGE);
+    const storage = services.resolve(OBJECT_STORAGE);
     const site = new SiteSettingsService(services.resolve(DATABASE).sql, storage);
     const profileImages = new ProfileImageService(storage, services.resolve(LOGGER));
     services.register(SITE_SETTINGS, site);

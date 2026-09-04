@@ -11,6 +11,12 @@ import {
   type TemplateVars,
 } from "@podosoft/podokit-template-engine";
 import {
+  isProviderCapability,
+  isProviderName,
+  type ProviderCapability,
+} from "@podosoft/podokit-runtime";
+import {
+  manifestTemplateVars,
   matchGlob,
   readFilesLock,
   readManifest as readProjectManifest,
@@ -18,7 +24,6 @@ import {
   writeManifest,
   type ManifestModuleInput,
 } from "./lockfile";
-import { toolchainTemplateVars } from "./toolchain";
 
 interface Injection {
   file: string;
@@ -30,7 +35,14 @@ interface Injection {
 
 /** Highest `module.manifest.json` schema version this CLI understands. A package
  *  module declaring a higher version is rejected rather than mis-applied. */
-export const SUPPORTED_MANIFEST_VERSION = 2;
+export const SUPPORTED_MANIFEST_VERSION = 3;
+
+export interface ModuleRuntimeConstraints {
+  /** Maximum safe API replicas for process-local providers. */
+  maxApiReplicas?: number;
+  /** Whether jobs must execute inside the API process. */
+  embeddedWorker?: boolean;
+}
 
 export interface ModulePathMove {
   /** Project-relative file or directory path from an older module layout. */
@@ -65,6 +77,12 @@ export interface ModuleManifest {
   name: string;
   description: string;
   requires?: string[];
+  /** Runtime capabilities that must have an implementation module installed. */
+  requiresCapabilities?: ProviderCapability[];
+  /** Provider implementations supplied by this module. */
+  provides?: Partial<Record<ProviderCapability, string>>;
+  /** Deployment restrictions introduced by this implementation. */
+  runtimeConstraints?: ModuleRuntimeConstraints;
   targetApp: string;
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
@@ -207,6 +225,58 @@ function assertManifestVersion(name: string, manifest: ModuleManifest): void {
       `Module "${name}" needs a newer PodoKit (manifest v${manifest.manifestVersion}, this CLI supports v${SUPPORTED_MANIFEST_VERSION}). Update @podosoft/podokit.`,
     );
   }
+  for (const capability of manifest.requiresCapabilities ?? []) {
+    if (!isProviderCapability(capability)) {
+      throw new Error(`Module "${name}" requires unknown capability "${capability}".`);
+    }
+  }
+  for (const [capability, provider] of Object.entries(manifest.provides ?? {})) {
+    if (
+      !isProviderCapability(capability)
+      || typeof provider !== "string"
+      || !isProviderName(capability, provider)
+    ) {
+      throw new Error(`Module "${name}" declares invalid provider ${capability}=${String(provider)}.`);
+    }
+  }
+  const maxApiReplicas = manifest.runtimeConstraints?.maxApiReplicas;
+  if (
+    maxApiReplicas !== undefined
+    && (!Number.isSafeInteger(maxApiReplicas) || maxApiReplicas < 1)
+  ) {
+    throw new Error(`Module "${name}" declares an invalid maxApiReplicas constraint.`);
+  }
+}
+
+function providerModuleName(
+  projectRoot: string,
+  modulesDir: string,
+  capability: ProviderCapability,
+): string {
+  const project = readProjectManifest(projectRoot);
+  if (!project) throw new Error("Provider capabilities require a PodoKit project manifest.");
+  const selected = project.providers[capability];
+  for (const available of listModules(modulesDir, projectRoot)) {
+    const resolved = resolveModule(available.name, modulesDir, projectRoot);
+    if (!resolved) continue;
+    const provides = readModuleManifest(resolved.dir).provides;
+    if (provides?.[capability] === selected) return available.name;
+  }
+  throw new Error(
+    `No module provides the selected ${capability} provider "${selected}". ` +
+      `Choose another provider with podo provider set ${capability} <provider> --apply.`,
+  );
+}
+
+function requiredModules(
+  projectRoot: string,
+  modulesDir: string,
+  manifest: ModuleManifest,
+): string[] {
+  const capabilities = (manifest.requiresCapabilities ?? []).map((capability) =>
+    providerModuleName(projectRoot, modulesDir, capability)
+  );
+  return [...new Set([...(manifest.requires ?? []), ...capabilities])];
 }
 
 function assertRequiredProjectFiles(
@@ -286,7 +356,7 @@ function assertModuleGraphPrerequisites(
   const manifest = readModuleManifest(resolved.dir);
   assertManifestVersion(module, manifest);
   assertRequiredProjectFiles(projectRoot, module, manifest);
-  for (const required of manifest.requires ?? []) {
+  for (const required of requiredModules(projectRoot, modulesDir, manifest)) {
     assertModuleGraphPrerequisites(
       projectRoot,
       required,
@@ -459,7 +529,7 @@ function applyModule(
   const projectManifest = readProjectManifest(projectRoot);
   const vars: TemplateVars = {
     projectName: appName,
-    ...(projectManifest ? toolchainTemplateVars(projectManifest.toolchain) : {}),
+    ...(projectManifest ? manifestTemplateVars(projectManifest) : {}),
   };
   const manifest = readModuleManifest(moduleDir, vars);
 
@@ -472,7 +542,7 @@ function applyModule(
   const preserved: string[] = [];
   const adopted: string[] = [];
   const touched: string[] = [];
-  for (const required of manifest.requires ?? []) {
+  for (const required of requiredModules(projectRoot, modulesDir, manifest)) {
     if (applied.has(required) || isApplied(projectRoot, modulesDir, required)) continue;
     const result = applyModule(projectRoot, required, modulesDir, applied, adopt);
     added.push(required, ...result.added);

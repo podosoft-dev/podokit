@@ -1,0 +1,34 @@
+{
+  "manifestVersion": 3,
+  "name": "object-storage-local",
+  "description": "Atomic path-confined local filesystem object storage for desktop and single-host applications.",
+  "provides": { "object-storage": "local" },
+  "runtimeConstraints": { "maxApiReplicas": 1 },
+  "requiredProjectFiles": [
+    "apps/api/src/config/providers.ts"
+  ],
+  "managedGlobs": [
+    "apps/api/src/storage-local/**"
+  ],
+  "targetApp": "api",
+  "env": [
+    "# Local object storage root. Use an absolute path in production and desktop packaging.",
+    "LOCAL_STORAGE_PATH=./data/files"
+  ],
+  "inject": [
+    {
+      "file": "apps/api/src/app.ts",
+      "marker": "// podokit:end:imports",
+      "text": "import { storageLocalModule } from \"./storage-local/storage-local.module\";"
+    },
+    {
+      "file": "apps/api/src/app.ts",
+      "marker": "// podokit:end:modules",
+      "text": "storageLocalModule,"
+    }
+  ],
+  "instructions": [
+    "Local object storage is single-host. Back up LOCAL_STORAGE_PATH together with the database.",
+    "Keep the API at one replica or select the S3 provider."
+  ]
+}

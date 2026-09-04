@@ -1,16 +1,14 @@
 {
+  "manifestVersion": 3,
   "name": "sse",
   "description": "Server-Sent Events with memory or Redis transport for multi-replica delivery.",
-  "requires": [],
+  "requiresCapabilities": ["events"],
   "requiredProjectFiles": [
-    "apps/api/src/config/redis.connection.ts",
     "apps/api/src/health/readiness.service.ts"
   ],
   "targetApp": "api",
   "env": [
-    "# Server-Sent Events transport: memory for one API replica, redis for multiple replicas",
-    "SSE_TRANSPORT=memory",
-    "SSE_REDIS_CHANNEL=podokit:events",
+    "# Maximum encoded Server-Sent Event payload",
     "SSE_MAX_EVENT_BYTES=65536"
   ],
   "inject": [
@@ -20,7 +18,7 @@
   "instructions": [
     "Stream events:  curl -N localhost:5002/events/stream",
     "Publish a message (in another terminal):  curl -XPOST localhost:5002/events -H 'content-type: application/json' -d '{\"message\":\"hello\"}'",
-    "Set SSE_TRANSPORT=redis for delivery across API replicas; Redis uses the shared REDIS_URL or individual Redis settings.",
+    "Select events=redis for multiple replicas or events=memory for a single process.",
     "Inject EventsService and call publishAsync for confirmed delivery, publish for best-effort delivery, or publishLocal for events already fanned out to every replica."
   ]
 }

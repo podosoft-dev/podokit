@@ -8,9 +8,9 @@ Follow it so your changes match the project's conventions.
 
 A Bun 1.4 full-stack TypeScript monorepo ({{packageManager}} workspaces):
 
-- `apps/api` — **Elysia** backend (`{{projectName}}-api`), Bun.SQL + PostgreSQL, merged OpenAPI at `/api-docs`.
+- `apps/api` — **Elysia** backend (`{{projectName}}-api`), Bun.SQL + `{{databaseProvider}}`, merged OpenAPI at `/api-docs`.
 - `apps/web` — **SvelteKit** frontend (`{{projectName}}-web`), Tailwind v4 + shadcn-svelte + typesafe-i18n.
-- `infra/` — Docker Compose (PostgreSQL/Redis) and example k3s manifests.
+- `infra/` — provider-aware Docker Compose and example k3s manifests.
 - `.podokit/` — PodoKit generation metadata plus application-owned development and
   deployment profiles (see "PodoKit tooling" below).
 
@@ -19,7 +19,7 @@ A Bun 1.4 full-stack TypeScript monorepo ({{packageManager}} workspaces):
 ```bash
 {{packageManager}} install
 cp .env.example .env
-docker compose -f infra/docker/docker-compose.yml up -d   # PostgreSQL (+ Redis)
+docker compose -f infra/docker/docker-compose.yml up -d   # selected external providers only
 {{rootRun}} dev        # api on http://localhost:5002, web on http://localhost:5001
 ```
 
@@ -74,6 +74,7 @@ Useful commands:
   exact API WebSocket allowlist; never use a prefix or wildcard for that allowlist.
 - `podo add <module>` — add a feature (auth, admin-dashboard, redis, bullmq, …). It wires itself into the app; run `podo add` with no argument to list modules.
 - `podo remove <module>` — un-apply a module (inverse of add; refuses if another module needs it, keeps files you edited).
+- `podo provider list` / `podo provider set <capability> <provider> [--apply]` — inspect or switch database, cache, object storage, events, and jobs. Set is dry-run by default and never migrates or deletes provider data. Local providers require one API process.
 - `podo status` / `podo diff` — see your local edits vs. what PodoKit generated.
 - `podo update` — pull in template/module improvements (3-way merges your edits; never touches owned files).
 - `podo deploy` — plan, apply, verify, or roll back an immutable release on Kubernetes or one Docker host. Production API WebSocket paths belong in the deployment profile's exact `exposure.webSocketPaths` allowlist; Compose trusts forwarding headers only from `exposure.trustedProxyCidrs`. Tag `vX.Y.Z` to build and push the images (`.github/workflows/release.yml`; check its runner — GitHub-hosted minutes are free for public repositories only). Use `.agents/skills/podokit-deploy`.

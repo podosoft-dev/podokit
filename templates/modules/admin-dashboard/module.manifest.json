@@ -1,11 +1,9 @@
 {
-  "manifestVersion": 2,
+  "manifestVersion": 3,
   "name": "admin-dashboard",
   "description": "Admin console UI (SvelteKit + shadcn-svelte): the `(admin)` route group and `admin-sidebar.svelte` are reserved for `/admin/*`; put protected product pages in `(app)` or their own guarded layout. Requires auth.",
-  "requires": [
-    "auth",
-    "object-storage-s3"
-  ],
+  "requires": ["auth"],
+  "requiresCapabilities": ["object-storage"],
   "targetApp": "web",
   "dependencies": {
     "qrcode": "^1.5.4"

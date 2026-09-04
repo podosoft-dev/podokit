@@ -1,8 +1,8 @@
 # PodoKit
 
 PodoKit is an opinionated Bun 1.4 full-stack toolkit and CLI built around
-**Elysia**, **SvelteKit**, **TailwindCSS**, **shadcn-svelte**, PostgreSQL,
-Redis, Docker, and k3s.
+**Elysia**, **SvelteKit**, **TailwindCSS**, **shadcn-svelte**, selectable
+PostgreSQL/SQLite and distributed/local runtime providers, Docker, and k3s.
 
 PodoKit v1 intentionally generates Bun-only applications. The CLI itself can
 still be launched with `npx` or `bunx`, but generated API, web, worker,
@@ -40,6 +40,7 @@ Options:
   --template <t>   fullstack (default) | todo | base
   --dir <path>     Target directory (default: ./<name>)
   --runtime bun    Optional explicit Bun selection
+  --database <p>   postgres (default) | sqlite
   -y, --yes        Skip prompts and accept defaults
   -h, --help       Show help
 ```
@@ -49,6 +50,7 @@ Options:
 | `podo create <name>` | Scaffold a Bun 1.4 project |
 | `podo add <module>` | Add a feature module and its dependencies |
 | `podo remove <module>` | Remove a module while preserving local edits |
+| `podo provider <command>` | Inspect or switch runtime providers with a dry-run-first workflow |
 | `podo status` | Show version, modules, file tiers, and local edits |
 | `podo diff` | List edited managed files |
 | `podo doctor` | Check Elysia, Svelte, and Better Auth ranges |
@@ -62,7 +64,7 @@ Options:
 
 | Template | Description |
 |---|---|
-| `fullstack` (default) | Bun + Elysia + SvelteKit foundation with Bun.SQL, merged OpenAPI, Docker Compose, and k3s |
+| `fullstack` (default) | Bun + Elysia + SvelteKit foundation with Bun.SQL, selectable providers, merged OpenAPI, Docker Compose, and k3s |
 | `todo` | The fullstack foundation plus a tested Bun.SQL Todo CRUD example |
 | `base` | Minimal Bun workspace |
 
@@ -70,11 +72,12 @@ Options:
 npx @podosoft/podokit create my-app
 npx @podosoft/podokit create my-app --template todo
 npx @podosoft/podokit create my-app --template base
+npx @podosoft/podokit create local-app --database sqlite
 ```
 
 The generated API uses Elysia on the request path, Bun.SQL for application
-queries, Bun's Redis and S3 clients where those modules are installed, and a
-small TypeORM layer only for versioned migrations. API documentation is
+queries, provider-neutral cache, object storage, events, and jobs contracts,
+and a small TypeORM layer only for versioned migrations. API documentation is
 available at `/api-docs`; `/api-docs-json` merges Elysia routes, PodoKit module
 routes, and Better Auth's dynamic OpenAPI document.
 
@@ -120,8 +123,25 @@ See [Modules](docs/modules.md) for capabilities and endpoints.
 
 The `admin-dashboard` module adds user/session administration, account security,
 profile images, audit views, and runtime Settings for authentication providers,
-SMTP, sign-up policy, and feature flags. Secrets are encrypted in PostgreSQL
+SMTP, sign-up policy, and feature flags. Secrets are encrypted in the selected database
 and never returned to the browser.
+
+## Runtime providers
+
+Use PostgreSQL, Redis, S3, Redis events, and BullMQ for a distributed server
+deployment, or SQLite, bounded memory services, local files, and local jobs for
+a desktop or single-process application. Existing projects can preview and apply
+each selection independently:
+
+```bash
+podo provider list
+podo provider set cache memory
+podo provider set cache memory --apply
+```
+
+Switching never migrates or deletes data. See [Runtime providers](docs/providers.md)
+for the compatibility contracts, complete local profile, backup boundary, and
+single-replica constraints.
 
 ## Validation and runtime policy
 
@@ -182,6 +202,7 @@ the CLI packages. Generated applications are Bun workspaces.
 - `packages/api-client` — typed frontend request client
 - `packages/contracts` — error and capability contracts
 - `packages/podokit-auth` — encrypted auth configuration primitives
+- `packages/runtime` — provider-neutral runtime contracts and local providers
 - `packages/podokit-module-blog` — publishing, images, comments, and admin tools
 - `packages/podokit-module-analytics` — GA4 consent, configuration, and reports
 - `templates/` — Bun/Elysia project templates and bundled modules
@@ -212,6 +233,7 @@ legacy PodoKit 0.x applications.
 - [Getting Started](docs/getting-started.md)
 - [Templates](docs/templates.md)
 - [Modules and endpoints](docs/modules.md)
+- [Runtime providers](docs/providers.md)
 - [Updating](docs/updating.md)
 - [Development](docs/development.md)
 - [Testing](docs/testing.md)

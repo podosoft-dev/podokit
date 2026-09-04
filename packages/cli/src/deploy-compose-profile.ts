@@ -582,14 +582,24 @@ export function initializeComposeProfile(
 
   const draft = buildDefaultComposeProfile(projectName, options);
   const modules = new Set(manifest.modules.map((module) => module.name));
-  const usesRedis = [...modules].some((module) =>
-    ["redis", "bullmq", "job-progress", "rate-limit", "sse"].includes(module),
-  );
+  const providers = manifest.providers;
+  const usesRedis = (providers.cache === "redis"
+      && ["redis", "rate-limit"].some((module) => modules.has(module)))
+    || (providers.events === "redis" && modules.has("sse"))
+    || (providers.jobs === "bullmq" && modules.has("bullmq"));
+  const usesEmbeddedProviders = providers.database === "sqlite"
+    || providers.cache === "memory"
+    || providers["object-storage"] === "local"
+    || providers.events === "memory"
+    || providers.jobs === "local";
+  draft.workloads.api.replicas = usesEmbeddedProviders ? 1 : 2;
+  draft.dependencies.postgres.mode = providers.database === "postgres" ? "managed" : "disabled";
   draft.dependencies.redis.mode = usesRedis ? "managed" : "disabled";
-  draft.dependencies.objectStorage.mode = modules.has("object-storage-s3")
+  draft.dependencies.objectStorage.mode = providers["object-storage"] === "s3"
+      && modules.has("object-storage-s3")
     ? "managed"
     : "disabled";
-  if (modules.has("bullmq")) {
+  if (providers.jobs === "bullmq" && modules.has("bullmq")) {
     draft.workloads.worker = { replicas: 1, resources: { cpuLimit: "0.5", memoryLimit: "512m" } };
   }
   const usesAuth = modules.has("auth");
@@ -601,7 +611,6 @@ export function initializeComposeProfile(
   draft.runtimeConfig = {
     ...draft.runtimeConfig,
     ...(usesAuth ? { BETTER_AUTH_URL: `https://${host}` } : {}),
-    ...(modules.has("sse") && usesRedis ? { SSE_TRANSPORT: "redis" } : {}),
     ...(modules.has("rate-limit")
       ? {
           RATE_LIMIT_TTL: "60",

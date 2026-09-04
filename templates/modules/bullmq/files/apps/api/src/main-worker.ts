@@ -1,5 +1,10 @@
 import "dotenv/config";
+import { PROVIDERS } from "./config/providers";
 import { startWorkers } from "./jobs/worker.module";
+
+if (PROVIDERS.jobs !== "bullmq") {
+  throw new Error("The BullMQ worker cannot start unless jobs=bullmq is selected");
+}
 
 const workers = startWorkers();
 

@@ -12,13 +12,13 @@ import { modulePackageOverlays, resolveModuleDir, type ModuleManifest } from "./
 import {
   computeFilesLock,
   DEFAULT_OWNED_GLOBS,
+  manifestTemplateVars,
   matchGlob,
   readFilesLock,
   readManifest,
   writeFilesLock,
   writeManifest,
 } from "./lockfile";
-import { toolchainTemplateVars } from "./toolchain";
 
 export interface RemoveOptions {
   projectRoot: string;
@@ -88,7 +88,7 @@ export function removeModule(options: RemoveOptions): RemoveResult {
   }
   const vars: TemplateVars = {
     projectName: projectName(projectRoot),
-    ...toolchainTemplateVars(manifest.toolchain),
+    ...manifestTemplateVars(manifest),
   };
   const targetManifest = readModuleManifest(moduleDir, vars);
 
@@ -103,7 +103,17 @@ export function removeModule(options: RemoveOptions): RemoveResult {
     .filter((m): m is { name: string; dir: string; manifest: ModuleManifest } => m !== null);
 
   // Guard: refuse if another installed module requires this one.
-  const dependents = others.filter((o) => (o.manifest.requires ?? []).includes(module)).map((o) => o.name);
+  const selectedCapabilities = Object.entries(targetManifest.provides ?? {})
+    .filter(([capability, provider]) =>
+      manifest.providers[capability as keyof typeof manifest.providers] === provider
+    )
+    .map(([capability]) => capability);
+  const dependents = others.filter((other) =>
+    (other.manifest.requires ?? []).includes(module)
+    || (other.manifest.requiresCapabilities ?? []).some((capability) =>
+      selectedCapabilities.includes(capability)
+    )
+  ).map((other) => other.name);
   if (dependents.length) {
     throw new Error(
       `Cannot remove "${module}": required by ${dependents.join(", ")}. Remove ${dependents.length > 1 ? "those" : "that"} first.`,

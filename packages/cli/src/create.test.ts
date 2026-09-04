@@ -159,9 +159,30 @@ describe("create (integration against templates)", () => {
     const manifest = JSON.parse(
       readFileSync(join(target, ".podokit/manifest.json"), "utf8"),
     ) as { schemaVersion: number; toolchain: Record<string, string>; packageManager?: string };
-    expect(manifest.schemaVersion).toBe(3);
+    expect(manifest.schemaVersion).toBe(4);
     expect(manifest.toolchain).toEqual(result.toolchain);
     expect(manifest.packageManager).toBeUndefined();
+  });
+
+  it("records and renders the selected database provider", () => {
+    const target = join(tmp(), "sqlite-app");
+    const result = create({
+      name: "sqlite-app",
+      templatesDir: REPO_TEMPLATES,
+      targetDir: target,
+      database: "sqlite",
+    });
+    expect(result.providers.database).toBe("sqlite");
+    const manifest = JSON.parse(
+      readFileSync(join(target, ".podokit/manifest.json"), "utf8"),
+    ) as { providers: Record<string, string> };
+    expect(manifest.providers).toMatchObject({
+      database: "sqlite",
+      cache: "redis",
+      "object-storage": "s3",
+    });
+    expect(readFileSync(join(target, "apps/api/src/config/providers.ts"), "utf8"))
+      .toContain('database: "sqlite"');
   });
 
   it.each(["base", "todo"])("applies the Bun profile to the %s template", (template) => {

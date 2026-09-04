@@ -1,0 +1,32 @@
+{
+  "manifestVersion": 3,
+  "name": "events-redis",
+  "description": "Redis publish/subscribe event bus for delivery across API replicas.",
+  "provides": { "events": "redis" },
+  "requiredProjectFiles": [
+    "apps/api/src/config/providers.ts",
+    "apps/api/src/config/redis.connection.ts"
+  ],
+  "managedGlobs": [
+    "apps/api/src/events-provider-redis/**"
+  ],
+  "targetApp": "api",
+  "env": [
+    "EVENTS_REDIS_CHANNEL=podokit:events"
+  ],
+  "inject": [
+    {
+      "file": "apps/api/src/app.ts",
+      "marker": "// podokit:end:imports",
+      "text": "import { eventsRedisModule } from \"./events-provider-redis/events-redis.module\";"
+    },
+    {
+      "file": "apps/api/src/app.ts",
+      "marker": "// podokit:end:modules",
+      "text": "eventsRedisModule,"
+    }
+  ],
+  "instructions": [
+    "Redis events use REDIS_URL or the shared individual Redis settings."
+  ]
+}

@@ -8,9 +8,10 @@ export interface AuditLogView extends AuditEntry {
   createdAt: string;
 }
 
-interface AuditLogRow extends Omit<AuditLogView, "createdAt"> {
-  createdAt: Date;
-}
+type AuditLogRow = Omit<AuditLogView, "createdAt" | "metadata"> & {
+  createdAt: Date | string;
+  metadata: unknown;
+};
 
 export interface AuditTarget {
   type?: string;
@@ -40,13 +41,13 @@ export class AuditService {
         : JSON.stringify(entry.metadata);
       await this.sql`
         INSERT INTO "audit_logs" (
-          "action", "actorId", "actorName", "actorEmail",
-          "targetType", "targetId", "targetLabel", "ip", "metadata"
+          "id", "action", "actorId", "actorName", "actorEmail",
+          "targetType", "targetId", "targetLabel", "ip", "metadata", "createdAt"
         ) VALUES (
-          ${entry.action}, ${entry.actorId ?? null}, ${entry.actorName ?? null},
+          ${crypto.randomUUID()}, ${entry.action}, ${entry.actorId ?? null}, ${entry.actorName ?? null},
           ${entry.actorEmail ?? null}, ${entry.targetType ?? null},
           ${entry.targetId ?? null}, ${entry.targetLabel ?? null}, ${entry.ip ?? null},
-          ${metadata}::jsonb
+          CAST(${metadata} AS JSON), ${new Date().toISOString()}
         )
       `;
     } catch {
@@ -62,7 +63,15 @@ export class AuditService {
       ORDER BY "createdAt" DESC
       LIMIT ${limit}
     `;
-    return rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString() }));
+    return rows.map((row) => ({
+      ...row,
+      metadata: typeof row.metadata === "string"
+        ? JSON.parse(row.metadata) as Record<string, unknown>
+        : row.metadata as Record<string, unknown> | null,
+      createdAt: row.createdAt instanceof Date
+        ? row.createdAt.toISOString()
+        : new Date(row.createdAt).toISOString(),
+    }));
   }
 
   async recordRequest(

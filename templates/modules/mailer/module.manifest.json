@@ -5,12 +5,10 @@
   "targetApp": "api",
   "dependencies": {
     "nodemailer": "^9.0.5",
-    "@podosoft/podokit-auth": "^0.3.0",
-    "pg": "^8.12.0"
+    "@podosoft/podokit-auth": "^0.3.0"
   },
   "devDependencies": {
-    "@types/nodemailer": "^8.0.1",
-    "@types/pg": "^8.11.10"
+    "@types/nodemailer": "^8.0.1"
   },
   "env": [
     "# ── Mailer (SMTP) — optional ──",

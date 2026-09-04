@@ -1,0 +1,34 @@
+{
+  "manifestVersion": 3,
+  "name": "jobs-local",
+  "description": "Database-persistent local job queue with an embedded single-process worker.",
+  "provides": { "jobs": "local" },
+  "runtimeConstraints": { "maxApiReplicas": 1, "embeddedWorker": true },
+  "requiredProjectFiles": [
+    "apps/api/src/config/providers.ts",
+    "apps/api/src/database/database.ts"
+  ],
+  "managedGlobs": [
+    "apps/api/src/jobs-local/**"
+  ],
+  "targetApp": "api",
+  "env": [
+    "LOCAL_JOBS_POLL_INTERVAL_MS=250"
+  ],
+  "inject": [
+    {
+      "file": "apps/api/src/app.ts",
+      "marker": "// podokit:end:imports",
+      "text": "import { jobsLocalModule } from \"./jobs-local/jobs-local.module\";"
+    },
+    {
+      "file": "apps/api/src/app.ts",
+      "marker": "// podokit:end:modules",
+      "text": "jobsLocalModule,"
+    }
+  ],
+  "instructions": [
+    "The local worker runs inside the API process and persists jobs in the selected database.",
+    "Keep the API at one replica or select the BullMQ jobs provider."
+  ]
+}

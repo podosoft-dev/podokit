@@ -137,6 +137,31 @@ describe("docker-compose profile", () => {
     expect(queued.workloads.worker).not.toBeNull();
   });
 
+  it("uses a single API replica and no managed dependencies for local providers", () => {
+    const root = initialized([]);
+    const manifestPath = join(root, ".podokit", "manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+      providers: Record<string, string>;
+    };
+    manifest.providers = {
+      database: "sqlite",
+      cache: "memory",
+      "object-storage": "local",
+      events: "memory",
+      jobs: "local",
+    };
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+    const profile = initializeComposeProfile(root, "local", {
+      context: "local",
+      endpointFingerprint: `sha256:${"b".repeat(64)}`,
+    }).profile;
+    expect(profile.workloads.api.replicas).toBe(1);
+    expect(profile.workloads.worker).toBeNull();
+    expect(profile.dependencies.postgres.mode).toBe("disabled");
+    expect(profile.dependencies.redis.mode).toBe("disabled");
+    expect(profile.dependencies.objectStorage.mode).toBe("disabled");
+  });
+
   it.each<[string, string]>([
     ["etc/podokit/api.env", "must be an absolute path"],
     ["/etc/podokit/../../api.env", "must be an absolute path"],

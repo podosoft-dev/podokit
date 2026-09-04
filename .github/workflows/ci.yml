@@ -42,17 +42,11 @@ jobs:
       - name: Verify a Bun-only generated app
         run: |
           app_dir="$(mktemp -d)"
-          node packages/cli/dist/index.js create app --dir "$app_dir" --no-ai --yes
+          node scripts/dev-app.mjs "$app_dir" \
+            --add admin-dashboard,job-progress,api-key-auth,audit-log,file-upload,logging,rate-limit \
+            --no-build
           (
             cd "$app_dir"
-            node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" add admin-dashboard
-            node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" add job-progress
-            node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" add api-key-auth
-            node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" add audit-log
-            node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" add file-upload
-            node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" add logging
-            node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" add rate-limit
-            bun install
             bun run lint
             bun run test
             bun run build

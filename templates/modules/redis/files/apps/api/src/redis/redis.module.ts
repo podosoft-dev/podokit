@@ -1,4 +1,6 @@
 import { Elysia, t } from "elysia";
+import { CACHE } from "@podosoft/podokit-runtime";
+import { PROVIDERS } from "../config/providers";
 import {
   type AppPlugin,
   type PodokitModule,
@@ -6,10 +8,12 @@ import {
   type ServiceKey,
 } from "../core/services";
 import { RedisService } from "./redis.service";
+import { RedisCacheStore } from "./redis-cache.store";
 
 export const REDIS = Symbol("redis") as ServiceKey<RedisService>;
 
 const cachePlugin: AppPlugin = ({ services }) => {
+  if (PROVIDERS.cache !== "redis") return new Elysia({ name: "podokit.redis.inactive" });
   const redis = services.resolve(REDIS);
   return new Elysia({ name: "podokit.redis" })
     .put("/cache/:key", async ({ params, body }) => {
@@ -35,8 +39,10 @@ const cachePlugin: AppPlugin = ({ services }) => {
 export const redisModule: PodokitModule = {
   name: "redis",
   configure: (_env, services): void => {
+    if (PROVIDERS.cache !== "redis") return;
     const redis = new RedisService(services.resolve(READINESS));
     services.register(REDIS, redis, () => redis.close());
+    services.register(CACHE, new RedisCacheStore(redis));
     services.onStart(() => redis.connect());
   },
   plugin: cachePlugin,

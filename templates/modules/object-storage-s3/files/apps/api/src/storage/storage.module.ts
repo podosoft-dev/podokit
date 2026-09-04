@@ -1,4 +1,6 @@
 import { Elysia, t } from "elysia";
+import { OBJECT_STORAGE } from "@podosoft/podokit-runtime";
+import { PROVIDERS } from "../config/providers";
 import {
   type AppPlugin,
   type PodokitModule,
@@ -6,10 +8,14 @@ import {
   type ServiceKey,
 } from "../core/services";
 import { StorageService } from "./storage.service";
+import { S3ObjectStore } from "./s3-object.store";
 
 export const STORAGE = Symbol("storage") as ServiceKey<StorageService>;
 
 const storagePlugin: AppPlugin = ({ services }) => {
+  if (PROVIDERS["object-storage"] !== "s3") {
+    return new Elysia({ name: "podokit.storage-s3.inactive" });
+  }
   const storage = services.resolve(STORAGE);
   return new Elysia({ name: "podokit.storage" })
     .put("/storage/:key", async ({ params, body }) => {
@@ -38,8 +44,10 @@ const storagePlugin: AppPlugin = ({ services }) => {
 export const storageModule: PodokitModule = {
   name: "object-storage-s3",
   configure: (_env, services): void => {
+    if (PROVIDERS["object-storage"] !== "s3") return;
     const storage = new StorageService(services.resolve(READINESS));
     services.register(STORAGE, storage, () => storage.close());
+    services.register(OBJECT_STORAGE, new S3ObjectStore(storage));
   },
   plugin: storagePlugin,
 };

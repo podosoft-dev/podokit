@@ -1,7 +1,9 @@
 {
   "name": "rate-limit",
-  "description": "Distributed Elysia request limiting by authenticated user, validated API key, or trusted-proxy client address. Uses Bun Redis across replicas and returns stable 429/503 errors.",
-  "requires": ["redis", "api-key-auth"],
+  "manifestVersion": 3,
+  "description": "Provider-neutral Elysia request limiting by authenticated user, validated API key, or trusted-proxy client address.",
+  "requires": ["api-key-auth"],
+  "requiresCapabilities": ["cache"],
   "targetApp": "api",
   "managedGlobs": [
     "apps/api/src/rate-limit/**",
@@ -36,14 +38,14 @@
     }
   ],
   "instructions": [
-    "Ensure Redis is running: docker compose -f infra/docker/docker-compose.yml up -d",
+    "Configure the selected cache provider before enabling request limits.",
     "Tune the general, authentication, and runtime limits in .env.",
     "Give each deployment that shares Redis a distinct RATE_LIMIT_KEY_PREFIX.",
     "Set RATE_LIMIT_TRUSTED_PROXY_HOPS to the exact number of trusted reverse proxies; keep 0 for direct API access.",
     "Authenticated users and validated X-API-Key clients receive independent opaque counters; other traffic uses the trusted client address.",
-    "Exceeded limits return RATE_LIMIT_EXCEEDED with HTTP 429 and Retry-After. Redis failures return RATE_LIMIT_UNAVAILABLE with HTTP 503.",
+    "Exceeded limits return RATE_LIMIT_EXCEEDED with HTTP 429 and Retry-After. Cache failures return RATE_LIMIT_UNAVAILABLE with HTTP 503.",
     "Register a RateLimitIdentityExtension under RATE_LIMIT_IDENTITY_EXTENSION in app.extensions.ts for another validated machine-key source.",
     "GET /health and GET /health/ready bypass request quotas so orchestrator probes remain reliable.",
-    "The atomic counter is shared across API replicas in Redis."
+    "Redis counters are shared across replicas; memory counters require one API replica."
   ]
 }

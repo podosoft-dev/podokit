@@ -31,6 +31,24 @@ and run API scripts as `bun run --cwd apps/api <script>`.
   `podo update --apply` when the project is stale, and
 - prints follow-up steps.
 
+## Provider capabilities
+
+Feature modules declare capabilities instead of concrete infrastructure. The CLI
+adds the implementation selected in `.podokit/manifest.json`:
+
+| Capability | Providers | Used by |
+| --- | --- | --- |
+| `database` | `postgres`, `sqlite` | core queries, auth, migrations, local jobs |
+| `cache` | `redis`, `memory` | rate limiting and application caches |
+| `object-storage` | `s3`, `local` | file upload, profile images, content modules |
+| `events` | `redis`, `memory` | SSE and job progress |
+| `jobs` | `bullmq`, `local` | background work and job progress |
+
+Inspect or change them with `podo provider list` and `podo provider set
+<capability> <provider> [--apply]`. The set command previews by default. It does
+not migrate or delete provider data. Local providers require one API process;
+read [Runtime providers](providers.md) before deployment or data migration.
+
 ## Available modules
 
 ### External package modules
@@ -294,7 +312,7 @@ await sendMail({ to: "a@example.com", subject: "Hi", text: "Hello", html: action
 Background jobs with [BullMQ](https://docs.bullmq.io): a demo queue, enqueue/
 status endpoints on the API, and a **separate worker process** that consumes
 jobs (the standard production shape — workers scale independently of the API).
-Needs Redis.
+Needs Redis and is active when the `jobs` capability selects `bullmq`.
 
 ```bash
 npx @podosoft/podokit add bullmq
@@ -311,6 +329,18 @@ curl localhost:5002/jobs/<id>   # waiting -> active -> completed
 ```
 
 Without the worker running, jobs stay `waiting`; start the worker and they complete.
+
+### `jobs-local`
+
+A database-persistent job queue with an embedded worker in the API process. It
+implements the same `JOBS` contract as BullMQ and is selected with:
+
+```bash
+podo provider set jobs local --apply
+```
+
+Use it for desktop and single-process applications. It does not start a separate
+worker and must not be scaled to multiple API replicas.
 
 **Deployment.** The worker is a separate process, so `podo add bullmq` also adds:
 
@@ -348,20 +378,33 @@ The same native `Bun.S3Client` code path serves both — only configuration diff
 The module registers a bucket probe with `/health/ready`, so an unavailable or
 unauthorized bucket removes the API pod from service without failing liveness.
 
-### `file-upload`
+### `object-storage-local`
 
-A multipart upload endpoint that stores files via object storage and returns a
-presigned download URL. Depends on `object-storage-s3` — `podo add file-upload`
-adds it automatically if it is not already present.
+Atomic, path-confined object storage rooted at `LOCAL_STORAGE_PATH`. It rejects
+absolute paths, traversal, and symbolic-link escapes and implements the same
+`OBJECT_STORAGE` contract as S3.
 
 ```bash
-npx @podosoft/podokit add file-upload   # also adds object-storage-s3
+podo provider set object-storage local --apply
+```
+
+Use an absolute path for packaged or production applications and back it up with
+the database. Local files are single-host and require one API replica.
+
+### `file-upload`
+
+A multipart upload endpoint that stores files through the `OBJECT_STORAGE`
+contract and returns a download URL. `podo add file-upload` automatically adds
+the selected S3 or local implementation.
+
+```bash
+npx @podosoft/podokit add file-upload   # also adds the selected provider
 bun install
 docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml up -d
 bun run dev
 
 curl -F 'file=@./photo.png' localhost:5002/files
-# → { key, url }  (url is a presigned download link)
+# → { key, url }  (presigned for S3, application-local for local storage)
 ```
 
 ### `sse`
@@ -380,12 +423,22 @@ curl -N localhost:5002/events/stream
 curl -XPOST localhost:5002/events -H 'content-type: application/json' -d '{"message":"hello"}'
 ```
 
-The default `SSE_TRANSPORT=memory` preserves the simple single-process behavior.
-Set `SSE_TRANSPORT=redis` and `SSE_REDIS_CHANNEL=<app>:events` for delivery
-across API replicas. The module uses the shared `REDIS_URL` or individual Redis
-settings and creates dedicated publish/subscribe connections. A Redis-configured
-application fails readiness instead of silently falling back to process-local
-delivery.
+The selected `events` provider supplies the transport. `events-memory` is bounded
+to one API process. `events-redis` uses the shared `REDIS_URL` or individual Redis
+settings, creates dedicated publish/subscribe connections, and delivers across
+API replicas. A Redis-configured application fails readiness instead of silently
+falling back to process-local delivery.
+
+### `events-memory` and `events-redis`
+
+These modules implement the `EVENTS` contract consumed by `sse` and
+`job-progress`. Select memory for a single process or Redis for cross-replica
+delivery:
+
+```bash
+podo provider set events memory --apply
+podo provider set events redis --apply
+```
 
 `EventsService.publish()` remains best-effort for domain operations that already
 committed their state. Use `publishAsync()` when the caller must know delivery
@@ -396,7 +449,7 @@ hints; clients must reload authoritative state after reconnecting.
 ### `redis`
 
 Bun's native Redis client with `get`/`set`/`del` and `publish`/`subscribe`,
-exposed as a shared `RedisService`, plus demo `/cache` endpoints. BullMQ retains
+exposed as the `CACHE` implementation plus demo `/cache` endpoints. BullMQ retains
 its own transitive `ioredis` connection because that is BullMQ's supported
 transport.
 
@@ -416,15 +469,22 @@ curl -XPUT localhost:5002/cache/greeting -H 'content-type: application/json' -d 
 curl localhost:5002/cache/greeting   # { key, value }
 ```
 
+### `cache-memory`
+
+A bounded in-process cache with TTL, least-recently-used eviction, value size
+limits, and fixed-window counters. Select it with `podo provider set cache memory
+--apply`. It requires one API process and its contents intentionally disappear
+when that process exits.
+
 ### `job-progress`
 
-Live job progress streaming — a capstone that composes `bullmq` + `redis` + `sse`
-(all auto-added). A **worker** processes a job and reports progress over a Redis
-channel; the **API** subscribes and relays it to SSE clients. This is the
-production pattern for pushing worker progress to the browser across processes.
+Live job progress streaming over the selected `jobs` and `events` providers.
+The default server profile composes BullMQ, Redis events, and SSE with a separate
+worker. A local profile composes the embedded database queue, memory events, and
+SSE in one API process.
 
 ```bash
-npx @podosoft/podokit add job-progress   # also adds bullmq, sse, redis
+npx @podosoft/podokit add job-progress   # adds selected jobs/events providers and sse
 bun install
 docker compose -f infra/docker/docker-compose.yml up -d   # postgres + redis
 
@@ -479,16 +539,17 @@ curl -b cookies.txt localhost:5002/audit-logs   # [{ userId, method:"POST", path
 
 ### `rate-limit`
 
-Rate limiting with a native Elysia request guard backed by **Redis**, with `auth`
-and `api-key-auth` added automatically. Counters
+Rate limiting with a native Elysia request guard backed by the selected `CACHE`
+provider, with `auth` and `api-key-auth` added automatically. Counters
 are selected by authenticated user first, then a validated `X-API-Key`, then the
 trusted-proxy client address. Every identity is domain-separated and SHA-256
-hashed before it becomes a Redis key. The limit holds across API replicas.
+hashed before it becomes a provider key. The limit holds across API replicas
+with Redis; memory counters require one API process.
 The liveness and readiness endpoints (`GET /health` and `GET /health/ready`) are
 excluded so orchestrator probes cannot consume the application request quota.
 
 ```bash
-npx @podosoft/podokit add rate-limit   # also adds redis, auth, and api-key-auth
+npx @podosoft/podokit add rate-limit   # also adds the selected cache, auth, and api-key-auth
 bun install
 docker compose -f infra/docker/docker-compose.yml up -d
 bun run dev
@@ -507,7 +568,7 @@ database so their counters remain isolated. The default is
 `podokit:rate-limit`.
 
 Exceeded limits return HTTP 429 with `RATE_LIMIT_EXCEEDED` and `Retry-After`.
-Redis errors or the bounded storage timeout return HTTP 503 with
+Cache errors or the bounded storage timeout return HTTP 503 with
 `RATE_LIMIT_UNAVAILABLE`, also with `Retry-After`. Applications with another
 validated machine-key source can wrap or replace the rate-limit guard from the
 owned `app.extensions.ts` file. Register application services in
@@ -631,7 +692,7 @@ selection: **PNG, JPEG, or WebP; at most 2 MB; width and height at most 2048 px*
 Images keep their original bytes and aspect ratio; the shared avatar component
 renders them with a circular center crop.
 
-The module stores image objects through `object-storage-s3` (auto-added) and keeps
+The module stores image objects through the selected object-storage provider and keeps
 the resulting versioned path in better-auth's `user.image`. The bucket stays
 private; `GET /api/profile-images/:fileName` serves the UUID path with immutable
 cache headers. Replacing, removing, or self-deleting the account removes managed
@@ -847,9 +908,11 @@ hand-written list. Inspect the complete result at `/api-docs` or
 | `analytics` | `GET /analytics/config`<br>`GET /admin/analytics/config`<br>`PUT /admin/analytics/config`<br>`DELETE /admin/analytics/config/credentials`<br>`POST /admin/analytics/config/test`<br>`GET /admin/analytics/report`<br>`GET /admin/analytics/realtime` |
 | `blog` | `GET /blog`<br>`POST /blog/images`<br>`GET /blog/images/{id}`<br>`GET /blog/mine`<br>`GET /blog/manage/{slug}`<br>`GET /blog/{postRef}/comments`<br>`GET /blog/{postRef}`<br>`POST /blog`<br>`PATCH /blog/{postRef}`<br>`DELETE /blog/{postRef}`<br>`POST /blog/{postRef}/comments`<br>`PATCH /blog/comments/{id}`<br>`DELETE /blog/comments/{id}`<br>`GET /admin/blog`<br>`GET /admin/blog/{id}`<br>`POST /admin/blog`<br>`PATCH /admin/blog/{id}`<br>`DELETE /admin/blog/{id}` |
 | `bullmq` | `POST /jobs`<br>`GET /jobs/{id}` |
+| `jobs-local` | `POST /jobs`<br>`GET /jobs/{id}` |
 | `file-upload` | `POST /files`<br>`GET /files/{key}/url` |
 | `job-progress` | `POST /progress` |
 | `object-storage-s3` | `PUT /storage/{key}`<br>`GET /storage/{key}`<br>`GET /storage/{key}/presigned` |
+| `object-storage-local` | `PUT /storage/{key}`<br>`GET /files/content/{key}` |
 | `redis` | `PUT /cache/{key}`<br>`GET /cache/{key}` |
 | `sse` | `GET /events/stream`<br>`POST /events` |
 

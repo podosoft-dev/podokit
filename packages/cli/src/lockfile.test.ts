@@ -106,6 +106,13 @@ describe("initLockfile + computeFilesLock", () => {
     expect(manifest?.modules).toEqual([]);
     expect(manifest?.ownedGlobs).toEqual(DEFAULT_OWNED_GLOBS);
     expect(manifest?.managedOverrides).toEqual([]);
+    expect(manifest?.providers).toEqual({
+      database: "postgres",
+      cache: "redis",
+      "object-storage": "s3",
+      events: "redis",
+      jobs: "bullmq",
+    });
 
     const lock = JSON.parse(readFileSync(join(root, ".podokit/files.lock"), "utf8")) as FilesLock;
     expect(lock.files["apps/api/src/main.ts"].tier).toBe("managed");
@@ -126,6 +133,29 @@ describe("initLockfile + computeFilesLock", () => {
       ownedGlobs: [],
     }));
     expect(() => readManifest(root)).toThrow("@podosoft/podokit@0.17.4");
+  });
+
+  it("reads a schema v3 Bun project with server provider defaults", () => {
+    const root = tmp();
+    write(root, ".podokit/manifest.json", JSON.stringify({
+      schemaVersion: 3,
+      podokitVersion: "1.0.2",
+      template: "base",
+      toolchain: { runtime: "bun", runtimeVersion: "1.4.0", packageManager: "bun" },
+      answers: { projectName: "app" },
+      modules: [],
+      ownedGlobs: [],
+    }));
+    expect(readManifest(root)).toMatchObject({
+      schemaVersion: 4,
+      providers: {
+        database: "postgres",
+        cache: "redis",
+        "object-storage": "s3",
+        events: "redis",
+        jobs: "bullmq",
+      },
+    });
   });
 });
 

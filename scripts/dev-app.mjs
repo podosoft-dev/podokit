@@ -4,7 +4,8 @@
 // publishing @podosoft/podokit-api-client to npm.
 //
 // Usage:
-//   node scripts/dev-app.mjs <targetDir> [--template <t>] [--add mod1,mod2] [--no-build]
+//   node scripts/dev-app.mjs <targetDir> [--template <t>] [--database <provider>]
+//     [--local-providers] [--add mod1,mod2] [--no-build]
 //
 // It builds the monorepo, generates the app with the local CLI, points the
 // web app's @podosoft/podokit-api-client at the local package (file:), applies
@@ -29,6 +30,8 @@ if (!targetDir) {
 }
 const target = resolve(targetDir);
 const template = flag("template") ?? "fullstack";
+const database = flag("database");
+const localProviders = args.includes("--local-providers");
 const modules = (flag("add") ?? "").split(",").map((m) => m.trim()).filter(Boolean);
 const name = target.split("/").pop();
 
@@ -42,7 +45,17 @@ if (!args.includes("--no-build")) {
 
 console.log(`• generating ${name} (${template}) at ${target}…`);
 rmSync(target, { recursive: true, force: true });
-run("node", [join(repoRoot, "packages/cli/dist/index.js"), "create", name, "--dir", target, "--template", template, "--yes"]);
+run("node", [
+  join(repoRoot, "packages/cli/dist/index.js"),
+  "create",
+  name,
+  "--dir",
+  target,
+  "--template",
+  template,
+  ...(database ? ["--database", database] : []),
+  "--yes",
+]);
 
 // --published: use the published @podosoft packages instead of local file: links.
 // Required for containerized dev apps — a host `file:` path does not exist inside
@@ -50,6 +63,24 @@ run("node", [join(repoRoot, "packages/cli/dist/index.js"), "create", name, "--di
 // runtime (see docs/pitfalls.md P-008). Use this when the @podosoft packages have
 // no unpublished local changes (e.g. verifying only template/module edits).
 const usePublished = args.includes("--published");
+
+if (localProviders) {
+  for (const [capability, provider] of [
+    ["cache", "memory"],
+    ["object-storage", "local"],
+    ["events", "memory"],
+    ["jobs", "local"],
+  ]) {
+    run("node", [
+      join(repoRoot, "packages/cli/dist/index.js"),
+      "provider",
+      "set",
+      capability,
+      provider,
+      "--apply",
+    ], target);
+  }
+}
 
 // Point the web app at the LOCAL api-client package (re-packed on each install).
 if (!usePublished) {
@@ -77,11 +108,12 @@ if (!usePublished) {
   rootPkg.overrides = {
     ...(rootPkg.overrides ?? {}),
     "@podosoft/podokit-contracts": `file:${join(repoRoot, "packages/contracts")}`,
+    "@podosoft/podokit-runtime": `file:${join(repoRoot, "packages/runtime")}`,
     "@podosoft/podokit-auth": `file:${join(repoRoot, "packages/podokit-auth")}`,
     "@podosoft/podokit-api-client": `file:${join(repoRoot, "packages/api-client")}`,
   };
   writeFileSync(rootPkgPath, `${JSON.stringify(rootPkg, null, 2)}\n`);
-  console.log("• pinned local @podosoft/podokit-contracts + api-client via overrides");
+  console.log("• pinned local @podosoft runtime, contracts, auth, and API packages via overrides");
 } else {
   console.log("• using published @podosoft packages (container-friendly)");
 }

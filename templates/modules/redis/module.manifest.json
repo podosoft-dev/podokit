@@ -1,7 +1,9 @@
 {
+  "manifestVersion": 3,
   "name": "redis",
   "description": "Bun native Redis client with get/set/del and publish/subscribe, plus demo cache endpoints.",
   "requires": [],
+  "provides": { "cache": "redis" },
   "requiredProjectFiles": [
     "apps/api/src/config/redis.connection.ts",
     "apps/api/src/health/readiness.service.ts"

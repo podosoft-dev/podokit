@@ -4,6 +4,8 @@
 NODE_ENV=development
 PORT=5002
 
+# Canonical database connection. Set this for PostgreSQL or SQLite; POSTGRES_* remains a fallback.
+# DATABASE_URL=postgres://podokit:podokit@localhost:5432/podokit
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
 POSTGRES_USER=podokit

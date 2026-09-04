@@ -27,6 +27,20 @@ podo doctor
 podo update
 ```
 
+Runtime providers have their own dry-run-first command and remain part of the
+same managed manifest and lockfile:
+
+```bash
+podo provider list
+podo provider set object-storage local
+podo provider set object-storage local --apply
+```
+
+The apply step updates code and configuration and may add an implementation
+module. It does not migrate or delete database rows, cache entries, queued jobs,
+or stored objects. Follow the backup and data-migration boundary in
+[Runtime providers](providers.md).
+
 `podo update` is read-only. It rebuilds the current v1 template and modules in
 memory and prints a per-file plan. `podo doctor` checks declared Elysia, Svelte,
 and Better Auth versions against the supported ranges.
