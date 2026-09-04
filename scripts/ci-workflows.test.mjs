@@ -60,6 +60,8 @@ test("publishes a GitHub Release only after npm packages succeed", () => {
   const publishSteps = [...release.matchAll(/^\s+- name: Publish .+$/gm)];
   assert.ok(publishSteps.length > 0);
   assert.ok(publishSteps.every((step) => (step.index ?? -1) < createRelease));
+  assert.match(release, /PKG=@podosoft\/podokit-runtime/);
+  assert.match(release, /require\('\.\/packages\/runtime\/package\.json'\)\.version/);
   assert.match(release, /PKG=@podosoft\/podokit-module-analytics/);
   assert.match(
     release,
@@ -70,4 +72,11 @@ test("publishes a GitHub Release only after npm packages succeed", () => {
   assert.match(release, /gh release create "\$GITHUB_REF_NAME"/);
   assert.match(release, /--verify-tag/);
   assert.match(release, /--generate-notes/);
+});
+
+test("links unpublished workspace packages in generated app CI", () => {
+  assert.match(ci, /node scripts\/dev-app\.mjs "\$app_dir"/);
+  assert.match(ci, /--add admin-dashboard,job-progress,api-key-auth,audit-log,file-upload,logging,rate-limit/);
+  assert.match(ci, /--no-build/);
+  assert.doesNotMatch(ci, /node packages\/cli\/dist\/index\.js create app/);
 });
