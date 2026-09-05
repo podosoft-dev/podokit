@@ -1,5 +1,25 @@
 # @podosoft/podokit
 
+## 1.1.0
+
+### Minor Changes
+
+- [#187](https://github.com/podosoft-dev/podokit/pull/187) [`77abca6`](https://github.com/podosoft-dev/podokit/commit/77abca69c99ff284a600e139e9664590483e3e75) Thanks [@korone00](https://github.com/korone00)! - Add provider-neutral database, cache, object storage, event, and job contracts with selectable distributed and local implementations.
+  
+  Add dry-run-first provider inspection and switching for existing generated projects, SQLite project generation, provider-aware deployment profiles, and local single-process modules for desktop applications.
+  
+  Generalize the auth configuration store around a database-neutral repository contract.
+
+### Patch Changes
+
+- [#183](https://github.com/podosoft-dev/podokit/pull/183) [`669c020`](https://github.com/podosoft-dev/podokit/commit/669c020aa84a2a6d8752b40cd5ccf4a461af5dfe) Thanks [@korone00](https://github.com/korone00)! - Keep read-only session checks out of the stricter authentication mutation request budget.
+
+- [#180](https://github.com/podosoft-dev/podokit/pull/180) [`47e2f83`](https://github.com/podosoft-dev/podokit/commit/47e2f830bb327f3b2bb1197c93a5683ecc9df6ba) Thanks [@korone00](https://github.com/korone00)! - Migrate populated Better Auth 1.6 account identities safely before applying the 1.7 schema.
+
+- [#182](https://github.com/podosoft-dev/podokit/pull/182) [`32ee57f`](https://github.com/podosoft-dev/podokit/commit/32ee57f365f32a428f8cedcbd9b101ac11fc06ff) Thanks [@korone00](https://github.com/korone00)! - Route exact WebSocket paths to the API in Docker Compose deployments without exposing a second host port, and trust forwarded headers only from explicitly configured proxy CIDRs.
+- Updated dependencies [[`77abca6`](https://github.com/podosoft-dev/podokit/commit/77abca69c99ff284a600e139e9664590483e3e75)]:
+  - @podosoft/podokit-runtime@0.2.0
+
 ## 1.0.2
 
 ### Patch Changes

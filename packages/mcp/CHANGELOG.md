@@ -1,5 +1,13 @@
 # @podosoft/podokit-mcp
 
+## 1.0.1
+
+### Patch Changes
+
+- [#190](https://github.com/podosoft-dev/podokit/pull/190) [`c5415f6`](https://github.com/podosoft-dev/podokit/commit/c5415f6436ffa54f22557c4306b534ebbd8501e1) Thanks [@korone00](https://github.com/korone00)! - Update Zod to 4.5.4.
+- Updated dependencies [[`669c020`](https://github.com/podosoft-dev/podokit/commit/669c020aa84a2a6d8752b40cd5ccf4a461af5dfe), [`47e2f83`](https://github.com/podosoft-dev/podokit/commit/47e2f830bb327f3b2bb1197c93a5683ecc9df6ba), [`77abca6`](https://github.com/podosoft-dev/podokit/commit/77abca69c99ff284a600e139e9664590483e3e75), [`32ee57f`](https://github.com/podosoft-dev/podokit/commit/32ee57f365f32a428f8cedcbd9b101ac11fc06ff)]:
+  - @podosoft/podokit@1.1.0
+
 ## 1.0.0
 
 ### Major Changes

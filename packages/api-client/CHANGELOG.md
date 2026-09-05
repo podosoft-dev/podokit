@@ -1,5 +1,11 @@
 # @podosoft/podokit-api-client
 
+## 0.8.2
+
+### Patch Changes
+
+- [#188](https://github.com/podosoft-dev/podokit/pull/188) [`1ef595a`](https://github.com/podosoft-dev/podokit/commit/1ef595a90b4bb0164e5307befd73529e869b8377) Thanks [@korone00](https://github.com/korone00)! - Update Better Auth packages to 1.7.2 as one compatible version set.
+
 ## 0.8.1
 
 ### Patch Changes
