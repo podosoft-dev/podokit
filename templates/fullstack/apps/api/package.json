@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@podosoft/podokit-contracts": "^0.4.0",
-    "@podosoft/podokit-runtime": "^0.1.0",
+    "@podosoft/podokit-runtime": "^0.2.0",
     "@elysia/cors": "^1.4.2",
     "@elysia/openapi": "^1.4.15",
     "dotenv": "^16.4.5",
