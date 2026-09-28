@@ -538,8 +538,8 @@ export function initializeDeploymentProfile(
       },
       objectStorage: {
         mode: usesObjectStorage ? "inCluster" : "disabled",
-        image: "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z",
-        clientImage: "quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z",
+        image: "pgsty/silo:RELEASE.2026-09-16T00-00-00Z",
+        clientImage: "pgsty/mc:RELEASE.2026-09-16T00-00-00Z",
         secretName: `${releaseName}-object-storage`,
         storageClassName: "",
         storageSize: "8Gi",

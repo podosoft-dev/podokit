@@ -67,7 +67,7 @@ bun run dev
 ```
 
 The root `dev` script starts the Elysia API on port 5002 and SvelteKit on port
-5001. Redis, MinIO, Mailpit, and the SMS sink are enabled by the generated
+5001. Redis, Silo, Mailpit, and the SMS sink are enabled by the generated
 Compose profiles only when required.
 
 ### Containerized development

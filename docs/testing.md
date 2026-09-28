@@ -105,7 +105,7 @@ E2E_BASE_URL=http://app.localhost \
   bunx playwright test api/<feature>.api.spec.ts
 ```
 
-Use a real migration for the selected database and real Redis/MinIO services for
+Use a real migration for the selected database and real Redis/Silo services for
 distributed provider modules that depend on them. SQLite, memory, local-file, and
 local-job tests must still run through a freshly generated application rather
 than only contract fixtures. Authentication work must exercise
@@ -135,7 +135,7 @@ installs the generated workspace with Bun 1.4.0, runs Better Auth and TypeORM
 migrations, verifies the OpenAPI contract, builds and starts the Bun API and
 worker plus the SvelteKit server, and runs the shipped Playwright suite.
 
-Optional Mailpit, SMS, Redis, and MinIO tests run only when the harness explicitly
+Optional Mailpit, SMS, Redis, and Silo tests run only when the harness explicitly
 configures those services. `KEEP=1` preserves the generated app for inspection.
 Ports and backing-service credentials can be overridden with the documented
 `E2E_*`, `POSTGRES_*`, Redis, and S3 environment variables. The shared suite's

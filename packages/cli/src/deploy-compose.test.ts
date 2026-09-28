@@ -65,6 +65,16 @@ afterEach(() => {
 });
 
 describe("docker-compose profile", () => {
+  it("uses available S3-compatible server and client images", () => {
+    const profile = initializeComposeProfile(project(), "production", {
+      context: "production",
+      endpointFingerprint: `sha256:${"b".repeat(64)}`,
+      host: "app.example.com",
+    }).profile;
+    expect(profile.dependencies.objectStorage.image).toBe("pgsty/silo:RELEASE.2026-09-16T00-00-00Z");
+    expect(profile.dependencies.objectStorage.clientImage).toBe("pgsty/mc:RELEASE.2026-09-16T00-00-00Z");
+  });
+
   it("records the driver so dispatch reads it back from disk", () => {
     const root = initialized();
     expect(readDeploymentDriver(root, "production")).toBe("docker-compose");

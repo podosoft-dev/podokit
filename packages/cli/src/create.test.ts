@@ -136,9 +136,12 @@ describe("create (integration against templates)", () => {
     expect(workflow).toContain("oven-sh/setup-bun@v2");
     expect(workflow).toContain("bun-version: 1.4.0");
     expect(workflow).not.toContain("actions/setup-node");
-    expect(readFileSync(join(target, "compose.dev.yaml"), "utf8")).toContain(
+    const developmentCompose = readFileSync(join(target, "compose.dev.yaml"), "utf8");
+    expect(developmentCompose).toContain(
       "bun run --cwd apps/api dev",
     );
+    expect(developmentCompose).toContain("pgsty/silo:RELEASE.2026-09-16T00-00-00Z");
+    expect(developmentCompose).toContain("pgsty/mc:RELEASE.2026-09-16T00-00-00Z");
     const devDockerfile = readFileSync(join(target, "Dockerfile.dev"), "utf8");
     expect(devDockerfile).toContain("FROM oven/bun:1.4.0-alpine");
     expect(devDockerfile).toContain(

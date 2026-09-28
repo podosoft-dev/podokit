@@ -35,6 +35,12 @@ afterEach(() => {
 });
 
 describe("deployment profile verification origin", () => {
+  it("uses available S3-compatible server and client images", () => {
+    const profile = loadDeploymentProfile(initializedProfile(), "production");
+    expect(profile.dependencies.objectStorage.image).toBe("pgsty/silo:RELEASE.2026-09-16T00-00-00Z");
+    expect(profile.dependencies.objectStorage.clientImage).toBe("pgsty/mc:RELEASE.2026-09-16T00-00-00Z");
+  });
+
   it.each([
     "https://deploy-user@example.com",
     "https://deploy-user:deploy-password@example.com",

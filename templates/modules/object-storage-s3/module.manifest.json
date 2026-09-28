@@ -1,7 +1,7 @@
 {
   "manifestVersion": 3,
   "name": "object-storage-s3",
-  "description": "Bun-native S3-compatible object storage for AWS S3 or MinIO with a StorageService and presigned URLs.",
+  "description": "Bun-native S3-compatible object storage for AWS S3 or MinIO-compatible services with a StorageService and presigned URLs.",
   "requires": [],
   "provides": { "object-storage": "s3" },
   "requiredProjectFiles": [
@@ -23,7 +23,7 @@
     { "file": "apps/api/src/app.ts", "marker": "// podokit:end:modules", "text": "storageModule," }
   ],
   "instructions": [
-    "Start MinIO for local dev:  docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml up -d",
+    "Start Silo for local dev:  docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml up -d",
     "Store an object:  curl -XPUT localhost:5002/storage/hello -H 'content-type: application/json' -d '{\"content\":\"hi\"}'",
     "Read it back:     curl localhost:5002/storage/hello",
     "Presigned URL:    curl localhost:5002/storage/hello/presigned",

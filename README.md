@@ -87,7 +87,7 @@ my-app/
 │   ├── api/     # Bun + Elysia, Bun.SQL, health, OpenAPI, error envelope
 │   └── web/     # SvelteKit 5, Tailwind v4, shadcn-svelte, i18n, API proxy
 ├── infra/
-│   ├── docker/  # PostgreSQL and optional Redis/MinIO/worker profiles
+│   ├── docker/  # PostgreSQL and optional Redis/Silo/worker profiles
 │   └── k3s/     # reference Kubernetes resources
 ├── tests/       # Playwright API and UI e2e suites
 ├── bun.lock

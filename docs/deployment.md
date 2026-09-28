@@ -33,6 +33,13 @@ PodoKit consumes:
 It never writes a secret value into a profile and does not create virtual machines,
 DNS records, registries, TLS certificates, or backup repositories.
 
+New deployment profiles default to pinned [Silo](https://github.com/pgsty/silo)
+server and client images for managed S3-compatible storage. The existing
+`MINIO_*` secret keys and service names remain compatible. Profiles already
+written to disk keep their recorded image references; update those references
+to `pgsty/silo:RELEASE.2026-09-16T00-00-00Z` and
+`pgsty/mc:RELEASE.2026-09-16T00-00-00Z` before applying a new plan.
+
 ## Build and publish the images first
 
 The deployment tooling consumes images; it does not build them. Generated projects
@@ -133,7 +140,7 @@ public verification checks.
 
 Initialization reads the manifest's active providers and installed modules. Auth
 and API-key modules add their required secret key names, distributed providers
-select PostgreSQL, Redis, or MinIO, and BullMQ adds a worker. Local providers
+select PostgreSQL, Redis, or Silo, and BullMQ adds a worker. Local providers
 disable their managed external dependency, omit the separate worker, and constrain
 the API to one replica. Dependencies support
 `external` and `disabled` as well as PodoKit-managed. External endpoints and

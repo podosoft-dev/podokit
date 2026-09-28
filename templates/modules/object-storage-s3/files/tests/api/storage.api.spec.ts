@@ -14,7 +14,7 @@ test("object storage: put, get, and presign @smoke", async ({ playwright }) => {
   const ctx = await session(playwright);
   const key = `obj-${Date.now()}`;
   const put = await ctx.put(`/api/storage/${key}`, { data: { content: "hello world" } });
-  test.skip(put.status() >= 500, "object storage (MinIO/S3) not reachable");
+  test.skip(put.status() >= 500, "object storage (S3-compatible service) not reachable");
   expect(put.ok()).toBeTruthy();
   expect(await put.json()).toMatchObject({ key });
 
