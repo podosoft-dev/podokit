@@ -549,6 +549,9 @@ describe("addModule (auth / better-auth)", () => {
     expect(existsSync(join(project, "apps/api/src/storage/storage.service.ts"))).toBe(true);
     expect(existsSync(join(project, "apps/api/src/storage/storage.config.ts"))).toBe(true);
     expect(existsSync(join(project, "infra/docker/minio.compose.yml"))).toBe(true);
+    const storageCompose = readFileSync(join(project, "infra/docker/minio.compose.yml"), "utf8");
+    expect(storageCompose).toContain("pgsty/silo:RELEASE.2026-09-16T00-00-00Z");
+    expect(storageCompose).toContain("pgsty/mc:RELEASE.2026-09-16T00-00-00Z");
     const apiPkg = JSON.parse(readFileSync(join(project, "apps/api/package.json"), "utf8")) as {
       dependencies: Record<string, string>;
     };
