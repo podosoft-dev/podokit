@@ -1,6 +1,6 @@
 {
   "name": "@podosoft/podokit-mcp",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Local Model Context Protocol server for creating and managing Bun and Elysia PodoKit projects.",
   "license": "Apache-2.0",
   "type": "module",
@@ -36,7 +36,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.1",
-    "@podosoft/podokit": "^1.1.0",
+    "@podosoft/podokit": "^1.1.1",
     "zod": "^4.6.5"
   }
 }

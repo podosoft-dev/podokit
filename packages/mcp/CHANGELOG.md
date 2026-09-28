@@ -1,5 +1,15 @@
 # @podosoft/podokit-mcp
 
+## 1.0.2
+
+### Patch Changes
+
+- [#195](https://github.com/podosoft-dev/podokit/pull/195) [`5cf6083`](https://github.com/podosoft-dev/podokit/commit/5cf60832677097719c17d8f4978a2b37174bb323) Thanks [@dependabot](https://github.com/apps/dependabot)! - Update the MCP server's Zod dependency to 4.6.5.
+
+- [#196](https://github.com/podosoft-dev/podokit/pull/196) [`50fe0a9`](https://github.com/podosoft-dev/podokit/commit/50fe0a9711c6ec3f7694ad0ec779b6e209eb9f92) Thanks [@dependabot](https://github.com/apps/dependabot)! - Use available Silo images for generated development and deployment storage, and update the MCP SDK to 1.30.1.
+- Updated dependencies [[`50fe0a9`](https://github.com/podosoft-dev/podokit/commit/50fe0a9711c6ec3f7694ad0ec779b6e209eb9f92)]:
+  - @podosoft/podokit@1.1.1
+
 ## 1.0.1
 
 ### Patch Changes
