@@ -1,5 +1,11 @@
 # @podosoft/podokit
 
+## 1.1.1
+
+### Patch Changes
+
+- [#196](https://github.com/podosoft-dev/podokit/pull/196) [`50fe0a9`](https://github.com/podosoft-dev/podokit/commit/50fe0a9711c6ec3f7694ad0ec779b6e209eb9f92) Thanks [@dependabot](https://github.com/apps/dependabot)! - Use available Silo images for generated development and deployment storage, and update the MCP SDK to 1.30.1.
+
 ## 1.1.0
 
 ### Minor Changes

@@ -1,5 +1,11 @@
 # @podosoft/podokit-api-client
 
+## 0.8.3
+
+### Patch Changes
+
+- [#193](https://github.com/podosoft-dev/podokit/pull/193) [`885c957`](https://github.com/podosoft-dev/podokit/commit/885c957ff330d507ef3084b71cce374742d68d7f) Thanks [@dependabot](https://github.com/apps/dependabot)! - Update Better Auth, API key, and passkey dependencies to 1.7.4.
+
 ## 0.8.2
 
 ### Patch Changes
