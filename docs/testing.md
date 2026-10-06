@@ -136,7 +136,9 @@ migrations, verifies the OpenAPI contract, builds and starts the Bun API and
 worker plus the SvelteKit server, and runs the shipped Playwright suite.
 
 Optional Mailpit, SMS, Redis, and Silo tests run only when the harness explicitly
-configures those services. `KEEP=1` preserves the generated app for inspection.
+configures those services. When `S3_ENDPOINT` is configured, storage failures fail
+the smoke test; it also downloads the object through its presigned URL.
+`KEEP=1` preserves the generated app for inspection.
 Ports and backing-service credentials can be overridden with the documented
 `E2E_*`, `POSTGRES_*`, Redis, and S3 environment variables. The shared suite's
 general request ceiling defaults to 1000; override it with

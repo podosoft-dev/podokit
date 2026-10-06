@@ -737,6 +737,165 @@ function helmFailureFlag(runner: CommandRunner): string {
   return version.startsWith("v4.") ? "--rollback-on-failure" : "--atomic";
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function managedStorageImage(
+  resource: unknown,
+  profile: DeployProfileV1,
+): string | null {
+  const name = `${profile.target.release}-minio`;
+  if (
+    !isRecord(resource) ||
+    resource.apiVersion !== "apps/v1" ||
+    resource.kind !== "StatefulSet" ||
+    !isRecord(resource.metadata) ||
+    resource.metadata.name !== name ||
+    resource.metadata.namespace !== profile.target.namespace ||
+    !isRecord(resource.spec) ||
+    !isRecord(resource.spec.template) ||
+    !isRecord(resource.spec.template.spec) ||
+    !Array.isArray(resource.spec.template.spec.containers)
+  ) {
+    return null;
+  }
+  const containers: unknown[] = resource.spec.template.spec.containers;
+  const container = containers[0];
+  if (
+    containers.length !== 1 ||
+    !isRecord(container) ||
+    container.name !== "minio" ||
+    typeof container.image !== "string" ||
+    !container.image.trim()
+  ) {
+    return null;
+  }
+  return container.image;
+}
+
+function jsonObjectStream(output: string): unknown[] | null {
+  const documents: unknown[] = [];
+  let start = -1;
+  let depth = 0;
+  let quoted = false;
+  let escaped = false;
+  for (let index = 0; index < output.length; index += 1) {
+    const character = output[index];
+    if (start < 0) {
+      if (/\s/.test(character ?? "")) continue;
+      if (character !== "{") return null;
+      start = index;
+    }
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === '"') quoted = false;
+      continue;
+    }
+    if (character === '"') quoted = true;
+    else if (character === "{") depth += 1;
+    else if (character === "}") depth -= 1;
+    if (depth === 0) {
+      try {
+        documents.push(JSON.parse(output.slice(start, index + 1)) as unknown);
+      } catch {
+        return null;
+      }
+      start = -1;
+    }
+  }
+  return start < 0 && documents.length > 0 ? documents : null;
+}
+
+function recordedStorageImage(
+  profile: DeployProfileV1,
+  runner: CommandRunner,
+): string | null {
+  const manifest = runner(
+    "helm",
+    helmArgs(profile, ["get", "manifest", `${profile.target.release}-dependencies`]),
+    { capture: true },
+  );
+  if (manifest.status !== 0 || !manifest.stdout.trim()) return null;
+  const temporaryRoot = mkdtempSync(join(tmpdir(), "podokit-storage-manifest-"));
+  try {
+    const path = join(temporaryRoot, "dependencies.yaml");
+    writeFileSync(path, manifest.stdout, { mode: 0o600 });
+    // Client dry-run parses Helm's YAML without submitting a create request to Kubernetes.
+    const parsed = runner(
+      "kubectl",
+      kubectlArgs(profile, [
+        "create", "--dry-run=client", "--validate=false", "-f", path, "-o", "json",
+      ]),
+      { capture: true },
+    );
+    if (parsed.status !== 0) return null;
+    // kubectl prints consecutive JSON objects for a manifest containing multiple resources.
+    const documents = jsonObjectStream(parsed.stdout);
+    if (!documents) return null;
+    const resources: unknown[] = [];
+    for (const document of documents) {
+      if (!isRecord(document)) return null;
+      if (document.kind !== "List") resources.push(document);
+      else if (document.apiVersion === "v1" && Array.isArray(document.items)) {
+        resources.push(...document.items);
+      } else return null;
+    }
+    const name = `${profile.target.release}-minio`;
+    const matches: unknown[] = resources.filter(
+      (item: unknown) => isRecord(item) && item.kind === "StatefulSet" &&
+        isRecord(item.metadata) && item.metadata.name === name,
+    );
+    return matches.length === 1 ? managedStorageImage(matches[0], profile) : null;
+  } finally {
+    rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+}
+
+function dependencyRollbackWarning(
+  profile: DeployProfileV1,
+  plan: DeploymentPlan,
+  runner: CommandRunner,
+): string | null {
+  if (profile.dependencies.objectStorage.mode !== "inCluster") return null;
+  const name = `${profile.target.release}-minio`;
+  const current = runner(
+    "kubectl",
+    kubectlArgs(profile, ["get", "statefulset", name, "--ignore-not-found=true", "-o", "json"]),
+    { capture: true },
+  );
+  if (current.status !== 0) return "the current managed storage image could not be inspected";
+  if (!current.stdout.trim()) {
+    return plan.dependencyRevision === null
+      ? null
+      : "the existing managed storage StatefulSet is missing";
+  }
+  let resource: unknown;
+  try {
+    resource = JSON.parse(current.stdout) as unknown;
+  } catch {
+    return "the managed storage StatefulSet has an invalid schema";
+  }
+  const currentImage = managedStorageImage(resource, profile);
+  if (!currentImage || typeof plan.images.objectStorage !== "string") {
+    return "the current managed storage image could not be confirmed";
+  }
+  if (currentImage !== plan.images.objectStorage) {
+    return "the managed storage server image is changing";
+  }
+  // A failed revision can already contain the new image while Helm's rollback target uses the old one.
+  if (plan.dependencyRevision !== null && plan.dependencyStatus !== "deployed") {
+    return "the previous dependency release is not deployed";
+  }
+  if (plan.dependencyRevision !== null) {
+    const recordedImage = recordedStorageImage(profile, runner);
+    if (!recordedImage) return "the storage image recorded by Helm could not be confirmed";
+    if (recordedImage !== currentImage) return "the storage image recorded by Helm differs from the current image";
+  }
+  return null;
+}
+
 function waitForDependencies(
   profile: DeployProfileV1,
   runner: CommandRunner,
@@ -914,7 +1073,15 @@ export async function applyDeployment(
       plan.rolloutStateDigest,
     );
     const failureFlag = helmFailureFlag(runner);
-    const common = ["--wait", "--timeout", "5m", failureFlag];
+    const common = ["--wait", "--timeout", "5m"];
+    const rollbackWarning = dependencyRollbackWarning(profile, plan, runner);
+    if (rollbackWarning) {
+      console.warn(
+        `Disable automatic dependency rollback because ${rollbackWarning}. ` +
+        "If the upgrade fails, stop storage and restore the complete data and IAM backup before starting the previous image. " +
+        "Application upgrades retain automatic rollback.",
+      );
+    }
 
     if (profile.dependencies.objectStorage.mode === "inCluster") {
       checked(
@@ -940,6 +1107,7 @@ export async function applyDeployment(
         `${profile.target.release}-dependencies`,
         runtime.dependencyChart,
         ...common,
+        ...(rollbackWarning ? [] : [failureFlag]),
       ]),
       false,
     );
@@ -974,6 +1142,7 @@ export async function applyDeployment(
         profile.target.release,
         runtime.applicationChart,
         ...common,
+        failureFlag,
       ]),
       false,
     );

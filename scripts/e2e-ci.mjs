@@ -169,7 +169,7 @@ async function main() {
   const npmEnv = { ...process.env, npm_config_registry: registry, npm_config_userconfig: npmrc };
   run("npx", ["--yes", "@podosoft/podokit", "create", "app", "--dir", target, "--template", "fullstack", "--yes"], { cwd: appDir, env: npmEnv });
   run("npx", ["--yes", "@podosoft/podokit", "add", "admin-dashboard"], { cwd: target, env: npmEnv });
-  // Backend modules whose shipped api specs need Redis / MinIO — added so their
+  // Backend modules whose shipped api specs need Redis / Silo — added so their
   // tests run in the Outer loop (they self-skip when a backing service is absent).
   // Blog pulls in rate-limit. Auth and runtime traffic receive high ceilings in
   // the shared suite, while the ordinary limit stays at its production default
@@ -240,7 +240,7 @@ async function main() {
       // Route phone-number OTPs to the SMS sink when present so its spec can read
       // the code back; otherwise the app logs it and the spec skips.
       ...(process.env.SMS_WEBHOOK_URL ? [`SMS_WEBHOOK_URL=${process.env.SMS_WEBHOOK_URL}`] : []),
-      // Redis (redis/bullmq/job-progress specs) and S3/MinIO (storage/file-upload
+      // Redis (redis/bullmq/job-progress specs) and S3/Silo (storage/file-upload
       // specs) are wired only when the CI service is present; otherwise those specs
       // self-skip. The api-key spec always has its static key.
       ...(process.env.REDIS_URL

@@ -81,7 +81,7 @@ Deploy the worker separately (k3s `worker-deployment.yaml` and a Compose worker 
 
 ## 4. file uploads (`podo add file-upload`)
 
-Upload files to S3-compatible storage (MinIO in dev, AWS S3 in prod) and get a
+Upload files to S3-compatible storage (Silo in dev, AWS S3 in prod) and get a
 presigned download URL. `file-upload` pulls in `object-storage-s3` automatically.
 
 ```bash
