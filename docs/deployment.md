@@ -40,6 +40,20 @@ written to disk keep their recorded image references; update those references
 to `pgsty/silo:RELEASE.2026-09-16T00-00-00Z` and
 `pgsty/mc:RELEASE.2026-09-16T00-00-00Z` before applying a new plan.
 
+### Upgrading an existing MinIO installation
+
+Keep the existing service, bucket, volume/PVC, endpoint, and secret references.
+Before upgrading, pause application writes and IAM administration, stop the
+storage processes, and back up the complete data volume, including `.minio.sys`,
+file permissions, deployment configuration, and required encryption material.
+Preserve the previous image from the local cache when its registry is unavailable.
+
+Rehearse the upgrade and recovery on an isolated copy before applying the
+confirmed deployment plan. An object-only backup or live IAM export does not
+preserve the complete IAM history. Recovery requires the full compatible backup
+and previous image; starting the old image against an upgraded volume is unsafe.
+See the [Silo IAM upgrade and recovery guide](https://silo.pgsty.com/operations/replication/iam-upgrade/).
+
 ## Build and publish the images first
 
 The deployment tooling consumes images; it does not build them. Generated projects
@@ -219,6 +233,24 @@ Apply performs the same steps on both drivers:
 A second apply or rollback fails while the lock is held, which is what prevents
 concurrent migrations. A crash deliberately leaves the lock behind; inspect the
 interrupted deployment before removing it.
+
+For Kubernetes-managed object storage, apply reads the current storage StatefulSet
+while holding the Lease and compares its server image with the approved image and
+the image recorded in Helm's dependency manifest. Helm's YAML is parsed with a
+client dry-run without creating resources. If any image changes, cannot be
+confirmed, differs between the live resource and Helm's manifest, or belongs to a
+dependency release that is not deployed, PodoKit warns and disables automatic
+Helm rollback for the dependency chart. It still waits for dependencies and stops before migrations or
+application rollout if the dependency upgrade fails. A failed storage upgrade
+requires deliberate recovery: stop storage and restore the complete compatible
+data and IAM backup before starting the previous image.
+
+Application upgrades retain automatic rollback through Helm 3's
+[`--atomic`](https://helm.sh/docs/v3/helm/helm_upgrade/) or Helm 4's
+[`--rollback-on-failure`](https://docs.helm.sh/docs/helm/helm_upgrade/).
+External object storage, unchanged live and recorded managed server images in a
+deployed release, and new installations keep the existing Helm behavior. This execution safeguard
+does not change the rendered manifests or the plan confirmation hash.
 
 ### ⚠ The migration runs against the release that is still serving
 

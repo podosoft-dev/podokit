@@ -40,7 +40,7 @@ In a second terminal, apply the included Todo migration and use the lifecycle he
 ```
 
 `dev watch` reads `.podokit/manifest.json` and automatically activates `cache`,
-`storage`, and `queue` when installed modules require Redis, MinIO, or a worker.
+`storage`, and `queue` when installed modules require Redis, Silo, or a worker.
 `dev up` uses the same shared gateway and module profiles without keeping Compose
 Watch attached.
 You can still activate an additional Compose profile explicitly:
