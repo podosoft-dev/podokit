@@ -294,6 +294,42 @@ publishes anything, and versions climb only when a release is deliberately cut.
 This lets work accumulate on `main` and ship as one release when enough has piled
 up, instead of a version bump per merge.
 
+### Publishing authentication
+
+The Release workflow uses npm
+[trusted publishing](https://docs.npmjs.com/trusted-publishers/) with GitHub
+Actions OIDC. It runs on a GitHub-hosted runner with `id-token: write` and installs
+the pinned npm 11.17.0 before installing or publishing packages. Node 22.22.1
+bundles npm 10, while trusted publishing requires npm 11.5.1 or later. No npm
+publishing token is supplied to the workflow.
+
+Each published package needs its own trusted publisher configuration. Use the
+repository owner and name, workflow filename `release.yml`, an empty environment
+name, and permission to run `npm publish`. An organization-level configuration
+does not cover all its packages. Self-hosted runners are not supported.
+New configurations automatically include `npm stage publish`; direct publishing
+must be explicitly allowed. This workflow does not need `npm dist-tag` permission.
+
+When adding a new workspace package, complete these steps in order:
+
+1. Build and inspect the package from the intended release commit. Publish its
+   first version locally using an authenticated maintainer session and
+   `npm publish -w <package-name> --provenance=false`. Local publishing cannot
+   generate the CI provenance required by the package's `publishConfig`.
+2. Register the package's trusted publisher, then verify its repository,
+   `release.yml` filename, environment, and publish permission. The package must
+   already exist on npm before the publisher can be registered. New unvalidated
+   configurations expire after 48 hours, so complete the first OIDC publish
+   within that window.
+3. Add its publish step to `release.yml` in dependency order and update the
+   workflow tests. Verify the first OIDC release before requiring two-factor
+   authentication and disallowing tokens in the package's publishing settings.
+
+The first locally published version has no provenance attestation. Later
+versions published by the Release workflow include provenance automatically.
+
+### Release sequence
+
 **1. Changes accumulate.** Each PR that touches a published package adds a
 changeset (`npm run changeset`; see [CONTRIBUTING.md](../CONTRIBUTING.md)). The
 changeset files sit in `.changeset/` and pile up as PRs merge.

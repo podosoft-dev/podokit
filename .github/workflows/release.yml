@@ -7,7 +7,7 @@ on:
 
 permissions:
   contents: write # publish the GitHub Release after npm succeeds
-  id-token: write # required for npm provenance
+  id-token: write # npm trusted publishing (OIDC) + provenance
 
 jobs:
   publish:
@@ -19,6 +19,9 @@ jobs:
           node-version: 22.22.1
           registry-url: https://registry.npmjs.org
           cache: npm
+      # Node 22.22.1 bundles npm 10; trusted publishing needs npm >= 11.5.1.
+      - name: Install npm for trusted publishing
+        run: npm install -g npm@11.17.0
       - run: npm ci --no-audit --no-fund
       - run: npm run build
       - run: npm test
@@ -34,8 +37,6 @@ jobs:
           else
             npm publish -w "$PKG"
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Publish runtime
         run: |
           PKG=@podosoft/podokit-runtime
@@ -45,8 +46,6 @@ jobs:
           else
             npm publish -w "$PKG"
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Publish auth
         run: |
           PKG=@podosoft/podokit-auth
@@ -56,8 +55,6 @@ jobs:
           else
             npm publish -w "$PKG"
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Publish template-engine
         run: |
           PKG=@podosoft/podokit-template-engine
@@ -67,8 +64,6 @@ jobs:
           else
             npm publish -w "$PKG"
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Publish api-client
         run: |
           PKG=@podosoft/podokit-api-client
@@ -78,8 +73,6 @@ jobs:
           else
             npm publish -w "$PKG"
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Publish CLI
         run: |
           PKG=@podosoft/podokit
@@ -89,8 +82,6 @@ jobs:
           else
             npm publish -w "$PKG"
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Publish MCP server
         run: |
           PKG=@podosoft/podokit-mcp
@@ -100,8 +91,6 @@ jobs:
           else
             npm publish -w "$PKG"
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Publish blog module
         run: |
           PKG=@podosoft/podokit-module-blog
@@ -111,8 +100,6 @@ jobs:
           else
             npm publish -w "$PKG"
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Publish analytics module
         run: |
           PKG=@podosoft/podokit-module-analytics
@@ -122,8 +109,6 @@ jobs:
           else
             npm publish -w "$PKG"
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
