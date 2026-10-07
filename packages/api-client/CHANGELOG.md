@@ -5,7 +5,7 @@
 ### Patch Changes
 
 - [#198](https://github.com/podosoft-dev/podokit/pull/198) [`d7b3905`](https://github.com/podosoft-dev/podokit/commit/d7b39055dc66af0e070630a4533aa0588aaed37e) Thanks [@dependabot](https://github.com/apps/dependabot)! - Require Better Auth 1.7.7 and matching API key, passkey, and OAuth provider integrations in the API client and generated authentication module. Document coordinated upgrades and reissuing pending Magic Links after the security update.
-  
+
   Clean up obsolete account issuer constraints before applying the current PostgreSQL or SQLite authentication schema. Preserve account data, reject identity collisions, and support repeated migrations.
 
 ## 0.8.3
