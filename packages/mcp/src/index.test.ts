@@ -87,8 +87,8 @@ describe("podokit-mcp server", () => {
     );
   });
 
-  it("list_templates lists the templates", async () => {
-    const r = (await client.callTool({ name: "list_templates", arguments: {} })) as TextResult;
+  it("list_templates lists the templates with omitted arguments", async () => {
+    const r = (await client.callTool({ name: "list_templates" })) as TextResult;
     expect(r.content[0].text).toContain("fullstack");
     expect(r.content[0].text).toContain("base");
   });
