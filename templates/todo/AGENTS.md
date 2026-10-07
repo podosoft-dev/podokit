@@ -8,26 +8,44 @@ Follow it so your changes match the project's conventions.
 
 A Bun 1.4 full-stack TypeScript monorepo ({{packageManager}} workspaces):
 
-- `apps/api` — **Elysia** backend (`{{projectName}}-api`), Bun.SQL + PostgreSQL, merged OpenAPI at `/api-docs`.
+- `apps/api` — **Elysia** backend (`{{projectName}}-api`), Bun.SQL + `{{databaseProvider}}`, merged OpenAPI at `/api-docs`.
 - `apps/web` — **SvelteKit** frontend (`{{projectName}}-web`), Tailwind v4 + shadcn-svelte + typesafe-i18n.
-- `infra/` — Docker Compose (PostgreSQL/Redis) and example k3s manifests.
-- `.podokit/` — PodoKit's generation lockfile (see "PodoKit tooling" below). Do not edit by hand.
+- `infra/` — Docker Compose references for external services and example k3s manifests.
+- `.podokit/` — generation metadata plus application-owned development and deployment profiles.
 - **Todo example**: `apps/api/src/todos/` (Elysia plugin, Bun.SQL repository, and migration) and the todo UI in `apps/web/src/routes/` show the end-to-end patterns to follow.
 
 ## Setup & commands
 
+Inspect active infrastructure with `podo provider list`. New-project defaults
+are `database=postgres`, `cache=redis`, `object-storage=s3`, `events=redis`, and
+`jobs=bullmq`. A simple single-process app can instead use `sqlite`, `memory`
+cache/events, `local` files, and `local` jobs. Only the database has a creation
+flag (`--database`); apply other choices using
+`podo provider set <capability> <provider> --apply` before adding features.
+Provider selection does not migrate or delete existing data.
+
 ```bash
 {{packageManager}} install
 cp .env.example .env
-docker compose -f infra/docker/docker-compose.yml up -d   # PostgreSQL (+ Redis)
+{{apiRun}} migration:run
 {{rootRun}} dev        # api on http://localhost:5002, web on http://localhost:5001
 ```
+
+For PostgreSQL, start `docker compose -f infra/docker/docker-compose.yml up -d`
+before migrating. Add `--profile cache` for Redis; Silo uses the overlay from
+`object-storage-s3`. Skip external services entirely for the complete local
+combination. `podo dev watch` is a separate container workflow and requires
+Docker. SQLite and local files default to `./data/podokit.sqlite` and
+`./data/files` relative to the API working directory; migrations and runtime
+must use the same database path. Keep local providers at one API process.
+Merge added module settings from `.env.example` into an existing `.env`.
 
 - **Ports: web = 5001, api = 5002.** The web app reaches the API only through its
   SvelteKit server proxy (`/api/*`), never with a direct browser `fetch`.
 - Build: `{{rootRun}} build`  ·  Type-check/lint: `{{rootRun}} lint`  ·  Unit tests: `{{rootRun}} test`
 - Per workspace: `{{apiRun}} build` / `{{webRun}} build`.
-- DB migrations (TypeORM migration layer only): `{{apiRun}} migration:run`.
+- Application migrations (PostgreSQL or SQLite): `{{apiRun}} migration:run`.
+- When `auth` is installed, run `{{apiRun}} migrate:all` for Better Auth and application tables.
 - e2e (Playwright, ships in `tests/`): `{{rootRun}} test:e2e`.
 - Playwright officially runs on Node, so `bunx playwright` respects its Node
   shebang. Node LTS is a test-tool dependency only; API, web, worker, migrations,
@@ -69,6 +87,7 @@ in `.podokit/files.lock` — respect it:
 
 Useful commands:
 
+- `podo provider list` / `podo provider set <capability> <provider> [--apply]` — inspect or switch database, cache, storage, events, and jobs; set previews by default.
 - `podo add <module>` — add a feature (auth, admin-dashboard, redis, bullmq, …). It wires itself into the app; run `podo add` with no argument to list modules.
 - `podo remove <module>` — un-apply a module (inverse of add; refuses if another module needs it, keeps files you edited).
 - `podo status` / `podo diff` — see your local edits vs. what PodoKit generated.

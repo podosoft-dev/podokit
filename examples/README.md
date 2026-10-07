@@ -1,157 +1,187 @@
-# Examples
+# Generated examples
 
-PodoKit generates projects rather than vendoring large example apps, so the
-canonical example is what `podo create` produces. Each example below layers on
-one more feature. PodoKit v1 applications use Bun 1.4.0; run package CLIs with
-`bunx` and API workspace scripts with `bun run --cwd apps/api <script>`.
+PodoKit generates examples through the CLI. Applications use Bun 1.4.0,
+Elysia, SvelteKit, and native `Bun.SQL`. Start with the
+[creation guide](../docs/getting-started.md), then add features to the generated
+project. Each example below describes its provider requirements.
 
-## 1. todo (`--template todo`)
+## Small Todo app without external services
 
-The `todo` template is a working todo app: a SvelteKit UI, an Elysia `todos`
-CRUD API backed by native `Bun.SQL` and PostgreSQL, and OpenAPI docs. (The
-default `fullstack` template is the same foundation without the todo code.)
-
-| Web (SvelteKit) | API docs (Swagger) |
-| --- | --- |
-| ![Generated todo app](../docs/images/todo-app.png) | ![Generated API docs](../docs/images/api-docs.png) |
+The `todo` template works with PostgreSQL or SQLite. Use SQLite for a simple
+program; memory cache/events, local files, and local jobs let added features run
+without PostgreSQL, Redis, or S3:
 
 ```bash
-npx @podosoft/podokit create todo-app --template todo
-cd todo-app
+bunx --bun @podosoft/podokit create podokit --template todo --database sqlite --yes
+cd podokit
+bunx --bun @podosoft/podokit provider set cache memory --apply
+bunx --bun @podosoft/podokit provider set object-storage local --apply
+bunx --bun @podosoft/podokit provider set events memory --apply
+bunx --bun @podosoft/podokit provider set jobs local --apply
 bun install
 cp .env.example .env
-
-# start PostgreSQL + Redis, then apply migrations
-docker compose -f infra/docker/docker-compose.yml up -d
 bun run --cwd apps/api migration:run
-
-bun run dev
 ```
 
-- Web: http://localhost:5001
-- API: http://localhost:5002 — health at `/health`, docs at `/api-docs`
+For only Todo CRUD, the four optional provider commands can be omitted. SQLite
+selection changes only the database; those commands select local implementations
+for later features. Run `bun run --cwd apps/api dev` and
+`bun run --cwd apps/web dev` in separate terminals, then open
+`http://localhost:5001`. API docs are at `http://localhost:5002/api-docs`.
 
-Try it: add a todo in the UI, then open `/api-docs` and call `GET /todos`.
+| Web | API docs |
+| --- | --- |
+| ![Generated Todo app](../docs/images/todo-app.png) | ![Generated API docs](../docs/images/api-docs.png) |
 
-For a minimal, dependency-light layout instead, use `--template base`.
+The following local examples extend this project. Install modules before
+starting the app, merge their new `.env.example` entries into `.env`, install
+dependencies, and run migrations. Local providers require one API process.
+SQLite, files, and job records persist; memory cache/events reset on restart.
+See [Runtime providers](../docs/providers.md) for paths and backup boundaries.
 
-## 2. auth (`podo add auth`)
+## Authentication
 
-Add full authentication (better-auth): email/password + sessions, with OAuth and
-2FA available by config. Adding it makes the API **secure by default** — every
-route needs a session except `/health` and `/api/auth/*`.
+Authentication works with either selected database; it does not require Redis
+or S3. Add the auth module, set a stable `BETTER_AUTH_SECRET` in `.env`, then
+create both Better Auth and application tables:
 
 ```bash
-npx @podosoft/podokit create auth-demo
-cd auth-demo && bun install && cp .env.example .env
-npx @podosoft/podokit add auth
+bunx --bun @podosoft/podokit add auth
 bun install
-docker compose -f infra/docker/docker-compose.yml up -d
-bunx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
-bun run dev
+# Merge the auth and mailer settings from .env.example into .env first.
+bun run --cwd apps/api migrate:all
+```
 
-# sign up (sets a session cookie), then call a protected route
+Once the API is running, sign up and call a protected route:
+
+```bash
 curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-up/email \
-  -H 'content-type: application/json' -d '{"email":"a@example.com","password":"password123","name":"A"}'
+  -H 'content-type: application/json' \
+  -d '{"email":"user@example.com","password":"podokit-example-password","name":"PodoKit"}'
 curl -b cookies.txt localhost:5002/account/me
 ```
 
-Enable OAuth by setting a provider's `*_CLIENT_ID`/`*_CLIENT_SECRET`, and 2FA with `AUTH_TWO_FACTOR=true`.
+Application routes require a session by default after installing auth. Health,
+OpenAPI, auth endpoints, and explicitly registered public routes remain public.
+Manage sign-in methods and feature flags in the admin Settings UI, or use
+`auth:configure` for supported configuration automation. See
+[Authentication](../docs/modules.md#auth-better-auth) for email, OAuth, and account policies.
 
-## 3. background jobs (`podo add bullmq`)
+## Local file uploads
 
-Add a BullMQ queue with a **separate worker process**.
-
-```bash
-npx @podosoft/podokit create jobs-demo
-cd jobs-demo && bun install && cp .env.example .env
-npx @podosoft/podokit add bullmq
-bun install
-docker compose -f infra/docker/docker-compose.yml up -d
-
-# API (producer) and worker (consumer) run as separate processes
-bun run dev                          # terminal 1
-bun run --cwd apps/api dev:worker    # terminal 2
-
-curl -XPOST localhost:5002/jobs -H 'content-type: application/json' -d '{"text":"hello"}'
-curl localhost:5002/jobs/<id>     # waiting -> active -> completed
-```
-
-Deploy the worker separately (k3s `worker-deployment.yaml` and a Compose worker example are added by the module).
-
-## 4. file uploads (`podo add file-upload`)
-
-Upload files to S3-compatible storage (Silo in dev, AWS S3 in prod) and get a
-presigned download URL. `file-upload` pulls in `object-storage-s3` automatically.
+`file-upload` uses the selected object-storage capability. With `local`, the
+CLI installs `object-storage-local`; S3 and Docker are unnecessary:
 
 ```bash
-npx @podosoft/podokit create files-demo
-cd files-demo && bun install && cp .env.example .env
-npx @podosoft/podokit add file-upload
+bunx --bun @podosoft/podokit add file-upload
 bun install
-docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml up -d
-bun run dev
-
-curl -F 'file=@./photo.png' localhost:5002/files   # → { key, url }
 ```
 
-## 5. job dashboard — live progress (`podo add job-progress`)
-
-Stream a background job's progress to the browser. `job-progress` composes
-`bullmq` (queue + worker), `redis` (pub/sub bridge), and `sse` (stream) — all
-added automatically.
+Merge `LOCAL_STORAGE_PATH` and upload settings from `.env.example` into `.env`.
+Once the API is running, upload a file. Include the session cookie when auth is
+installed:
 
 ```bash
-npx @podosoft/podokit create jobs-dash
-cd jobs-dash && bun install && cp .env.example .env
-npx @podosoft/podokit add job-progress          # also adds bullmq, sse, redis
-bun install
-docker compose -f infra/docker/docker-compose.yml up -d
-
-bun run dev                            # API
-bun run --cwd apps/api dev:worker      # worker (separate process)
-
-curl -N localhost:5002/events/stream   # watch
-curl -XPOST localhost:5002/progress -H 'content-type: application/json' -d '{"steps":5}'
-# stream: job-progress 20 -> 40 -> 60 -> 80 -> 100 (pushed from the worker via Redis)
+curl -b cookies.txt -F 'file=@./photo.png' localhost:5002/files
 ```
 
-## 6. admin dashboard (`podo add admin-dashboard`)
+The response contains `{ key, url }`. Local storage returns an application-local
+URL; S3 returns a presigned URL. Local files default to `./data/files` relative
+to the API working directory. See [File uploads](../docs/modules.md#file-upload).
 
-A full admin console on top of `auth`: login/signup/password-reset pages and a
-shadcn-svelte sidebar shell, plus:
+## Local jobs and live progress
 
-- **User & session management** — list, filter, search, ban/unban, set role,
-  revoke sessions, create/delete users.
-- **Audit log** — security-relevant actions (sign-ups, admin changes) recorded
-  and browsable at `/admin/audit`.
-- **Organizations** — teams with members and invitations.
-- **Runtime Settings** — enable/disable sign-in methods and configure OAuth
-  providers, SMTP, and server toggles (email verification, breached-password
-  check, self-delete, audit log) from `/admin/settings`. These are stored
-  **encrypted in the DB and applied live — no restart**, with env vars as an
-  optional fallback.
-- **Account** self-service — password, 2FA, passkeys, API keys, sessions.
+The `local` job provider persists records in the selected database and runs its
+worker inside the API process. Add progress streaming to compose it with memory
+events and SSE:
 
-| Users | Audit log | Settings — social login |
+```bash
+bunx --bun @podosoft/podokit add job-progress
+bun install
+bun run --cwd apps/api migrate:all # auth is installed in this example
+```
+
+With this local selection, the CLI adds `jobs-local`, `events-memory`, and `sse`.
+No Redis or separate worker is required. Once the API is running:
+
+```bash
+curl -N -b cookies.txt localhost:5002/events/stream
+```
+
+```bash
+# In another terminal:
+curl -b cookies.txt -XPOST localhost:5002/progress \
+  -H 'content-type: application/json' -d '{"steps":5}'
+```
+
+Progress events are delivered inside the single API process. For multi-process
+delivery, use Redis events and BullMQ. See
+[Job progress](../docs/modules.md#job-progress).
+
+## Admin dashboard on local providers
+
+The dashboard adds authentication, user/session administration, organizations,
+audit views, runtime Settings, and account self-service. Profile images use the
+selected storage provider, so SQLite and local files are sufficient for a small
+single-process installation:
+
+```bash
+bunx --bun @podosoft/podokit add admin-dashboard
+bun install
+```
+
+Merge the module settings into `.env`, set a stable `BETTER_AUTH_SECRET`, and
+set `ADMIN_EMAILS=admin@example.com`. Then migrate and bootstrap the first
+administrator:
+
+```bash
+bun run --cwd apps/api migrate:all
+export ADMIN_BOOTSTRAP_EMAIL="admin@example.com"
+IFS= read -r -s ADMIN_BOOTSTRAP_PASSWORD && export ADMIN_BOOTSTRAP_PASSWORD
+bun run --cwd apps/api admin:bootstrap
+unset ADMIN_BOOTSTRAP_PASSWORD
+```
+
+After starting the app, sign in at `/login` and open `/admin/users`. Use
+`/admin/settings` to configure sign-in methods, OAuth, SMTP, and feature flags.
+Bootstrap is idempotent and does not print the password. See
+[Admin dashboard](../docs/modules.md#admin-dashboard).
+
+| Users | Audit log | Settings |
 | --- | --- | --- |
-| ![Admin users](../docs/images/admin-users.png) | ![Audit log](../docs/images/admin-audit.png) | ![Settings — social login](../docs/images/admin-settings-social.png) |
+| ![Admin users](../docs/images/admin-users.png) | ![Audit log](../docs/images/admin-audit.png) | ![Settings](../docs/images/admin-settings-social.png) |
+
+## Server providers for shared infrastructure
+
+For a server app using the defaults, create a separate fullstack project and add
+the needed features:
 
 ```bash
-npx @podosoft/podokit create my-admin
-cd my-admin && bun install && cp .env.example .env
-npx @podosoft/podokit add admin-dashboard    # also adds auth
+bunx --bun @podosoft/podokit create podokit --yes
+cd podokit
+bunx --bun @podosoft/podokit add file-upload
+bunx --bun @podosoft/podokit add job-progress
 bun install
-docker compose -f infra/docker/docker-compose.yml up -d
-bunx @better-auth/cli migrate -y --config apps/api/src/auth/auth.ts
-bun run --cwd apps/api migration:run         # creates auth_config + app_setting
-# set ADMIN_EMAILS=you@example.com in .env
-bun run dev
-# open /signup, register that email (→ admin), then manage users at /admin/users
+cp .env.example .env
+bunx --bun @podosoft/podokit dev watch
 ```
 
-## Keeping examples up to date
+Use a different parent directory from the local example. This project selects
+PostgreSQL, Redis cache/events, S3, and BullMQ. The container loop enables the
+installed Redis, Silo, and worker profiles. Run migrations in a second terminal:
 
-These are generated apps, so they ship with the `.podokit/` lockfile and can
-receive template and module improvements via `podo update`. See
-[../docs/updating.md](../docs/updating.md).
+```bash
+bunx --bun @podosoft/podokit dev exec api bun run --cwd apps/api migration:run
+```
+
+Open `http://podokit.localhost`. The S3 module uses Silo in development with
+`STORAGE_PROVIDER=minio`; AWS S3 uses `STORAGE_PROVIDER=aws`. Production
+deployment settings are documented in [Deployment](../docs/deployment.md).
+
+## Keep generated examples up to date
+
+Generated apps record their assembly in `.podokit/`. Use `podo provider list` to
+inspect selections and `podo update` to preview template/module changes before
+applying them. Provider switching changes code and configuration only; it does
+not transfer existing database rows, cache keys, objects, or jobs. See
+[Updating](../docs/updating.md) and [Runtime providers](../docs/providers.md).

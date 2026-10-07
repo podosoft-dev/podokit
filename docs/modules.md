@@ -20,7 +20,7 @@ and run API scripts as `bun run --cwd apps/api <script>`.
 - wires its Elysia plugin and startup services into `app.ts` at marker comments,
 - may declare `ownedGlobs` (paths it ships as user-owned — e.g. public pages you
   restyle — merged into your project so `podo update` never touches them; see
-  [updating](updating.md#module-owned-paths)),
+  [updating](updating.md#project-metadata)),
 - may declare `managedOverrides` for module-owned files inside a broadly owned
   area, such as a generated `.claude/skills/<module>/**` workflow or an exact
   route server loader that must keep receiving behavioral and security updates;
@@ -36,18 +36,27 @@ and run API scripts as `bun run --cwd apps/api <script>`.
 Feature modules declare capabilities instead of concrete infrastructure. The CLI
 adds the implementation selected in `.podokit/manifest.json`:
 
-| Capability | Providers | Used by |
-| --- | --- | --- |
-| `database` | `postgres`, `sqlite` | core queries, auth, migrations, local jobs |
-| `cache` | `redis`, `memory` | rate limiting and application caches |
-| `object-storage` | `s3`, `local` | file upload, profile images, content modules |
-| `events` | `redis`, `memory` | SSE and job progress |
-| `jobs` | `bullmq`, `local` | background work and job progress |
+| Capability | Default | Alternative | Used by |
+| --- | --- | --- | --- |
+| `database` | `postgres` | `sqlite` | core queries, auth, migrations, local jobs |
+| `cache` | `redis` | `memory` | rate limiting and application caches |
+| `object-storage` | `s3` | `local` | file upload, profile images, content modules |
+| `events` | `redis` | `memory` | SSE and job progress |
+| `jobs` | `bullmq` | `local` | background work and job progress |
+
+A simple app can use SQLite, memory cache/events, local files, and local jobs.
+Configure the providers before adding features: `file-upload` then selects
+`object-storage-local`, `rate-limit` selects `cache-memory`, and `job-progress`
+selects `jobs-local`, `events-memory`, and `sse`. With the defaults, the same
+features select S3, Redis, and BullMQ implementations. Creating a project records
+these choices but does not install every optional implementation module.
 
 Inspect or change them with `podo provider list` and `podo provider set
 <capability> <provider> [--apply]`. The set command previews by default. It does
 not migrate or delete provider data. Local providers require one API process;
 read [Runtime providers](providers.md) before deployment or data migration.
+For a complete setup sequence, use
+[Getting Started](getting-started.md#small-app-with-local-providers).
 
 ## Available modules
 
@@ -190,7 +199,8 @@ trusted issuer backfill in the
 before running v1 code; the migration command cannot infer issuers safely.
 
 Run the same command in development and from a built production image. It applies
-both the Better Auth schema and all TypeORM migrations without downloading a CLI:
+both the Better Auth schema and application migrations for the selected
+PostgreSQL or SQLite database without downloading a CLI:
 
 ```bash
 bun run --cwd apps/api migrate:all

@@ -2,9 +2,47 @@
 
 Full-stack TypeScript starter generated with [PodoKit](https://github.com/podosoft-dev/podokit).
 
-- `apps/api` — Bun 1.4 + Elysia API: schema-validated env, `/health` + `/health/ready`, merged OpenAPI at `/api-docs`, a standard error envelope, and Bun.SQL + PostgreSQL. TypeORM is used only to execute migrations.
+- `apps/api` — Bun 1.4 + Elysia API: schema-validated env, `/health` + `/health/ready`, merged OpenAPI at `/api-docs`, a standard error envelope, and Bun.SQL with PostgreSQL or SQLite. TypeORM is used only for PostgreSQL migrations; SQLite has its own migration runner.
 - `apps/web` — SvelteKit app (TailwindCSS v4, shadcn-svelte, typesafe-i18n) that talks to the API through a server-side proxy.
-- `infra/` — Docker Compose (PostgreSQL, Redis) and k3s manifests.
+- `infra/` — Docker Compose references for external services and k3s manifests.
+
+## Infrastructure choices
+
+Inspect the current selections with `{{packageExecutor}} @podosoft/podokit provider list`.
+New projects use these defaults unless configured otherwise:
+
+| Capability | Default | Lightweight alternative |
+| --- | --- | --- |
+| Database | `postgres` | `sqlite` |
+| Cache | `redis` | `memory` |
+| Object storage | `s3` | `local` |
+| Events | `redis` | `memory` |
+| Jobs | `bullmq` | `local` |
+
+For a simple program, prototype, or desktop app, SQLite, memory cache/events,
+local files, and local jobs can run inside one API process without PostgreSQL,
+Redis, or S3 services. `create --database sqlite` selects only the database;
+choose the other providers after creation:
+
+```bash
+{{packageExecutor}} @podosoft/podokit provider set cache memory --apply
+{{packageExecutor}} @podosoft/podokit provider set object-storage local --apply
+{{packageExecutor}} @podosoft/podokit provider set events memory --apply
+{{packageExecutor}} @podosoft/podokit provider set jobs local --apply
+```
+
+Apply providers before adding features, then install dependencies and merge new
+`.env.example` entries into `.env`. These commands install implementation modules
+and configure them; they do not move or delete data. SQLite defaults to
+`./data/podokit.sqlite`, and local files to `LOCAL_STORAGE_PATH=./data/files`,
+relative to the API working directory. Memory cache/events are lost on restart;
+the database, files, and local job records persist. Use absolute paths and back
+up the database and files together for packaged or production apps.
+
+Use the host-process setup below to avoid Docker. The containerized loop still
+requires Docker. See the PodoKit
+[runtime provider guide](https://github.com/podosoft-dev/podokit/blob/main/docs/providers.md)
+for server settings, Silo/AWS S3 configuration, and provider switching.
 
 ## Getting started
 
@@ -57,13 +95,27 @@ through Compose Watch, including Vite HMR on the same portless browser origin.
 
 ### Alternative: host processes
 
-Use this loop when you want only the web and API processes on the host:
+Use this loop for an app with SQLite and local providers, or when you want the
+web and API processes on the host. Prepare the project first:
 
 ```bash
-# start local PostgreSQL + Redis
-docker compose -f infra/docker/docker-compose.yml up -d
+{{packageManager}} install
+cp .env.example .env
+{{apiRun}} migration:run
+```
 
-{{packageManager}} run dev
+For PostgreSQL, start `docker compose -f infra/docker/docker-compose.yml up -d`
+before migrating. Redis needs `--profile cache`; Silo needs the storage overlay
+added by `object-storage-s3`. Skip those services for the complete local setup.
+
+Run each service in a separate terminal from the project root:
+
+```bash
+{{apiRun}} dev # terminal 1
+```
+
+```bash
+{{webRun}} dev # terminal 2
 ```
 
 - API: http://localhost:5002 — health at `/health`, docs at `/api-docs`
@@ -71,12 +123,17 @@ docker compose -f infra/docker/docker-compose.yml up -d
 
 ## Database & migrations
 
-The API uses Bun.SQL for request-time queries and TypeORM only as a migration
-runner. Add a numbered migration under `apps/api/src/migrations`, then run it:
+The API uses Bun.SQL with the selected PostgreSQL or SQLite database. TypeORM
+runs PostgreSQL migrations; SQLite uses the local migration runner. Add a
+numbered migration under `apps/api/src/migrations`, then run it:
 
 ```bash
 {{apiRun}} migration:run
 ```
+
+When `auth` is installed, use `{{apiRun}} migrate:all` to create or update both
+Better Auth and application tables. Set the module's required environment
+values before migrating.
 
 Want a worked example? Generate the `todo` template instead:
 `{{packageExecutor}} @podosoft/podokit create my-app --template todo`.

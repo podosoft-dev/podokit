@@ -5,30 +5,44 @@ storage, event, and job contracts. A generated project records one active
 implementation for each capability in `.podokit/manifest.json` and the managed
 `apps/api/src/config/providers.ts` source.
 
-| Capability | Distributed/server provider | Local provider |
-| --- | --- | --- |
-| Database | `postgres` | `sqlite` |
-| Cache and rate limits | `redis` | `memory` |
-| Object storage | `s3` | `local` |
-| Events | `redis` | `memory` |
-| Jobs | `bullmq` | `local` |
+## Choices and defaults
 
-Distributed providers support multiple API or worker processes. Memory events,
+| Capability | Default | Local alternative | Implementation modules |
+| --- | --- | --- | --- |
+| `database` | `postgres` — PostgreSQL | `sqlite` — embedded database file | Included in `fullstack` and `todo` |
+| `cache` | `redis` — shared Redis cache | `memory` — bounded in-process cache | `redis` / `cache-memory` |
+| `object-storage` | `s3` — S3-compatible object service | `local` — local filesystem | `object-storage-s3` / `object-storage-local` |
+| `events` | `redis` — shared Redis events | `memory` — in-process events | `events-redis` / `events-memory` |
+| `jobs` | `bullmq` — Redis queue and separate worker | `local` — database-persistent embedded worker | `bullmq` / `jobs-local` |
+
+For a simple program, prototype, desktop application, or single-process
+service, SQLite, memory cache/events, local files, and local jobs avoid running
+external PostgreSQL, Redis, and S3 services. Template and provider choices are
+independent: use `fullstack` or `todo` with local providers for a lightweight
+working app. `base` is a minimal skeleton without the database/module foundation.
+
+Selections can be mixed, for example PostgreSQL with memory cache and local
+files. Creation records the choices but does not install all optional modules
+or start infrastructure. `provider set --apply` installs its implementation;
+feature modules install the implementations of their required capabilities.
+
+Server providers supply shared infrastructure. Memory events,
 memory cache, local jobs, and local object storage are designed for one API
 process. The deployment planner enforces one API replica when any selected
 provider has that constraint and omits unneeded managed dependencies.
 
-## Create with SQLite
+## Select providers when creating a project
 
-Database selection is available during generation:
+Only database selection is available as a creation flag. PostgreSQL is the
+default; select SQLite explicitly:
 
 ```bash
 podo create my-app --database sqlite
 ```
 
-This selects SQLite while retaining the server defaults for other capabilities.
-Select a complete local profile explicitly when building a desktop or
-single-process application:
+This selects SQLite while retaining Redis cache, S3, Redis events, and BullMQ.
+There are no `--cache` or `--storage` creation flags. Configure those providers
+after creation. Select the complete local combination before adding features:
 
 ```bash
 cd my-app
@@ -38,10 +52,56 @@ podo provider set events memory --apply
 podo provider set jobs local --apply
 ```
 
+Then run `bun install`, copy `.env.example` to `.env`, and run
+`bun run --cwd apps/api migration:run`. Use host API/web processes to avoid
+Docker; the containerized `podo dev watch` workflow still needs it. A full
+copyable example is in
+[Getting Started](getting-started.md#small-app-with-local-providers).
+
 Each command installs the selected implementation module when it is missing.
 Feature modules depend on capabilities instead of concrete infrastructure, so
 `podo add file-upload`, `podo add rate-limit`, `podo add sse`, and `podo add
 job-progress` compose with the active provider set.
+
+Configure providers before adding features so the CLI installs the intended
+dependencies. For example, `file-upload` uses `object-storage-local` when storage
+is `local`, and `job-progress` uses `jobs-local`, `events-memory`, and `sse` for
+the local combination. Provider commands and `podo add` append settings to
+`.env.example`; merge new settings into an existing `.env` yourself.
+
+## Runtime settings
+
+| Provider | Setting | Default behavior |
+| --- | --- | --- |
+| PostgreSQL | `DATABASE_URL`, or `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Example connects to `localhost:5432`, database/user `podokit`; `DATABASE_URL` takes precedence |
+| SQLite | `DATABASE_URL` with a `sqlite:` or `file:` URL | `./data/podokit.sqlite` |
+| Redis cache/events | `REDIS_URL`, or `REDIS_HOST`, `REDIS_PORT`, `REDIS_DB`, and optional auth/TLS settings | `localhost:6379`, database `0`; `REDIS_URL` takes precedence |
+| Memory cache/events | No external connection | Bounded state held inside the API process |
+| S3 | `STORAGE_PROVIDER`, `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, credentials, `S3_FORCE_PATH_STYLE` | Silo-compatible development settings described below |
+| Local files | `LOCAL_STORAGE_PATH` | `./data/files` |
+| Local jobs | Selected database and `LOCAL_JOBS_POLL_INTERVAL_MS` | Embedded API worker; polling every `250` ms |
+
+The provider configuration selects the implementation; environment settings
+configure its connection or paths. Setting `DATABASE_URL` alone does not change
+the recorded database provider.
+
+### S3-compatible storage
+
+`object-storage=s3` supports AWS S3 and Silo/MinIO-compatible services through
+the same storage contract. The module's development defaults are:
+
+```dotenv
+STORAGE_PROVIDER=minio
+S3_ENDPOINT=http://localhost:9000
+S3_REGION=us-east-1
+S3_BUCKET=podokit
+S3_FORCE_PATH_STYLE=true
+```
+
+The local Compose overlay uses Silo. The `minio` provider value and Compose names
+are retained for compatibility. For AWS S3, set `STORAGE_PROVIDER=aws`, remove
+`S3_ENDPOINT`, set `S3_FORCE_PATH_STYLE=false`, and provide your bucket, region,
+and credentials. See [Object storage modules](modules.md#object-storage-s3).
 
 ## Inspect and switch an existing project
 
@@ -87,7 +147,10 @@ contracts through `apps/api/src/app.extensions.ts`.
 ## Local persistence and backup
 
 SQLite defaults to `./data/podokit.sqlite`; local object storage defaults to
-`./data/files`. Set absolute paths for packaged desktop and production use.
+`./data/files`, both relative to the API process's working directory. Commands
+using `bun run --cwd apps/api` therefore use `apps/api/data` by default. Set
+absolute paths for packaged desktop and production use, and use the same
+database path for migrations and the API.
 SQLite enables WAL, foreign keys, and a busy timeout. Back up the database and
 local files as one logical snapshot, and include the authentication secret used
 to decrypt stored configuration. In-process cache and event state is ephemeral;

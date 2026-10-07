@@ -10,7 +10,31 @@ migration, build, and unit-test processes run on Bun. Existing PodoKit 0.x
 applications are not converted in place; keep them on
 `@podosoft/podokit@0.17.4`.
 
+## Choose your infrastructure
+
+The default template is `fullstack`. Its infrastructure selections are:
+
+| Capability | Default | Lightweight alternative |
+| --- | --- | --- |
+| Database | `postgres` — PostgreSQL | `sqlite` — a local database file |
+| Cache | `redis` — shared Redis cache | `memory` — in-process cache |
+| Object storage | `s3` — AWS S3 or an S3-compatible service | `local` — local files |
+| Events | `redis` — shared Redis events | `memory` — in-process events |
+| Jobs | `bullmq` — Redis queue with a separate worker | `local` — database-backed jobs with an embedded worker |
+
+For a small tool, prototype, desktop app, or single-process service, you can use
+**SQLite, memory cache, and local files** without running PostgreSQL, Redis, or
+S3. Choose each capability independently; you can also mix local and server
+providers. Local providers require one API process.
+
+These are provider selections, not services installed or started by `create`.
+Database support is included in `fullstack` and `todo`; cache, storage, event,
+and job modules are added when you apply a provider or add a feature that needs
+it. See [Runtime providers](docs/providers.md) for configuration and limits.
+
 ## Quick start
+
+### Default server setup
 
 ```bash
 npx @podosoft/podokit create my-app
@@ -31,6 +55,30 @@ on loopback port 80 and routes multiple projects by their `*.localhost`
 hostnames. See [Development](docs/development.md) for profiles, migrations,
 container lifecycle, and the host-process loop.
 
+### Small app without external services
+
+```bash
+bunx --bun @podosoft/podokit create podokit --template todo --database sqlite --yes
+cd podokit
+bunx --bun @podosoft/podokit provider set cache memory --apply
+bunx --bun @podosoft/podokit provider set object-storage local --apply
+bunx --bun @podosoft/podokit provider set events memory --apply
+bunx --bun @podosoft/podokit provider set jobs local --apply
+bun install
+cp .env.example .env
+bun run --cwd apps/api migration:run
+```
+
+Run `bun run --cwd apps/api dev` and `bun run --cwd apps/web dev` in separate
+terminals, then open **http://localhost:5001**. This host-process setup does not
+need Docker. SQLite defaults to `./data/podokit.sqlite` and local files to
+`./data/files`, relative to the API working directory.
+
+Only the database has a creation flag. There are no `--cache` or `--storage`
+flags; configure those after creation with `provider set`. `--database sqlite`
+alone retains the Redis, S3, Redis events, and BullMQ defaults. See
+[Getting Started](docs/getting-started.md) for both setup paths.
+
 ## CLI
 
 ```text
@@ -41,6 +89,7 @@ Options:
   --dir <path>     Target directory (default: ./<name>)
   --runtime bun    Optional explicit Bun selection
   --database <p>   postgres (default) | sqlite
+  --no-ai          Omit generated AI-agent guidance
   -y, --yes        Skip prompts and accept defaults
   -h, --help       Show help
 ```
@@ -77,7 +126,8 @@ npx @podosoft/podokit create local-app --database sqlite
 
 The generated API uses Elysia on the request path, Bun.SQL for application
 queries, provider-neutral cache, object storage, events, and jobs contracts,
-and a small TypeORM layer only for versioned migrations. API documentation is
+and versioned migrations through TypeORM for PostgreSQL or the SQLite migration
+runner. API documentation is
 available at `/api-docs`; `/api-docs-json` merges Elysia routes, PodoKit module
 routes, and Better Auth's dynamic OpenAPI document.
 
@@ -85,7 +135,7 @@ routes, and Better Auth's dynamic OpenAPI document.
 my-app/
 ├── apps/
 │   ├── api/     # Bun + Elysia, Bun.SQL, health, OpenAPI, error envelope
-│   └── web/     # SvelteKit 5, Tailwind v4, shadcn-svelte, i18n, API proxy
+│   └── web/     # SvelteKit, Svelte 5, Tailwind v4, shadcn-svelte, i18n, API proxy
 ├── infra/
 │   ├── docker/  # PostgreSQL and optional Redis/Silo/worker profiles
 │   └── k3s/     # reference Kubernetes resources
@@ -128,10 +178,8 @@ and never returned to the browser.
 
 ## Runtime providers
 
-Use PostgreSQL, Redis, S3, Redis events, and BullMQ for a distributed server
-deployment, or SQLite, bounded memory services, local files, and local jobs for
-a desktop or single-process application. Existing projects can preview and apply
-each selection independently:
+Inspect the selected providers and available alternatives, or preview and apply
+one change:
 
 ```bash
 podo provider list
@@ -139,9 +187,11 @@ podo provider set cache memory
 podo provider set cache memory --apply
 ```
 
-Switching never migrates or deletes data. See [Runtime providers](docs/providers.md)
-for the compatibility contracts, complete local profile, backup boundary, and
-single-replica constraints.
+`provider set` previews by default; `--apply` updates configuration and installs
+the selected implementation module. It never migrates or deletes data. S3's
+development configuration uses Silo with `STORAGE_PROVIDER=minio`; AWS S3 uses
+`STORAGE_PROVIDER=aws`. See [Runtime providers](docs/providers.md) for settings,
+module mappings, persistence, and switching an existing project.
 
 ## Validation and runtime policy
 
@@ -230,6 +280,7 @@ legacy PodoKit 0.x applications.
 
 ## Documentation
 
+- [Documentation index](docs/README.md)
 - [Getting Started](docs/getting-started.md)
 - [Templates](docs/templates.md)
 - [Modules and endpoints](docs/modules.md)

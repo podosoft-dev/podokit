@@ -10,12 +10,16 @@ export interface TodoRecord {
 interface TodoRow {
   id: string;
   title: string;
-  completed: boolean;
-  createdAt: Date;
+  completed: boolean | number;
+  createdAt: Date | string;
 }
 
 function record(row: TodoRow): TodoRecord {
-  return { ...row, createdAt: row.createdAt.toISOString() };
+  return {
+    ...row,
+    completed: Boolean(row.completed),
+    createdAt: (row.createdAt instanceof Date ? row.createdAt : new Date(row.createdAt)).toISOString(),
+  };
 }
 
 export class TodoRepository {
@@ -39,8 +43,9 @@ export class TodoRepository {
   }
 
   async create(title: string): Promise<TodoRecord> {
+    const id = crypto.randomUUID();
     const rows = await this.sql<TodoRow[]>`
-      INSERT INTO todos (title) VALUES (${title})
+      INSERT INTO todos (id, title) VALUES (${id}, ${title})
       RETURNING id, title, completed, "createdAt"
     `;
     const row = rows[0];
