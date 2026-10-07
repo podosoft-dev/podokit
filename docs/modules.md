@@ -191,12 +191,12 @@ curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-up/email \
 curl -b cookies.txt localhost:5002/account/me
 ```
 
-Better Auth 1.7 requires an `issuer` for every account. The generated migration
-command uses the Better Auth version installed by the application, avoiding a
-schema mismatch with an independently resolved CLI. Existing Better Auth 1.6 databases need the
-trusted issuer backfill in the
-[Better Auth 1.7 upgrade guide](https://github.com/better-auth/better-auth/blob/main/docs/content/docs/guides/1-7-upgrade-guide.mdx)
-before running v1 code; the migration command cannot infer issuers safely.
+The authentication module requires Better Auth 1.7.7 and uses the version
+installed by the application for migrations. Before applying the current
+schema, it checks duplicate `(providerId, accountId)` identities and cleans up
+obsolete 1.7.0–1.7.2 issuer constraints in PostgreSQL or SQLite. Back up existing
+databases and resolve reported collisions manually; see
+[authentication upgrade guidance](updating.md#compatibility-ranges).
 
 Run the same command in development and from a built production image. It applies
 both the Better Auth schema and application migrations for the selected
