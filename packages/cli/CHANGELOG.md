@@ -1,5 +1,17 @@
 # @podosoft/podokit
 
+## 1.1.3
+
+### Patch Changes
+
+- [#198](https://github.com/podosoft-dev/podokit/pull/198) [`d7b3905`](https://github.com/podosoft-dev/podokit/commit/d7b39055dc66af0e070630a4533aa0588aaed37e) Thanks [@dependabot](https://github.com/apps/dependabot)! - Require Better Auth 1.7.7 and matching API key, passkey, and OAuth provider integrations in the API client and generated authentication module. Document coordinated upgrades and reissuing pending Magic Links after the security update.
+  
+  Clean up obsolete account issuer constraints before applying the current PostgreSQL or SQLite authentication schema. Preserve account data, reject identity collisions, and support repeated migrations.
+
+- [#203](https://github.com/podosoft-dev/podokit/pull/203) [`72eca65`](https://github.com/podosoft-dev/podokit/commit/72eca657c8c0a10eb5667f929e571112d1295da7) Thanks [@korone00](https://github.com/korone00)! - Clarify project creation defaults and document SQLite, memory cache/events, local files, and local jobs for simple single-process applications. Align generated README and agent guidance with provider selection, host development, and current module migration workflows.
+
+- [#203](https://github.com/podosoft-dev/podokit/pull/203) [`72eca65`](https://github.com/podosoft-dev/podokit/commit/72eca657c8c0a10eb5667f929e571112d1295da7) Thanks [@korone00](https://github.com/korone00)! - Fix the Todo template's SQLite migration and normalize UUIDs, booleans, and timestamps so SQLite and PostgreSQL return the same API types. Ship persistence and HTTP/browser CRUD regression tests with generated Todo projects.
+
 ## 1.1.2
 
 ### Patch Changes
