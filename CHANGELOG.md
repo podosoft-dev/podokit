@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Update the MCP SDK to 1.32.0 and verify stdio tool calls with omitted arguments.
 - Reorganize project creation documentation around infrastructure choices and
   defaults. Add complete SQLite, memory cache/events, local files, and local
   jobs setup instructions for simple single-process apps, and align CLI,
