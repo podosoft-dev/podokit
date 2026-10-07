@@ -54,6 +54,21 @@ test("uses package-only verification for the generated Changesets PR", () => {
   assert.match(version, /gh workflow run e2e\.yml --ref changeset-release\/main -f mode=package-smoke/);
 });
 
+test("authenticates npm publishing with GitHub OIDC", () => {
+  assert.match(release, /id-token: write/);
+  assert.match(release, /runs-on: ubuntu-latest/);
+  assert.doesNotMatch(release, /self-hosted/);
+  assert.doesNotMatch(release, /secrets\.NPM_TOKEN|NODE_AUTH_TOKEN/);
+  assert.match(release, /registry-url: https:\/\/registry\.npmjs\.org/);
+
+  const setupNode = release.indexOf("uses: actions/setup-node@");
+  const upgradeNpm = release.indexOf("run: npm install -g npm@11.17.0");
+  const installPackages = release.indexOf("run: npm ci");
+  assert.ok(setupNode >= 0);
+  assert.ok(upgradeNpm > setupNode);
+  assert.ok(installPackages > upgradeNpm);
+});
+
 test("publishes a GitHub Release only after npm packages succeed", () => {
   assert.match(release, /permissions:\s+contents: write/);
   const createRelease = release.indexOf("name: Create GitHub release");
