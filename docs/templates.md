@@ -1,7 +1,8 @@
 # Templates
 
 `podo create --template <name>` selects one of three Bun 1.4 templates.
-`--database postgres|sqlite` independently selects the initial database provider.
+`--database postgres|sqlite` selects the initial database provider, defaulting to
+`postgres`. Template choice and infrastructure choice are independent.
 
 | Template | Description |
 |---|---|
@@ -16,6 +17,26 @@ package-manager targets do not exist in PodoKit v1.
 npx @podosoft/podokit create my-app
 bunx --bun @podosoft/podokit create my-app --template todo
 ```
+
+For a simple application, keep the Elysia/SvelteKit foundation and select
+SQLite, memory cache/events, local files, and local jobs. `base` is a skeleton
+with placeholder scripts, not the way to select lighter infrastructure.
+`fullstack` and `todo` support either database; `base` does not include database
+integration or the provider-consuming module foundation.
+
+| Capability | Default | Other choice |
+| --- | --- | --- |
+| `database` | `postgres` | `sqlite` |
+| `cache` | `redis` | `memory` |
+| `object-storage` | `s3` | `local` |
+| `events` | `redis` | `memory` |
+| `jobs` | `bullmq` | `local` |
+
+Only `database` is selected with a `create` flag. Other providers are configured
+after creation using `podo provider set <capability> <provider> --apply`.
+SQLite selection alone leaves the other defaults unchanged. Follow
+[Getting Started](getting-started.md) for complete server and local setup steps,
+or [Runtime providers](providers.md) for settings and module installation.
 
 ## `fullstack`
 
@@ -44,8 +65,9 @@ tests/                     # Playwright API and UI e2e suites
 bun.lock
 ```
 
-The request path uses Elysia and Bun.SQL with PostgreSQL or SQLite. TypeORM is
-present only to execute versioned migrations. Other infrastructure is selected
+The request path uses Elysia and Bun.SQL with PostgreSQL or SQLite. TypeORM
+executes PostgreSQL migrations; SQLite uses the local migration runner. Other
+infrastructure is selected
 through the contracts described in [Runtime providers](providers.md). The merged
 OpenAPI document at `/api-docs-json` includes
 Elysia, module, and Better Auth routes. `bun run --cwd apps/api contract`
@@ -82,13 +104,18 @@ The Todo template adds:
 - unit/API/UI tests.
 
 ```bash
-npx @podosoft/podokit create my-app --template todo
-cd my-app
+npx @podosoft/podokit create podokit --template todo --database sqlite
+cd podokit
 bun install
 cp .env.example .env
 bun run --cwd apps/api migration:run
 bun run dev
 ```
+
+This example uses SQLite and needs no PostgreSQL server. Add memory/local
+providers before adding cache, upload, event, or job features to keep the app
+free of external services; see the complete local setup in
+[Getting Started](getting-started.md#small-app-with-local-providers).
 
 | Web | API docs |
 |---|---|
@@ -96,8 +123,9 @@ bun run dev
 
 ## `base`
 
-The base template contains the Bun workspace metadata and a minimal API entry
-point. Use it when the full Elysia/SvelteKit foundation is unnecessary.
+The base template contains Bun workspace metadata, placeholder API/web scripts,
+and a minimal API entry point. Use it to build your own foundation. For a small
+working full-stack app, use `fullstack` or `todo` with local providers instead.
 
 ## UI foundation
 

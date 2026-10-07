@@ -6,6 +6,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Reorganize project creation documentation around infrastructure choices and
+  defaults. Add complete SQLite, memory cache/events, local files, and local
+  jobs setup instructions for simple single-process apps, and align CLI,
+  generated README/agent guidance, and feature examples with the current v1
+  provider and migration workflows.
+
+### Fixed
+
+- Make the Todo template's initial migration compatible with SQLite and keep
+  UUID, boolean, and timestamp response types consistent across PostgreSQL and
+  SQLite. The documented local example now includes regression coverage for
+  migration, rollback, and Todo CRUD persistence.
+
+## Released package history
+
+Changesets records released versions and dependency changes in each package's
+changelog. Use these for the Bun/Elysia v1 release line:
+
+- [CLI and generated templates](packages/cli/CHANGELOG.md)
+- [Runtime providers](packages/runtime/CHANGELOG.md)
+- [Authentication primitives](packages/podokit-auth/CHANGELOG.md)
+- [Template engine](packages/template-engine/CHANGELOG.md)
+- [API client](packages/api-client/CHANGELOG.md)
+- [MCP server](packages/mcp/CHANGELOG.md)
+- [Blog module](packages/podokit-module-blog/CHANGELOG.md)
+- [Analytics module](packages/podokit-module-analytics/CHANGELOG.md)
+
+## Historical 0.x development notes
+
+The following notes were previously grouped under `Unreleased` while 0.x
+features accumulated. They are preserved as historical context, not pending v1
+changes. In particular, Node/NestJS defaults and runtime conversion describe the
+earlier architecture. Current v1 applications use Bun and Elysia exclusively;
+see [Updating](docs/updating.md) for the compatibility boundary.
+
 ### Added
 - **Node and Bun runtime profiles.** `podo create --runtime bun` now generates a
   Bun 1.4.0-native workspace with Bun lockfiles, scripts, Docker images, Compose,

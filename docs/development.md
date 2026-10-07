@@ -1,7 +1,9 @@
-# Local development
+# Development
 
-How to work on PodoKit templates, modules, and packages, then verify the result
-in a real generated Bun application without publishing to npm.
+Develop a generated application with host processes or containers, or work on
+PodoKit templates, modules, and packages with a local verification app. For
+project creation and infrastructure choices, start with
+[Getting Started](getting-started.md) and [Runtime providers](providers.md).
 
 ## Generate a local verification app
 
@@ -11,6 +13,7 @@ From the PodoKit monorepo root:
 node scripts/dev-app.mjs /tmp/myapp
 node scripts/dev-app.mjs /tmp/myapp --add auth,admin-dashboard
 node scripts/dev-app.mjs /tmp/myapp --template todo --no-build
+node scripts/dev-app.mjs /tmp/podokit --template todo --database sqlite --local-providers
 ```
 
 The helper builds the monorepo, runs the local CLI, links unpublished local
@@ -49,11 +52,19 @@ Generated applications support two development layouts:
 | | Host process | Containerized (`compose.dev.yaml`) |
 | --- | --- | --- |
 | Web/API | `bun run dev` on the host | Bun runs inside containers |
-| Dependencies | Docker with published host ports | Internal Docker networks |
+| Dependencies | SQLite/memory/local files, or external services with host connections | Internal Docker networks |
 | URL | `localhost:5001` and `:5002` | `http://<project>.localhost` |
 | Best fit | One quick local project | Several projects and deployment parity |
 
 ### Host process
+
+For a simple single-process app, select SQLite, memory cache/events, local
+files, and local jobs using the
+[local setup](getting-started.md#small-app-with-local-providers). Skip Docker
+entirely for that combination. The reference host Compose file always starts
+PostgreSQL when invoked, even if the application selects SQLite.
+
+For PostgreSQL-backed development:
 
 ```bash
 cd /tmp/myapp
@@ -67,8 +78,10 @@ bun run dev
 ```
 
 The root `dev` script starts the Elysia API on port 5002 and SvelteKit on port
-5001. Redis, Silo, Mailpit, and the SMS sink are enabled by the generated
-Compose profiles only when required.
+5001. Use `--profile cache` when host development needs Redis, and the
+`minio.compose.yml` overlay from `object-storage-s3` for Silo. `--profile dev`
+adds Mailpit and the SMS sink. The containerized `podo dev` loop detects module
+profiles; direct `docker compose` commands need explicit profiles/overlays.
 
 ### Containerized development
 

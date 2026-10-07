@@ -5,19 +5,25 @@ by [PodoKit](https://github.com/podosoft-dev/podokit).
 
 ## Project overview
 
-A minimal Bun 1.4 workspace starter. Build it up from here — add features with the
-`podo` CLI (`podo add <module>`; run `podo add` with no argument to list them).
+A minimal Bun 1.4 workspace starter with placeholder API/web scripts. Build your
+own foundation here. Modules requiring the fullstack service registry, provider
+consumers, or injection points cannot be added directly to this skeleton.
+
+For a simple working full-stack app, create `fullstack` or `todo` with SQLite,
+memory cache/events, local files, and local jobs. Those templates support local
+providers independently of template choice and need one API process. See
+[Getting Started](https://github.com/podosoft-dev/podokit/blob/main/docs/getting-started.md).
 
 ## Commands
 
 ```bash
 {{packageManager}} install
-{{rootRun}} dev      # runs workspace dev scripts
 {{rootRun}} build
 {{rootRun}} lint     # type-check
 {{rootRun}} test
 ```
 
+The generated scripts are placeholders; implement them before running the app.
 ## Code style
 
 - TypeScript `strict`. **No `any`** (use `unknown` + narrowing), no `@ts-ignore`.

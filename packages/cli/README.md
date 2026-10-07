@@ -7,11 +7,38 @@ through native `Bun.SQL`, Tailwind CSS v4, shadcn-svelte, Docker, and k3s assets
 The CLI itself remains Node-compatible, so either `npx` or `bunx` can create and
 maintain projects. Generated PodoKit v1 applications are Bun-only.
 
+## Choose infrastructure
+
+`fullstack` is the default template. `todo` adds a working CRUD example; `base`
+is a minimal workspace with placeholder scripts. For a small working app, use
+`fullstack` or `todo` with local providers rather than choosing `base` just to
+avoid external infrastructure.
+
+| Capability | Default | Local alternative |
+| --- | --- | --- |
+| Database | `postgres` — PostgreSQL | `sqlite` — database file |
+| Cache | `redis` | `memory` — in-process cache |
+| Object storage | `s3` — AWS S3 or S3-compatible storage | `local` — local files |
+| Events | `redis` | `memory` — in-process events |
+| Jobs | `bullmq` — Redis queue and separate worker | `local` — database-backed embedded worker |
+
+A simple program, prototype, desktop app, or single-process service can use
+**SQLite, memory cache, and local files** without PostgreSQL, Redis, or S3.
+Providers can be mixed. Local providers require one API process.
+
+Only the database is selected during creation with `--database postgres|sqlite`.
+Other capabilities use `provider set` after creation; there are no `--cache` or
+`--storage` creation flags. Choosing SQLite alone leaves the other defaults
+unchanged. Creation records selections, while applying a provider or adding a
+feature installs the necessary optional implementation modules.
+
 ## Quick start
+
+### Default server setup
 
 ```bash
 npx @podosoft/podokit create my-app
-# or: bunx @podosoft/podokit create my-app
+# or: bunx --bun @podosoft/podokit create my-app
 
 cd my-app
 bun install
@@ -27,6 +54,26 @@ The `todo` template generates a working SvelteKit UI, Elysia CRUD API, and
 PostgreSQL or SQLite persistence:
 
 ![Generated todo app](https://raw.githubusercontent.com/podosoft-dev/podokit/main/docs/images/todo-app.png)
+
+### Small app with local providers
+
+```bash
+bunx --bun @podosoft/podokit create podokit --template todo --database sqlite --yes
+cd podokit
+bunx --bun @podosoft/podokit provider set cache memory --apply
+bunx --bun @podosoft/podokit provider set object-storage local --apply
+bunx --bun @podosoft/podokit provider set events memory --apply
+bunx --bun @podosoft/podokit provider set jobs local --apply
+bun install
+cp .env.example .env
+bun run --cwd apps/api migration:run
+```
+
+Run `bun run --cwd apps/api dev` and `bun run --cwd apps/web dev` in separate
+terminals and open `http://localhost:5001`. This host-process setup requires no
+Docker. SQLite and local files default to `./data/podokit.sqlite` and
+`./data/files`, relative to the API working directory. Memory state disappears
+on restart; files and the database-backed local jobs persist.
 
 ## Commands
 
@@ -85,14 +132,21 @@ and [updating guide](https://github.com/podosoft-dev/podokit/blob/main/docs/upda
 
 ## Runtime providers
 
-Generated projects use stable capability contracts with server defaults
-(`postgres`, `redis`, `s3`, Redis events, and `bullmq`) and local alternatives
-(`sqlite`, memory cache/events, local files/jobs). `podo provider set` is a dry
-run by default and installs the selected implementation module on `--apply`.
-It changes code and configuration only; it never migrates or deletes data.
+Inspect active selections and available alternatives with `podo provider list`.
+`podo provider set` is a dry run by default and installs the selected
+implementation module on `--apply`. Configure providers before adding features:
+`file-upload` uses local storage when selected, and `job-progress` can use local
+jobs and memory events. Changes append settings to `.env.example`; merge them
+into an existing `.env` manually. Switching changes code and configuration only;
+it never migrates or deletes data.
+
+S3's development settings use Silo with `STORAGE_PROVIDER=minio`; use
+`STORAGE_PROVIDER=aws` for AWS S3. Local files use `LOCAL_STORAGE_PATH`.
 
 See the [runtime provider guide](https://github.com/podosoft-dev/podokit/blob/main/docs/providers.md)
 before switching an existing project.
+For the complete creation sequence, see
+[Getting Started](https://github.com/podosoft-dev/podokit/blob/main/docs/getting-started.md).
 
 ## Compatibility boundary
 
