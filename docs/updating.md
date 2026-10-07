@@ -174,3 +174,21 @@ Microsoft 1.7 identities change from `sub` to the directory `oid`, which cannot 
 derived safely when a verified ID token or trusted directory export is unavailable.
 Complete that mapping before the upgrade as described in the
 [Better Auth 1.7 upgrade guide](https://better-auth.com/docs/guides/1-7-upgrade-guide#account-identity-is-scoped-by-issuer).
+
+### Better Auth 1.7.7 security update
+
+New authentication modules and the API client require at least 1.7.7 for Better
+Auth and their matching integrations. Existing applications should upgrade the
+server, API key, passkey, and OAuth provider packages together and regenerate
+their dependency lockfile.
+
+When API instances share verification storage, upgrade them in the same
+cutover. Request new Magic Links and restart OAuth or cookie-backed SAML sign-ins
+that began before the upgrade. OAuth Proxy participants must also upgrade
+together. This security update requires no database migration; the separate
+issuer migration described above still applies when upgrading from 1.6.
+
+Custom `verification.storeIdentifier.overrides` rules must account for the
+`magic-link:` and `auth-state:` prefixes. Existing endpoints and token formats
+remain the same. See the [official 1.7.7 release notes](https://github.com/better-auth/better-auth/releases/tag/v1.7.7)
+and [Magic Link security advisory](https://github.com/better-auth/better-auth/security/advisories/GHSA-965c-763c-88jm).
