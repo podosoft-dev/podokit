@@ -1,5 +1,13 @@
 # @podosoft/podokit-mcp
 
+## 1.0.3
+
+### Patch Changes
+
+- [#199](https://github.com/podosoft-dev/podokit/pull/199) [`f28999b`](https://github.com/podosoft-dev/podokit/commit/f28999b4710013bafd6d46236e5fb3ce09bbcef6) Thanks [@dependabot](https://github.com/apps/dependabot)! - Update the MCP SDK to 1.32.0 and verify that tools without parameters accept calls with omitted arguments through the stdio transport.
+- Updated dependencies [[`d7b3905`](https://github.com/podosoft-dev/podokit/commit/d7b39055dc66af0e070630a4533aa0588aaed37e), [`72eca65`](https://github.com/podosoft-dev/podokit/commit/72eca657c8c0a10eb5667f929e571112d1295da7), [`72eca65`](https://github.com/podosoft-dev/podokit/commit/72eca657c8c0a10eb5667f929e571112d1295da7)]:
+  - @podosoft/podokit@1.1.3
+
 ## 1.0.2
 
 ### Patch Changes
