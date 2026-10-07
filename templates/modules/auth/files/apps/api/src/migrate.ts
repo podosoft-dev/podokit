@@ -3,6 +3,7 @@ import { auth } from "./auth/auth";
 import { closeAuthDatabase, postgresPool, sqliteDatabase } from "./auth/db";
 import {
   migrateLegacyAccountIssuers,
+  migrateSqliteLegacyAccountIssuers,
   postgresAccountIssuerMigrationDatabase,
 } from "./auth/account-issuer-migration";
 import { runSqliteMigrations } from "./database/sqlite-migrator";
@@ -11,6 +12,7 @@ async function runMigrations(): Promise<void> {
   if (postgresPool) {
     await migrateLegacyAccountIssuers(postgresAccountIssuerMigrationDatabase(postgresPool));
   }
+  if (sqliteDatabase) migrateSqliteLegacyAccountIssuers(sqliteDatabase);
 
   const authMigrations = await getMigrations(auth.options);
   await authMigrations.runMigrations();

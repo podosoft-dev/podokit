@@ -425,7 +425,13 @@ describe("addModule (auth / better-auth)", () => {
     const apiPkg = JSON.parse(readFileSync(join(project, "apps/api/package.json"), "utf8")) as {
       dependencies: Record<string, string>;
     };
-    expect(apiPkg.dependencies["better-auth"]).toBeDefined();
+    const clientPkg = JSON.parse(readFileSync(
+      resolve(REPO_TEMPLATES, "..", "packages/api-client/package.json"), "utf8",
+    )) as { dependencies: Record<string, string> };
+    for (const dependency of ["better-auth", "@better-auth/api-key", "@better-auth/passkey"]) {
+      expect(apiPkg.dependencies[dependency]).toBe(clientPkg.dependencies[dependency]);
+    }
+    expect(apiPkg.dependencies["@better-auth/oauth-provider"]).toBe(apiPkg.dependencies["better-auth"]);
     expect(apiPkg.dependencies["@thallesp/nestjs-better-auth"]).toBeUndefined();
     expect(apiPkg.scripts["auth:configure"]).toBe("bun scripts/configure-auth.mjs");
     expect(apiPkg.scripts["migrate:all"]).toBe("bun scripts/run-migrations.mjs");

@@ -161,16 +161,36 @@ policy, and add Bun tests plus an API contract entry.
 
 `podo doctor` warns when an application moves outside these ranges.
 
-Better Auth 1.7 adds issuer-scoped account identities and a required `issuer`
-column. Fresh PodoKit v1 applications receive the complete schema through their
-initial migration. For a populated Better Auth 1.6 PostgreSQL database,
-`migrate:all` adds the column as nullable, backfills every safely derivable
-credential and built-in social-provider identity, checks collisions, installs a
-compatibility trigger for writes from the release that is still serving, and only
-then adds the required constraint and compound unique index.
+Better Auth 1.7.3 restored account identity to `(providerId, accountId)` and
+removed the required `issuer` introduced in 1.7.0–1.7.2. Back up populated
+databases before upgrading. The generated `migrate:all` command checks for
+duplicate identities before changing constraints and stops for manual resolution
+if it finds collisions. It preserves account rows, user links, and passwords.
 
-The migration fails closed for an unknown provider and for Microsoft accounts.
-Microsoft 1.7 identities change from `sub` to the directory `oid`, which cannot be
-derived safely when a verified ID token or trusted directory export is unavailable.
-Complete that mapping before the upgrade as described in the
-[Better Auth 1.7 upgrade guide](https://better-auth.com/docs/guides/1-7-upgrade-guide#account-identity-is-scoped-by-issuer).
+For PostgreSQL, it makes a legacy `issuer` column nullable, preserves its values,
+and removes the obsolete issuer index and PodoKit compatibility trigger. For
+SQLite, it drops the obsolete index and unused column. Both paths enforce unique
+`(providerId, accountId)` identities, support repeated runs, and leave fresh or
+1.6 schemas without an `issuer` column. Custom indexes or constraints may require
+manual cleanup. Microsoft accounts may still need a trusted `sub`-to-`oid` mapping;
+follow the [official upgrade guide](https://github.com/better-auth/better-auth/blob/main/docs/content/docs/guides/1-7-upgrade-guide.mdx)
+for those accounts rather than guessing an identity.
+
+### Better Auth 1.7.7 security update
+
+New authentication modules and the API client require at least 1.7.7 for Better
+Auth and their matching integrations. Existing applications should upgrade the
+server, API key, passkey, and OAuth provider packages together and regenerate
+their dependency lockfile.
+
+When API instances share verification storage, upgrade them in the same
+cutover. Request new Magic Links and restart OAuth or cookie-backed SAML sign-ins
+that began before the upgrade. OAuth Proxy participants must also upgrade
+together. Upgrading from 1.7.6 to 1.7.7 requires no schema change. Databases with
+the older 1.7.0–1.7.2 issuer constraints need the cleanup described above before
+authentication starts.
+
+Custom `verification.storeIdentifier.overrides` rules must account for the
+`magic-link:` and `auth-state:` prefixes. Existing endpoints and token formats
+remain the same. See the [official 1.7.7 release notes](https://github.com/better-auth/better-auth/releases/tag/v1.7.7)
+and [Magic Link security advisory](https://github.com/better-auth/better-auth/security/advisories/GHSA-965c-763c-88jm).

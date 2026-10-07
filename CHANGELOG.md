@@ -16,6 +16,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Align authentication packages on Better Auth 1.7.7 and clean up obsolete
+  account issuer constraints before migrating PostgreSQL or SQLite. Preserve
+  existing account data, reject identity collisions, and allow migration reruns.
 - Make the Todo template's initial migration compatible with SQLite and keep
   UUID, boolean, and timestamp response types consistent across PostgreSQL and
   SQLite. The documented local example now includes regression coverage for
