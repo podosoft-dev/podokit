@@ -6,7 +6,7 @@
     "dev": "bun --watch src/main.ts",
     "build": "bun scripts/build.mjs",
     "start": "bun dist/main.js",
-    "lint": "bunx tsc -p tsconfig.json --noEmit",
+    "lint": "bunx --bun tsc -p tsconfig.json --noEmit",
     "test": "bun test src",
     "contract": "bun scripts/verify-api-contract.ts",
     "migrate:all": "bun dist/database/migrate.js",
