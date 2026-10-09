@@ -1,5 +1,11 @@
 # @podosoft/podokit
 
+## 1.1.4
+
+### Patch Changes
+
+- [#205](https://github.com/podosoft-dev/podokit/pull/205) [`4749967`](https://github.com/podosoft-dev/podokit/commit/474996791e7352d2574eb3e679b2b937ae25e403) Thanks [@korone00](https://github.com/korone00)! - Run the generated API type check with `bunx --bun tsc`, so an older Node on `PATH`, such as the one on some self-hosted CI runners, no longer runs TypeScript and fails `bun run lint`.
+
 ## 1.1.3
 
 ### Patch Changes
