@@ -110,6 +110,17 @@ describe("create (integration against templates)", () => {
     expect(readFileSync(join(target, "apps/api/package.json"), "utf8")).toContain(
       '"test": "bun test src"',
     );
+    for (const workspace of ["api", "web"]) {
+      const { scripts } = JSON.parse(
+        readFileSync(join(target, `apps/${workspace}/package.json`), "utf8"),
+      ) as { scripts: Record<string, string> };
+      // A bare bunx honors a tool's Node shebang and runs it on whatever Node is on PATH.
+      for (const name of ["build", "lint", "test"]) {
+        for (const invocation of scripts[name]?.match(/bunx(?: --bun)?/g) ?? []) {
+          expect(invocation, `${workspace} ${name}`).toBe("bunx --bun");
+        }
+      }
+    }
     const apiMain = readFileSync(join(target, "apps/api/src/main.ts"), "utf8");
     expect(apiMain).toContain("async function bootstrap(): Promise<void>");
     expect(apiMain).toContain("await services.start()");
