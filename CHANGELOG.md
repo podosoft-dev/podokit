@@ -24,6 +24,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   UUID, boolean, and timestamp response types consistent across PostgreSQL and
   SQLite. The documented local example now includes regression coverage for
   migration, rollback, and Todo CRUD persistence.
+- Run the generated API type check with `bunx --bun tsc`. A bare `bunx` honored
+  the TypeScript Node shebang, so an older Node on `PATH`, such as Node 10 on a
+  self-hosted CI runner image, failed `bun run lint`.
 
 ## Released package history
 
