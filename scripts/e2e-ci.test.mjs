@@ -121,6 +121,16 @@ test("requires dependency readiness only when object storage is configured", () 
   assert.match(source, /\$\{env\.SECONDARY_API_PORT\}\$\{secondaryHealthPath\}/);
 });
 
+test("downloads presigned objects only when the runner can reach the S3 endpoint", () => {
+  const spec = readFileSync(
+    join(repoRoot, "templates/modules/object-storage-s3/files/tests/api/storage.api.spec.ts"),
+    "utf8",
+  );
+
+  assert.match(spec, /if \(process\.env\.S3_ENDPOINT\) \{\s+const download = await ctx\.get\(pre\.url\);/);
+  assert.equal(spec.match(/ctx\.get\(pre\.url\)/g)?.length, 1);
+});
+
 test("preserves the audit-log module default in the generated app environment", () => {
   const source = readFileSync(join(repoRoot, "scripts/e2e-ci.mjs"), "utf8");
 
