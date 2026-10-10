@@ -71,3 +71,12 @@ export function createPhaseTimer({ now = () => performance.now(), log = console.
     },
   };
 }
+
+// Better Auth reports a schema mismatch when an instance starts before the schema
+// matches. A migration run that loads it too early prints that report even when it
+// succeeds, so a clean run must not contain it.
+export function assertCleanMigrationOutput(output) {
+  if (output.includes("Database schema mismatch")) {
+    throw new Error("migrate:all reported a Better Auth schema mismatch before migrating");
+  }
+}

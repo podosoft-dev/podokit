@@ -4,6 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import {
+  assertCleanMigrationOutput,
   createPhaseTimer,
   playwrightArguments,
   resolveE2eOptions,
@@ -198,4 +199,16 @@ test("keeps the ready-PR smoke suite within its reviewed risk budget", () => {
   ]) {
     assert.match(source, new RegExp(requiredScenario.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
+});
+
+test("fails a migration run that reports a Better Auth schema mismatch", () => {
+  assert.doesNotThrow(() => assertCleanMigrationOutput("$ bun scripts/run-migrations.mjs\n"));
+  assert.throws(
+    () => assertCleanMigrationOutput("ERROR [Better Auth]: Database schema mismatch\n\n  Missing tables\n"),
+    /schema mismatch before migrating/,
+  );
+
+  const source = readFileSync(join(repoRoot, "scripts/e2e-ci.mjs"), "utf8");
+  assert.match(source, /spawnSync\("bun", \["run", "--cwd", "apps\/api", "migrate:all"\]/);
+  assert.match(source, /assertCleanMigrationOutput\(`\$\{migration\.stdout\}\$\{migration\.stderr\}`\)/);
 });
