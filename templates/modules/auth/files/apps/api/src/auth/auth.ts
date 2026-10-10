@@ -13,6 +13,7 @@ import { oauthProvider } from "@better-auth/oauth-provider";
 import { SIGNUP_APPROVAL_REQUIRED } from "@podosoft/podokit-contracts";
 import { runUserDeletedHandlers } from "./user-delete-handlers";
 import { authBaseUrl, authSecret } from "./auth-environment";
+import { authSchemaValidation } from "./schema-validation";
 // podokit:begin:auth-imports
 // podokit:end:auth-imports
 
@@ -226,6 +227,7 @@ export function buildAuth(config: AuthConfig) {
         // resolved client IP as x-forwarded-for; trust it so sessions record an IP.
         ipAddressHeaders: ["x-forwarded-for"],
       },
+      ...(authSchemaValidation() ? {} : { database: { validateSchema: false } }),
     },
     user: {
       additionalFields: {

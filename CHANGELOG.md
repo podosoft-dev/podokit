@@ -8,9 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
-- Download the presigned object in the generated storage API test only when the
-  test runner has `S3_ENDPOINT`. A containerized `podo dev` stack signs URLs for
-  an in-network host that the runner on the host cannot resolve.
+- Skip Better Auth's startup schema check in the generated migration runner, so
+  `migrate:all` no longer logs a schema mismatch for the schema it is about to
+  migrate. API servers keep validating the schema at startup.
 
 ## Released package history
 

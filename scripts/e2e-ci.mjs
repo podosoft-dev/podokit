@@ -10,12 +10,13 @@
 //   SECONDARY_API_PORT,
 //   POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB,
 //   APP_DIR, E2E_BUN_CACHE, E2E_RATE_LIMIT_MAX, KEEP.
-import { spawn, execFileSync } from "node:child_process";
+import { spawn, spawnSync, execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir, homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  assertCleanMigrationOutput,
   createPhaseTimer,
   playwrightArguments,
   resolveE2eOptions,
@@ -311,7 +312,11 @@ async function main() {
   run("bun", ["run", "--cwd", "apps/api", "build"], { cwd: target });
 
   step("migrate auth and app tables from compiled output");
-  run("bun", ["run", "--cwd", "apps/api", "migrate:all"], { cwd: target, env: pgEnv });
+  const migration = spawnSync("bun", ["run", "--cwd", "apps/api", "migrate:all"], { cwd: target, env: pgEnv, encoding: "utf8" });
+  process.stdout.write(migration.stdout ?? "");
+  process.stderr.write(migration.stderr ?? "");
+  if (migration.status !== 0) throw new Error(`migrate:all exited with status ${migration.status}`);
+  assertCleanMigrationOutput(`${migration.stdout}${migration.stderr}`);
 
   step("verify generated API contract");
   run("bun", ["run", "--cwd", "apps/api", "contract"], { cwd: target, env: pgEnv });

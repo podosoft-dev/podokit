@@ -1,3 +1,6 @@
+// Keep this first: Better Auth checks the schema when ./auth/auth creates its
+// instance, and the migrations below are what make that schema match.
+import "./auth/skip-schema-validation";
 import { getMigrations } from "better-auth/db/migration";
 import { auth } from "./auth/auth";
 import { closeAuthDatabase, postgresPool, sqliteDatabase } from "./auth/db";
