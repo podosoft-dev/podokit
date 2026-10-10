@@ -1,5 +1,11 @@
 # @podosoft/podokit
 
+## 1.1.5
+
+### Patch Changes
+
+- [#208](https://github.com/podosoft-dev/podokit/pull/208) [`8b23bbb`](https://github.com/podosoft-dev/podokit/commit/8b23bbbcd774965953174ea9b12b951ad24066e2) Thanks [@korone00](https://github.com/korone00)! - Download the presigned object in the generated storage API test only when the test runner has `S3_ENDPOINT`, so the test passes against a containerized `podo dev` stack whose URLs are signed for an in-network host.
+
 ## 1.1.4
 
 ### Patch Changes
