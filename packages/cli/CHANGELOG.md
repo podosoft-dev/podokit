@@ -1,5 +1,11 @@
 # @podosoft/podokit
 
+## 1.1.6
+
+### Patch Changes
+
+- [#210](https://github.com/podosoft-dev/podokit/pull/210) [`72c8616`](https://github.com/podosoft-dev/podokit/commit/72c8616004f857bdab50878ec759b0e8f0086c02) Thanks [@korone00](https://github.com/korone00)! - Skip Better Auth's startup schema check in the generated migration runner, so `migrate:all` no longer logs `Database schema mismatch` for the schema it is about to migrate. API servers keep validating the schema at startup.
+
 ## 1.1.5
 
 ### Patch Changes
