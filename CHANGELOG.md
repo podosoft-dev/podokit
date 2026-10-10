@@ -6,27 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-### Changed
-
-- Update the MCP SDK to 1.32.0 and verify stdio tool calls with omitted arguments.
-- Reorganize project creation documentation around infrastructure choices and
-  defaults. Add complete SQLite, memory cache/events, local files, and local
-  jobs setup instructions for simple single-process apps, and align CLI,
-  generated README/agent guidance, and feature examples with the current v1
-  provider and migration workflows.
-
 ### Fixed
 
-- Align authentication packages on Better Auth 1.7.7 and clean up obsolete
-  account issuer constraints before migrating PostgreSQL or SQLite. Preserve
-  existing account data, reject identity collisions, and allow migration reruns.
-- Make the Todo template's initial migration compatible with SQLite and keep
-  UUID, boolean, and timestamp response types consistent across PostgreSQL and
-  SQLite. The documented local example now includes regression coverage for
-  migration, rollback, and Todo CRUD persistence.
-- Run the generated API type check with `bunx --bun tsc`. A bare `bunx` honored
-  the TypeScript Node shebang, so an older Node on `PATH`, such as Node 10 on a
-  self-hosted CI runner image, failed `bun run lint`.
+- Download the presigned object in the generated storage API test only when the
+  test runner has `S3_ENDPOINT`. A containerized `podo dev` stack signs URLs for
+  an in-network host that the runner on the host cannot resolve.
 
 ## Released package history
 
