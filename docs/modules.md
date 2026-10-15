@@ -1148,7 +1148,9 @@ The generated web container and Kubernetes config set
 `BODY_SIZE_LIMIT=3M`. This leaves room for multipart framing while the API
 continues to enforce the 2 MiB file limit and return stable validation codes.
 Set the same value when running the built web server outside the generated
-deployment files.
+deployment files. It is the ceiling for every web route; see
+[request body limits](templates.md#request-body-limits) before raising it for a
+larger upload.
 
 | Method | Route | Purpose |
 | --- | --- | --- |

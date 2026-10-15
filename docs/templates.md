@@ -123,6 +123,42 @@ build and tests: hop-by-hop headers (`connection`, `transfer-encoding`,
 get the file empty; `podo update` creates it once in an existing app and never
 overwrites it.
 
+### Request body limits
+
+`BODY_SIZE_LIMIT` (3 MiB in the generated `.env.example`, web Dockerfile, and
+Kubernetes config) is the ceiling for every web route. adapter-bun passes it to
+`Bun.serve` as `maxRequestBodySize`, so Bun enforces it before SvelteKit or the
+proxy runs: a request whose `Content-Length` exceeds it gets 413 with an empty
+body and a closed connection, and a chunked body without `Content-Length` fails
+once it passes the limit while being read, with the same 413. Neither response
+carries the error envelope.
+
+Below that ceiling, cap individual `/api` routes in the application-owned
+`apps/web/src/lib/server/body-limits.ts`:
+
+```ts
+export const APP_BODY_LIMITS: ReadonlyArray<{ pathPrefix: string; maxBytes: number }> = [
+  { pathPrefix: "/api/feedback/", maxBytes: 64 * 1024 },
+];
+```
+
+An entry covers its path and every path below it, matched on the decoded
+request path, and the longest matching prefix wins. The proxy rejects a declared
+`Content-Length` above the limit at once and otherwise counts the body as it
+streams in, stopping at the limit without buffering the rest. Either way it
+answers 413 with the standard envelope, code `PAYLOAD_TOO_LARGE` and
+`details.maxBytes`, without contacting the API. Routes without an entry keep the
+server-wide ceiling. An invalid prefix (not a static path under `/api/`) or a
+`maxBytes` that is not a positive whole number fails the web build and tests.
+
+These limits can only lower the ceiling: a `maxBytes` above `BODY_SIZE_LIMIT`
+has no effect, because Bun rejects the body first. Raising `BODY_SIZE_LIMIT`
+raises it for every page, form action, and endpoint, and the web process still
+holds each proxied body in memory. For uploads larger than the ceiling, list the
+upload route in `apiPaths` so the gateway sends it straight to the API; see
+[direct API paths](deployment.md#direct-api-paths). An app that splits uploads
+into chunks small enough for the web proxy can send larger parts that way.
+
 ## `todo`
 
 The Todo template adds:

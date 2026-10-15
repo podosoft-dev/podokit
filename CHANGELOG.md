@@ -26,6 +26,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   editing `backend-proxy.ts`. Hop-by-hop, framing, `host`, `set-cookie`, and
   client address headers are rejected when the web server loads. `podo update`
   creates the file once in existing apps and never overwrites it.
+- `apps/web/src/lib/server/body-limits.ts` is an application-owned
+  `APP_BODY_LIMITS` list of `{ pathPrefix, maxBytes }` entries for `/api`
+  routes. The proxy rejects a larger declared `Content-Length` at once, counts a
+  streamed body as it arrives, and answers 413 `PAYLOAD_TOO_LARGE` with the
+  standard error envelope without contacting the API. `BODY_SIZE_LIMIT` stays
+  the ceiling for every web route, since Bun rejects larger bodies before
+  SvelteKit runs, so routes that need more use `apiPaths`. `podo update`
+  creates the file once in existing apps and never overwrites it.
 
 ### Upgrade notes
 

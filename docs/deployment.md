@@ -334,7 +334,8 @@ docker build --build-arg PODOKIT_BUILD_ORIGIN=https://example.com -f apps/web/Do
 By default every `/api/*` request goes through the web server, which proxies it
 to the API. The web server holds the whole body in memory, and adapter-bun rejects any
 body larger than `BODY_SIZE_LIMIT` (3 MiB in the generated configuration) on every
-web route. To accept larger uploads, list the API routes that receive them under
+web route; per-route `APP_BODY_LIMITS` can only lower that ceiling (see
+[request body limits](templates.md#request-body-limits)). To accept larger uploads, list the API routes that receive them under
 `exposure.apiPaths`. The gateway then sends those requests straight to the API, so
 their bodies never pass through the web process:
 
@@ -376,8 +377,9 @@ What changes for requests on these paths:
   applies same-origin rules exactly as it does for the rest of `/api`. The API
   authenticates them itself, as it already does for proxied requests.
 - They skip everything the web server does for `/api`: the forwarded header
-  allowlist (the API receives every request header), SvelteKit's cross-site form
-  check, and any `+server.ts` routes the app added under the prefix. For cookie-authenticated writes, have the API compare the
+  allowlist (the API receives every request header), `APP_BODY_LIMITS`,
+  SvelteKit's cross-site form check, and any `+server.ts` routes the app added
+  under the prefix. For cookie-authenticated writes, have the API compare the
   `Origin` header with the public origin; the session cookie's `SameSite=Lax`
   already keeps it off most cross-site POSTs.
 - The API's CORS headers reach the browser. Keep `CORS_ORIGIN` set to the public

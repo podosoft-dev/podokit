@@ -46,7 +46,10 @@ Merge added module settings from `.env.example` into an existing `.env`.
   allowlisted headers. List extra request and response header names in the
   app-owned `apps/web/src/lib/server/proxy-headers.ts`
   (`APP_FORWARDED_REQUEST_HEADERS`, `APP_RELAYED_RESPONSE_HEADERS`); never edit the
-  managed lists.
+  managed lists. Cap a route's request body in the app-owned
+  `apps/web/src/lib/server/body-limits.ts` (`APP_BODY_LIMITS`, 413
+  `PAYLOAD_TOO_LARGE`). `BODY_SIZE_LIMIT` is the ceiling for every web route, so
+  uploads larger than it must use a direct API path (`apiPaths`) instead.
 - Build: `{{rootRun}} build`  ·  Type-check/lint: `{{rootRun}} lint`  ·  Unit tests: `{{rootRun}} test`
 - Per workspace: `{{apiRun}} build` / `{{webRun}} build`.
 - Application migrations (PostgreSQL or SQLite): `{{apiRun}} migration:run`.

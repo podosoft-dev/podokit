@@ -469,6 +469,12 @@ describe("create (integration against templates)", () => {
       "export const APP_FORWARDED_REQUEST_HEADERS: readonly string[] = [];",
     );
     expect(readFilesLock(target)?.files[proxyHeaders]?.tier).toBe("owned");
+    expect(backendProxy).toContain('from "./body-limits"');
+    const bodyLimits = "apps/web/src/lib/server/body-limits.ts";
+    expect(readFileSync(join(target, bodyLimits), "utf8")).toContain(
+      "export const APP_BODY_LIMITS: ReadonlyArray<{ pathPrefix: string; maxBytes: number }> = [];",
+    );
+    expect(readFilesLock(target)?.files[bodyLimits]?.tier).toBe("owned");
     expect(readFilesLock(target)?.files["apps/web/src/lib/server/backend-proxy.ts"]?.tier).toBe("managed");
     const serverApi = readFileSync(join(target, "apps", "web", "src", "lib", "server", "api.ts"), "utf8");
     expect(serverApi).toContain('headers.set("x-forwarded-for", clientIp)');

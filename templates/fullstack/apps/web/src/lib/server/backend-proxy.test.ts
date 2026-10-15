@@ -2,7 +2,14 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { gzipSync } from "node:zlib";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { proxyRequest, rawSubpath, resolveClientIp, withAppHeaders } from "./backend-proxy";
+import {
+  bodyLimitFor,
+  proxyRequest,
+  rawSubpath,
+  resolveClientIp,
+  sortedBodyLimits,
+  withAppHeaders,
+} from "./backend-proxy";
 
 describe("backend proxy client address handling", () => {
   afterEach(() => {
@@ -376,5 +383,142 @@ describe("backend proxy application header lists", () => {
       'LIST contains an invalid header name: "x trace"',
     );
     expect(() => withAppHeaders([], [""], reserved, "LIST")).toThrow("invalid header name");
+  });
+});
+
+describe("backend proxy application body limits", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.doUnmock("./body-limits");
+    vi.resetModules();
+  });
+
+  async function proxyWithBodyLimits(
+    limits: ReadonlyArray<{ pathPrefix: string; maxBytes: number }>,
+  ): Promise<typeof proxyRequest> {
+    vi.resetModules();
+    vi.doMock("./body-limits", () => ({ APP_BODY_LIMITS: limits }));
+    return (await import("./backend-proxy")).proxyRequest;
+  }
+
+  function recordingFetch(): { bodies: Uint8Array[] } {
+    const record = { bodies: [] as Uint8Array[] };
+    vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+      record.bodies.push(new Uint8Array(await new Response(init?.body).arrayBuffer()));
+      return new Response(null, { status: 204 });
+    });
+    return record;
+  }
+
+  // A body without content-length, as a chunked upload arrives.
+  function streamedRequest(url: string, chunks: number, chunkSize: number): { request: Request; pulled: () => number } {
+    let pulled = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pulled === chunks) {
+          controller.close();
+          return;
+        }
+        pulled += 1;
+        controller.enqueue(new Uint8Array(chunkSize).fill(pulled));
+      },
+    });
+    const init = { method: "POST", body: stream, duplex: "half" } as RequestInit;
+    return { request: new Request(url, init), pulled: () => pulled };
+  }
+
+  it("rejects a declared body above the route limit before contacting the API", async () => {
+    const proxy = await proxyWithBodyLimits([{ pathPrefix: "/api/feedback/", maxBytes: 8 }]);
+    const record = recordingFetch();
+
+    const response = await proxy(
+      new Request("http://app.localhost/api/feedback/new", { method: "POST", body: "0123456789" }),
+      "http://api:5002/feedback/new",
+    );
+
+    expect(response.status).toBe(413);
+    const envelope = (await response.json()) as {
+      success: boolean;
+      error: { code: string; statusCode: number; path: string; details: { maxBytes: number } };
+    };
+    expect(envelope.success).toBe(false);
+    expect(envelope.error).toMatchObject({
+      code: "PAYLOAD_TOO_LARGE",
+      statusCode: 413,
+      path: "/api/feedback/new",
+      details: { maxBytes: 8 },
+    });
+    expect(record.bodies).toEqual([]);
+  });
+
+  it("stops reading a streamed body once it passes the limit", async () => {
+    const proxy = await proxyWithBodyLimits([{ pathPrefix: "/api/feedback", maxBytes: 10 }]);
+    const record = recordingFetch();
+    const { request, pulled } = streamedRequest("http://app.localhost/api/feedback", 100, 4);
+
+    const response = await proxy(request, "http://api:5002/feedback");
+
+    expect(response.status).toBe(413);
+    expect(record.bodies).toEqual([]);
+    expect(pulled()).toBeLessThan(10);
+  });
+
+  it("forwards a body within the limit byte-for-byte", async () => {
+    const proxy = await proxyWithBodyLimits([{ pathPrefix: "/api/feedback/", maxBytes: 12 }]);
+    const record = recordingFetch();
+    const { request } = streamedRequest("http://app.localhost/api/feedback/new", 3, 4);
+
+    const response = await proxy(request, "http://api:5002/feedback/new");
+
+    expect(response.status).toBe(204);
+    expect([...(record.bodies[0] ?? [])]).toEqual([1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3]);
+  });
+
+  it("leaves routes without a limit to the server-wide ceiling", async () => {
+    const proxy = await proxyWithBodyLimits([{ pathPrefix: "/api/feedback/", maxBytes: 1 }]);
+    const record = recordingFetch();
+
+    const response = await proxy(
+      new Request("http://app.localhost/api/feedbacks", { method: "POST", body: "0123456789" }),
+      "http://api:5002/feedbacks",
+    );
+
+    expect(response.status).toBe(204);
+    expect(record.bodies[0]?.byteLength).toBe(10);
+  });
+
+  it("applies the longest matching prefix on the decoded path", () => {
+    const limits = sortedBodyLimits([
+      { pathPrefix: "/api/", maxBytes: 100 },
+      { pathPrefix: "/api/files/uploads/", maxBytes: 10 },
+      { pathPrefix: "/api/files", maxBytes: 50 },
+    ]);
+
+    expect(bodyLimitFor("/api/files/uploads/u1/parts/2", limits)).toBe(10);
+    expect(bodyLimitFor("/api/files/uploads", limits)).toBe(10);
+    expect(bodyLimitFor("/api/files/u1", limits)).toBe(50);
+    expect(bodyLimitFor("/api/filesystem", limits)).toBe(100);
+    expect(bodyLimitFor("/api/%66iles/uploads/u1", limits)).toBe(10);
+    expect(bodyLimitFor("/api/files%2Fuploads/u1", limits)).toBe(10);
+    expect(bodyLimitFor("/api/files/%E0%A4%A", limits)).toBe(50);
+    expect(bodyLimitFor("/other", limits)).toBeUndefined();
+  });
+
+  it.each<[{ pathPrefix: string; maxBytes: number }[], string]>([
+    [[{ pathPrefix: "/feedback/", maxBytes: 10 }], "must be a static path under /api/"],
+    [[{ pathPrefix: "/api/files/*", maxBytes: 10 }], "must be a static path under /api/"],
+    [[{ pathPrefix: "/api//files", maxBytes: 10 }], "must be a static path under /api/"],
+    [[{ pathPrefix: "/api/files/../admin", maxBytes: 10 }], "must be a static path under /api/"],
+    [[{ pathPrefix: "/api/files", maxBytes: 0 }], "positive whole number"],
+    [[{ pathPrefix: "/api/files", maxBytes: 1.5 }], "positive whole number"],
+    [[{ pathPrefix: "/api/files", maxBytes: 10 }, { pathPrefix: "/api/files/", maxBytes: 20 }], "more than once"],
+  ])("rejects an invalid body limit list %#", (limits, message) => {
+    expect(() => sortedBodyLimits(limits)).toThrow(message);
+  });
+
+  it("refuses to load with an invalid application body limit", async () => {
+    await expect(proxyWithBodyLimits([{ pathPrefix: "/upload", maxBytes: 10 }])).rejects.toThrow(
+      "APP_BODY_LIMITS pathPrefix must be a static path under /api/",
+    );
   });
 });

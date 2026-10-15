@@ -165,7 +165,9 @@ The SvelteKit `/api` proxy, `apps/web/src/lib/server/backend-proxy.ts`, is
 managed. Instead of adding header names to its lists, put them in the
 application-owned `apps/web/src/lib/server/proxy-headers.ts`
 (`APP_FORWARDED_REQUEST_HEADERS` and `APP_RELAYED_RESPONSE_HEADERS`); see
-[proxy headers](templates.md#proxy-headers). An app that already added names to
+[proxy headers](templates.md#proxy-headers). Per-route request body limits go in
+the owned `apps/web/src/lib/server/body-limits.ts` (`APP_BODY_LIMITS`); see
+[request body limits](templates.md#request-body-limits). An app that already added names to
 the managed lists keeps them through `podo update`, because the new version adds
 its merge below the lists; move the names to the owned file and restore the
 managed copy so the next update is clean.

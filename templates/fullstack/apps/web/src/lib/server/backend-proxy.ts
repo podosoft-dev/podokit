@@ -1,3 +1,4 @@
+import { APP_BODY_LIMITS } from "./body-limits";
 import { APP_FORWARDED_REQUEST_HEADERS, APP_RELAYED_RESPONSE_HEADERS } from "./proxy-headers";
 
 // Server-side proxy boundary. The browser never talks to the API directly:
@@ -110,6 +111,101 @@ const relayedResponseHeaders = withAppHeaders(
   "APP_RELAYED_RESPONSE_HEADERS",
 );
 
+export interface BodyLimit {
+  pathPrefix: string;
+  maxBytes: number;
+}
+
+const BODY_LIMIT_PREFIX = /^\/api(?:\/[A-Za-z0-9._~!$&'()+,;=:@-]+)*\/?$/;
+
+/** Validate application body limits and order them so the longest prefix
+ *  matches first. Prefixes are stored without a trailing slash. */
+export function sortedBodyLimits(limits: ReadonlyArray<BodyLimit>): BodyLimit[] {
+  const seen = new Set<string>();
+  const sorted = limits.map(({ pathPrefix, maxBytes }) => {
+    if (
+      !BODY_LIMIT_PREFIX.test(pathPrefix) ||
+      pathPrefix.split("/").some((segment) => segment === "." || segment === "..")
+    ) {
+      throw new Error(
+        `APP_BODY_LIMITS pathPrefix must be a static path under /api/, such as "/api/feedback/": ${JSON.stringify(pathPrefix)}`,
+      );
+    }
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
+      throw new Error(`APP_BODY_LIMITS maxBytes for ${pathPrefix} must be a positive whole number of bytes.`);
+    }
+    const base = pathPrefix.endsWith("/") ? pathPrefix.slice(0, -1) : pathPrefix;
+    if (seen.has(base)) throw new Error(`APP_BODY_LIMITS lists ${pathPrefix} more than once.`);
+    seen.add(base);
+    return { pathPrefix: base, maxBytes };
+  });
+  return sorted.sort((left, right) => right.pathPrefix.length - left.pathPrefix.length);
+}
+
+const bodyLimits = sortedBodyLimits(APP_BODY_LIMITS);
+
+/** The body limit for a request path, matched on the decoded path so an encoded
+ *  segment cannot step around a prefix. */
+export function bodyLimitFor(pathname: string, limits: readonly BodyLimit[] = bodyLimits): number | undefined {
+  let path = pathname;
+  try {
+    path = decodeURIComponent(pathname);
+  } catch {
+    // Keep the raw path when it holds a malformed escape.
+  }
+  return limits.find(
+    ({ pathPrefix }) => path === pathPrefix || path.startsWith(`${pathPrefix}/`),
+  )?.maxBytes;
+}
+
+/** Read a request body, or return null as soon as it exceeds maxBytes. The rest
+ *  of an oversized body is never buffered. */
+async function readLimitedBody(request: Request, maxBytes: number): Promise<ArrayBuffer | null> {
+  const declared = request.headers.get("content-length");
+  if (declared !== null && Number(declared) > maxBytes) {
+    request.body?.cancel().catch(() => undefined);
+    return null;
+  }
+  if (!request.body) return new ArrayBuffer(0);
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) {
+      reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(value);
+  }
+  const body = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body.buffer;
+}
+
+function payloadTooLarge(path: string, maxBytes: number): Response {
+  return Response.json(
+    {
+      success: false,
+      error: {
+        code: "PAYLOAD_TOO_LARGE",
+        message: `Request body exceeds the ${maxBytes}-byte limit for this route`,
+        statusCode: 413,
+        path,
+        timestamp: new Date().toISOString(),
+        details: { maxBytes },
+      },
+    },
+    { status: 413 },
+  );
+}
+
 // SvelteKit decodes rest params, so an encoded "%2F" or "%3F" inside a path
 // segment would reach the API as "/" or "?". Forward the raw pathname instead.
 export function rawSubpath(url: URL, prefix: string): string {
@@ -155,12 +251,24 @@ export async function proxyRequest(
   if (forwardedIp) headers.set("x-forwarded-for", forwardedIp);
 
   const hasBody = request.method !== "GET" && request.method !== "HEAD";
+  let body: ArrayBuffer | undefined;
+  if (hasBody) {
+    // Preserve multipart uploads and other binary bodies byte-for-byte. Reading
+    // them as text corrupts bytes that are not valid UTF-8 before forwarding.
+    const { pathname } = new URL(request.url);
+    const maxBytes = bodyLimitFor(pathname);
+    if (maxBytes === undefined) {
+      body = await request.arrayBuffer();
+    } else {
+      const limited = await readLimitedBody(request, maxBytes);
+      if (limited === null) return payloadTooLarge(pathname, maxBytes);
+      body = limited;
+    }
+  }
   const upstream = await fetch(targetUrl, {
     method: request.method,
     headers,
-    // Preserve multipart uploads and other binary bodies byte-for-byte. Reading
-    // them as text corrupts bytes that are not valid UTF-8 before forwarding.
-    body: hasBody ? await request.arrayBuffer() : undefined,
+    body,
     redirect: "manual",
     // Abort the upstream request when the browser disconnects. Without this, every
     // closed EventSource or aborted request keeps its API socket open until Bun's

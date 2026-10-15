@@ -119,8 +119,9 @@ export const DEFAULT_OWNED_GLOBS = [
   "apps/web/src/lib/i18n/catalogs/app/**",
   // Owned Elysia extension slot — register application services and plugins here.
   "apps/api/src/app.extensions.ts",
-  // Owned additions to the managed /api proxy's header lists.
+  // Owned additions to the managed /api proxy's header lists and body limits.
   "apps/web/src/lib/server/proxy-headers.ts",
+  "apps/web/src/lib/server/body-limits.ts",
   // AI agent guidance — yours to customize; update never touches it.
   "AGENTS.md",
   "CLAUDE.md",

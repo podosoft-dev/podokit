@@ -1097,7 +1097,7 @@ describe("app-owned public paths", () => {
 describe("app-owned proxy headers", () => {
   const SEED = "apps/web/src/lib/server/proxy-headers.ts";
   const PROXY = "apps/web/src/lib/server/backend-proxy.ts";
-  const IMPORT = 'import { APP_FORWARDED_REQUEST_HEADERS, APP_RELAYED_RESPONSE_HEADERS } from "./proxy-headers";\n\n';
+  const IMPORT = 'import { APP_FORWARDED_REQUEST_HEADERS, APP_RELAYED_RESPONSE_HEADERS } from "./proxy-headers";\n';
 
   // The fullstack layout before the proxy read app-owned header lists.
   function templatesWithoutProxyHeaders(): string {
@@ -1109,7 +1109,7 @@ describe("app-owned proxy headers", () => {
     const current = readFileSync(proxyPath, "utf8");
     const mergeStart = current.indexOf("// Hop-by-hop headers describe a single connection");
     const mergeEnd = current.indexOf("\n", current.indexOf('"APP_RELAYED_RESPONSE_HEADERS",\n);')) + 1;
-    expect(current.startsWith(IMPORT)).toBe(true);
+    expect(current).toContain(IMPORT);
     expect(mergeStart).toBeGreaterThan(0);
     writeFileSync(
       proxyPath,
@@ -1188,5 +1188,50 @@ describe("app-owned proxy headers", () => {
     writeFileSync(join(project, PROXY), readFileSync(join(REPO_TEMPLATES, "fullstack", PROXY), "utf8"));
     expect(planUpdate(project, REPO_TEMPLATES).changes.find((change) => change.path === PROXY)?.action)
       .toBe("up-to-date");
+  });
+});
+
+describe("app-owned body limits", () => {
+  const SEED = "apps/web/src/lib/server/body-limits.ts";
+  const PROXY = "apps/web/src/lib/server/backend-proxy.ts";
+
+  it("creates the owned file once for an existing app and never overwrites it", () => {
+    const oldTemplates = join(tmp(), "old-templates");
+    cpSync(REPO_TEMPLATES, oldTemplates, { recursive: true });
+    const server = join(oldTemplates, "fullstack/apps/web/src/lib/server");
+    rmSync(join(server, "body-limits.ts"));
+    const proxyPath = join(server, "backend-proxy.ts");
+    const current = readFileSync(proxyPath, "utf8");
+    expect(current).toContain('import { APP_BODY_LIMITS } from "./body-limits";\n');
+    writeFileSync(
+      proxyPath,
+      current
+        .replace('import { APP_BODY_LIMITS } from "./body-limits";\n', "")
+        .replace("sortedBodyLimits(APP_BODY_LIMITS)", "sortedBodyLimits([])"),
+    );
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: project });
+    const manifest = readManifest(project);
+    if (!manifest) throw new Error("expected manifest");
+    writeManifest(project, { ...manifest, ownedGlobs: manifest.ownedGlobs.filter((glob) => glob !== SEED) });
+    expect(existsSync(join(project, SEED))).toBe(false);
+
+    expect(planUpdate(project, REPO_TEMPLATES).changes.find((change) => change.path === SEED)).toMatchObject({
+      action: "add",
+      tier: "owned",
+    });
+    const result = applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+
+    expect(result.conflicts).toEqual([]);
+    expect(readFileSync(join(project, PROXY), "utf8")).toContain('from "./body-limits"');
+    expect(readFilesLock(project)?.files[SEED]?.tier).toBe("owned");
+
+    const own =
+      'export const APP_BODY_LIMITS: ReadonlyArray<{ pathPrefix: string; maxBytes: number }> = [\n' +
+      '  { pathPrefix: "/api/feedback/", maxBytes: 65536 },\n];\n';
+    writeFileSync(join(project, SEED), own);
+    expect(planUpdate(project, REPO_TEMPLATES).changes.find((change) => change.path === SEED)?.action).toBe("skip");
+    applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+    expect(readFileSync(join(project, SEED), "utf8")).toBe(own);
   });
 });
