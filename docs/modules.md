@@ -483,18 +483,22 @@ application already records.
 
 ### `sse`
 
-Server-Sent Events for real-time updates: a `/events/stream` endpoint and a
-`POST /events` publisher. `EventsService` is global, so any module (for example a
-queue processor) can broadcast updates.
+Server-Sent Events scoped by topic and audience. The module provides:
+
+- `GET /events/stream?topics=a,b` for signed-in users.
+- `POST /events`, a broadcast tool.
+- `EventsService`, which any module (a queue processor, for example) uses to
+  publish.
 
 ```bash
 npx @podosoft/podokit add sse
 bun run dev
 
-# terminal 1 — stream
-curl -N localhost:5002/events/stream
+# terminal 1 — stream as a signed-in user
+curl -N -b cookies.txt 'localhost:5002/events/stream?topics=message'
 # terminal 2 — publish
-curl -XPOST localhost:5002/events -H 'content-type: application/json' -d '{"message":"hello"}'
+curl -b cookies.txt -XPOST localhost:5002/events \
+  -H 'content-type: application/json' -d '{"message":"hello"}'
 ```
 
 The selected `events` provider supplies the transport. `events-memory` is bounded
@@ -503,13 +507,147 @@ settings, creates dedicated publish/subscribe connections, and delivers across
 API replicas. A Redis-configured application fails readiness instead of silently
 falling back to process-local delivery.
 
-The stream starts with a `retry:` hint. Every five seconds it sends a
-`: heartbeat` comment, which keeps proxies and Bun's idle timeout from closing a
-quiet stream and never reaches `EventSource.onmessage`. Each connection buffers
-at most 256 events. A client that falls further behind loses the backlog and
-receives one named `resync` event, which tells it to reload its state. A
-connection uses one heartbeat timer, and a client disconnect releases its
-subscription and timer at once.
+#### Publishing
+
+Modules publish an envelope with a topic, an optional audience, and JSON data:
+
+```ts
+const events = services.resolve(SSE_EVENTS);
+events.publish({
+  topic: "orders",
+  audience: { userIds: [order.ownerId] },
+  data: { orderId: order.id, status: "shipped" },
+});
+```
+
+- `topic` and the optional `id` use letters, digits, `.`, `_`, `:`, and `-`,
+  start with a letter or digit, and have at most 128 characters.
+- `audience` limits who receives the event:
+  - `userIds` matches the listed users.
+  - `roles` matches users who hold any listed role.
+  - `organizationId` matches users whose active organization is that one.
+- When an audience sets several fields, a user must match every one of them.
+  `{ organizationId: "o1", roles: ["admin"] }` reaches only the administrators of
+  `o1`.
+- An empty list such as `userIds: []` reaches nobody. An audience with no fields
+  is rejected, because it is usually a recipient list that failed to resolve.
+- Without an audience, every stream subscribed to the topic receives the event.
+
+`publish()` is best-effort for domain operations that already committed their
+state. Use `publishAsync()` when the caller must know that delivery failed, and
+`publishLocal()` only for an event that another channel has already fanned out
+to every API replica. For an invalid envelope, `publish()` and `publishLocal()`
+throw `InvalidEventError` and `publishAsync()` rejects with it. Events are
+at-most-once invalidation hints, so clients must reload authoritative state after
+a resync or reconnect.
+
+#### Subscribing
+
+A stream needs a signed-in user. Each stream lists its topics in `topics`, up to
+32 comma-separated names. Without `topics`, the stream carries every topic that
+has no authorizer. The stream answers:
+
+- 401 `AUTH_REQUIRED` without a user.
+- 400 `EVENTS_TOPICS_INVALID` for a malformed list.
+- 403 `EVENTS_TOPIC_FORBIDDEN` when an authorizer refuses a topic.
+
+Any signed-in user may subscribe to a topic by default. Register an authorizer to
+restrict a topic, or a pattern ending in `*` to restrict every topic with that
+prefix. Every authorizer that matches a topic must allow the subscriber, and a
+guarded topic must be requested by name:
+
+```ts
+const events = services.resolve(SSE_EVENTS);
+events.topics.register("admin-alerts", (subscriber) => subscriber.roles.includes("admin"));
+events.topics.register("project:*", async (subscriber, topic) =>
+  projects.isMember(topic.slice("project:".length), subscriber.userId)
+);
+```
+
+The stream resolves the subscriber's user id, roles, and active organization
+once, when it connects. By default, the user comes from the request identity
+and holds the `admin` role when the user is an administrator. Other roles and
+the active organization stay empty until you register an `EVENT_IDENTITY` in
+`app.extensions.ts`. With the `auth` module:
+
+```ts
+import { AUTH } from "./auth/auth.module";
+import { rolesOf } from "./auth/auth.service";
+import type { ServiceRegistry } from "./core/services";
+import { EVENT_IDENTITY } from "./events/events.module";
+
+export function configureServices(services: ServiceRegistry): void {
+  const auth = services.resolve(AUTH);
+  services.register(EVENT_IDENTITY, {
+    subscriber: async (request) => {
+      const session = await auth.session(request);
+      if (!session) return undefined;
+      const organizationId = session.session.activeOrganizationId;
+      return {
+        userId: session.user.id,
+        roles: rolesOf(session.user),
+        ...(typeof organizationId === "string" ? { organizationId } : {}),
+      };
+    },
+  });
+}
+```
+
+Because the identity is fixed at connect, a stream ends after 30 minutes. The
+client reconnects and is authorized again, so a revoked session or a removed role
+stops receiving events within that time.
+
+#### Wire format
+
+The stream starts with `retry: 3000`. Each data event is a default `message`
+event, so `EventSource.onmessage` receives it. Its data is `{ topic, data }` as
+JSON, and its `id:` is the publisher's `id` or a sequence number for the
+connection:
+
+```text
+retry: 3000
+
+id: 1
+data: {"topic":"orders","data":{"orderId":"o-1","status":"shipped"}}
+
+event: resync
+data: {}
+
+: heartbeat
+```
+
+The stream also sends two control frames, and neither reaches `onmessage`:
+
+- A named `resync` event tells the client that events were dropped and its state
+  must be reloaded.
+- A `: heartbeat` comment every five seconds keeps proxies and Bun's idle timeout
+  from closing a quiet stream.
+
+Event ids are not replayed. The stream ignores `Last-Event-ID`, so reload state
+after every reconnect.
+
+Each connection buffers at most 256 events. A client that falls further behind
+loses the backlog and receives one `resync` instead of letting the queue grow
+without bound. A connection uses one heartbeat timer. When the client disconnects,
+the connection's subscription and timer are released at once.
+
+#### Upgrading from the open broadcast stream
+
+Earlier versions delivered every event to every stream. Apps that relied on that
+behavior must change in these ways:
+
+- `EventsService.publish()`, `publishAsync()`, and `publishLocal()` take
+  `{ topic, audience?, data, id? }` instead of a bare payload, and
+  `EventsService.subscribe()` was removed. Choose a topic for each event, and set
+  an audience for anything that belongs to particular users.
+- Each data event's `data` is now `{ topic, data }`. `POST /events` publishes
+  `{ topic: "message", data: { message } }` instead of
+  `{ type: "message", message }`. Read the payload from `data`.
+- Heartbeats are SSE comments and no longer reach `onmessage` as
+  `{ type: "heartbeat" }` messages.
+- The stream requires a signed-in user even when the route is public in your
+  access policy, so add the `auth` module or another request identity provider.
+- During a rolling deploy, replicas discard transport messages in the old format.
 
 ### `events-memory` and `events-redis`
 
@@ -522,11 +660,11 @@ podo provider set events memory --apply
 podo provider set events redis --apply
 ```
 
-`EventsService.publish()` remains best-effort for domain operations that already
-committed their state. Use `publishAsync()` when the caller must know delivery
-failed, and `publishLocal()` only for an event that another Redis channel has
-already fanned out to every API replica. Events are at-most-once invalidation
-hints; clients must reload authoritative state after reconnecting.
+Every replica subscribes to one transport topic. The SSE envelope travels whole,
+including its topic and audience, and each replica filters for its own streams.
+`SSE_MAX_EVENT_BYTES` limits the encoded envelope, audience included, on publish
+and on receipt. Delivery is at-most-once. See [`sse`](#sse) for the publishing
+API.
 
 ### `redis`
 
@@ -580,10 +718,14 @@ docker compose -f infra/docker/docker-compose.yml up -d   # postgres + redis
 bun run dev                          # terminal 1 — API
 bun run --cwd apps/api dev:worker    # terminal 2 — worker
 
-curl -N localhost:5002/events/stream                                             # terminal 3 — watch
-curl -XPOST localhost:5002/progress -H 'content-type: application/json' -d '{"steps":5}'
+curl -N -b cookies.txt 'localhost:5002/events/stream?topics=job-progress'   # terminal 3 — watch
+curl -b cookies.txt -XPOST localhost:5002/progress -H 'content-type: application/json' -d '{"steps":5}'
 # the stream shows job-progress events: 20 -> 40 -> 60 -> 80 -> 100
 ```
+
+Progress is published on the `job-progress` topic as `{ jobId, progress }`.
+Earlier versions sent `{ type: "job-progress", jobId, progress }` as the whole
+event.
 
 ### `logging`
 

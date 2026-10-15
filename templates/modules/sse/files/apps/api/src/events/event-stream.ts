@@ -1,3 +1,5 @@
+import type { EventSubscriber } from "./event-envelope";
+
 export type StreamFrame =
   | { kind: "event"; id: string; data: string }
   | { kind: "resync" }
@@ -24,7 +26,9 @@ export const timerScheduler: Scheduler = {
 export interface EventStreamOptions {
   queueLimit: number;
   heartbeatMs: number;
+  maxConnectionMs: number;
   scheduler: Scheduler;
+  now: () => number;
 }
 
 /**
@@ -34,6 +38,7 @@ export interface EventStreamOptions {
  */
 export class EventStream {
   private readonly queue: EventFrame[] = [];
+  private readonly openedAt: number;
   private readonly onAbort = (): void => this.close();
   private resyncPending = false;
   private heartbeatPending = false;
@@ -44,9 +49,13 @@ export class EventStream {
   private signal?: AbortSignal;
 
   constructor(
+    readonly subscriber: EventSubscriber,
+    readonly topics: ReadonlySet<string> | undefined,
     private readonly options: EventStreamOptions,
     private readonly onClose: (stream: EventStream) => void,
-  ) {}
+  ) {
+    this.openedAt = options.now();
+  }
 
   get isClosed(): boolean {
     return this.closed;
@@ -117,6 +126,12 @@ export class EventStream {
   }
 
   private tick(): void {
+    // The identity was resolved at connect. Ending long-lived streams makes the
+    // client reconnect and re-authenticate, so revoked sessions and roles lapse.
+    if (this.options.now() - this.openedAt >= this.options.maxConnectionMs) {
+      this.close();
+      return;
+    }
     this.heartbeatPending = true;
     this.wake();
   }
@@ -129,8 +144,9 @@ export class EventStream {
 }
 
 /**
- * Data events use the default `message` type, so `EventSource.onmessage` keeps
- * working. Control frames use a named event or a comment and never reach it.
+ * Data events use the default `message` type with `{ topic, data }` as JSON, so
+ * `EventSource.onmessage` keeps working. Control frames use a named event or a
+ * comment and never reach `onmessage`.
  */
 export function encodeFrame(frame: StreamFrame): string {
   switch (frame.kind) {

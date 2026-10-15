@@ -1,13 +1,23 @@
+import { AppException } from "@podosoft/podokit-contracts";
 import type { EventBus, Unsubscribe } from "@podosoft/podokit-runtime";
 import { ReadinessService } from "../health/readiness.service";
+import {
+  audienceMatcher,
+  readEnvelope,
+  validEnvelope,
+  type EventEnvelope,
+  type EventSubscriber,
+} from "./event-envelope";
 import {
   EventStream,
   timerScheduler,
   type EventStreamOptions,
   type Scheduler,
 } from "./event-stream";
+import { TopicAuthorizers } from "./event-topics";
 
-type LocalHandler = (data: unknown) => void;
+/** Every replica subscribes to this one transport topic and filters locally. */
+const TRANSPORT_TOPIC = "sse";
 
 export interface EventsServiceOptions {
   /** Events buffered for one slow client before it is told to resync. */
@@ -15,14 +25,19 @@ export interface EventsServiceOptions {
   heartbeatMs?: number;
   /** Reconnect delay the stream advertises to EventSource clients. */
   retryMs?: number;
+  /** Streams end after this long so clients reconnect with a fresh identity. */
+  maxConnectionMs?: number;
   scheduler?: Scheduler;
+  now?: () => number;
 }
 
 export class EventsService {
+  readonly topics = new TopicAuthorizers();
   readonly retryMs: number;
   private readonly streamOptions: EventStreamOptions;
-  private readonly handlers = new Set<LocalHandler>();
   private readonly streams = new Set<EventStream>();
+  private readonly byTopic = new Map<string, Set<EventStream>>();
+  private readonly everyTopic = new Set<EventStream>();
   private unregisterReadiness?: () => void;
   private unsubscribe?: Unsubscribe;
 
@@ -35,7 +50,9 @@ export class EventsService {
     this.streamOptions = {
       queueLimit: options.queueLimit ?? 256,
       heartbeatMs: options.heartbeatMs ?? 5_000,
+      maxConnectionMs: options.maxConnectionMs ?? 30 * 60_000,
       scheduler: options.scheduler ?? timerScheduler,
+      now: options.now ?? Date.now,
     };
   }
 
@@ -44,36 +61,61 @@ export class EventsService {
   }
 
   async connect(): Promise<void> {
-    this.unsubscribe = await this.transport.subscribe("sse", (data) => this.publishLocal(data));
+    this.unsubscribe = await this.transport.subscribe(TRANSPORT_TOPIC, (value) => {
+      const envelope = readEnvelope(value);
+      if (typeof envelope === "string") {
+        process.stderr.write(`Discard invalid event: ${envelope}\n`);
+        return;
+      }
+      this.deliver(envelope);
+    });
     this.unregisterReadiness = this.readiness.register("events", () => this.transport.ready());
   }
 
-  publish(data: unknown): void {
-    void this.publishAsync(data).catch((error: unknown) => {
+  /** Best-effort delivery for state that is already committed. Throws on an invalid event. */
+  publish(event: EventEnvelope): void {
+    const envelope = validEnvelope(event);
+    void this.transport.publish(TRANSPORT_TOPIC, envelope).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
       process.stderr.write(`Publish event failed: ${message}\n`);
     });
   }
 
-  publishAsync(data: unknown): Promise<void> {
-    return this.transport.publish("sse", data);
+  /** Resolves once the transport accepted the event; rejects when it did not. */
+  async publishAsync(event: EventEnvelope): Promise<void> {
+    await this.transport.publish(TRANSPORT_TOPIC, validEnvelope(event));
   }
 
-  publishLocal(data: unknown): void {
-    for (const handler of this.handlers) handler(data);
-    if (this.streams.size === 0) return;
-    const payload = JSON.stringify(data) ?? "null";
-    for (const stream of this.streams) stream.offer(payload, undefined);
+  /** Delivers to this replica only, for events another channel already fanned out. */
+  publishLocal(event: EventEnvelope): void {
+    this.deliver(validEnvelope(event));
   }
 
-  subscribe(handler: LocalHandler): () => void {
-    this.handlers.add(handler);
-    return () => this.handlers.delete(handler);
-  }
-
-  open(signal: AbortSignal): EventStream {
-    const stream = new EventStream(this.streamOptions, (closed) => this.streams.delete(closed));
-    this.streams.add(stream);
+  /**
+   * Opens a stream for `subscriber`. Without `topics` the stream receives every
+   * topic that has no authorizer; guarded topics must be requested by name.
+   */
+  async open(
+    subscriber: EventSubscriber,
+    topics: readonly string[] | undefined,
+    signal: AbortSignal,
+  ): Promise<EventStream> {
+    for (const topic of topics ?? []) {
+      if (!(await this.topics.allows(subscriber, topic))) {
+        throw new AppException(
+          "EVENTS_TOPIC_FORBIDDEN",
+          `You cannot subscribe to ${topic}`,
+          403,
+        );
+      }
+    }
+    const stream = new EventStream(
+      subscriber,
+      topics ? new Set(topics) : undefined,
+      this.streamOptions,
+      (closed) => this.detach(closed),
+    );
+    this.attach(stream);
     stream.start(signal);
     return stream;
   }
@@ -81,7 +123,47 @@ export class EventsService {
   async close(): Promise<void> {
     this.unregisterReadiness?.();
     await this.unsubscribe?.();
-    this.handlers.clear();
     for (const stream of [...this.streams]) stream.close();
+  }
+
+  private deliver(event: EventEnvelope): void {
+    const matches = audienceMatcher(event.audience);
+    let payload: string | undefined;
+    const offer = (stream: EventStream): void => {
+      if (!matches(stream.subscriber)) return;
+      payload ??= JSON.stringify({ topic: event.topic, data: event.data });
+      stream.offer(payload, event.id);
+    };
+    for (const stream of this.byTopic.get(event.topic) ?? []) offer(stream);
+    if (!this.topics.guarded(event.topic)) {
+      for (const stream of this.everyTopic) offer(stream);
+    }
+  }
+
+  private attach(stream: EventStream): void {
+    this.streams.add(stream);
+    if (!stream.topics) {
+      this.everyTopic.add(stream);
+      return;
+    }
+    for (const topic of stream.topics) {
+      const streams = this.byTopic.get(topic) ?? new Set<EventStream>();
+      streams.add(stream);
+      this.byTopic.set(topic, streams);
+    }
+  }
+
+  private detach(stream: EventStream): void {
+    this.streams.delete(stream);
+    if (!stream.topics) {
+      this.everyTopic.delete(stream);
+      return;
+    }
+    for (const topic of stream.topics) {
+      const streams = this.byTopic.get(topic);
+      if (!streams) continue;
+      streams.delete(stream);
+      if (streams.size === 0) this.byTopic.delete(topic);
+    }
   }
 }

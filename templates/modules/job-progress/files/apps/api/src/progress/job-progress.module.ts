@@ -1,6 +1,7 @@
 import { JOBS, type JobQueue, type Unsubscribe } from "@podosoft/podokit-runtime";
 import { Elysia, t } from "elysia";
 import type { AppPlugin, PodokitModule, ServiceKey } from "../core/services";
+import type { EventEnvelope } from "../events/event-envelope";
 import { SSE_EVENTS } from "../events/events.module";
 import { processProgress } from "./progress.processor";
 
@@ -9,15 +10,14 @@ class ProgressWorker {
 
   constructor(
     private readonly queue: JobQueue,
-    private readonly publish: (event: unknown) => Promise<void>,
+    private readonly publish: (event: EventEnvelope) => Promise<void>,
   ) {}
 
   async connect(): Promise<void> {
     this.unsubscribe = await this.queue.process("progress", async (payload, job) => {
       await processProgress(payload, (progress) => this.publish({
-        type: "job-progress",
-        jobId: job.id,
-        progress,
+        topic: "job-progress",
+        data: { jobId: job.id, progress },
       }));
     });
   }
