@@ -480,7 +480,21 @@ The API serves two health endpoints. `GET /health` reports that the process is
 running. `GET /health/ready` runs `SELECT 1` against the database and every
 readiness check that installed modules register, such as Redis, the event bus, and
 the object storage bucket. It answers `503` with the `READINESS_FAILED` error code
-when any of them is down.
+when any of them is down, and its message names them, for example
+`One or more dependencies are unavailable: redis, events`.
+
+The API starts and listens even when PostgreSQL is unreachable. Before listening
+it makes one connection attempt. When the server does not answer at all, startup
+waits up to `DB_CONNECT_TIMEOUT_MS` for that attempt, and once more for each
+start hook that reads the database, such as the auth module's configuration
+preload. After that the API keeps reconnecting in the background, starting after
+250 ms and doubling the wait up to 5 seconds. Until the database is back,
+`GET /health` answers `200`, `GET /health/ready` answers `503`, and requests
+that need it fail with their usual errors, such as `DATABASE_UNAVAILABLE`. The
+API logs `Dependency connection failed; retrying in the background` when a
+dependency becomes unavailable and `Dependency connection restored` with
+`downtimeMs` when it returns, not on every attempt. A pod therefore stays
+running while the database is down and becomes ready again without a restart.
 
 | Setting | Default | Effect |
 | --- | --- | --- |

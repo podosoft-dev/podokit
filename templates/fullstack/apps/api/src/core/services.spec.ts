@@ -4,11 +4,15 @@ import { validateEnv } from "../config/env.validation";
 import { PROVIDERS } from "../config/providers";
 import {
   AccessPolicy,
+  ConnectionSupervisor,
   createCoreServices,
   OpenApiRegistry,
   REQUEST_IDENTITY,
   RequestGuardRegistry,
   ServiceRegistry,
+  type ConnectionEvents,
+  type RetryTimer,
+  type SupervisedConnection,
 } from "./services";
 
 function databaseProvider(): DatabaseProviderName {
@@ -47,6 +51,180 @@ describe("ServiceRegistry", () => {
 
     await expect(registry.start()).rejects.toThrow("dependency unavailable");
     expect(reached).toBe(false);
+  });
+});
+
+describe("ServiceRegistry supervision", () => {
+  test("starts and runs start hooks while a supervised dependency is down", async () => {
+    const registry = new ServiceRegistry();
+    let attempts = 0;
+    let hookRan = false;
+    registry.supervise("redis", {
+      connect: () => {
+        attempts += 1;
+        return Promise.reject(new Error("Connection closed"));
+      },
+    });
+    registry.onStart(() => { hookRan = true; });
+    registry.freeze();
+
+    await registry.start();
+    expect(hookRan).toBe(true);
+    expect(attempts).toBe(1);
+    await registry.close();
+    await Bun.sleep(400);
+    expect(attempts).toBe(1);
+  });
+
+  test("connects a reachable dependency before the start hooks run", async () => {
+    const registry = new ServiceRegistry();
+    const order: string[] = [];
+    registry.supervise("database", {
+      connect: async () => {
+        await Bun.sleep(5);
+        order.push("connected");
+      },
+    });
+    registry.onStart(() => { order.push("hook"); });
+    registry.freeze();
+
+    await registry.start();
+    expect(order).toEqual(["connected", "hook"]);
+    await registry.close();
+  });
+});
+
+interface FakeTimer extends RetryTimer {
+  delays: number[];
+  pending(): number;
+  fire(): Promise<void>;
+}
+
+function fakeTimer(): FakeTimer {
+  const tasks: Array<{ task: () => void; cancelled: boolean }> = [];
+  const delays: number[] = [];
+  return {
+    delays,
+    after: (delayMs, task) => {
+      const entry = { task, cancelled: false };
+      delays.push(delayMs);
+      tasks.push(entry);
+      return () => { entry.cancelled = true; };
+    },
+    pending: () => tasks.filter((entry) => !entry.cancelled).length,
+    fire: async () => {
+      const entry = tasks.shift();
+      if (entry && !entry.cancelled) entry.task();
+      await Bun.sleep(0);
+    },
+  };
+}
+
+function recordingEvents(): ConnectionEvents & { log: string[] } {
+  const log: string[] = [];
+  return {
+    log,
+    unavailable: (name, reason) => { log.push(`unavailable ${name}: ${reason}`); },
+    restored: (name) => { log.push(`restored ${name}`); },
+  };
+}
+
+class FlakyConnection implements SupervisedConnection {
+  attempts = 0;
+  failuresLeft = 0;
+  private listener?: (reason: unknown) => void;
+
+  connect(): Promise<void> {
+    this.attempts += 1;
+    if (this.failuresLeft > 0) {
+      this.failuresLeft -= 1;
+      return Promise.reject(new Error("Connection closed"));
+    }
+    return Promise.resolve();
+  }
+
+  onLost(listener: (reason: unknown) => void): void {
+    this.listener = listener;
+  }
+
+  drop(): void {
+    this.listener?.(new Error("Connection reset"));
+  }
+}
+
+describe("ConnectionSupervisor", () => {
+  const policy = { initialDelayMs: 100, maxDelayMs: 400 };
+
+  test("retries with doubling delays up to the cap and reports each state change once", async () => {
+    const connection = new FlakyConnection();
+    connection.failuresLeft = 5;
+    const timer = fakeTimer();
+    const events = recordingEvents();
+    const supervisor = new ConnectionSupervisor("redis", connection, events, { policy, timer });
+
+    await supervisor.start();
+    expect(supervisor.connected).toBe(false);
+    while (timer.pending() > 0) await timer.fire();
+
+    expect(connection.attempts).toBe(6);
+    expect(timer.delays).toEqual([100, 200, 400, 400, 400]);
+    expect(events.log).toEqual(["unavailable redis: Connection closed", "restored redis"]);
+    expect(supervisor.connected).toBe(true);
+  });
+
+  test("reopens a lost connection and starts the backoff over", async () => {
+    const connection = new FlakyConnection();
+    const timer = fakeTimer();
+    const events = recordingEvents();
+    const supervisor = new ConnectionSupervisor("redis", connection, events, { policy, timer });
+    await supervisor.start();
+    expect(supervisor.connected).toBe(true);
+
+    connection.failuresLeft = 1;
+    connection.drop();
+    connection.drop();
+    expect(supervisor.connected).toBe(false);
+    expect(timer.pending()).toBe(1);
+    while (timer.pending() > 0) await timer.fire();
+
+    expect(timer.delays).toEqual([100, 200]);
+    expect(connection.attempts).toBe(3);
+    expect(events.log).toEqual(["unavailable redis: Connection reset", "restored redis"]);
+    expect(supervisor.connected).toBe(true);
+  });
+
+  test("tries again when the connection drops while an attempt runs", async () => {
+    const connection = new FlakyConnection();
+    const timer = fakeTimer();
+    const supervisor = new ConnectionSupervisor("events", {
+      connect: async () => {
+        await connection.connect();
+        if (connection.attempts === 1) connection.drop();
+      },
+      onLost: (listener) => connection.onLost(listener),
+    }, recordingEvents(), { policy, timer });
+
+    await supervisor.start();
+    expect(supervisor.connected).toBe(false);
+    await timer.fire();
+    expect(connection.attempts).toBe(2);
+    expect(supervisor.connected).toBe(true);
+  });
+
+  test("stops retrying once stopped", async () => {
+    const connection = new FlakyConnection();
+    connection.failuresLeft = 10;
+    const timer = fakeTimer();
+    const supervisor = new ConnectionSupervisor("redis", connection, recordingEvents(), { policy, timer });
+    await supervisor.start();
+    expect(timer.pending()).toBe(1);
+
+    supervisor.stop();
+    expect(timer.pending()).toBe(0);
+    connection.drop();
+    await timer.fire();
+    expect(connection.attempts).toBe(1);
+    expect(timer.pending()).toBe(0);
   });
 });
 

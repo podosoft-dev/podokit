@@ -80,6 +80,23 @@ regenerates it, and a failed generation is retried on the next request.
 
 Routes are session-protected by default when `auth` is installed. Modules use
 the startup service registry and explicitly register public or API-key access.
+
+The registry starts work in two ways. `services.onStart(start)` runs before the
+server listens, in registration order, and a rejection stops startup, so use it
+only for work that cannot fail because a dependency is down. A connection to
+another service goes through `services.supervise(name, connection)` instead:
+`connection.connect()` opens whatever is closed and restores what depends on it,
+such as subscriptions, and the optional `connection.onLost(listener)` hands over
+a callback to run when an open connection drops. The registry makes one attempt
+before the start hooks run and then reconnects in the background with capped
+backoff, so the API listens while the service is down. Register a readiness
+check for the dependency so `/health/ready` reports it (see
+[Health probes](deployment.md#health-probes)).
+
+```ts
+services.resolve(READINESS).register("search", () => search.ping());
+services.supervise("search", search);
+```
 The backend always renders failures as:
 
 ```json

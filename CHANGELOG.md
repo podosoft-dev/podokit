@@ -132,6 +132,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   paths to add" and writes them with `--apply`. `file-upload` declares
   `/api/files/uploads/`, so its parts no longer need a manual configuration
   step.
+  honors `Retry-After`, report progress, and cancel the upload when their
+  signal aborts. A 40 MiB upload to Silo through the API added about 47 MiB of
+  API memory. Parts exceed the web `BODY_SIZE_LIMIT`, so list
+  `/api/files/uploads/` in `exposure.apiPaths` and `.podokit/dev.json`
+  `apiPaths`.
+- `services.supervise(name, connection)` in the generated API's service
+  registry keeps a connection to another service open. Startup makes one
+  attempt and then listens, and the registry reconnects in the background with
+  backoff from 250 ms up to 5 seconds, also after `connection.onLost` reports a
+  drop. It logs once when a dependency becomes unavailable and once when it is
+  restored. `services.onStart` stays for work that must finish before the
+  server listens.
+
 
 ### Changed
 
@@ -169,6 +182,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   the stream enqueues and closes within one pull. `LocalObjectStore` now reads
   objects up to 2 MiB whole; larger ones still stream in 64 KiB chunks and are
   sent chunked.
+- The generated API starts and listens while PostgreSQL is unreachable, answers
+  `/health/ready` with 503 until the database is back, and becomes ready without
+  a restart. It used to exit at startup with `ERR_POSTGRES_CONNECTION_REFUSED`,
+  so Kubernetes restarted it in a loop. The `jobs-local` worker likewise
+  creates its table once the database is reachable instead of failing startup.
+  The `/health/ready` 503 message now names the checks that are down, such as
+  `One or more dependencies are unavailable: db`.
 
 - The admin-dashboard `disposableUsers` Playwright fixture cleans up through its
   own request context in UI tests, holding a copy of the browser's admin cookies

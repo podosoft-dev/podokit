@@ -374,7 +374,9 @@ podo provider set jobs local --apply
 ```
 
 Use it for desktop and single-process applications. It does not start a separate
-worker and must not be scaled to multiple API replicas.
+worker and must not be scaled to multiple API replicas. The worker creates its
+table and starts polling once the database is reachable, so an API that starts
+while PostgreSQL is down begins processing jobs when it returns.
 
 **Deployment.** The worker is a separate process, so `podo add bullmq` also adds:
 

@@ -47,29 +47,18 @@ export class LocalJobQueue implements JobQueue {
   }
 
   initialize(): Promise<void> {
-    this.initialized ??= (async () => {
-      await this.sql`
-        CREATE TABLE IF NOT EXISTS "podokit_job" (
-          "id" text PRIMARY KEY,
-          "name" text NOT NULL,
-          "payload" text NOT NULL,
-          "status" text NOT NULL,
-          "attempts" integer NOT NULL,
-          "maxAttempts" integer NOT NULL,
-          "availableAt" bigint NOT NULL,
-          "createdAt" bigint NOT NULL,
-          "updatedAt" bigint NOT NULL,
-          "error" text
-        )
-      `;
-      await this.sql`
-        CREATE INDEX IF NOT EXISTS "podokit_job_pending"
-        ON "podokit_job" ("status", "availableAt", "createdAt")
-      `;
-    })();
+    if (!this.initialized) {
+      const attempt = this.createTables();
+      this.initialized = attempt;
+      // Forget a failed attempt so the next call retries instead of replaying the failure.
+      void attempt.catch(() => {
+        if (this.initialized === attempt) this.initialized = undefined;
+      });
+    }
     return this.initialized;
   }
 
+  /** Creates the table, then polls for jobs. Rejects while the database is unreachable. */
   async start(): Promise<void> {
     if (this.started) return;
     await this.initialize();
@@ -169,6 +158,27 @@ export class LocalJobQueue implements JobQueue {
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;
     this.handlers.clear();
+  }
+
+  private async createTables(): Promise<void> {
+    await this.sql`
+      CREATE TABLE IF NOT EXISTS "podokit_job" (
+        "id" text PRIMARY KEY,
+        "name" text NOT NULL,
+        "payload" text NOT NULL,
+        "status" text NOT NULL,
+        "attempts" integer NOT NULL,
+        "maxAttempts" integer NOT NULL,
+        "availableAt" bigint NOT NULL,
+        "createdAt" bigint NOT NULL,
+        "updatedAt" bigint NOT NULL,
+        "error" text
+      )
+    `;
+    await this.sql`
+      CREATE INDEX IF NOT EXISTS "podokit_job_pending"
+      ON "podokit_job" ("status", "availableAt", "createdAt")
+    `;
   }
 
   private schedule(delay: number): void {

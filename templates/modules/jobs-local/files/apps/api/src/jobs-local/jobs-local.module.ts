@@ -36,7 +36,7 @@ export const jobsLocalModule: PodokitModule = {
     });
     void queue.process("demo", () => undefined);
     services.register(JOBS, queue, () => queue.close());
-    services.onStart(() => queue.start());
+    services.supervise("jobs", { connect: () => queue.start() });
   },
   plugin: localJobsPlugin,
 };
