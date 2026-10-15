@@ -2,7 +2,7 @@ import {
   expect,
   test,
   type APIRequestContext,
-  type Playwright,
+  type PlaywrightWorkerArgs,
 } from "@playwright/test";
 import { ADMIN, USER, type Account } from "../helpers/accounts";
 
@@ -13,7 +13,7 @@ const PNG_PIXEL = Buffer.from(
 );
 
 async function signedIn(
-  playwright: Playwright,
+  playwright: PlaywrightWorkerArgs["playwright"],
   account: Account,
   create = false,
 ): Promise<APIRequestContext> {

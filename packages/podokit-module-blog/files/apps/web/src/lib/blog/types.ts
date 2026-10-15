@@ -37,6 +37,9 @@ export interface Paginated<T> {
   totalPages: number;
 }
 
+/** A public list page. `unavailable` marks the empty page shown while the API is down. */
+export type PublicPage<T> = Paginated<T> & { unavailable?: true };
+
 export interface BlogDraft {
   title: string;
   slug: string;

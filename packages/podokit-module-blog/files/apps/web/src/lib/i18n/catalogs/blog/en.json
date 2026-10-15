@@ -36,6 +36,8 @@
     "previous": "Previous",
     "next": "Next",
     "empty": "No posts yet.",
+    "unavailable": "Posts are temporarily unavailable. Please try again shortly.",
+    "commentsUnavailable": "Comments are temporarily unavailable.",
     "noComments": "No comments yet.",
     "signInToWrite": "Sign in to write or comment.",
     "deletePostTitle": "Delete this post?",

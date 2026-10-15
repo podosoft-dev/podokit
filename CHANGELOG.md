@@ -61,6 +61,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The request budget, OIDC consent, user row menu, and password reset UI specs
   wait for hydration or read each response before navigating on, so they pass
   on slower development servers.
+- Blog module 1.0.3: the public list and comments stay up with an
+  "unavailable" message during an API outage, a missing post answers 404
+  instead of 500, a post page answers a retryable 503 during an outage, and
+  `/blog/mine` returns 503 instead of a sign-in redirect while sessions cannot
+  be checked.
 - Generated Playwright specs and helpers pass strict type checking;
   `playwright.extensions.ts` now types projects with `PlaywrightTestConfig`.
 
@@ -87,6 +92,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   updating. If you already import `./public-paths` and spread it right after
   `"/maintenance"`, update merges your edit without a conflict and keeps your
   file.
+- Blog route wrappers are application-owned. After `bun update
+  @podosoft/podokit-module-blog` and `podo update --apply`, the managed loaders
+  already answer 404 and keep the list up; add `requireBackendAvailable` to your
+  `/blog/mine` loader and show `posts.unavailable` as described in the blog
+  README.
 - `/admin/users/+page.svelte` is application-owned, so update keeps your page,
   which still uses Better Auth `listUsers` with one filter. Compare it with the
   template page to adopt `GET /admin/users`.

@@ -1,13 +1,51 @@
-import type { RequestEvent } from "@sveltejs/kit";
+import { error, type RequestEvent } from "@sveltejs/kit";
+import { ApiError } from "@podosoft/podokit-api-client";
 import { serverApiClient } from "#lib/server/api.js";
-import type { BlogComment, BlogDraft, BlogPost, Paginated } from "./types";
+import type { BlogComment, BlogDraft, BlogPost, Paginated, PublicPage } from "./types";
+
+// A failed fetch is not an ApiError. Timeouts, rate limits, and 5xx are temporary;
+// other API errors are answers and keep their status.
+function isTemporaryFailure(cause: unknown): boolean {
+  if (!(cause instanceof ApiError)) return true;
+  return cause.statusCode === 408 || cause.statusCode === 429 || cause.statusCode >= 500;
+}
+
+/** A post page needs its post: missing is 404, and an outage is a retryable 503. */
+async function contentItem<T>(load: () => Promise<T>): Promise<T> {
+  try {
+    return await load();
+  } catch (cause: unknown) {
+    if (cause instanceof ApiError && cause.statusCode === 404) error(404, "Blog post not found");
+    if (isTemporaryFailure(cause)) error(503, "Blog temporarily unavailable");
+    throw cause;
+  }
+}
+
+/** A public list stays up during an outage as an empty page marked unavailable. */
+async function contentPage<T>(
+  load: () => Promise<Paginated<T>>,
+  page: number,
+  pageSize: number,
+): Promise<PublicPage<T>> {
+  try {
+    return await load();
+  } catch (cause: unknown) {
+    if (cause instanceof ApiError && cause.statusCode === 404) error(404, "Blog post not found");
+    if (!isTemporaryFailure(cause)) throw cause;
+    return { items: [], page, pageSize, total: 0, totalPages: 0, unavailable: true };
+  }
+}
 
 export function loadBlogPosts(
   event: RequestEvent,
   page: number,
   pageSize = 10,
-): Promise<Paginated<BlogPost>> {
-  return serverApiClient(event).get<Paginated<BlogPost>>(`/blog?page=${page}&pageSize=${pageSize}`);
+): Promise<PublicPage<BlogPost>> {
+  return contentPage(
+    () => serverApiClient(event).get<Paginated<BlogPost>>(`/blog?page=${page}&pageSize=${pageSize}`),
+    page,
+    pageSize,
+  );
 }
 
 export function loadMyBlogPosts(
@@ -21,11 +59,13 @@ export function loadMyBlogPosts(
 }
 
 export function loadBlogPost(event: RequestEvent, slug: string): Promise<BlogPost> {
-  return serverApiClient(event).get<BlogPost>(`/blog/${encodeURIComponent(slug)}`);
+  return contentItem(() => serverApiClient(event).get<BlogPost>(`/blog/${encodeURIComponent(slug)}`));
 }
 
 export function loadManagedBlogPost(event: RequestEvent, slug: string): Promise<BlogPost> {
-  return serverApiClient(event).get<BlogPost>(`/blog/manage/${encodeURIComponent(slug)}`);
+  return contentItem(() =>
+    serverApiClient(event).get<BlogPost>(`/blog/manage/${encodeURIComponent(slug)}`)
+  );
 }
 
 export function loadBlogComments(
@@ -33,9 +73,13 @@ export function loadBlogComments(
   slug: string,
   page: number,
   pageSize = 20,
-): Promise<Paginated<BlogComment>> {
-  return serverApiClient(event).get<Paginated<BlogComment>>(
-    `/blog/${encodeURIComponent(slug)}/comments?page=${page}&pageSize=${pageSize}`,
+): Promise<PublicPage<BlogComment>> {
+  return contentPage(
+    () => serverApiClient(event).get<Paginated<BlogComment>>(
+      `/blog/${encodeURIComponent(slug)}/comments?page=${page}&pageSize=${pageSize}`,
+    ),
+    page,
+    pageSize,
   );
 }
 
