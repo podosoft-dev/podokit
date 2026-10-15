@@ -25,29 +25,8 @@ function dependencyEntries(value: unknown): Array<[string, string]> {
   return Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string");
 }
 
-function supportsVersion(range: string, version: string): boolean {
-  const rangeMatch = /^\^(\d+)\.(\d+)\.(\d+)$/.exec(range);
-  const versionMatch = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
-  if (!rangeMatch || !versionMatch) return false;
-
-  const minimum = rangeMatch.slice(1).map(Number);
-  const current = versionMatch.slice(1).map(Number);
-  const [minimumMajor, minimumMinor, minimumPatch] = minimum;
-  const [currentMajor, currentMinor, currentPatch] = current;
-  if (
-    minimumMajor === undefined || minimumMinor === undefined || minimumPatch === undefined ||
-    currentMajor === undefined || currentMinor === undefined || currentPatch === undefined
-  ) return false;
-  if (currentMajor !== minimumMajor) return false;
-  if (currentMajor > 0) {
-    return currentMinor > minimumMinor || (currentMinor === minimumMinor && currentPatch >= minimumPatch);
-  }
-  if (currentMinor !== minimumMinor) return false;
-  return currentMinor > 0 ? currentPatch >= minimumPatch : currentPatch === minimumPatch;
-}
-
 describe("template PodoKit dependency ranges", () => {
-  it("accepts the current workspace package versions", () => {
+  it("requires the current workspace package versions", () => {
     const workspaceVersions = new Map<string, string>();
     for (const packageDir of readdirSync(resolve(REPO_ROOT, "packages"), { withFileTypes: true })) {
       if (!packageDir.isDirectory()) continue;
@@ -63,8 +42,10 @@ describe("template PodoKit dependency ranges", () => {
       for (const field of DEPENDENCY_FIELDS) {
         for (const [name, range] of dependencyEntries(manifest[field])) {
           const version = workspaceVersions.get(name);
-          if (version && !supportsVersion(range, version)) {
-            incompatible.push(`${relative(REPO_ROOT, path)}: ${name}@${range} does not accept ${version}`);
+          // Existing apps keep their lockfile entry while a range still accepts
+          // it, so the minimum must be the version the templates are built against.
+          if (version && range !== `^${version}`) {
+            incompatible.push(`${relative(REPO_ROOT, path)}: ${name}@${range} is not ^${version}`);
           }
         }
       }

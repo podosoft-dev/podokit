@@ -40,28 +40,6 @@ function replaceDependencyRange(source, name, currentRange, nextRange) {
   return updated;
 }
 
-export function caretRangeAccepts(range, version) {
-  const rangeMatch = /^\^(\d+)\.(\d+)\.(\d+)$/.exec(range);
-  const versionMatch = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
-  if (!rangeMatch || !versionMatch) return false;
-
-  const [, rangeMajorText, rangeMinorText, rangePatchText] = rangeMatch;
-  const [, versionMajorText, versionMinorText, versionPatchText] = versionMatch;
-  const rangeMajor = Number(rangeMajorText);
-  const rangeMinor = Number(rangeMinorText);
-  const rangePatch = Number(rangePatchText);
-  const versionMajor = Number(versionMajorText);
-  const versionMinor = Number(versionMinorText);
-  const versionPatch = Number(versionPatchText);
-
-  if (versionMajor !== rangeMajor) return false;
-  if (versionMajor > 0) {
-    return versionMinor > rangeMinor || (versionMinor === rangeMinor && versionPatch >= rangePatch);
-  }
-  if (versionMinor !== rangeMinor) return false;
-  return versionMinor > 0 ? versionPatch >= rangePatch : versionPatch === rangePatch;
-}
-
 export function syncTemplateDependencyRanges(repoRoot) {
   const packageVersions = new Map();
   const packagesRoot = resolve(repoRoot, "packages");
@@ -85,8 +63,12 @@ export function syncTemplateDependencyRanges(repoRoot) {
 
       for (const [name, range] of Object.entries(dependencies)) {
         const version = packageVersions.get(name);
-        if (version && typeof range === "string" && !caretRangeAccepts(range, version)) {
-          updates.set(`${name}\0${range}`, { name, currentRange: range, nextRange: `^${version}` });
+        // Raise the minimum even while the old range still accepts the version.
+        // Existing apps keep their lockfile entry until the range excludes it,
+        // and templates may use APIs that only the current version provides.
+        const nextRange = `^${version}`;
+        if (version && typeof range === "string" && range !== nextRange) {
+          updates.set(`${name}\0${range}`, { name, currentRange: range, nextRange });
         }
       }
     }
