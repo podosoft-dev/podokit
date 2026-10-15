@@ -1,5 +1,11 @@
 # @podosoft/podokit-module-blog
 
+## 1.0.3
+
+### Patch Changes
+
+- [#219](https://github.com/podosoft-dev/podokit/pull/219) [`77ad3b9`](https://github.com/podosoft-dev/podokit/commit/77ad3b9a895efa812588e56b62abdd3bb1fed79f) Thanks [@korone00](https://github.com/korone00)! - Keep the public blog up during API outages. `loadBlogPosts` and `loadBlogComments` return an empty page marked `unavailable` when the API cannot answer, a missing post answers 404 instead of 500, a post page answers a retryable 503 during an outage, and `/blog/mine` checks backend availability before redirecting to sign in, like `/blog/write` and the edit page. The seeded list and post pages show the new `blog.unavailable` and `blog.commentsUnavailable` messages.
+
 ## 1.0.2
 
 ### Patch Changes
