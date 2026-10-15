@@ -69,9 +69,16 @@ test("user list shows the joined column", async ({ page }) => {
 });
 
 test("row menu exposes admin actions", async ({ page }) => {
-  await page.goto("/admin/users");
+  // The list shows one server page, so the search must run before the row exists.
+  await ready(page, "/admin/users");
+  const searched = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === "/api/auth/admin/list-users" &&
+      url.searchParams.get("searchValue") === "user@example.com";
+  });
   await page.locator("#toolbar-search").fill("user@example.com");
   await page.getByRole("button", { name: "Search", exact: true }).click();
+  expect((await searched).ok()).toBeTruthy();
   const row = page.getByRole("row", { name: /user@example.com/ });
   await row.getByRole("button").click();
   await expect(page.getByRole("menuitem", { name: "Manage" })).toBeVisible();
