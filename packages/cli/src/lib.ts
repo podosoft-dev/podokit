@@ -23,6 +23,13 @@ export type {
   AddOptions,
   AddResult,
 } from "./add";
+export type {
+  ApiPathChange,
+  ApiPathResult,
+  ApiPathSkip,
+  ModuleApiPath,
+} from "./module-api-paths";
+export { describeApiPaths } from "./module-api-paths";
 export { status, diff, doctor, SUPPORTED_FRAMEWORKS } from "./inspect";
 export type { StatusReport, DoctorFinding } from "./inspect";
 export { addedModuleReason, planUpdate, summarize } from "./update";

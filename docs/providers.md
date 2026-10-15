@@ -96,6 +96,7 @@ second, `pg` pool for Better Auth. Both read these settings:
 | `DB_AUTH_POOL_MAX` | `10` | Maximum connections in the auth module's pool. |
 | `DB_CONNECT_TIMEOUT_MS` | `10000` | How long opening a connection may take. For the auth pool it also bounds the wait for a free connection when the pool is full. |
 | `DB_IDLE_TIMEOUT_MS` | `30000` | How long an unused connection stays open. `0` keeps it open. |
+| `DB_QUERY_TIMEOUT_MS` | `10000` | How long a query may wait for PostgreSQL to answer. The auth pool fails a slower query, and the Bun SQL pool checks the server, as described below. |
 
 Each API replica can hold `DB_POOL_MAX + DB_AUTH_POOL_MAX` connections, 30 with
 the defaults. Multiply that by the API replica count, add a few connections for
@@ -107,13 +108,42 @@ connection pooler such as PgBouncer in front before adding replicas.
 Bun SQL queues a query while every connection is busy and does not time out that
 wait. While the pool stays full, the readiness check reports the database as down
 once `READINESS_CHECK_TIMEOUT_MS` passes. The API answers `503` with the
-`DATABASE_UNAVAILABLE` error code instead of `500` when either pool times out
-opening a connection, when the auth pool has no free connection in time, and
-when Bun SQL cannot reach the server or loses the connection.
+`DATABASE_UNAVAILABLE` error code and `Retry-After: 1` instead of `500` when
+either pool times out opening a connection, when the auth pool has no free
+connection in time, and when Bun SQL cannot reach the server or loses the
+connection. Better Auth reports a failed query as a bare `500`, so when one of
+its endpoints under `/api/auth`, or the session lookup of a protected route,
+fails with a server error, the auth module runs `SELECT 1` on its pool and
+answers `DATABASE_UNAVAILABLE` when that does not succeed within
+`READINESS_CHECK_TIMEOUT_MS`. Other `500` errors stay `500`.
 
-These settings bound connections only and set no statement timeout, so a long
-migration is not cut short. Application migrations open their own TypeORM
-connection and ignore them.
+A server that keeps its connections open but stops answering, such as a paused
+container, a frozen VM, or a network partition, leaves queries waiting without an
+error. `DB_QUERY_TIMEOUT_MS` bounds that wait for both pools.
+
+The auth pool fails any query that gets no answer within `DB_QUERY_TIMEOUT_MS`,
+closes that connection instead of returning it to the pool, and opens a new one
+for the next query. The auth endpoint then answers `503` with
+`DATABASE_UNAVAILABLE` after its `SELECT 1` check.
+
+Bun SQL has no query timeout and cannot close a single pool connection, so the
+API watches every query and transaction on the Bun SQL pool instead. When one is
+still pending after `DB_QUERY_TIMEOUT_MS`, the API checks whether PostgreSQL
+answers `SELECT 1` on a new connection within `READINESS_CHECK_TIMEOUT_MS`. If it
+does not, the API opens a new pool and closes the old one, which fails every query
+still waiting on it. Those requests answer `503` with `DATABASE_UNAVAILABLE`
+about `DB_QUERY_TIMEOUT_MS` plus `READINESS_CHECK_TIMEOUT_MS` after they started,
+and the API logs `Dependency connection failed; retrying in the background`.
+While the server stays silent, a query on the new pool waits at most
+`DB_CONNECT_TIMEOUT_MS` for its connection. Once PostgreSQL answers again,
+queries succeed without a restart and the API logs `Dependency connection
+restored`. A query on the Bun SQL pool that is only slow, on a server that still
+answers, keeps running. A write that was waiting when its query failed may still
+be applied if the server resumes.
+
+Migrations and maintenance commands such as `admin:bootstrap` run without the
+query timeout, so a long migration is not cut short. Application migrations open
+their own TypeORM connection and ignore these settings.
 
 ### S3-compatible storage
 
@@ -168,6 +198,8 @@ provider data.
 - `OBJECT_STORAGE` / `ObjectStore`
 - `EVENTS` / `EventBus`
 - `JOBS` / `JobQueue`
+- `RATE_LIMIT_ROUTES` / `RateLimitRouteRegistry`, registered by the `rate-limit`
+  module (see [Route profiles](modules.md#route-profiles))
 
 Feature modules resolve these keys from the generated service registry. Provider
 modules are the only layer that should import Redis, S3, BullMQ, or local storage
@@ -176,27 +208,46 @@ contracts through `apps/api/src/app.extensions.ts`.
 
 ### Object storage reads
 
-`ObjectStore.get(key)` streams instead of buffering. It resolves `null` for a
-missing key; otherwise it returns `size`, `contentType`, `etag`, and
-`lastModified` with a `ReadableStream` body that opens on the first read. Read
-the body to the end or cancel it. `stat(key)` returns the same metadata without
-a body. Provider errors, such as an unreachable bucket, are thrown rather than
-reported as a missing object.
+`ObjectStore.get(key)` resolves `null` for a missing key; otherwise it returns
+`size`, `contentType`, `etag`, and `lastModified` with a `ReadableStream` body.
+Read the body to the end or cancel it, because a provider may already have the
+download open. `stat(key)` returns the same metadata without reading the
+content. Provider errors, such as an unreachable bucket, are thrown rather than
+reported as a missing object. The S3 provider's `get()` also throws for a missing
+bucket; its `stat()` uses a HEAD request, whose 404 cannot tell the two apart.
 
-The S3 provider asks for the metadata first and starts the download only when
-the body is read, because a missing key would otherwise surface only after a
-response had started. The download is a presigned GET paced by the reader,
-because Bun's `S3File.stream()` reads ahead without backpressure and would hold
-the rest of the object in memory for a slow client. The GET carries `If-Match`,
-so an object overwritten after its metadata was read fails the stream instead of
-mixing two versions. The local provider derives the entity tag from the file's
-inode, size, and modification time, and fails the stream rather than send a file
-that was replaced after its metadata was read.
+The S3 provider sends one presigned GET from `get()` and takes the metadata from
+its response headers, so the metadata always describes the content that follows
+and a missing key resolves `null` before a response has started. Objects up to
+2 MiB (`IN_MEMORY_READ_BYTES` from the runtime package) are read into memory
+before `get()` resolves, so `objectResponse` keeps their `content-length`.
+Larger objects stream from the GET's body, paced by the reader, because Bun's
+`S3File.stream()` reads ahead without backpressure and would hold the rest of the
+object in memory for a slow client; Bun sends them chunked. Until such a body is
+read or cancelled, the GET stays open, and an S3-compatible server may hold back
+overwrites of that key meanwhile: Silo waited about 30 seconds and then dropped
+the GET. An overwrite during a read never switches the stream to the new content;
+at worst the stream fails.
+
+The local provider derives the entity tag from the file's inode, size, and
+modification time, and opens files with `O_NOFOLLOW`, checking that the path
+still holds the described file. It reads objects up to `IN_MEMORY_READ_BYTES`
+whole before `get()` resolves, describing the object again if the file was
+replaced meanwhile, so their responses keep `content-length` too. Larger objects
+open on the first read and stream in 64 KiB chunks, chunked on the wire; such a
+stream fails rather than send a file that was replaced after its metadata was
+read.
 
 Serve objects with `objectResponse(request, object, options)` from the runtime
 package. It sets `content-type`, `content-length`, `etag`, and `last-modified`,
 answers a matching `If-None-Match` with `304` without reading the content, and
-accepts a `cacheControl` value and extra headers. Use
+accepts a `cacheControl` value and extra headers. Bun keeps that
+`content-length` only for a body held in memory or read from a file, such as
+`new Blob([bytes]).stream()` or `Bun.file().stream()`. It sends any other
+`ReadableStream`, including a `fetch()` response body and the stream of a large
+local object, with `Transfer-Encoding: chunked` and drops the length, except
+sometimes for a few KiB or less
+([oven-sh/bun#10507](https://github.com/oven-sh/bun/issues/10507)). Use
 `readObjectBytes(store, key, { maxBytes })` only for small objects you must hold
 in memory.
 
@@ -207,6 +258,60 @@ holds at most `limit` keys (1 to 1000, default 1000); pass `nextCursor` back as
 S3 pages with continuation tokens, and the local provider reads one directory at
 a time, skipping directories that sort before the cursor. Treat cursors as
 opaque and provider-specific.
+
+### Object storage writes
+
+`ObjectStore.put(key, body)` accepts bytes, a string, a `Blob` (including a
+Bun file), a `ReadableStream<Uint8Array>` such as a request body, or an
+`AsyncIterable<Uint8Array>`, and neither provider collects a streamed body into
+one buffer:
+
+- The local provider writes chunks to a temporary file next to the target and
+  renames it into place.
+- The S3 provider sends bytes, strings, and blobs up to 8 MiB in one request.
+  Anything larger or streamed goes out as a multipart upload in 8 MiB parts,
+  two in flight at a time, reusing the part buffers. Against Silo, streaming a
+  200 MB body and a 1 GiB body each added about 70 MiB to the process's
+  resident memory. A file-backed `Blob` is read in slices, because both Bun's
+  S3 write and `Blob.stream()` would read a file into memory ahead of the
+  upload.
+
+A body that fails part way abandons the write: the temporary file is removed,
+or the multipart upload is aborted, so no partial object appears.
+
+For uploads that span several HTTP requests, such as resumable or chunked
+uploads, use the multipart API on the same contract:
+`createMultipartUpload(key, { contentType })`, `uploadPart(key, uploadId,
+partNumber, body)`, `completeMultipartUpload(key, uploadId, parts)`, and
+`abortMultipartUpload(key, uploadId)`. Parts are numbered from 1 to
+`MAX_MULTIPART_PARTS` (10,000), and every part except the last needs at least
+`MIN_MULTIPART_PART_BYTES` (5 MiB), the S3 rule that the local provider
+enforces too, so code tested against local storage behaves the same on S3.
+Failures a caller can act on throw `MultipartUploadError` with the code
+`UPLOAD_NOT_FOUND`, `INVALID_PART`, or `PART_TOO_SMALL`. See the
+[runtime package README](../packages/runtime/README.md#multipart-uploads) for
+the full rules.
+
+Provider details:
+
+- **S3**: Bun's `S3Client` has no multipart calls, so the module signs these
+  requests itself with AWS Signature Version 4, using the same `S3_*` (or
+  `AWS_*`) credentials and endpoint settings. It works with AWS S3 and
+  Silo/MinIO-compatible services. S3 needs each part's length before sending
+  it, so a part passed as a stream is collected in memory first; pass a
+  `Blob` or bytes when you have them, and keep parts to tens of MiB. Unfinished
+  uploads keep their parts, and storage charges, until they are aborted: add a
+  bucket lifecycle rule with `AbortIncompleteMultipartUpload` (for example
+  after one day) on AWS. MinIO-compatible services such as Silo also expire
+  stale uploads on their own schedule.
+- **Local**: parts live under `LOCAL_STORAGE_PATH/.podokit/multipart/<uploadId>/`.
+  Uploads idle longer than `LOCAL_STORAGE_MULTIPART_MAX_AGE` seconds (default
+  86400) are removed when a later upload starts.
+
+Bun's own request body limit still applies to each HTTP request. Raise
+`API_MAX_REQUEST_BODY_SIZE` or set `apiServerOptions` (see
+[API server options](templates.md#api-server-options)) when a single request must
+carry more than 128 MiB, or keep requests small with multipart parts.
 
 ## Local persistence and backup
 

@@ -11,8 +11,13 @@ const origin = { origin: base };
 // Honor RATE_LIMIT_MAX when the test runner has it (a dedicated app sets a small
 // value so the window is crossed in a handful of requests); otherwise fall back
 // to the module default and allow a little headroom.
+// A local stack that raises the limits to run the whole suite quickly sets
+// E2E_SKIP_RATE_LIMIT=true and runs this file separately against the defaults.
+test.skip(process.env.E2E_SKIP_RATE_LIMIT === "true", "assumes the configured limits; run it on its own");
+
 const limit = Number(process.env.RATE_LIMIT_MAX ?? 300);
 const authLimit = Number(process.env.RATE_LIMIT_AUTH_MAX ?? 20);
+const runtimeLimit = Number(process.env.RATE_LIMIT_RUNTIME_MAX ?? 1000);
 
 async function session(
   playwright: import("@playwright/test").PlaywrightWorkerArgs["playwright"],
@@ -119,5 +124,24 @@ test("rate limit: session reads do not consume the strict authentication budget"
     const response = await ctx.get("/api/auth/get-session");
     expect(response.status(), `session request ${i + 1}`).toBe(200);
   }
+  await ctx.dispose();
+});
+
+test("rate limit: each route is counted in its most specific registered budget", async ({
+  playwright,
+}) => {
+  const ctx = await session(playwright);
+  const probe = await ctx.get("/api/account/capabilities");
+  test.skip(probe.status() >= 500, "throttler storage (redis) not reachable");
+  const ceiling = (response: APIResponse): number => Number(response.headers()["ratelimit-limit"]);
+
+  // Ordinary routes fall back to the general budget registered at "/".
+  expect(ceiling(probe)).toBe(limit);
+  // Longer GET prefixes inside "/api/auth" win over its authentication budget:
+  // session reads use the runtime budget and administrator reads the general one.
+  expect(ceiling(await ctx.get("/api/auth/get-session"))).toBe(runtimeLimit);
+  expect(ceiling(await ctx.get("/api/auth/admin/list-users"))).toBe(limit);
+  // Other "/api/auth" requests carry the strict authentication budget.
+  expect(ceiling(await ctx.post("/api/auth/sign-out", { data: {} }))).toBe(authLimit);
   await ctx.dispose();
 });

@@ -43,6 +43,8 @@ export interface ManifestModule {
   moduleVersion?: string;
   /** Module-local update migrations already applied to this project. */
   appliedMigrations?: string[];
+  /** Direct API paths of the module already merged into the app's gateway configuration. */
+  appliedApiPaths?: string[];
 }
 
 export interface ManifestModuleInput {
@@ -50,6 +52,7 @@ export interface ManifestModuleInput {
   packageName?: string;
   moduleVersion?: string;
   appliedMigrations?: string[];
+  appliedApiPaths?: string[];
 }
 
 export interface PodokitManifest {
@@ -119,6 +122,9 @@ export const DEFAULT_OWNED_GLOBS = [
   "apps/web/src/lib/i18n/catalogs/app/**",
   // Owned Elysia extension slot — register application services and plugins here.
   "apps/api/src/app.extensions.ts",
+  // Owned additions to the managed /api proxy's header lists and body limits.
+  "apps/web/src/lib/server/proxy-headers.ts",
+  "apps/web/src/lib/server/body-limits.ts",
   // AI agent guidance — yours to customize; update never touches it.
   "AGENTS.md",
   "CLAUDE.md",
@@ -389,6 +395,10 @@ export function recordModules(
     if (existing) {
       existing.packageName = module.packageName ?? existing.packageName;
       existing.moduleVersion = module.moduleVersion ?? existing.moduleVersion;
+      const apiPaths = [
+        ...new Set([...(existing.appliedApiPaths ?? []), ...(module.appliedApiPaths ?? [])]),
+      ];
+      if (apiPaths.length) existing.appliedApiPaths = apiPaths;
       continue;
     }
     fresh.push({
@@ -398,6 +408,7 @@ export function recordModules(
       packageName: module.packageName,
       moduleVersion: module.moduleVersion,
       appliedMigrations: module.appliedMigrations,
+      ...(module.appliedApiPaths?.length ? { appliedApiPaths: module.appliedApiPaths } : {}),
     });
   }
   const ordered = [...manifest.modules].sort((a, b) => a.order - b.order);

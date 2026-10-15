@@ -8,7 +8,9 @@
   "aliases": {
     "components": "#lib/components",
     "ui": "#lib/components/ui",
-    "utils": "#lib/utils.js"
+    "utils": "#lib/utils",
+    "hooks": "#lib/hooks",
+    "lib": "#lib"
   },
   "typescript": true,
   "registry": "https://shadcn-svelte.com/registry"

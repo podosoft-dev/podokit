@@ -80,6 +80,26 @@ regenerates it, and a failed generation is retried on the next request.
 
 Routes are session-protected by default when `auth` is installed. Modules use
 the startup service registry and explicitly register public or API-key access.
+A rule registered for `GET` also covers `HEAD`, which Elysia answers with the
+GET handler and Bun sends without the body; register a `HEAD` rule to treat it
+differently.
+
+The registry starts work in two ways. `services.onStart(start)` runs before the
+server listens, in registration order, and a rejection stops startup, so use it
+only for work that cannot fail because a dependency is down. A connection to
+another service goes through `services.supervise(name, connection)` instead:
+`connection.connect()` opens whatever is closed and restores what depends on it,
+such as subscriptions, and the optional `connection.onLost(listener)` hands over
+a callback to run when an open connection drops. The registry makes one attempt
+before the start hooks run and then reconnects in the background with capped
+backoff, so the API listens while the service is down. Register a readiness
+check for the dependency so `/health/ready` reports it (see
+[Health probes](deployment.md#health-probes)).
+
+```ts
+services.resolve(READINESS).register("search", () => search.ping());
+services.supervise("search", search);
+```
 The backend always renders failures as:
 
 ```json
@@ -97,6 +117,100 @@ The backend always renders failures as:
 
 The browser calls only the SvelteKit `/api/*` proxy. Cookies and internal API
 origins stay server-side.
+
+### Proxy headers
+
+The managed `apps/web/src/lib/server/backend-proxy.ts` forwards an allowlist of
+request headers to the API (cookies, authorization, content negotiation,
+conditional and range requests, the user agent) and relays an allowlist of
+response headers back (content and caching headers, `location`, rate-limit
+headers, `x-next-cursor`, and `set-cookie`). Every other header is dropped.
+
+The proxy relays the API's `content-length` unless the body was compressed.
+Bun sends a streamed body with chunked encoding and drops its length unless the
+body is in memory, so the proxy reads a body of up to 2 MiB with a known length
+before relaying it, such as a profile image or a JSON response, and streams
+larger ones through, chunked.
+
+Add the headers your own API uses to the application-owned
+`apps/web/src/lib/server/proxy-headers.ts`:
+
+```ts
+export const APP_FORWARDED_REQUEST_HEADERS: readonly string[] = ["x-api-key", "mcp-session-id"];
+export const APP_RELAYED_RESPONSE_HEADERS: readonly string[] = ["x-checksum-sha256", "www-authenticate"];
+```
+
+The proxy merges these into its lists, lowercased and without duplicates. A name
+that is not a valid header token, or one the proxy handles itself, fails the web
+build and tests: hop-by-hop headers (`connection`, `transfer-encoding`,
+`upgrade`, and the like), `host`, `content-length`, the client address headers
+(`forwarded`, `x-forwarded-*`, `x-real-ip`), and on responses
+`content-encoding` and `set-cookie`, which the proxy already relays. New apps
+get the file empty; `podo update` creates it once in an existing app and never
+overwrites it.
+
+### Request body limits
+
+`BODY_SIZE_LIMIT` (3 MiB in the generated `.env.example`, web Dockerfile, and
+Kubernetes config) is the ceiling for every web route. adapter-bun passes it to
+`Bun.serve` as `maxRequestBodySize`, so Bun enforces it before SvelteKit or the
+proxy runs: a request whose `Content-Length` exceeds it gets 413 with an empty
+body and a closed connection, and a chunked body without `Content-Length` fails
+once it passes the limit while being read, with the same 413. Neither response
+carries the error envelope.
+
+Below that ceiling, cap individual `/api` routes in the application-owned
+`apps/web/src/lib/server/body-limits.ts`:
+
+```ts
+export const APP_BODY_LIMITS: ReadonlyArray<{ pathPrefix: string; maxBytes: number }> = [
+  { pathPrefix: "/api/feedback/", maxBytes: 64 * 1024 },
+];
+```
+
+An entry covers its path and every path below it, matched on the decoded
+request path, and the longest matching prefix wins. The proxy rejects a declared
+`Content-Length` above the limit at once and otherwise counts the body as it
+streams in, stopping at the limit without buffering the rest. Either way it
+answers 413 with the standard envelope, code `PAYLOAD_TOO_LARGE` and
+`details.maxBytes`, without contacting the API. Routes without an entry keep the
+server-wide ceiling. An invalid prefix (not a static path under `/api/`) or a
+`maxBytes` that is not a positive whole number fails the web build and tests.
+
+These limits can only lower the ceiling: a `maxBytes` above `BODY_SIZE_LIMIT`
+has no effect, because Bun rejects the body first. Raising `BODY_SIZE_LIMIT`
+raises it for every page, form action, and endpoint, and the web process still
+holds each proxied body in memory. For uploads larger than the ceiling, list the
+upload route in `apiPaths` so the gateway sends it straight to the API; see
+[direct API paths](deployment.md#direct-api-paths). An app that splits uploads
+into chunks small enough for the web proxy can send larger parts that way.
+
+### API server options
+
+`main.ts` is managed, so applications set Bun server options through the
+`apiServerOptions` export of the owned `apps/api/src/app.extensions.ts`:
+
+```ts
+import type { ApiServerOptionsSource } from "./config/server-options";
+
+export const apiServerOptions: ApiServerOptionsSource = {
+  maxRequestBodySize: 1024 ** 3, // bytes per request body
+  idleTimeout: 120, // seconds, 0 to 255
+};
+```
+
+| Option | Default | Effect |
+| --- | --- | --- |
+| `maxRequestBodySize` | `API_MAX_REQUEST_BODY_SIZE`, else 128 MiB (Bun's default) | Larger bodies are refused with `413` before a handler runs. |
+| `idleTimeout` | 30 seconds (Elysia's default) | How long a connection may stay idle; `0` disables the timeout. |
+
+Values in the export win over the environment. Export a function to derive
+them from the validated environment instead, for example
+`(env) => ({ maxRequestBodySize: Math.max(env.API_MAX_REQUEST_BODY_SIZE, 1024 ** 3) })`.
+The export is optional: an `app.extensions.ts` written before it existed keeps
+compiling, and `API_MAX_REQUEST_BODY_SIZE` still applies. Invalid values stop
+the API at startup. Requests through the web app's `/api` proxy are also
+bounded by the web server's `BODY_SIZE_LIMIT`.
 
 ## `todo`
 
@@ -135,14 +249,19 @@ working full-stack app, use `fullstack` or `todo` with local providers instead.
 ## UI foundation
 
 `fullstack` and `todo` include Svelte 5, Tailwind v4, mode-watcher,
-typesafe-i18n, and shadcn-svelte primitives for forms, cards, dialogs, menus,
-tables, tabs, feedback, and navigation.
+typesafe-i18n, and shadcn-svelte primitives for forms (including `input`,
+`textarea`, `select`, `checkbox`, and `switch`), cards, dialogs, menus, tables,
+tabs, feedback, and navigation.
 
 Add another official component from `apps/web`:
 
 ```bash
-bunx --bun shadcn-svelte@latest add dialog badge
+bunx --bun shadcn-svelte@latest add accordion progress
 ```
+
+`components.json` maps the CLI's `utils`, `hooks`, and `lib` aliases to the
+`#lib` import map, so vendored components import `#lib/utils.js` like the
+shipped ones.
 
 Application components should wrap the vendored primitives rather than editing
 `src/lib/components/ui/**`. Colors and radius are CSS variables in `app.css`.

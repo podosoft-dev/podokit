@@ -68,6 +68,12 @@ requirement, such as `sse` requiring `events`, adds the module that implements
 the project's selected provider (`podo provider list`). The plan lists these
 under "Modules to add".
 
+A module that starts declaring a [direct API path](modules.md#module-direct-api-paths)
+in a newer version gets it added to `.podokit/dev.json` and every deployment
+profile. The plan lists these under "Direct API paths to add", including any it
+cannot add and why, and `--apply` writes them. `.podokit/manifest.json` records
+each module's applied paths, so a path you removed afterwards is not restored.
+
 Modules configure in manifest order, so a provider always comes before the
 modules that use it. `podo add` places a newly added provider ahead of installed
 modules that require it, and `podo update --apply` moves a provider recorded
@@ -121,8 +127,8 @@ layout.
 podo remove <module>
 ```
 
-Removal reverses registrations, files, package overlays, and environment
-examples. It refuses to remove a module required by another installed module,
+Removal reverses registrations, files, package overlays, environment
+examples, and the direct API paths only that module declared. It refuses to remove a module required by another installed module,
 keeps locally edited files, and never drops database tables.
 
 ## Taking ownership
@@ -158,6 +164,19 @@ export const extensionModules: PodokitModule[] = [];
 For a new route, create an Elysia plugin, validate inputs with `t`, throw
 `AppException` with a stable code, declare OpenAPI details, register its access
 policy, and add Bun tests plus an API contract entry.
+
+## Extending the web proxy
+
+The SvelteKit `/api` proxy, `apps/web/src/lib/server/backend-proxy.ts`, is
+managed. Instead of adding header names to its lists, put them in the
+application-owned `apps/web/src/lib/server/proxy-headers.ts`
+(`APP_FORWARDED_REQUEST_HEADERS` and `APP_RELAYED_RESPONSE_HEADERS`); see
+[proxy headers](templates.md#proxy-headers). Per-route request body limits go in
+the owned `apps/web/src/lib/server/body-limits.ts` (`APP_BODY_LIMITS`); see
+[request body limits](templates.md#request-body-limits). An app that already added names to
+the managed lists keeps them through `podo update`, because the new version adds
+its merge below the lists; move the names to the owned file and restore the
+managed copy so the next update is clean.
 
 ## Compatibility ranges
 

@@ -49,17 +49,45 @@ export class ApiError extends Error {
   readonly code: string;
   readonly statusCode: number;
   readonly details?: unknown;
+  /** Seconds to wait before retrying, from a `Retry-After` header (for example on 429 or 503). */
+  readonly retryAfterSeconds?: number;
 
-  constructor(code: string, message: string, statusCode: number, details?: unknown) {
+  constructor(
+    code: string,
+    message: string,
+    statusCode: number,
+    details?: unknown,
+    retryAfterSeconds?: number,
+  ) {
     super(message);
     this.name = "ApiError";
     this.code = code;
     this.statusCode = statusCode;
     this.details = details;
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
+/** Reads `Retry-After` as delay seconds or an HTTP date. */
+function retryAfterSeconds(response: Response): number | undefined {
+  const value = response.headers.get("retry-after")?.trim();
+  if (!value) return undefined;
+  if (/^\d+$/.test(value)) return Number(value);
+  const date = Date.parse(value);
+  return Number.isNaN(date) ? undefined : Math.max(0, Math.ceil((date - Date.now()) / 1000));
+}
+
+/** An error body as JSON, or undefined when a proxy or server answered with text or HTML. */
+function errorBody(text: string): unknown {
+  try {
+    return text ? JSON.parse(text) : undefined;
+  } catch {
+    return undefined;
   }
 }
 
 function toApiError(data: unknown, response: Response): ApiError {
+  const retryAfter = retryAfterSeconds(response);
   if (data && typeof data === "object" && "error" in data) {
     const error = (data as { error: unknown }).error;
     if (error && typeof error === "object") {
@@ -69,10 +97,62 @@ function toApiError(data: unknown, response: Response): ApiError {
         typeof record.message === "string" ? record.message : response.statusText,
         typeof record.statusCode === "number" ? record.statusCode : response.status,
         record.details,
+        retryAfter,
       );
     }
   }
-  return new ApiError("HTTP_ERROR", response.statusText || "Request failed", response.status);
+  return new ApiError("HTTP_ERROR", response.statusText || "Request failed", response.status, undefined, retryAfter);
+}
+
+/**
+ * A request body sent as is rather than as JSON: a `Blob` or `File`, bytes, or
+ * a stream. Send large files as a `Blob` (or `blob.slice()` chunks); a stream
+ * body needs a server and browser that support streaming uploads.
+ */
+export type BinaryBody = Blob | ArrayBuffer | ArrayBufferView | ReadableStream<Uint8Array>;
+
+/** Per-request options for {@link ApiClient} calls. */
+export interface RequestOptions {
+  /**
+   * Content type of the body. Binary bodies default to the Blob's own type,
+   * else `application/octet-stream`; JSON bodies to `application/json`.
+   * Ignored for `FormData`, whose boundary the runtime sets.
+   */
+  contentType?: string;
+  /** Additional request headers, such as `content-range` for a chunk. */
+  headers?: Record<string, string>;
+  /** Cancels the request, for example when the user abandons an upload. */
+  signal?: AbortSignal;
+}
+
+// lib.dom does not declare `duplex` yet; fetch requires it for stream bodies.
+type FetchInit = RequestInit & { duplex?: "half" };
+
+function isBinaryBody(body: unknown): body is BinaryBody {
+  return (
+    (typeof Blob !== "undefined" && body instanceof Blob) ||
+    body instanceof ArrayBuffer ||
+    ArrayBuffer.isView(body) ||
+    (typeof ReadableStream !== "undefined" && body instanceof ReadableStream)
+  );
+}
+
+function requestInit(method: string, credentials: RequestCredentials, body: unknown, options: RequestOptions): FetchInit {
+  const headers: Record<string, string> = { ...options.headers };
+  const init: FetchInit = { method, credentials, ...(options.signal ? { signal: options.signal } : {}) };
+  if (typeof FormData !== "undefined" && body instanceof FormData) {
+    init.body = body;
+  } else if (isBinaryBody(body)) {
+    headers["content-type"] =
+      options.contentType ?? (body instanceof Blob && body.type ? body.type : "application/octet-stream");
+    init.body = body as BodyInit;
+    if (typeof ReadableStream !== "undefined" && body instanceof ReadableStream) init.duplex = "half";
+  } else if (body !== undefined) {
+    headers["content-type"] = options.contentType ?? "application/json";
+    init.body = JSON.stringify(body);
+  }
+  if (Object.keys(headers).length > 0) init.headers = headers;
+  return init;
 }
 
 /**
@@ -81,8 +161,10 @@ function toApiError(data: unknown, response: Response): ApiError {
  *
  * - `client.auth` is the better-auth client (email/password, sessions, and the
  *   admin plugin: `client.auth.admin.listUsers()`, `banUser`, `setRole`, ...).
- * - `client.get/post/put/patch/del` call the app's JSON REST endpoints and parse
- *   the standard error envelope, throwing {@link ApiError} on failure.
+ * - `client.get/post/put/patch/del` call the app's REST endpoints and parse
+ *   the standard error envelope, throwing {@link ApiError} on failure. Bodies
+ *   are sent as JSON, except `FormData` (multipart, with the runtime's
+ *   boundary) and {@link BinaryBody} values, which are sent as they are.
  * - `client.postForm` sends multipart `FormData` without overriding the browser's
  *   boundary-aware content type.
  */
@@ -133,33 +215,21 @@ export function createApiClient(options: ApiClientOptions = {}) {
     return authClient;
   }
 
-  async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const response = await doFetch(`${baseUrl}${apiBasePath}${path}`, {
-      method,
-      credentials,
-      headers: body === undefined ? undefined : { "content-type": "application/json" },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+  async function request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    options: RequestOptions = {},
+  ): Promise<T> {
+    const response = await doFetch(
+      `${baseUrl}${apiBasePath}${path}`,
+      requestInit(method, credentials, body, options),
+    );
     const text = await response.text();
-    const data: unknown = text ? JSON.parse(text) : undefined;
     if (!response.ok) {
-      throw toApiError(data, response);
+      throw toApiError(errorBody(text), response);
     }
-    return data as T;
-  }
-
-  async function formRequest<T>(method: string, path: string, body: FormData): Promise<T> {
-    const response = await doFetch(`${baseUrl}${apiBasePath}${path}`, {
-      method,
-      credentials,
-      body,
-    });
-    const text = await response.text();
-    const data: unknown = text ? JSON.parse(text) : undefined;
-    if (!response.ok) {
-      throw toApiError(data, response);
-    }
-    return data as T;
+    return (text ? JSON.parse(text) : undefined) as T;
   }
 
   return {
@@ -169,12 +239,16 @@ export function createApiClient(options: ApiClientOptions = {}) {
     },
     /** Low-level typed request against the app's REST API. */
     request,
-    get: <T>(path: string): Promise<T> => request<T>("GET", path),
-    post: <T>(path: string, body?: unknown): Promise<T> => request<T>("POST", path, body),
-    put: <T>(path: string, body?: unknown): Promise<T> => request<T>("PUT", path, body),
-    patch: <T>(path: string, body?: unknown): Promise<T> => request<T>("PATCH", path, body),
-    del: <T>(path: string): Promise<T> => request<T>("DELETE", path),
-    postForm: <T>(path: string, body: FormData): Promise<T> => formRequest<T>("POST", path, body),
+    get: <T>(path: string, options?: RequestOptions): Promise<T> => request<T>("GET", path, undefined, options),
+    post: <T>(path: string, body?: unknown, options?: RequestOptions): Promise<T> =>
+      request<T>("POST", path, body, options),
+    put: <T>(path: string, body?: unknown, options?: RequestOptions): Promise<T> =>
+      request<T>("PUT", path, body, options),
+    patch: <T>(path: string, body?: unknown, options?: RequestOptions): Promise<T> =>
+      request<T>("PATCH", path, body, options),
+    del: <T>(path: string, options?: RequestOptions): Promise<T> => request<T>("DELETE", path, undefined, options),
+    postForm: <T>(path: string, body: FormData, options?: RequestOptions): Promise<T> =>
+      request<T>("POST", path, body, options),
   };
 }
 

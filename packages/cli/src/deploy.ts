@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { directApiRoutes } from "./api-paths";
 import type { CommandRunner } from "./dev";
 import {
   assertReleaseTag,
@@ -299,6 +300,30 @@ export function doctorDeployment(
           ? `IngressClass ${profile.exposure.ingressClassName} exists.`
           : `IngressClass ${profile.exposure.ingressClassName} is missing or inaccessible.`,
     });
+    if (profile.exposure.apiPaths.length > 0) {
+      // Direct API paths remove /api with a Traefik Middleware resource.
+      const middlewareCrd = runner(
+        "kubectl",
+        [
+          "--context",
+          profile.target.context,
+          "get",
+          "crd",
+          "middlewares.traefik.io",
+          "-o",
+          "name",
+        ],
+        { capture: true },
+      );
+      findings.push({
+        code: "crd:middlewares.traefik.io",
+        ok: middlewareCrd.status === 0,
+        message:
+          middlewareCrd.status === 0
+            ? "Traefik Middleware resources are available for exposure.apiPaths."
+            : "exposure.apiPaths needs the Traefik Middleware CRD (middlewares.traefik.io); serve the IngressClass with Traefik or remove exposure.apiPaths.",
+      });
+    }
     if (profile.exposure.tlsSecretName) {
       const tlsType = runner(
         "kubectl",
@@ -703,7 +728,7 @@ export function planDeployment(
       {
         order: 3,
         kind: "application",
-        description: `Roll out API, web${profile.workloads.worker ? ", and worker" : ""} workloads with zero unavailable replicas.`,
+        description: `Roll out API, web${profile.workloads.worker ? ", and worker" : ""} workloads with zero unavailable replicas.${directApiRoutes(profile.exposure.apiPaths)}`,
       },
       {
         order: 4,

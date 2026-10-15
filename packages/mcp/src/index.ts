@@ -13,6 +13,7 @@ import {
   builtinModulesDir,
   builtinTemplatesDir,
   create,
+  describeApiPaths,
   describeDeploymentTarget,
   diff,
   doctor,
@@ -182,10 +183,12 @@ server.registerTool(
     });
     if ("content" in r) return r;
     const { plan, counts } = r;
+    const apiPaths = describeApiPaths(plan.apiPaths, "add");
     return text(
       `${plan.fromVersion} -> ${plan.toVersion} (template: ${plan.template})\n` +
         `changes: ${JSON.stringify(counts)}\n` +
-        plan.changes.map((c) => `  ${c.action}\t${c.path}`).join("\n"),
+        plan.changes.map((c) => `  ${c.action}\t${c.path}`).join("\n") +
+        (apiPaths.length ? `\nDirect API paths to add:\n${apiPaths.join("\n")}` : ""),
     );
   },
 );
@@ -374,9 +377,12 @@ server.registerTool(
   },
   async ({ module, projectDir }) => {
     const r = inProject(projectDir, (dir) => addModule({ projectRoot: dir, module, modulesDir: builtinModulesDir() }));
-    return "content" in r
-      ? r
-      : text(`Added ${r.module}. Also added: ${r.added.join(", ") || "(none)"}. Run bun install.`);
+    if ("content" in r) return r;
+    const apiPaths = describeApiPaths(r.apiPaths, "add");
+    return text(
+      `Added ${r.module}. Also added: ${r.added.join(", ") || "(none)"}. Run bun install.` +
+        (apiPaths.length ? `\nDirect API paths:\n${apiPaths.join("\n")}` : ""),
+    );
   },
 );
 

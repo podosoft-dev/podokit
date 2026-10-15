@@ -343,6 +343,17 @@ describe("deployment rendering and planning", () => {
     expect(planDeployment(root, "production", "v1.2.3", runner).planHash).not.toBe(
       first.planHash,
     );
+    helmStatus = "deployed";
+    const withApiPaths = JSON.parse(readFileSync(path, "utf8")) as {
+      exposure: { apiPaths: string[] };
+    };
+    withApiPaths.exposure.apiPaths = ["/api/files/uploads/"];
+    writeFileSync(path, JSON.stringify(withApiPaths));
+    const routed = planDeployment(root, "production", "v1.2.3", runner);
+    expect(routed.planHash).not.toBe(first.planHash);
+    expect(routed.actions.find((action) => action.kind === "application")?.description).toContain(
+      "Route /api/files/uploads/ directly to the API without /api.",
+    );
     expect(() => planDeployment(root, "production", "latest", runner)).toThrow(
       "does not match deployment tag pattern",
     );
@@ -451,6 +462,49 @@ describe("deployment doctor and verification", () => {
         (finding) => finding.code === "cluster-fingerprint",
       )?.ok,
     ).toBe(false);
+  });
+
+  it("requires the Traefik Middleware CRD only when API paths are configured", () => {
+    const root = initializedProject();
+    const path = profilePath(root, "production");
+    const profile = JSON.parse(readFileSync(path, "utf8")) as {
+      exposure: { apiPaths: string[] };
+    };
+    let crdInstalled = false;
+    const crdQueries: string[][] = [];
+    const runner: CommandRunner = (_command, args) => {
+      if (args.includes("crd")) {
+        crdQueries.push(args);
+        return crdInstalled
+          ? { status: 0, stdout: "customresourcedefinition/middlewares.traefik.io\n", stderr: "" }
+          : { status: 1, stdout: "", stderr: "NotFound" };
+      }
+      if (args.includes("config")) return { status: 0, stdout: clusterOutput, stderr: "" };
+      return { status: 0, stdout: "", stderr: "" };
+    };
+    const crdFinding = () =>
+      doctorDeployment(root, "production", runner).find(
+        (finding) => finding.code === "crd:middlewares.traefik.io",
+      );
+
+    expect(crdFinding()).toBeUndefined();
+    expect(crdQueries).toEqual([]);
+
+    profile.exposure.apiPaths = ["/api/files/uploads/"];
+    writeFileSync(path, JSON.stringify(profile));
+    expect(crdFinding()?.ok).toBe(false);
+    expect(crdQueries.at(-1)).toEqual([
+      "--context",
+      "production",
+      "get",
+      "crd",
+      "middlewares.traefik.io",
+      "-o",
+      "name",
+    ]);
+
+    crdInstalled = true;
+    expect(crdFinding()?.ok).toBe(true);
   });
 
   it("refuses to plan or report status when the target cluster is inaccessible", () => {

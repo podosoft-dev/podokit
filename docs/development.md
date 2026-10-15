@@ -96,6 +96,20 @@ podo dev exec api bun run --cwd apps/api migrate:all
 ```
 
 Use `npx @podosoft/podokit dev ...` when `podo` is not installed globally.
+
+The containers read their environment from `.env.docker`, which Git ignores
+because it holds local secrets. The committed `.env.docker.example` carries the
+development defaults. When `.env.docker` is missing, as in a fresh clone, every
+`podo dev` command except `url` creates it from the example and fills each empty
+`*_SECRET` value, such as `BETTER_AUTH_SECRET`, with a random value. An existing
+`.env.docker` is never changed. `podo dev env` creates the file without starting
+anything; the devcontainer runs it as its `initializeCommand`. Keep shared,
+non-secret settings in `.env.docker.example` and put credentials such as OAuth
+client secrets only in `.env.docker`. A project generated before the example
+existed gets it, with its `.gitignore` exception, from `podo update --apply`;
+copy any shared values you added to `.env.docker` into the example and commit
+it.
+
 The shared loopback Traefik gateway routes each committed
 `.podokit/dev.json` hostname to its web container. SvelteKit proxies
 `/api/*` internally to Elysia, so browsers use one origin.
@@ -115,9 +129,43 @@ web service. The gateway forwards cookies and proxy headers, but the API must
 authenticate the upgrade request. Add `publicUrl` when a stable HTTPS tunnel sends
 its public `Host` header to the loopback gateway.
 
+Routes that accept bodies larger than the web server's `BODY_SIZE_LIMIT` (3 MiB by
+default), such as file uploads, go in `apiPaths`:
+
+```json
+{
+  "schemaVersion": 1,
+  "hostname": "myapp.localhost",
+  "apiPaths": ["/api/files/uploads/"]
+}
+```
+
+Each entry covers its own path and every path below it. The gateway removes `/api`
+and sends the request straight to the API container, so
+`/api/files/uploads/u1/parts/2` reaches the API as `/files/uploads/u1/parts/2`
+without passing through SvelteKit. The rules and their security implications are
+the same as for `exposure.apiPaths` in a
+[deployment profile](deployment.md#direct-api-paths); list the same paths in both.
+Modules that need a direct path add it to both when you run `podo add`: the
+`file-upload` module's [resumable uploads](modules.md#resumable-uploads) add
+`/api/files/uploads/`. See
+[module direct API paths](modules.md#module-direct-api-paths).
+
 `podo dev watch` delegates to Compose Watch. Vite handles web HMR and Bun's
-watch process reloads the Elysia API. Use `podo dev ps`, `logs`, `exec`, and
-`down` for lifecycle operations. Install native dependencies inside the target
+watch process reloads the Elysia API. Compose Watch syncs edits into the running
+containers, not into their images, so `podo dev up` runs `docker compose up
+--build`: when Compose recreates a container, for example after a memory limit or
+`.env.docker` change, the new container runs the current source instead of the
+last built image. This also holds while `podo dev watch` is running, and Watch
+keeps syncing into the recreated containers. Pass `--no-build` to start from the
+existing images. Use `podo dev ps`, `logs`, `exec`, and
+`down` for lifecycle operations. `podo dev down` first stops the Compose Watch
+that `podo dev watch` started for the same project, found by the project's
+`.podokit/runtime/dev.compose.yaml` path in its command line, and waits for it
+to exit. Compose holds a per-project lock while it watches, so a watch left
+running made the next `podo dev watch` fail with "cannot take exclusive lock".
+Watches of other projects and the shared gateway are not touched. The stopped
+`podo dev watch` prints `Stopped watching.` and exits successfully. Install native dependencies inside the target
 container with `podo dev exec api bun install` when validating Linux-specific
 artifacts.
 

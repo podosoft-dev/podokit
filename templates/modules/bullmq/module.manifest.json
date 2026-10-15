@@ -8,13 +8,17 @@
     "apps/api/src/config/providers.ts",
     "apps/api/src/config/redis.connection.ts"
   ],
+  "requiredProjectContents": {
+    "apps/api/src/core/services.ts": ["supervise(name: string, connection: SupervisedConnection): void {"],
+    "apps/api/src/config/redis.connection.ts": ["export function redisCommandTimeoutMs("]
+  },
   "managedGlobs": [
     "apps/api/src/jobs/**",
     "apps/api/src/main-worker.ts"
   ],
   "targetApp": "api",
   "dependencies": {
-    "bullmq": "^5.34.0"
+    "bullmq": "^5.57.0"
   },
   "scripts": {
     "start:worker": "bun dist/main-worker.js",

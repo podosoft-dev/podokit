@@ -42,6 +42,14 @@ Merge added module settings from `.env.example` into an existing `.env`.
 
 - **Ports: web = 5001, api = 5002.** The web app reaches the API only through its
   SvelteKit server proxy (`/api/*`), never with a direct browser `fetch`.
+- The proxy (`apps/web/src/lib/server/backend-proxy.ts`) is managed and passes only
+  allowlisted headers. List extra request and response header names in the
+  app-owned `apps/web/src/lib/server/proxy-headers.ts`
+  (`APP_FORWARDED_REQUEST_HEADERS`, `APP_RELAYED_RESPONSE_HEADERS`); never edit the
+  managed lists. Cap a route's request body in the app-owned
+  `apps/web/src/lib/server/body-limits.ts` (`APP_BODY_LIMITS`, 413
+  `PAYLOAD_TOO_LARGE`). `BODY_SIZE_LIMIT` is the ceiling for every web route, so
+  uploads larger than it must use a direct API path (`apiPaths`) instead.
 - Build: `{{rootRun}} build`  ·  Type-check/lint: `{{rootRun}} lint`  ·  Unit tests: `{{rootRun}} test`
 - Per workspace: `{{apiRun}} build` / `{{webRun}} build`.
 - Application migrations (PostgreSQL or SQLite): `{{apiRun}} migration:run`.
@@ -92,7 +100,7 @@ Useful commands:
 - `podo remove <module>` — un-apply a module (inverse of add; refuses if another module needs it, keeps files you edited).
 - `podo status` / `podo diff` — see your local edits vs. what PodoKit generated.
 - `podo update` — pull in template/module improvements (3-way merges your edits; never touches owned files).
-- `podo deploy` — plan, apply, verify, or roll back an immutable release on Kubernetes or one Docker host. Production API WebSocket paths belong in the deployment profile's exact `exposure.webSocketPaths` allowlist; Compose trusts forwarding headers only from `exposure.trustedProxyCidrs`. Tag `vX.Y.Z` to build and push the images (`.github/workflows/release.yml`; check its runner — GitHub-hosted minutes are free for public repositories only). Use `.agents/skills/podokit-deploy`.
+- `podo deploy` — plan, apply, verify, or roll back an immutable release on Kubernetes or one Docker host. Production API WebSocket paths belong in the deployment profile's exact `exposure.webSocketPaths` allowlist, and API routes that take bodies above the web server's `BODY_SIZE_LIMIT` (file uploads) in `exposure.apiPaths` (and `.podokit/dev.json` `apiPaths` for `podo dev`; `podo add` and `podo deploy init` fill in the paths modules declare), which reach the API without the web proxy, so the API must check their size, session, and `Origin` itself; Compose trusts forwarding headers only from `exposure.trustedProxyCidrs`. Tag `vX.Y.Z` to build and push the images (`.github/workflows/release.yml`; check its runner — GitHub-hosted minutes are free for public repositories only). Use `.agents/skills/podokit-deploy`.
 - `podo deploy sync` — copy local build output into a running Compose deployment and restart it, for iterating without a release. Not a release: no image is published and the next `apply` discards it. Use `.agents/skills/podokit-deploy-fast`.
 
 ## Commit conventions

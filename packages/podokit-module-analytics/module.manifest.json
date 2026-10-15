@@ -3,6 +3,10 @@
   "name": "analytics",
   "description": "Provider-neutral web analytics with GA4 collection, advanced consent mode, encrypted administrator configuration, aggregate reports, and realtime visitors.",
   "requires": ["admin-dashboard", "audit-log"],
+  "requiredProjectFiles": [
+    "apps/web/src/lib/components/ui/textarea/index.ts",
+    "apps/web/src/lib/components/ui/textarea/textarea.svelte"
+  ],
   "targetApp": "web",
   "managedGlobs": [
     "apps/api/src/analytics/**",
@@ -11,7 +15,6 @@
     "apps/web/src/lib/analytics/**",
     "apps/web/src/lib/components/analytics-runtime.svelte",
     "apps/web/src/lib/components/settings/analytics-settings.svelte",
-    "apps/web/src/lib/components/ui/textarea/**",
     "apps/web/src/lib/i18n/catalogs/analytics/**",
     "apps/web/src/routes/(admin)/admin/analytics/**",
     "tests/api/analytics.api.spec.ts",

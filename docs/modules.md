@@ -28,7 +28,10 @@ and run API scripts as `bun run --cwd apps/api <script>`.
 - may declare `requiredProjectFiles` and `requiredProjectContents` when an
   overlay depends on newer generated baseline paths or source contracts; the CLI
   checks them before mutation and asks you to run
-  `podo update --apply` when the project is stale, and
+  `podo update --apply` when the project is stale,
+- may declare `apiPaths`, prefixes under `/api/` that its routes need sent
+  straight to the API (see [Module direct API paths](#module-direct-api-paths)),
+  and
 - prints follow-up steps.
 
 ## Provider capabilities
@@ -234,7 +237,9 @@ migration Job before a rolling deployment.
   3 seconds, and read the tables again only when the probe changes, so they converge within
   3 seconds, deleted providers included. When the app has an events provider (`events-redis`
   across replicas), a write also publishes `config.changed` so the other replicas reload at once;
-  without one they rely on the probe.
+  without one they rely on the probe. An auth request waits for the probe at most
+  `READINESS_CHECK_TIMEOUT_MS`; when the database answers later, the current configuration
+  serves that request and the probe finishes in the background.
 - **Social login is dynamic.** The "Social login" card manages providers add/edit/delete: pick
   any better-auth-supported provider (Google, GitHub, Apple, Microsoft, Discord, Kakao, Naver,
   … — see `auth/auth-config.ts` `SUPPORTED_SOCIAL_PROVIDERS`), paste its client id/secret, and it
@@ -288,6 +293,17 @@ migration Job before a rolling deployment.
   AES-256-GCM, the key derived from `BETTER_AUTH_SECRET` (never in the DB it protects). They are
   never returned to the browser (the API exposes only a `hasSecret` flag). Keep
   `BETTER_AUTH_SECRET` stable — rotating it makes previously-saved DB secrets undecryptable.
+- **Database outages answer 503.** While PostgreSQL is unreachable, Better Auth endpoints such
+  as `POST /api/auth/sign-in/email` and `GET /api/auth/get-session`, and every route that needs a
+  session, answer `503` with `DATABASE_UNAVAILABLE` and `Retry-After` instead of `500`. Better
+  Auth reports a failed query as a bare `500`, and its session lookup drops the cause, so after a
+  server error the module runs `SELECT 1` on its pool, bounded by `READINESS_CHECK_TIMEOUT_MS`,
+  and answers `503` only when that fails too. Client errors such as `401` and other `500` errors
+  are passed on unchanged. A query that PostgreSQL leaves unanswered, for example while the
+  server is paused, fails after `DB_QUERY_TIMEOUT_MS` (default `10000`), and the pool closes
+  that connection and opens a new one instead of reusing it. The migration runner and
+  `admin:bootstrap` run without that timeout: they import `./auth/maintenance-command` first,
+  which also skips Better Auth's startup schema check for their process.
 - **Bearer tokens (API/mobile clients)**: always on. Sign-in returns the session token in
   a `set-auth-token` response header; send it back as `Authorization: Bearer <token>` to
   authenticate without a cookie. Useful for native apps and server-to-server calls.
@@ -361,6 +377,20 @@ curl localhost:5002/jobs/<id>   # waiting -> active -> completed
 
 Without the worker running, jobs stay `waiting`; start the worker and they complete.
 
+The API adds and reads jobs over one producer connection that fails fast
+instead of waiting for Redis. While Redis is down, `POST /jobs`, `GET /jobs/{id}`,
+and every other `JOBS` call answer `503` with `JOBS_UNAVAILABLE` and
+`Retry-After` at once. A command that Redis does not answer within
+`REDIS_COMMAND_TIMEOUT_MS`, for example while the server is paused, fails the
+same way, and the connection is replaced. The API starts while Redis is down,
+reconnects the producer in the background like its other dependencies, and
+reports it as the `jobs` readiness check. Workers keep BullMQ's blocking
+connections, which wait for Redis instead of failing, and reconnect by
+themselves with the same backoff, from 250 ms up to 5 seconds, so they resume
+processing shortly after Redis returns. A job whose enqueue timed out may still
+be added if the server resumes; pass `deduplicationKey` when a retried enqueue
+must not create a second job.
+
 ### `jobs-local`
 
 A database-persistent job queue with an embedded worker in the API process. It
@@ -371,7 +401,9 @@ podo provider set jobs local --apply
 ```
 
 Use it for desktop and single-process applications. It does not start a separate
-worker and must not be scaled to multiple API replicas.
+worker and must not be scaled to multiple API replicas. The worker creates its
+table and starts polling once the database is reachable, so an API that starts
+while PostgreSQL is down begins processing jobs when it returns.
 
 **Deployment.** The worker is a separate process, so `podo add bullmq` also adds:
 
@@ -387,9 +419,11 @@ S3-compatible object storage that works with **AWS S3 and MinIO-compatible serve
 selected by the `STORAGE_PROVIDER` env var (`minio` or `aws`). Local development
 uses a pinned [Silo](https://github.com/pgsty/silo) image. Provides a `StorageService`
 (put, buffered `get`, streamed `open`, `stat`, paged `list`, delete, and presigned URLs) and demo
-`/storage` endpoints. `open(key)` reads the object's metadata first and starts
-the download only when the body is read; prefer it to `get` for anything that can
-be large.
+`/storage` endpoints. `open(key)` sends one GET and takes the object's metadata
+from its response, reading objects up to 2 MiB (`IN_MEMORY_READ_BYTES`) into
+memory so responses built from them keep their `content-length`; larger objects
+stream, chunked. Read or
+cancel the body it returns. Prefer it to `get` for anything that can be large.
 The Compose service and file keep their `minio` names for existing endpoints.
 
 **Security note:** the demo endpoints require the `auth` module and an
@@ -425,6 +459,22 @@ The same native `Bun.S3Client` code path serves both — only configuration diff
 The module registers a bucket probe with `/health/ready`, so an unavailable or
 unauthorized bucket removes the API pod from service without failing liveness.
 
+`OBJECT_STORAGE.put` streams large and streamed bodies as a multipart upload
+with bounded memory, and the store implements the runtime multipart API
+(`createMultipartUpload`, `uploadPart`, `completeMultipartUpload`,
+`abortMultipartUpload`) for uploads split across requests. Bun's `S3Client`
+has no multipart calls, so these requests are signed with AWS Signature
+Version 4 from the same `S3_*` settings; set `S3_ACCESS_KEY_ID` and
+`S3_SECRET_ACCESS_KEY` (or `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, and
+`S3_SESSION_TOKEN` or `AWS_SESSION_TOKEN` for temporary credentials). Keys
+with `.` or `..` segments are rejected for writes because a request URL would
+resolve them to another key. On AWS, add an `AbortIncompleteMultipartUpload`
+lifecycle rule so abandoned uploads stop accruing storage. See
+[Object storage writes](providers.md#object-storage-writes).
+
+Applications that wrote their own S3 multipart writer to store large files
+can call `put` with the stream, or the multipart API, instead.
+
 ### `object-storage-local`
 
 Atomic, path-confined object storage rooted at `LOCAL_STORAGE_PATH`. It rejects
@@ -453,15 +503,26 @@ The module serves the same administrator-only demo routes as `object-storage-s3`
 (`PUT /storage/:key`, `GET /storage/:key`, `GET /storage/:key/presigned`),
 confined to `demo/`.
 
-Downloads and demo reads stream the file from disk in 64 KiB chunks. Each
-response carries `content-length`, `etag`, and `last-modified`, and a matching
-`If-None-Match` receives `304` without reading the file.
+Downloads and demo reads carry `etag` and `last-modified`, and a matching
+`If-None-Match` receives `304`. Objects up to 2 MiB (`IN_MEMORY_READ_BYTES` from
+`@podosoft/podokit-runtime`) are read whole before the response is built, so it
+carries `content-length`. Larger objects stream from disk in 64 KiB chunks
+through a JavaScript `ReadableStream`, which Bun sends with
+`Transfer-Encoding: chunked` and without the length; a `304` for them opens no
+file.
+
+Streamed `put` bodies are written to a temporary file and renamed into place.
+Multipart uploads keep their parts under
+`LOCAL_STORAGE_PATH/.podokit/multipart/<uploadId>/` and follow the same rules
+as S3, including the 5 MiB minimum for every part but the last. Uploads idle
+for longer than `LOCAL_STORAGE_MULTIPART_MAX_AGE` seconds (default 86400) are
+removed when a later upload starts.
 
 ### `file-upload`
 
-A multipart upload endpoint that stores files through the `OBJECT_STORAGE`
-contract and returns a download URL. `podo add file-upload` automatically adds
-the selected S3 or local implementation.
+A multipart upload endpoint and resumable chunked uploads that store files
+through the `OBJECT_STORAGE` contract and return a download URL. `podo add
+file-upload` automatically adds the selected S3 or local implementation.
 
 ```bash
 npx @podosoft/podokit add file-upload   # also adds the selected provider
@@ -493,6 +554,138 @@ Uploads stored by earlier versions use that unowned format. Once `auth` is
 installed, only administrators can presign them. To return such files to their
 owners, move each object to `uploads/<userId>/<name>` using ownership your
 application already records.
+
+#### Resumable uploads
+
+`POST /files` takes the whole file in one request, so it is bounded by the web
+server's `BODY_SIZE_LIMIT` and restarts from zero when the connection drops.
+For large files, the module also provides resumable uploads: the client creates
+an upload session, sends the file in numbered parts, and completes it. Each
+part is streamed into an object storage multipart upload without being
+buffered whole, a failed part is simply sent again, and a client that lost its
+place reads which parts the server already has.
+
+Sessions and received parts are stored in the database
+(`file_upload_sessions` and `file_upload_parts`), never in process memory, so
+any API replica can serve any request of an upload. Every state change is a
+conditional `UPDATE`: two concurrent completes produce one object, and replicas
+sweeping expired sessions at the same time never abort the same upload twice.
+Run the migration after adding the module:
+
+```bash
+bun run --cwd apps/api migration:run   # or migrate:all with the auth module
+```
+
+In the browser, use the managed helper `$lib/uploads`:
+
+```ts
+import { resumeUpload, uploadFile } from "$lib/uploads";
+
+const controller = new AbortController();
+const stored = await uploadFile(file, {
+  onProgress: (sent, total) => (progress = sent / total),
+  onSession: ({ id }) => localStorage.setItem("upload", id), // to resume after a reload
+  signal: controller.signal, // abort() cancels the upload on the server
+});
+// stored = { id, status: "completed", key, size, contentType, url }
+
+// After a reload, with the same File:
+await resumeUpload(localStorage.getItem("upload") ?? "", file);
+```
+
+`uploadFile` sends three parts at a time (`concurrency`), retries a part that
+fails with a network error, 408, 425, 429, or 5xx up to five times (`retries`)
+with exponential backoff from 500 ms (`retryDelayMs`), and waits for the
+server's `Retry-After` when there is one. In a browser with the default client,
+parts go out with `XMLHttpRequest`, so `onProgress` reports bytes as they are
+sent. With a custom `client`, or where `XMLHttpRequest` does not exist (tests,
+server-side code), parts use the client's `fetch` and progress advances as each
+part is stored. The reported value never decreases: the bytes of a part that
+fails stop counting, and progress holds until its retry passes them. Aborting
+the signal stops the transfer, including the requests in flight, and deletes the
+session.
+
+The HTTP contract, as the API receives it (the browser calls the same paths
+under `/api`):
+
+| Request | Body | Response |
+| --- | --- | --- |
+| `POST /files/uploads` | `application/json`: `{ filename, size, contentType? }` | `201 { id, partSize, partCount, expiresAt }` |
+| `PUT /files/uploads/{id}/parts/{partNumber}` | `application/octet-stream`, the part's bytes, `Content-Length` equal to `partSize` (the last part holds the remainder) | `200 { partNumber, size }` |
+| `GET /files/uploads/{id}` | | `200 { id, status, filename, contentType, size, partSize, partCount, receivedParts, expiresAt, key? }` |
+| `POST /files/uploads/{id}/complete` | `application/json`: `{}` | `200 { id, status: "completed", key, size, contentType, url }` |
+| `DELETE /files/uploads/{id}` | | `204` |
+
+Parts may arrive in any order, and sending a part again replaces it. `status`
+is `open`, `completing`, `completed`, or `aborted`; `key` appears once the upload
+has completed. Completing a completed upload returns the same result, and
+deleting an aborted one succeeds. Uploads are stored as
+`uploads/<userId>/<id>-<filename>`, so `GET /files/{key}/url` presigns them like
+any other upload.
+
+| Error code | Status | Meaning |
+| --- | --- | --- |
+| `UPLOAD_NOT_FOUND` | 404 | No such session, it belongs to another user, or storage no longer has it. Other users always receive 404, never 403. |
+| `UPLOAD_SIZE_INVALID` | 400 | `size` is not a positive whole number of bytes. |
+| `UPLOAD_TOO_LARGE` | 413 | `size` is above `FILE_UPLOAD_MAX_BYTES`. |
+| `UPLOAD_PART_OUT_OF_RANGE` | 400 | The part number is not between 1 and `partCount`. |
+| `UPLOAD_LENGTH_REQUIRED` | 411 | The part was sent without `Content-Length`. |
+| `UPLOAD_PART_SIZE_MISMATCH` | 400 | `Content-Length`, or the body actually received, differs from the part's size. |
+| `UPLOAD_INCOMPLETE` | 409 | Complete was called before every part arrived; read the status and send the missing parts. |
+| `UPLOAD_COMPLETING` | 409 | Another request is completing the upload; retry shortly. |
+| `UPLOAD_COMPLETED` | 409 | A part or delete arrived after completion. |
+| `UPLOAD_INVALID_PART` | 409 | Storage rejected a stored part as changed; send the parts again. |
+| `UPLOAD_CONFLICT` | 409 | The upload changed state while a part was being stored; read the status. |
+| `UPLOAD_EXPIRED`, `UPLOAD_ABORTED` | 410 | The session expired or was cancelled; start a new upload. |
+| `UNSUPPORTED_MEDIA_TYPE` | 415 | A POST without `application/json` or a part without `application/octet-stream`. |
+| `ORIGIN_NOT_ALLOWED` | 403 | A browser `Origin` outside `CORS_ORIGIN`. |
+
+The content-type rule keeps every cross-origin browser call to these routes
+from being a CORS "simple" request: the browser must send a preflight first,
+and the API's CORS refuses origins outside `CORS_ORIGIN`. This matters because
+a direct API path skips the web server's cross-site form check. A browser
+`Origin` header outside `CORS_ORIGIN` is also rejected outright; requests
+without one, such as `curl`, are authenticated by the session alone.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `FILE_UPLOAD_MAX_BYTES` | `1073741824` (1 GiB) | Largest file one upload may hold. |
+| `FILE_UPLOAD_PART_BYTES` | `8388608` (8 MiB) | Part size, at least 5 MiB (the S3 minimum). Files that would need more than 10,000 parts get larger parts, in whole MiB. |
+| `FILE_UPLOAD_SESSION_TTL` | `86400` | Seconds an unfinished upload may sit idle; each stored part restarts the clock. With local storage, keep it at or below `LOCAL_STORAGE_MULTIPART_MAX_AGE`. |
+| `FILE_UPLOAD_SWEEP_INTERVAL` | `300` | Seconds between sweeps that abort expired uploads, retry failed storage aborts, and delete finished sessions a TTL after they end. `0` turns the sweep off. |
+| `FILE_UPLOAD_RATE_LIMIT_MAX` | `3000` | Part uploads per caller in each `RATE_LIMIT_TTL` window. |
+
+The part size of the largest allowed upload must fit in the API's request body
+limit (`API_MAX_REQUEST_BODY_SIZE`, 128 MiB by default, or `apiServerOptions`);
+the API refuses to start otherwise. The S3 provider holds each part in memory
+while it sends it, so keep parts in the tens of MiB: three 8 MiB parts in flight
+added about 47 MiB of API memory in a 40 MiB upload to Silo. With the
+`rate-limit` module installed, part uploads count against their own
+`file-uploads` budget instead of the general one.
+
+**Parts go past the web server.** Parts are larger than the web server's
+`BODY_SIZE_LIMIT` (3 MiB by default), so a production build answers `413` if
+they go through the `/api` proxy. The module declares `/api/files/uploads/` as a
+[direct API path](deployment.md#direct-api-paths), and `podo add file-upload`
+lists it in `.podokit/dev.json` for `podo dev` and in `exposure.apiPaths` of
+every deployment profile under `.podokit/deploy/`:
+
+```json
+{
+  "exposure": {
+    "apiPaths": ["/api/files/uploads/"]
+  }
+}
+```
+
+`podo deploy init` adds it to profiles created later, and `podo remove
+file-upload` takes it out again. A profile that cannot take the path, such as a
+Kubernetes profile with `nodePort` exposure, is left unchanged and reported; see
+[Module direct API paths](#module-direct-api-paths). The Vite development server
+sets no body limit, so `bun run dev` without a gateway also accepts the parts
+through the proxy. Requests on the direct path reach the API with the gateway's
+timeouts; see [direct API paths](deployment.md#direct-api-paths) for raising
+Traefik's read timeout on slow connections.
 
 ### `sse`
 
@@ -644,6 +837,13 @@ loses the backlog and receives one `resync` instead of letting the queue grow
 without bound. A connection uses one heartbeat timer. When the client disconnects,
 the connection's subscription and timer are released at once.
 
+Every open stream on a replica also receives one `resync` when that replica's
+event transport delivers again after an outage, such as a Redis restart, because
+events published in the meantime never reach it. The stream itself stays open.
+A transport reports this through the optional `onInterruption(listener)` of the
+runtime `EventBus` contract; the memory transport cannot lose events and leaves
+it out.
+
 #### Browser helper
 
 `$lib/events` keeps one `EventSource` per tab and reference-counts subscribers.
@@ -706,6 +906,20 @@ including its topic and audience, and each replica filters for its own streams.
 and on receipt. Delivery is at-most-once. See [`sse`](#sse) for the publishing
 API.
 
+The Redis transport keeps its handlers in the process, so `subscribe` resolves
+without Redis and handlers stay registered across reconnects. The API starts
+while Redis is down; the transport reconnects in the background and subscribes
+its channel again on a fresh connection after every drop, because Bun keeps the
+listener of a dropped connection but not its server subscription. Publishing
+fails at once while it is disconnected, and after `REDIS_COMMAND_TIMEOUT_MS`
+when Redis keeps the connection open without answering, which the
+`POST /events` route answers with 503 `EVENTS_TRANSPORT_UNAVAILABLE`. A
+connection that timed out is closed and reopened. Events published while a replica is
+disconnected are not replayed to it; its open streams receive one `resync` once
+it is subscribed again. Settings change events (`config.changed`) use the same
+subscription, so replicas return from the settings TTL to immediate updates
+when Redis returns.
+
 ### `redis`
 
 Bun's native Redis client with `get`/`set`/`del` and `publish`/`subscribe`,
@@ -718,6 +932,24 @@ For production, prefer an authenticated `REDIS_URL`. `REDIS_USERNAME`,
 individual host and port settings. The Redis module registers a readiness check,
 and rate limiting, BullMQ, SSE, and the Redis service share the same connection
 configuration without logging credentials.
+
+The API starts while Redis is down and reconnects in the background, also after
+Redis restarts (see [Health probes](deployment.md#health-probes)). While the
+connection is closed, commands fail at once instead of queueing, so the cache
+endpoints and the rate limiter answer with an error rather than waiting. A
+command that Redis does not answer within `REDIS_COMMAND_TIMEOUT_MS` (default
+`1000`), for example while the server is paused, fails with
+`RedisCommandTimeoutError`. Redis answers a connection's commands in order, so
+the connection is then closed, which fails the commands waiting behind it, and
+reopened in the background. The demo cache endpoints answer `503` with
+`CACHE_UNAVAILABLE` and `Retry-After` while Redis cannot be reached. Run other
+commands through `redis.command((client) => client.hget(key, field))` instead of
+`redis.client` so they are bounded the same way. A write that timed out may still
+be applied if the server resumes.
+`RedisService.subscribe(channel, handler)` resolves without waiting for Redis:
+the subscription starts once Redis is reachable and is opened again after every
+reconnect on a fresh connection. Messages published while it is closed are not
+delivered.
 
 As the `CACHE` implementation, the module runs the fixed-window counter script
 with `EVALSHA`, using a SHA1 computed in the process. When Redis has dropped the
@@ -927,6 +1159,58 @@ owned `app.extensions.ts` file. Register application services in
 Keep the managed `rateLimitModule` registered once. Application-specific identity
 code must validate the credential before producing a stable internal identifier.
 
+The module's `tests/api/rate-limit.api.spec.ts` checks the limits the stack runs
+with: pass `RATE_LIMIT_MAX`, `RATE_LIMIT_AUTH_MAX`, and `RATE_LIMIT_RUNTIME_MAX`
+to Playwright when they differ from the defaults. A local stack that raises the
+limits to run the whole suite quickly can set `E2E_SKIP_RATE_LIMIT=true` to skip
+the file, then run it on its own against a stack with the default limits.
+
+#### Route profiles
+
+Routes can have a budget of their own, or be exempt, through the
+`RATE_LIMIT_ROUTES` registry (from `@podosoft/podokit-runtime`, also re-exported
+by `rate-limit.module.ts`). A chunked upload, for example, sends many small
+requests that should not use up the general budget:
+
+```ts
+import { RATE_LIMIT_ROUTES } from "@podosoft/podokit-runtime";
+
+// In a module's plugin factory, or in configureServices() in app.extensions.ts:
+services.tryResolve(RATE_LIMIT_ROUTES)?.register({
+  method: "PUT", // optional; every method when omitted
+  pathPrefix: "/uploads",
+  profile: { name: "uploads", limit: 3000, ttlSeconds: 60 }, // or "exempt"
+});
+```
+
+- `pathPrefix` matches that path and the paths below it by whole segments
+  (`/uploads` covers `/uploads/1/parts/2`, not `/uploads-old`). Use the path the
+  API receives: `/uploads`, not the `/api/uploads` the browser calls through the
+  web proxy. Better Auth routes keep `/api/auth`.
+- The most specific route wins: the longest prefix, then a route with a method
+  over one without, then the latest registration.
+- `name` (1-64 letters, digits, `_`, or `-`) names the counter. Routes that
+  share a name share one budget and must give the same `limit` and
+  `ttlSeconds`; `ttlSeconds` defaults to `RATE_LIMIT_TTL`. Counters are per
+  caller, keyed by API key, session, or client address like the general budget.
+- `"exempt"` skips request limiting for the route. Prefer a generous budget,
+  because an exempt route has no protection against a runaway client.
+- Resolve the registry with `tryResolve`, so the module still works without
+  `rate-limit`. Register from the module's `plugin` factory, or later: a
+  module's `configure` can run before the rate-limit module registers the
+  registry. Applications register from `configureServices()`, which runs after
+  every module is configured.
+
+The built-in budgets are registered the same way: general at `/`, auth at
+`/api/auth`, and the runtime budget for `GET /api/auth/get-session` and
+`GET /site/settings`, with `GET /api/auth/admin` on the general budget. A
+module's longer prefix inside `/api/auth` therefore takes precedence over the
+auth budget, and registering `/api/auth` itself replaces it. The names
+`general`, `auth`, and `runtime` keep their configured limits. `GET /health`,
+`GET /health/ready`, and the API documentation are never counted, whatever is
+registered. Applications that waited out `Retry-After` between upload chunks
+can give the upload routes their own budget instead.
+
 ### `api-key-auth`
 
 API-key authentication for **machine/service clients** (`X-API-Key`), separate
@@ -984,6 +1268,23 @@ your own public pages, such as marketing or legal pages and `robots.txt`, in
 its subpaths. The file is application-owned: `podo add` and `podo update` create
 it once, empty, and never overwrite it, and the managed `guards.ts` includes the
 list. Give those pages' loaders a fallback for when the API is down.
+
+`hooks.server.ts` loads the site settings and the session before SvelteKit
+answers a page, a `__data.json` request, a form action, a remote function, or
+its 404 page, because each of them can render a layout or read the signed-in
+user. It skips both API calls for the `/api` proxy, for a missing subresource
+(a `Sec-Fetch-Dest` such as `image` or `script` that SvelteKit answers with a
+plain 404), and while prerendering. Files in `static/` and prerendered pages
+never reach the hook. When a `+server.ts` endpoint serves files or feeds, for
+example documentation under `/docs`, add its prefix to `APP_ASSET_PATHS` in the
+application-owned `apps/web/src/lib/server/asset-paths.ts`. Requests under a
+listed prefix then skip both calls and see an anonymous `locals.user`, unless
+they ask for a page: a navigation that accepts HTML, a page data request, or a
+form action still loads the full context, so a page under that prefix keeps its
+sign-in and maintenance checks. Do not list an endpoint that reads
+`locals.user`. `podo add` and `podo update` create the file once, empty, and
+never overwrite it.
+
 Server loads read `/account/capabilities` through `getCapabilities(event)` from
 the managed `#lib/server/capabilities.js`. It fetches once per request, for a
 full render or a `__data.json` navigation, and every layout and page load of
@@ -1137,8 +1438,10 @@ renders them with a circular center crop.
 The module stores image objects through the selected object-storage provider and keeps
 the resulting versioned path in better-auth's `user.image`. The bucket stays
 private; `GET /api/profile-images/:fileName` streams the UUID path from storage
-with `content-length`, `etag`, `last-modified`, and immutable cache headers, and
-answers a matching `If-None-Match` with `304` without reading the object. A
+with `etag`, `last-modified`, and immutable cache headers, and answers a
+matching `If-None-Match` with `304`. The response carries `content-length`,
+because both storage providers and the web proxy read images of at most 2 MiB
+into memory first. A
 missing image returns 404; a storage failure is reported as a server error rather
 than a missing image. Replacing, removing, or self-deleting the account removes
 managed objects on a best-effort basis. Existing external/social avatar URLs are
@@ -1148,7 +1451,9 @@ The generated web container and Kubernetes config set
 `BODY_SIZE_LIMIT=3M`. This leaves room for multipart framing while the API
 continues to enforce the 2 MiB file limit and return stable validation codes.
 Set the same value when running the built web server outside the generated
-deployment files.
+deployment files. It is the ceiling for every web route; see
+[request body limits](templates.md#request-body-limits) before raising it for a
+larger upload.
 
 | Method | Route | Purpose |
 | --- | --- | --- |
@@ -1357,7 +1662,7 @@ hand-written list. Inspect the complete result at `/api-docs` or
 | `blog` | `GET /blog`<br>`POST /blog/images`<br>`GET /blog/images/{id}`<br>`GET /blog/mine`<br>`GET /blog/manage/{slug}`<br>`GET /blog/{postRef}/comments`<br>`GET /blog/{postRef}`<br>`POST /blog`<br>`PATCH /blog/{postRef}`<br>`DELETE /blog/{postRef}`<br>`POST /blog/{postRef}/comments`<br>`PATCH /blog/comments/{id}`<br>`DELETE /blog/comments/{id}`<br>`GET /admin/blog`<br>`GET /admin/blog/{id}`<br>`POST /admin/blog`<br>`PATCH /admin/blog/{id}`<br>`DELETE /admin/blog/{id}` |
 | `bullmq` | `POST /jobs`<br>`GET /jobs/{id}` |
 | `jobs-local` | `POST /jobs`<br>`GET /jobs/{id}` |
-| `file-upload` | `POST /files`<br>`GET /files/{key}/url` |
+| `file-upload` | `POST /files`<br>`GET /files/{key}/url`<br>`POST /files/uploads`<br>`GET /files/uploads/{id}`<br>`PUT /files/uploads/{id}/parts/{partNumber}`<br>`POST /files/uploads/{id}/complete`<br>`DELETE /files/uploads/{id}` |
 | `job-progress` | `POST /progress` |
 | `object-storage-s3` | `PUT /storage/{key}`<br>`GET /storage/{key}`<br>`GET /storage/{key}/presigned` |
 | `object-storage-local` | `GET /files/content/*`<br>`PUT /storage/{key}`<br>`GET /storage/{key}`<br>`GET /storage/{key}/presigned` |
@@ -1385,7 +1690,8 @@ version independently. A package module is just a `module.manifest.json` (with a
 `manifestVersion`) plus a `files/` overlay, resolved and applied exactly like a
 bundled one; the CLI rejects a manifest that needs a newer PodoKit. Manifest v2
 can also declare idempotent path `migrations` for file or directory moves and
-verified text replacements. A module's
+verified text replacements, and manifest v4 can declare
+[direct API paths](#module-direct-api-paths). A module's
 `requiredProjectFiles` and `requiredProjectContents` are checked before files,
 dependencies, or marker injections are changed, so an older generated project
 fails closed with an update instruction rather than receiving broken imports or
@@ -1395,6 +1701,45 @@ legacy `dependencies`, `devDependencies`, and `scripts` fields apply to its
 under `packageOverlays.<app>`; `podo add`, `update`, and `remove` apply them
 symmetrically. `podo add` with no argument lists both bundled and installed
 package modules.
+
+## Module direct API paths
+
+Some module routes take request bodies larger than the web server's
+`BODY_SIZE_LIMIT`, so the gateway has to send them straight to the API (see
+[direct API paths](deployment.md#direct-api-paths)). A module declares those
+prefixes in its manifest:
+
+```json
+{
+  "manifestVersion": 4,
+  "name": "file-upload",
+  "apiPaths": ["/api/files/uploads/"]
+}
+```
+
+Each entry follows the same rules as `exposure.apiPaths`: a static prefix under
+`/api/`, outside `/api/auth`, without wildcards or overlapping entries. The CLI
+rejects a manifest that breaks them before it changes anything. The development
+configuration and the deployment profiles belong to the application, so the CLI
+edits only their `apiPaths` lists, keeps every other key and the file's
+indentation, and never writes a file that would stop validating:
+
+- `podo add` appends each path to `apiPaths` in `.podokit/dev.json` (creating
+  the key when it is missing) and to `exposure.apiPaths` in every
+  `.podokit/deploy/*.json` profile, then prints what it added. A path that an
+  existing entry already covers is left alone. A path that would overlap
+  another entry or cover a WebSocket path, or a profile that cannot route
+  direct paths (Kubernetes `nodePort` exposure), is reported and left for you
+  to resolve. A missing `.podokit/dev.json` is reported, not created.
+- `.podokit/manifest.json` records the paths under the module's
+  `appliedApiPaths`, and `podo deploy init` copies them into new profiles.
+- `podo remove` deletes the exact paths the module contributed unless another
+  installed module still declares them. A Compose profile whose
+  `trustedProxyCidrs` would be left without a direct path keeps it, and the
+  CLI reports that.
+- `podo update` lists the paths a newer module version declares under "Direct
+  API paths to add" and writes them with `--apply`, using the same rules. A path
+  you deleted after it was added stays deleted.
 
 ## Adding admin nav & settings (module registry)
 
@@ -1425,6 +1770,9 @@ It is deliberately conservative:
   deps/env another module still declares) is preserved.
 - **Edited owned files stay owned.** Module-owned globs are removed with the
   module unless another module or a preserved edited file still needs them.
+- **Shared direct API paths stay.** The module's
+  [direct API paths](#module-direct-api-paths) leave `.podokit/dev.json` and the
+  deployment profiles unless another installed module declares them too.
 
 Database tables a module created are **not** dropped — removing the code leaves
 your data intact. Drop them yourself with a migration if you no longer need them.

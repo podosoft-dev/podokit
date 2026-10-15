@@ -23,6 +23,7 @@ import {
   validateImageRepository,
   STABLE_SEMVER_TAG_PATTERN,
 } from "./deploy-schema";
+import { installedApiPaths, parseApiPaths } from "./api-paths";
 import { parseExactWebSocketPaths } from "./websocket-paths";
 
 export { profileDirectory, profilePath } from "./deploy-schema";
@@ -84,6 +85,8 @@ export interface DeployProfileV1 {
     ingressClassName: string;
     tlsSecretName: string | null;
     webSocketPaths: string[];
+    /** Path prefixes under /api/ that the Ingress sends to the API with /api removed. */
+    apiPaths: string[];
   };
   workloads: {
     api: WorkloadProfile;
@@ -207,7 +210,7 @@ function parseRedisDependency(
   return parseStatefulDependency(value, field);
 }
 
-function parseProfile(value: unknown): DeployProfileV1 {
+export function parseDeploymentProfile(value: unknown): DeployProfileV1 {
   if (!isRecord(value)) throw new Error("Deployment profile must be a JSON object.");
   assertOnlyKeys(
     value,
@@ -255,7 +258,7 @@ function parseProfile(value: unknown): DeployProfileV1 {
   );
   assertOnlyKeys(
     exposure,
-    ["mode", "host", "ingressClassName", "tlsSecretName", "webSocketPaths"],
+    ["mode", "host", "ingressClassName", "tlsSecretName", "webSocketPaths", "apiPaths"],
     "exposure",
   );
   assertOnlyKeys(workloads, ["api", "web", "worker"], "workloads");
@@ -312,6 +315,10 @@ function parseProfile(value: unknown): DeployProfileV1 {
   );
   if (exposureMode === "nodePort" && webSocketPaths.length > 0) {
     throw new Error("Deployment exposure.webSocketPaths requires exposure.mode ingress.");
+  }
+  const apiPaths = parseApiPaths(exposure.apiPaths ?? [], "exposure.apiPaths", webSocketPaths);
+  if (exposureMode === "nodePort" && apiPaths.length > 0) {
+    throw new Error("Deployment exposure.apiPaths requires exposure.mode ingress.");
   }
 
   const postgres = parseStatefulDependency(
@@ -372,6 +379,7 @@ function parseProfile(value: unknown): DeployProfileV1 {
       ingressClassName,
       tlsSecretName,
       webSocketPaths,
+      apiPaths,
     },
     workloads: {
       api: parseWorkload(requiredRecord(workloads, "api"), "workloads.api"),
@@ -409,7 +417,7 @@ export function loadDeploymentProfile(projectRoot: string, name: string): Deploy
   } catch (error) {
     throw new Error(`Cannot read deployment profile "${name}": ${(error as Error).message}`);
   }
-  return parseProfile(parsed);
+  return parseDeploymentProfile(parsed);
 }
 
 export function listDeploymentProfiles(projectRoot: string): DeploymentProfileSummary[] {
@@ -489,6 +497,7 @@ export function initializeDeploymentProfile(
       ingressClassName: "traefik",
       tlsSecretName: null,
       webSocketPaths: [],
+      apiPaths: installedApiPaths(manifest.modules),
     },
     workloads: {
       api: {
@@ -588,7 +597,7 @@ export function initializeDeploymentProfile(
       ],
     },
   };
-  const validated = parseProfile(defaultProfile);
+  const validated = parseDeploymentProfile(defaultProfile);
   mkdirSync(profileDirectory(projectRoot), { recursive: true });
   writeFileSync(path, `${JSON.stringify(validated, null, 2)}\n`, { flag: "wx" });
   return { name, path, profile: validated };

@@ -44,6 +44,7 @@ export class EventsService {
   private readonly everyTopic = new Set<EventStream>();
   private unregisterReadiness?: () => void;
   private unsubscribe?: Unsubscribe;
+  private stopResync?: () => void;
 
   constructor(
     private readonly transport: EventBus,
@@ -73,6 +74,11 @@ export class EventsService {
         return;
       }
       this.deliver(envelope);
+    });
+    // Events published while the transport was down never arrive, so open
+    // streams are told to reload once it is back.
+    this.stopResync = this.transport.onInterruption?.(() => {
+      for (const stream of this.streams) stream.resync();
     });
     this.unregisterReadiness = this.readiness.register("events", () => this.transport.ready());
   }
@@ -133,6 +139,7 @@ export class EventsService {
 
   async close(): Promise<void> {
     this.unregisterReadiness?.();
+    this.stopResync?.();
     await this.unsubscribe?.();
     for (const stream of [...this.streams]) stream.close();
   }

@@ -25,6 +25,8 @@ import {
   writeManifest,
   type ManifestModuleInput,
 } from "./lockfile";
+import { parseApiPaths } from "./api-paths";
+import { addApiPaths, type ApiPathResult } from "./module-api-paths";
 
 interface Injection {
   file: string;
@@ -36,7 +38,7 @@ interface Injection {
 
 /** Highest `module.manifest.json` schema version this CLI understands. A package
  *  module declaring a higher version is rejected rather than mis-applied. */
-export const SUPPORTED_MANIFEST_VERSION = 3;
+export const SUPPORTED_MANIFEST_VERSION = 4;
 
 export interface ModuleRuntimeConstraints {
   /** Maximum safe API replicas for process-local providers. */
@@ -111,6 +113,12 @@ export interface ModuleManifest {
   requiredProjectFiles?: string[];
   /** Stable source contracts that must be present in generated baseline files. */
   requiredProjectContents?: Record<string, string[]>;
+  /**
+   * Path prefixes under /api/ that the gateway must send straight to the API,
+   * such as routes taking bodies above the web server's BODY_SIZE_LIMIT. Merged
+   * into `.podokit/dev.json` and every deployment profile.
+   */
+  apiPaths?: string[];
 }
 
 export interface PackageOverlay {
@@ -173,7 +181,11 @@ export interface AddResult {
   adopted: string[];
   /** Files shipped, merged, or injected while applying the module. */
   touched: string[];
+  /** Direct API paths merged into `.podokit/dev.json` and deployment profiles. */
+  apiPaths: ApiPathResult;
 }
+
+type AppliedModule = Omit<AddResult, "apiPaths">;
 
 export interface ResolvedModule {
   dir: string;
@@ -239,6 +251,11 @@ function assertManifestVersion(name: string, manifest: ModuleManifest): void {
     ) {
       throw new Error(`Module "${name}" declares invalid provider ${capability}=${String(provider)}.`);
     }
+  }
+  try {
+    parseApiPaths(manifest.apiPaths ?? [], "apiPaths", []);
+  } catch (error) {
+    throw new Error(`Module "${name}" declares invalid apiPaths. ${(error as Error).message}`);
   }
   const maxApiReplicas = manifest.runtimeConstraints?.maxApiReplicas;
   if (
@@ -598,7 +615,7 @@ export function addModule(options: AddOptions): AddResult {
         .map(([path]) => path)
     : [];
   const placement = modulePlacement(options.projectRoot, options.module, options.modulesDir);
-  const result = applyModule(
+  const applied = applyModule(
     options.projectRoot,
     options.module,
     options.modulesDir,
@@ -606,15 +623,24 @@ export function addModule(options: AddOptions): AddResult {
     options.adopt ?? false,
     placement,
   );
-  if (options.adopt && result.adopted.length) {
-    releaseOwnedPaths(options.projectRoot, result.adopted);
+  if (options.adopt && applied.adopted.length) {
+    releaseOwnedPaths(options.projectRoot, applied.adopted);
   }
   // Record the module (and any auto-added requirements), fold in the modules'
   // declared ownedGlobs, and refresh the lock.
-  const records = [...result.added, result.module]
+  const records = [...applied.added, applied.module]
     .map((name) => resolveModule(name, options.modulesDir, options.projectRoot))
     .filter((module): module is ResolvedModule => module !== null)
     .map(moduleRecord);
+  const result: AddResult = {
+    ...applied,
+    apiPaths: addApiPaths(
+      options.projectRoot,
+      records.flatMap((record) =>
+        (record.appliedApiPaths ?? []).map((path) => ({ module: record.name, path })),
+      ),
+    ),
+  };
   recordModules(
     options.projectRoot,
     records,
@@ -641,7 +667,7 @@ function applyModule(
   applied: Set<string>,
   adopt: boolean,
   placement?: ModulePlacement,
-): AddResult {
+): AppliedModule {
   const resolved = resolveModule(module, modulesDir, projectRoot);
   if (!resolved) {
     const available = listModules(modulesDir, projectRoot).map((m) => m.name);
@@ -756,12 +782,13 @@ function applyModule(
 }
 
 function moduleRecord(module: ResolvedModule): ManifestModuleInput {
-  const migrations = readModuleManifest(module.dir).migrations ?? [];
+  const manifest = readModuleManifest(module.dir);
   return {
     name: module.name,
     packageName: module.packageName,
     moduleVersion: module.moduleVersion,
-    appliedMigrations: migrations.map((migration) => migration.id),
+    appliedMigrations: (manifest.migrations ?? []).map((migration) => migration.id),
+    ...(manifest.apiPaths?.length ? { appliedApiPaths: manifest.apiPaths } : {}),
   };
 }
 

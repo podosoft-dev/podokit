@@ -19,6 +19,7 @@ import {
   writeFilesLock,
   writeManifest,
 } from "./lockfile";
+import { removeApiPaths, type ApiPathResult } from "./module-api-paths";
 
 export interface RemoveOptions {
   projectRoot: string;
@@ -38,6 +39,8 @@ export interface RemoveResult {
   keptShared: string[];
   /** Injection targets whose wiring was removed. */
   unwired: string[];
+  /** Direct API paths removed from `.podokit/dev.json` and deployment profiles. */
+  apiPaths: ApiPathResult;
 }
 
 function readModuleManifest(moduleDir: string, vars?: TemplateVars): ModuleManifest {
@@ -98,9 +101,9 @@ export function removeModule(options: RemoveOptions): RemoveResult {
     .filter((m) => m.name !== module)
     .map((m) => {
       const dir = resolveModuleDir(m.packageName ?? m.name, modulesDir, projectRoot);
-      return dir ? { name: m.name, dir, manifest: readModuleManifest(dir, vars) } : null;
+      return dir ? { name: m.name, dir, manifest: readModuleManifest(dir, vars), record: m } : null;
     })
-    .filter((m): m is { name: string; dir: string; manifest: ModuleManifest } => m !== null);
+    .filter((m): m is NonNullable<typeof m> => m !== null);
 
   // Guard: refuse if another installed module requires this one.
   const selectedCapabilities = Object.entries(targetManifest.provides ?? {})
@@ -163,7 +166,21 @@ export function removeModule(options: RemoveOptions): RemoveResult {
   // 4) prune .env.example lines this module added that no other needs.
   pruneEnvExample(projectRoot, targetManifest, others);
 
-  // 5) drop from the manifest (re-number order) and recompute the lock.
+  // 5) remove the direct API paths this module contributed that no other declares.
+  const sharedApiPaths = new Set(
+    others.flatMap((other) => [
+      ...(other.manifest.apiPaths ?? []),
+      ...(other.record.appliedApiPaths ?? []),
+    ]),
+  );
+  const apiPaths = removeApiPaths(
+    projectRoot,
+    [...new Set([...(installedModule?.appliedApiPaths ?? []), ...(targetManifest.apiPaths ?? [])])]
+      .filter((path) => !sharedApiPaths.has(path))
+      .map((path) => ({ module, path })),
+  );
+
+  // 6) drop from the manifest (re-number order) and recompute the lock.
   manifest.modules = manifest.modules
     .filter((m) => m.name !== module)
     .map((m, i) => ({ ...m, order: i }));
@@ -190,7 +207,7 @@ export function removeModule(options: RemoveOptions): RemoveResult {
     computeFilesLock(projectRoot, manifest.ownedGlobs, manifest.managedOverrides),
   );
 
-  return { module, removed, keptEdited, keptShared, unwired };
+  return { module, removed, keptEdited, keptShared, unwired, apiPaths };
 }
 
 /** Remove now-empty directories left behind by a deleted file, up to the root. */

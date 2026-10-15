@@ -25,6 +25,29 @@ describe("local job queue", () => {
     queue.close();
   });
 
+  it("creates its table on a later start after the database was unreachable", async () => {
+    const database = new SQL(":memory:");
+    sql = database;
+    let unreachable = true;
+    const flaky = new Proxy(database, {
+      apply: (target, thisArg, args) =>
+        unreachable
+          ? Promise.reject(new Error("Connection refused"))
+          : Reflect.apply(target, thisArg, args),
+    });
+    const queue = new LocalJobQueue(flaky, { pollIntervalMs: 10 });
+    const payloads: unknown[] = [];
+    await queue.process("demo", (payload) => { payloads.push(payload); });
+
+    await expect(queue.start()).rejects.toThrow("Connection refused");
+    unreachable = false;
+    await queue.start();
+    await queue.enqueue("demo", { text: "after outage" });
+    for (let waited = 0; payloads.length === 0 && waited < 1_000; waited += 10) await Bun.sleep(10);
+    expect(payloads).toEqual([{ text: "after outage" }]);
+    queue.close();
+  });
+
   it("retries failures and records the final error", async () => {
     sql = new SQL(":memory:");
     let now = 1_000;

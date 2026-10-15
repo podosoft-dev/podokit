@@ -110,7 +110,16 @@ export interface CacheStore {
   close(): void | Promise<void>;
 }
 
-export type ObjectBody = string | Uint8Array | AsyncIterable<Uint8Array>;
+/**
+ * Content to store. Streams and async iterables are read once, in order, and
+ * never collected into one buffer by `put`.
+ */
+export type ObjectBody =
+  | Uint8Array
+  | string
+  | Blob
+  | ReadableStream<Uint8Array>
+  | AsyncIterable<Uint8Array>;
 
 export interface PutObjectOptions {
   contentType?: string;
@@ -130,8 +139,9 @@ export interface ObjectInfo extends StoredObject {
 
 export interface ObjectData extends ObjectInfo {
   /**
-   * The content, fetched only once it is read. Read it to the end or cancel it,
-   * as with a fetch response body.
+   * The content. A provider may open it on the first read or have its download
+   * under way already, so read it to the end or cancel it, as with a fetch
+   * response body.
    */
   body: ReadableStream<Uint8Array>;
 }
@@ -154,9 +164,30 @@ export interface ObjectPage {
   nextCursor?: string;
 }
 
+export interface CreateMultipartUploadOptions {
+  contentType?: string;
+}
+
+export interface MultipartUpload {
+  /** Opaque and provider-specific. */
+  uploadId: string;
+}
+
+export interface UploadedPart {
+  /** Pass it back to `completeMultipartUpload` with the part number. */
+  etag: string;
+  size: number;
+}
+
+export interface CompletedPart {
+  partNumber: number;
+  etag: string;
+}
+
 export interface ObjectStore {
+  /** Writes the whole object; streamed bodies are written as they are read. */
   put(key: string, body: ObjectBody, options?: PutObjectOptions): Promise<StoredObject>;
-  /** Metadata and a lazily opened body, or null when the object does not exist. */
+  /** Metadata and the content to read or cancel, or null when the object does not exist. */
   get(key: string): Promise<ObjectData | null>;
   /** Metadata only, or null when the object does not exist. */
   stat(key: string): Promise<ObjectInfo | null>;
@@ -165,6 +196,24 @@ export interface ObjectStore {
   exists(key: string): Promise<boolean>;
   delete(key: string): Promise<void>;
   getDownloadUrl(key: string, options?: DownloadUrlOptions): Promise<string>;
+  /**
+   * Starts an object that is uploaded in numbered parts. Nothing is visible
+   * under `key` until the upload completes.
+   */
+  createMultipartUpload(key: string, options?: CreateMultipartUploadOptions): Promise<MultipartUpload>;
+  /**
+   * Stores part `partNumber` (1 to `MAX_MULTIPART_PARTS`). Parts may arrive in
+   * any order, and uploading a number again replaces that part. Every part
+   * except the last must hold at least `MIN_MULTIPART_PART_BYTES`.
+   */
+  uploadPart(key: string, uploadId: string, partNumber: number, body: ObjectBody): Promise<UploadedPart>;
+  /**
+   * Joins the listed parts in part-number order into the object and ends the
+   * upload. Parts that are not listed are discarded.
+   */
+  completeMultipartUpload(key: string, uploadId: string, parts: readonly CompletedPart[]): Promise<ObjectInfo>;
+  /** Discards the upload and its parts; resolves when the upload no longer exists. */
+  abortMultipartUpload(key: string, uploadId: string): Promise<void>;
   close(): void | Promise<void>;
 }
 
@@ -172,9 +221,20 @@ export type EventHandler = (event: unknown) => void | Promise<void>;
 export type Unsubscribe = () => void | Promise<void>;
 
 export interface EventBus {
+  /** Resolves while published events reach subscribers; rejects otherwise, without waiting for a connection. */
   ready(): Promise<void>;
   publish(topic: string, event: unknown): Promise<void>;
+  /**
+   * Registers `handler` for `topic`. The registration does not wait for the
+   * transport to connect and stays in place across reconnects.
+   */
   subscribe(topic: string, handler: EventHandler): Promise<Unsubscribe>;
+  /**
+   * Calls `listener` each time delivery resumes after an interruption in which
+   * events may have been lost, so consumers can tell their clients to reload.
+   * A transport that cannot lose events leaves it out.
+   */
+  onInterruption?(listener: () => void): () => void;
   close(): void | Promise<void>;
 }
 
@@ -209,8 +269,49 @@ export interface JobQueue {
   close(): void | Promise<void>;
 }
 
+/** A request budget of its own, counted per caller like the general budget. */
+export interface RateLimitProfile {
+  /**
+   * Names the counter: 1 to 64 letters, digits, `_`, or `-`. Routes registered
+   * with the same name share one budget and must give the same limits.
+   */
+  name: string;
+  /** Requests allowed per window. */
+  limit: number;
+  /** Window length in seconds. Defaults to the general window (RATE_LIMIT_TTL). */
+  ttlSeconds?: number;
+}
+
+export interface RateLimitRoute {
+  /** Matches one HTTP method; omitted, every method. */
+  method?: string;
+  /**
+   * Matches this path and the paths below it, by whole segments: `/uploads`
+   * covers `/uploads` and `/uploads/1`, not `/uploads-old`. Use the path the
+   * API receives, such as `/uploads`, not `/api/uploads` as called through the
+   * web proxy; Better Auth routes keep their `/api/auth` prefix.
+   */
+  pathPrefix: string;
+  /** A budget of its own, or "exempt" to skip request limiting. */
+  profile: RateLimitProfile | "exempt";
+}
+
+/**
+ * Gives routes their own request budget or exempts them. The most specific
+ * matching route wins: the longest prefix, then a route with a method over
+ * one without, then the latest registration.
+ */
+export interface RateLimitRouteRegistry {
+  register(route: RateLimitRoute): void;
+}
+
 export const DATABASE = Symbol.for("@podosoft/podokit/database") as ServiceKey<DatabaseProvider>;
 export const CACHE = Symbol.for("@podosoft/podokit/cache") as ServiceKey<CacheStore>;
 export const OBJECT_STORAGE = Symbol.for("@podosoft/podokit/object-storage") as ServiceKey<ObjectStore>;
 export const EVENTS = Symbol.for("@podosoft/podokit/events") as ServiceKey<EventBus>;
 export const JOBS = Symbol.for("@podosoft/podokit/jobs") as ServiceKey<JobQueue>;
+/**
+ * Registered by the rate-limit module. Resolve it with `tryResolve` so a module
+ * keeps working when rate limiting is not installed.
+ */
+export const RATE_LIMIT_ROUTES = Symbol.for("@podosoft/podokit/rate-limit-routes") as ServiceKey<RateLimitRouteRegistry>;

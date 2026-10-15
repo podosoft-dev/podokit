@@ -38,6 +38,22 @@ function user(userId: string, roles: string[] = [], organizationId?: string): Ev
   return { userId, roles, ...(organizationId ? { organizationId } : {}) };
 }
 
+/** A memory bus that can report a transport interruption, as the Redis bus does after reconnecting. */
+class InterruptibleBus extends MemoryEventBus {
+  readonly listeners = new Set<() => void>();
+
+  onInterruption(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  interrupt(): void {
+    for (const listener of this.listeners) listener();
+  }
+}
+
 const services: EventsService[] = [];
 
 async function service(
@@ -266,6 +282,23 @@ describe("per-connection safety", () => {
     expect(decoded(await stream.next())).toEqual({ topic: "t", data: 5 });
     await events.publishAsync({ topic: "t", data: 6 });
     expect(decoded(await stream.next())).toEqual({ topic: "t", data: 6 });
+  });
+
+  it("tells every open stream to resync after a transport interruption", async () => {
+    const bus = new InterruptibleBus();
+    const events = await service({}, bus);
+    const topical = await open(events, user("a"), ["t"]);
+    const everything = await open(events, user("b"));
+    await events.publishAsync({ topic: "t", data: 1 });
+
+    bus.interrupt();
+    expect(await topical.next()).toEqual({ kind: "resync" });
+    expect(await everything.next()).toEqual({ kind: "resync" });
+    await events.publishAsync({ topic: "t", data: 2 });
+    expect(decoded(await topical.next())).toEqual({ topic: "t", data: 2 });
+
+    await events.close();
+    expect(bus.listeners.size).toBe(0);
   });
 
   it("reuses one heartbeat timer per connection and releases it on disconnect", async () => {

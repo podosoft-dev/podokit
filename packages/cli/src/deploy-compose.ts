@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
+import { directApiRoutes } from "./api-paths";
 import type { CommandRunner } from "./dev";
 import { loadComposeProfile } from "./deploy-driver";
 import {
@@ -21,6 +22,7 @@ import {
 } from "./deploy-compose-exec";
 import { readComposeSyncDrift, type ComposeSyncDrift } from "./deploy-compose-sync";
 import {
+  composeHasGateway,
   composeProfileDigest,
   type DockerComposeProfileV1,
 } from "./deploy-compose-profile";
@@ -593,7 +595,7 @@ export function planComposeDeployment(
   actions.push({
     order: order++,
     kind: "application",
-    description: `Roll out api, web${profile.workloads.worker ? ", worker" : ""}${profile.exposure.webSocketPaths.length ? ", gateway" : ""} and wait for health.`,
+    description: `Roll out api, web${profile.workloads.worker ? ", worker" : ""}${composeHasGateway(profile) ? ", gateway" : ""} and wait for health.${directApiRoutes(profile.exposure.apiPaths)}`,
   });
   actions.push({
     order: order++,

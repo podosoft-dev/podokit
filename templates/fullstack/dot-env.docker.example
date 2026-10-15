@@ -1,6 +1,9 @@
-# Container environment for compose.dev.yaml. Compose does not interpolate
-# from this file: set container memory limits such as API_MEM_LIMIT=3g in the
-# shell or the project's .env file instead.
+# Container environment for compose.dev.yaml. Commit this example with
+# development defaults only. podo dev copies it to the untracked .env.docker
+# when that file is missing and fills every empty *_SECRET value with a random
+# one. Put real credentials, such as OAuth or SMTP secrets, in .env.docker.
+# Compose does not interpolate from these files: set container memory limits
+# such as API_MEM_LIMIT=3g in the shell or the project's .env file instead.
 NODE_ENV=development
 PORT=5002
 POSTGRES_HOST=postgres
@@ -12,7 +15,7 @@ BACKEND_INTERNAL_URL=http://api:5002
 CORS_ORIGIN=http://{{projectName}}.localhost,http://localhost
 REDIS_HOST=redis
 REDIS_PORT=6379
-BETTER_AUTH_SECRET=change-me-in-container-min-32-characters
+BETTER_AUTH_SECRET=
 BETTER_AUTH_URL=http://{{projectName}}.localhost
 ADMIN_EMAILS=admin@example.com
 AUDIT_LOG_ENABLED=true

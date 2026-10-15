@@ -8,6 +8,7 @@ import type {
   WorkloadProfile,
 } from "./deploy-profile";
 import { profilePath } from "./deploy-profile";
+import { API_PATH_PREFIX, apiPathBase } from "./api-paths";
 import { readManifest } from "./lockfile";
 import {
   resolveToolchain,
@@ -610,6 +611,60 @@ spec:
 `;
 }
 
+function ingressPath(path: string, pathType: string, service: string): string {
+  return `          - path: ${quote(path)}
+            pathType: ${pathType}
+            backend:
+              service:
+                name: ${service}
+                port: { number: 3000 }
+`;
+}
+
+/**
+ * Direct API paths need /api removed on the way to the API, which a standard
+ * Ingress cannot express, so they get their own Ingress with a Traefik
+ * stripPrefix middleware. ImplementationSpecific makes Traefik match the
+ * trailing-slash prefix as a plain PathPrefix, and the Exact path adds the bare
+ * path, so every controller version routes the same set of requests.
+ */
+function apiPathIngress(profile: DeployProfileV1, tls: string): string {
+  if (profile.exposure.apiPaths.length === 0) return "";
+  const apiService = `${profile.target.release}-api`;
+  const middleware = `${profile.target.release}-strip-api-prefix`;
+  const paths = profile.exposure.apiPaths
+    .map((path) => {
+      const base = apiPathBase(path);
+      return (
+        ingressPath(base, "Exact", apiService) +
+        ingressPath(`${base}/`, "ImplementationSpecific", apiService)
+      );
+    })
+    .join("");
+  return `---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: ${middleware}
+spec:
+  stripPrefix:
+    prefixes: [${quote(API_PATH_PREFIX)}]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ${profile.target.release}-api-paths
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: ${quote(`${profile.target.namespace}-${middleware}@kubernetescrd`)}
+spec:
+  ingressClassName: ${quote(profile.exposure.ingressClassName)}
+${tls}  rules:
+    - host: ${quote(profile.exposure.host)}
+      http:
+        paths:
+${paths}`;
+}
+
 function exposure(profile: DeployProfileV1): string {
   const webService = `${profile.target.release}-web`;
   const apiService = `${profile.target.release}-api`;
@@ -633,15 +688,7 @@ spec:
 `
     : "";
   const webSocketPaths = profile.exposure.webSocketPaths
-    .map(
-      (path) => `          - path: ${quote(path)}
-            pathType: Exact
-            backend:
-              service:
-                name: ${apiService}
-                port: { number: 3000 }
-`,
-    )
+    .map((path) => ingressPath(path, "Exact", apiService))
     .join("");
   return `apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -659,7 +706,7 @@ ${webSocketPaths}          - path: /
               service:
                 name: ${webService}
                 port: { number: 3000 }
-`;
+${apiPathIngress(profile, tls)}`;
 }
 
 function applicationManifest(

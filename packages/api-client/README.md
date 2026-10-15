@@ -6,8 +6,9 @@ through this single entry point — never with a raw `fetch`.
 - `client.auth` — the [better-auth](https://better-auth.com) client (email/password,
   sessions, the `signupApproved` user field, and the admin plugin: `listUsers`,
   `updateUser`, `banUser`, `setRole`, `listUserSessions`, …).
-- `client.get/post/put/patch/del` — the app's JSON REST endpoints, parsing the
-  standard error envelope and throwing `ApiError` on failure.
+- `client.get/post/put/patch/del` — the app's REST endpoints, parsing the
+  standard error envelope and throwing `ApiError` on failure. Bodies are JSON,
+  except `FormData` and binary bodies, which are sent as they are.
 - `client.postForm` — multipart uploads with the browser-managed boundary and the
   same credentials and error handling.
 
@@ -29,6 +30,40 @@ form.set("file", imageFile);
 await api.postForm("/account/profile-image", form);
 ```
 
+## Binary bodies and request options
+
+`post`, `put`, and `patch` send a `Blob` (or `File`), an `ArrayBuffer`, a typed
+array such as `Uint8Array`, or a `ReadableStream` as the raw request body.
+Every call takes optional request options as its last argument:
+
+| Option | Purpose |
+| --- | --- |
+| `contentType` | Content type of the body. Binary bodies default to the Blob's type, else `application/octet-stream`; JSON bodies to `application/json`. |
+| `headers` | Additional headers, such as `content-range` or an idempotency key. |
+| `signal` | An `AbortSignal` that cancels the request. |
+
+```ts
+// Upload a file in 8 MiB chunks, one request per chunk
+const chunkSize = 8 * 1024 * 1024;
+for (let part = 0; part * chunkSize < file.size; part++) {
+  const chunk = file.slice(part * chunkSize, (part + 1) * chunkSize);
+  await api.put(`/uploads/${id}/parts/${part + 1}`, chunk, {
+    contentType: "application/octet-stream",
+    signal: controller.signal,
+  });
+}
+```
+
+A `ReadableStream` body is sent with `duplex: "half"`. Browsers stream request
+bodies only over HTTP/2 or later, and not every browser supports them, so send
+`Blob` slices from the browser and keep streams for server-side code. The SvelteKit
+`/api` proxy and the API each enforce their own request size limits.
+
+`ApiError.retryAfterSeconds` holds the `Retry-After` delay of a failed response,
+such as `429 RATE_LIMIT_EXCEEDED` or `503`, when the server sends one. Apps that
+called `fetch` directly to send binary chunks or to read `Retry-After` can use
+these instead.
+
 ## Options
 
 | Option | Default | Purpose |
@@ -40,6 +75,8 @@ await api.postForm("/account/profile-image", form);
 | `credentials` | `include` | Send cookies with requests. |
 
 Errors are thrown as `ApiError` (`code`, `message`, `statusCode`, `details`).
+A response without the JSON error envelope, such as a gateway's HTML error page,
+becomes an `ApiError` with code `HTTP_ERROR` and the response status.
 `PUBLIC_SIGNUP_DISABLED` and `SIGNUP_APPROVAL_REQUIRED` are re-exported for
 provider-independent registration-policy handling.
 The profile-image policy, response type, and stable validation error codes are

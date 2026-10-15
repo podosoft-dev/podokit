@@ -63,8 +63,17 @@ the same topology, with one route and no project-specific host port.
 
 When the API exposes WebSocket endpoints, add their exact paths to
 `.podokit/dev.json` under `webSocketPaths`. The shared gateway sends only those paths
-directly to the API and leaves every other path on the web app. Add `publicUrl` to the
-same file when an HTTPS tunnel preserves its public `Host` header.
+directly to the API and leaves every other path on the web app. Routes that accept
+bodies larger than the web server's `BODY_SIZE_LIMIT`, such as file uploads, go under
+`apiPaths` as prefixes like `/api/files/uploads/`; the gateway removes `/api` and
+sends them to the API without the web proxy. `podo add` adds the paths a module
+declares, such as `file-upload`'s, to this file and to every deployment profile. Add `publicUrl` to the same file when
+an HTTPS tunnel preserves its public `Host` header.
+
+The containers read `.env.docker`, which Git ignores. `dev` commands create it from
+the committed `.env.docker.example` when it is missing, as in a fresh clone, and fill
+each empty `*_SECRET` value with a random one; `dev env` does only that. Keep shared
+defaults in the example and credentials only in `.env.docker`.
 
 In a second terminal, apply the included Todo migration and use the lifecycle helpers:
 
@@ -80,7 +89,9 @@ In a second terminal, apply the included Todo migration and use the lifecycle he
 `dev watch` reads `.podokit/manifest.json` and automatically activates `cache`,
 `storage`, and `queue` when installed modules require Redis, Silo, or a worker.
 `dev up` uses the same shared gateway and module profiles without keeping Compose
-Watch attached.
+Watch attached. It rebuilds the images from the current source first, because Compose
+Watch syncs edits into running containers only: a container recreated from an older
+image would lose them. Pass `--no-build` to start from the existing images.
 You can still activate an additional Compose profile explicitly:
 
 ```bash
@@ -88,7 +99,8 @@ You can still activate an additional Compose profile explicitly:
 ```
 
 Explicit profile flags are preserved for other lifecycle commands. `dev down`
-activates all profiles while removing this project's stack and route. If it is
+first stops this project's running `dev watch`, so the next `dev watch` starts
+cleanly, then activates all profiles while removing this project's stack and route. If it is
 the final registered
 project, it also removes the shared gateway and network. Source changes are synced
 through Compose Watch, including Vite HMR on the same portless browser origin.
@@ -149,5 +161,6 @@ PodoKit [deployment guide](https://github.com/podosoft-dev/podokit/blob/main/doc
 
 For a Docker Compose deployment with API WebSockets, list their exact paths under
 `exposure.webSocketPaths`. The driver keeps one published port, routes those paths
-to API, and sends every other request to web. If an external reverse proxy supplies
+to API, and sends every other request to web. Large-upload routes listed under
+`exposure.apiPaths` reach the API the same way, with `/api` removed. If an external reverse proxy supplies
 forwarding headers, list only its direct CIDR blocks in `exposure.trustedProxyCidrs`.

@@ -1,18 +1,26 @@
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, readFile, rm, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  assertPartNumber,
   DATABASE,
+  IN_MEMORY_READ_BYTES,
   LOCAL_PROVIDER_SELECTIONS,
   LocalObjectStore,
+  MAX_MULTIPART_PARTS,
   MemoryCacheStore,
   MemoryEventBus,
+  MIN_MULTIPART_PART_BYTES,
+  MultipartUploadError,
+  normalizeCompletedParts,
+  objectBodyChunks,
   objectNotModified,
   objectResponse,
   type ObjectData,
   PROVIDER_CAPABILITIES,
   PROVIDER_NAMES,
+  RATE_LIMIT_ROUTES,
   readObjectBytes,
   resolveProviderSelections,
   SERVER_PROVIDER_SELECTIONS,
@@ -89,6 +97,7 @@ describe("provider contracts", () => {
     expect(SERVER_PROVIDER_SELECTIONS.database).toBe("postgres");
     expect(LOCAL_PROVIDER_SELECTIONS["object-storage"]).toBe("local");
     expect(DATABASE).toBe(Symbol.for("@podosoft/podokit/database"));
+    expect(RATE_LIMIT_ROUTES).toBe(Symbol.for("@podosoft/podokit/rate-limit-routes"));
     expect(resolveProviderSelections({ cache: "memory" })).toEqual({
       ...SERVER_PROVIDER_SELECTIONS,
       cache: "memory",
@@ -210,10 +219,25 @@ describe("LocalObjectStore", () => {
     expect(second?.etag).not.toBe(first.etag);
   });
 
+  it("reads an object up to IN_MEMORY_READ_BYTES whole before get() resolves", async () => {
+    const root = await temporaryDirectory();
+    const store = new LocalObjectStore({ rootDirectory: root });
+    for (const size of [0, 100 * 1024, IN_MEMORY_READ_BYTES]) {
+      const content = Buffer.alloc(size, 5);
+      await store.put("whole.bin", content);
+      const object = await store.get("whole.bin");
+      if (!object) throw new Error("expected the stored object");
+      expect(object.size).toBe(size);
+      // The content was read already, so a later write cannot reach this body.
+      await store.put("whole.bin", "replaced");
+      expect(Buffer.from(await new Response(object.body).arrayBuffer()).equals(content)).toBe(true);
+    }
+  });
+
   it("streams in bounded chunks and refuses a file replaced after the read began", async () => {
     const root = await temporaryDirectory();
     const store = new LocalObjectStore({ rootDirectory: root });
-    const content = Buffer.alloc(200 * 1024, 7);
+    const content = Buffer.alloc(IN_MEMORY_READ_BYTES + 200 * 1024, 7);
     await store.put("large.bin", content);
     const object = await store.get("large.bin");
     if (!object) throw new Error("expected the stored object");
@@ -275,6 +299,239 @@ describe("LocalObjectStore", () => {
     await mkdir(root, { recursive: true });
     await symlink(outside, join(root, "escape"), "dir");
     await expect(store.put("escape/no.txt", "no")).rejects.toThrow("symbolic link");
+  });
+});
+
+function streamOf(...chunks: string[]): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    start(controller): void {
+      for (const chunk of chunks) controller.enqueue(Buffer.from(chunk));
+      controller.close();
+    },
+  });
+}
+
+async function* iterableOf(...chunks: string[]): AsyncGenerator<Uint8Array> {
+  for (const chunk of chunks) yield Buffer.from(chunk);
+}
+
+function multipartError(code: string): unknown {
+  return expect.objectContaining({ name: "MultipartUploadError", code });
+}
+
+describe("object bodies", () => {
+  it("stores strings, bytes, blobs, streams, and async iterables", async () => {
+    const store = new LocalObjectStore({ rootDirectory: await temporaryDirectory() });
+    const bodies = {
+      "string.txt": "héllo",
+      "bytes.txt": Buffer.from("bytes"),
+      "blob.txt": new Blob(["bl", "ob"]),
+      "stream.txt": streamOf("str", "eam"),
+      "iterable.txt": iterableOf("iter", "able"),
+    };
+    for (const [key, body] of Object.entries(bodies)) await store.put(key, body);
+
+    const contents: Record<string, string> = {};
+    for (const key of Object.keys(bodies)) {
+      const object = await store.get(key);
+      if (!object) throw new Error(`expected ${key}`);
+      contents[key] = await collect(object.body);
+    }
+    expect(contents).toEqual({
+      "string.txt": "héllo",
+      "bytes.txt": "bytes",
+      "blob.txt": "blob",
+      "stream.txt": "stream",
+      "iterable.txt": "iterable",
+    });
+    expect(await store.stat("string.txt")).toMatchObject({ size: Buffer.byteLength("héllo") });
+  });
+
+  it("releases a stream that is not read to the end", async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller): void {
+        controller.enqueue(new Uint8Array(4));
+      },
+      cancel(): void {
+        cancelled = true;
+      },
+    });
+    for await (const chunk of objectBodyChunks(body)) {
+      expect(chunk.byteLength).toBe(4);
+      break;
+    }
+    expect(cancelled).toBe(true);
+  });
+
+  it("removes the partial file when a streamed body fails", async () => {
+    const root = await temporaryDirectory();
+    const store = new LocalObjectStore({ rootDirectory: root });
+    async function* failing(): AsyncGenerator<Uint8Array> {
+      yield Buffer.from("partial");
+      throw new Error("client went away");
+    }
+    await expect(store.put("dir/failed.txt", failing())).rejects.toThrow("client went away");
+    expect(await store.exists("dir/failed.txt")).toBe(false);
+    expect(await readdir(join(root, "dir"))).toEqual([]);
+  });
+});
+
+describe("multipart helpers", () => {
+  it("validates part numbers and orders completed parts", () => {
+    expect(MIN_MULTIPART_PART_BYTES).toBe(5 * 1024 * 1024);
+    expect(MAX_MULTIPART_PARTS).toBe(10_000);
+    for (const partNumber of [0, -1, 1.5, MAX_MULTIPART_PARTS + 1, Number.NaN]) {
+      expect(() => assertPartNumber(partNumber)).toThrow(RangeError);
+    }
+    expect(() => assertPartNumber(MAX_MULTIPART_PARTS)).not.toThrow();
+
+    expect(normalizeCompletedParts([
+      { partNumber: 3, etag: "c" },
+      { partNumber: 1, etag: "a" },
+    ])).toEqual([{ partNumber: 1, etag: "a" }, { partNumber: 3, etag: "c" }]);
+    expect(() => normalizeCompletedParts([])).toThrow("at least one part");
+    expect(() => normalizeCompletedParts([{ partNumber: 1, etag: "a" }, { partNumber: 1, etag: "b" }]))
+      .toThrow("more than once");
+    expect(() => normalizeCompletedParts([{ partNumber: 1, etag: "" }])).toThrow(TypeError);
+    expect(() => normalizeCompletedParts([{ partNumber: 0, etag: "a" }])).toThrow(RangeError);
+  });
+});
+
+describe("LocalObjectStore multipart uploads", () => {
+  const part = (fill: number, size = MIN_MULTIPART_PART_BYTES): Uint8Array => new Uint8Array(size).fill(fill);
+
+  it("joins parts uploaded out of order, in part-number order", async () => {
+    const root = await temporaryDirectory();
+    const store = new LocalObjectStore({ rootDirectory: root });
+    const { uploadId } = await store.createMultipartUpload("videos/clip.bin", {
+      contentType: "application/octet-stream",
+    });
+    expect(await store.exists("videos/clip.bin")).toBe(false);
+
+    const third = await store.uploadPart("videos/clip.bin", uploadId, 3, streamOf("tail"));
+    const first = await store.uploadPart("videos/clip.bin", uploadId, 1, new Blob([part(1)]));
+    const second = await store.uploadPart("videos/clip.bin", uploadId, 2, part(2));
+    expect(first.size).toBe(MIN_MULTIPART_PART_BYTES);
+    expect(third).toMatchObject({ size: 4 });
+
+    const info = await store.completeMultipartUpload("videos/clip.bin", uploadId, [
+      { partNumber: 3, etag: third.etag },
+      { partNumber: 1, etag: first.etag },
+      { partNumber: 2, etag: second.etag },
+    ]);
+    expect(info).toMatchObject({
+      key: "videos/clip.bin",
+      size: 2 * MIN_MULTIPART_PART_BYTES + 4,
+      contentType: "application/octet-stream",
+    });
+    expect(await store.stat("videos/clip.bin")).toEqual(info);
+
+    const content = await readFile(join(root, "videos", "clip.bin"));
+    expect(content.byteLength).toBe(info.size);
+    expect(content[0]).toBe(1);
+    expect(content[MIN_MULTIPART_PART_BYTES]).toBe(2);
+    expect(content.subarray(-4).toString("utf8")).toBe("tail");
+    expect(await readdir(join(root, ".podokit", "multipart"))).toEqual([]);
+    expect(await readdir(join(root, "videos"))).toEqual(["clip.bin"]);
+    await expect(store.uploadPart("videos/clip.bin", uploadId, 1, "late"))
+      .rejects.toEqual(multipartError("UPLOAD_NOT_FOUND"));
+  });
+
+  it("replaces a part uploaded again and refuses the replaced etag", async () => {
+    const store = new LocalObjectStore({ rootDirectory: await temporaryDirectory() });
+    const { uploadId } = await store.createMultipartUpload("a.txt");
+    const before = await store.uploadPart("a.txt", uploadId, 1, "first");
+    const after = await store.uploadPart("a.txt", uploadId, 1, "second");
+    expect(after.etag).not.toBe(before.etag);
+
+    await expect(store.completeMultipartUpload("a.txt", uploadId, [{ partNumber: 1, etag: before.etag }]))
+      .rejects.toEqual(multipartError("INVALID_PART"));
+    await expect(store.completeMultipartUpload("a.txt", uploadId, [{ partNumber: 2, etag: after.etag }]))
+      .rejects.toEqual(multipartError("INVALID_PART"));
+    await store.completeMultipartUpload("a.txt", uploadId, [{ partNumber: 1, etag: after.etag }]);
+    const object = await store.get("a.txt");
+    expect(object && await collect(object.body)).toBe("second");
+  });
+
+  it("requires every part but the last to meet the minimum size", async () => {
+    const store = new LocalObjectStore({ rootDirectory: await temporaryDirectory() });
+    const { uploadId } = await store.createMultipartUpload("small.bin");
+    const first = await store.uploadPart("small.bin", uploadId, 1, "small");
+    const second = await store.uploadPart("small.bin", uploadId, 2, "last");
+    await expect(store.completeMultipartUpload("small.bin", uploadId, [
+      { partNumber: 1, etag: first.etag },
+      { partNumber: 2, etag: second.etag },
+    ])).rejects.toEqual(multipartError("PART_TOO_SMALL"));
+    // The failed attempt leaves the upload in place.
+    await expect(store.completeMultipartUpload("small.bin", uploadId, [{ partNumber: 1, etag: first.etag }]))
+      .resolves.toMatchObject({ size: 5 });
+  });
+
+  it("refuses unknown, malformed, and other keys' upload ids", async () => {
+    const store = new LocalObjectStore({ rootDirectory: await temporaryDirectory() });
+    const { uploadId } = await store.createMultipartUpload("mine.txt");
+    for (const id of ["00000000-0000-0000-0000-000000000000", "../metadata", ""]) {
+      await expect(store.uploadPart("mine.txt", id, 1, "x")).rejects.toEqual(multipartError("UPLOAD_NOT_FOUND"));
+    }
+    await expect(store.uploadPart("other.txt", uploadId, 1, "x")).rejects.toEqual(multipartError("UPLOAD_NOT_FOUND"));
+    await expect(store.completeMultipartUpload("other.txt", uploadId, [{ partNumber: 1, etag: "x" }]))
+      .rejects.toEqual(multipartError("UPLOAD_NOT_FOUND"));
+    await expect(store.uploadPart("mine.txt", uploadId, 0, "x")).rejects.toThrow(RangeError);
+    // Aborting with another key leaves the upload alone.
+    await store.abortMultipartUpload("other.txt", uploadId);
+    await expect(store.uploadPart("mine.txt", uploadId, 1, "x")).resolves.toMatchObject({ size: 1 });
+  });
+
+  it("aborts idempotently and discards every part", async () => {
+    const root = await temporaryDirectory();
+    const store = new LocalObjectStore({ rootDirectory: root });
+    const { uploadId } = await store.createMultipartUpload("gone.bin");
+    await store.uploadPart("gone.bin", uploadId, 1, "data");
+    await store.abortMultipartUpload("gone.bin", uploadId);
+    await store.abortMultipartUpload("gone.bin", uploadId);
+    await store.abortMultipartUpload("gone.bin", "not-an-upload-id");
+    expect(await readdir(join(root, ".podokit", "multipart"))).toEqual([]);
+    await expect(store.uploadPart("gone.bin", uploadId, 1, "x")).rejects.toBeInstanceOf(MultipartUploadError);
+    expect(await store.exists("gone.bin")).toBe(false);
+  });
+
+  it("validates keys exactly like put and keeps uploads out of listings", async () => {
+    const root = await temporaryDirectory();
+    const outside = await temporaryDirectory();
+    const store = new LocalObjectStore({ rootDirectory: root });
+    for (const key of ["../outside.txt", "/outside.txt", "a//b"]) {
+      await expect(store.createMultipartUpload(key)).rejects.toThrow("safe relative path");
+    }
+    await expect(store.createMultipartUpload(".podokit/multipart/x")).rejects.toThrow("reserved path");
+
+    await symlink(outside, join(root, "escape"), "dir");
+    const { uploadId } = await store.createMultipartUpload("escape/no.txt");
+    const uploaded = await store.uploadPart("escape/no.txt", uploadId, 1, "no");
+    await expect(store.completeMultipartUpload("escape/no.txt", uploadId, [{ partNumber: 1, etag: uploaded.etag }]))
+      .rejects.toThrow("symbolic link");
+    expect(await readdir(outside)).toEqual([]);
+    expect(await store.list("")).toEqual({ keys: [] });
+  });
+
+  it("removes uploads without recent activity", async () => {
+    const root = await temporaryDirectory();
+    const store = new LocalObjectStore({ rootDirectory: root, multipartMaxAgeMs: 60_000 });
+    const stale = await store.createMultipartUpload("stale.bin");
+    const active = await store.createMultipartUpload("active.bin");
+    await store.uploadPart("stale.bin", stale.uploadId, 1, "old");
+    const old = new Date(Date.now() - 120_000);
+    await utimes(join(root, ".podokit", "multipart", stale.uploadId), old, old);
+
+    expect(await store.abortStaleMultipartUploads()).toBe(1);
+    await expect(store.uploadPart("stale.bin", stale.uploadId, 1, "x")).rejects.toEqual(multipartError("UPLOAD_NOT_FOUND"));
+    await expect(store.uploadPart("active.bin", active.uploadId, 1, "x")).resolves.toMatchObject({ size: 1 });
+
+    // A new store sweeps when its first upload starts.
+    await utimes(join(root, ".podokit", "multipart", active.uploadId), old, old);
+    await new LocalObjectStore({ rootDirectory: root, multipartMaxAgeMs: 60_000 }).createMultipartUpload("next.bin");
+    expect(await readdir(join(root, ".podokit", "multipart"))).toHaveLength(1);
+    expect(() => new LocalObjectStore({ rootDirectory: root, multipartMaxAgeMs: 0 })).toThrow(RangeError);
   });
 });
 
@@ -349,6 +606,28 @@ describe("objectResponse", () => {
       new Request("http://localhost/a", { method: "POST", headers: { "if-none-match": "*" } }),
       object,
     )).toBe(false);
+  });
+
+  it("answers 304 and HEAD when the unsent body fails to cancel", async () => {
+    const requests: RequestInit[] = [{ headers: { "if-none-match": '"v1"' } }, { method: "HEAD" }];
+    for (const init of requests) {
+      const locked = fakeObject("hello").object;
+      locked.body.getReader();
+      const failing: ObjectData = {
+        ...locked,
+        body: new ReadableStream<Uint8Array>({
+          cancel(): void {
+            throw new Error("cancel failed");
+          },
+        }),
+      };
+      for (const object of [locked, failing]) {
+        const response = objectResponse(new Request("http://localhost/a", init), object);
+        expect(response.status).toBe(init.method === "HEAD" ? 200 : 304);
+      }
+    }
+    // A rejected cancel that escaped would fail the run as an unhandled rejection.
+    await new Promise((resolve) => setTimeout(resolve, 0));
   });
 
   it("uses a replacement content type and answers HEAD without the body", async () => {

@@ -14,6 +14,11 @@ bun install
 bun run --cwd apps/api migration:run
 ```
 
+The module uses the shadcn-svelte `textarea` from the application's
+`apps/web/src/lib/components/ui/` set. Projects generated before PodoKit shipped
+that component get it from `podo update --apply`; `podo add blog` stops with a
+"newer PodoKit project baseline" message until then.
+
 When adopting an existing blog whose backend paths are currently app-owned, use
 `podo add blog --adopt`. Review `podo diff` before applying later module updates.
 

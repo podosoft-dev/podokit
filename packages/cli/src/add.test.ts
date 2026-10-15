@@ -462,15 +462,19 @@ describe("addModule (auth / better-auth)", () => {
       migrationSource.indexOf("getMigrations(auth.options)"),
     );
     // Creating the Better Auth instance runs its startup schema check, which would
-    // report the schema these migrations are about to change.
+    // report the schema these migrations are about to change, and the auth pool
+    // would bound migration statements with its query timeout.
     const imports = migrationSource.split("\n").filter((line) => line.startsWith("import "));
-    expect(imports[0]).toBe('import "./auth/skip-schema-validation";');
+    expect(imports[0]).toBe('import "./auth/maintenance-command";');
     expect(imports).toContain('import { auth } from "./auth/auth";');
     expect(
-      readFileSync(join(project, "apps/api/src/auth/skip-schema-validation.ts"), "utf8"),
-    ).toContain("\nskipAuthSchemaValidation();");
+      readFileSync(join(project, "apps/api/src/auth/maintenance-command.ts"), "utf8"),
+    ).toContain("\nstartMaintenanceCommand();");
     expect(readFileSync(join(project, "apps/api/src/auth/auth.ts"), "utf8")).toContain(
-      "...(authSchemaValidation() ? {} : { database: { validateSchema: false } }),",
+      "...(isMaintenanceCommand() ? { database: { validateSchema: false } } : {}),",
+    );
+    expect(readFileSync(join(project, "apps/api/src/auth/db.ts"), "utf8")).toContain(
+      "...(isMaintenanceCommand() ? {} : { query_timeout: env.DB_QUERY_TIMEOUT_MS }),",
     );
     const rootLayout = readFileSync(
       join(project, "apps/web/src/routes/+layout.svelte"),
@@ -548,6 +552,12 @@ describe("addModule (auth / better-auth)", () => {
       'command: ["bun", "dist/main-worker.js"]',
     );
     expect(readFileSync(join(project, "apps/api/src/app.ts"), "utf8")).toContain("jobsModule,");
+    const jobsModule = readFileSync(join(project, "apps/api/src/jobs/jobs.module.ts"), "utf8");
+    expect(jobsModule).toContain('register("jobs", () => queue.ready())');
+    expect(jobsModule).toContain('services.supervise("jobs", queue)');
+    const connections = readFileSync(join(project, "apps/api/src/jobs/queue.ts"), "utf8");
+    expect(connections).toContain("enableOfflineQueue: false");
+    expect(connections).toContain("maxRetriesPerRequest: null");
   });
 
   it("renders Bun commands into module scripts and worker manifests", () => {
@@ -649,6 +659,7 @@ describe("addModule (auth / better-auth)", () => {
       "utf8",
     );
     expect(providerModule).not.toContain('register("events"');
+    expect(providerModule).toContain('services.supervise("events", events)');
   });
 
   it("adds redis with a client and cache endpoints", () => {
@@ -665,7 +676,13 @@ describe("addModule (auth / better-auth)", () => {
       "utf8",
     );
     expect(redisService).toContain("redisConnectionUrl()");
-    expect(redisService).toContain('readiness?.register("redis"');
+    expect(redisService).toContain("autoReconnect: false");
+    expect(redisService).toContain("withReplyTimeout(send(this.client)");
+    expect(readFileSync(join(project, ".env.example"), "utf8")).toContain("# REDIS_COMMAND_TIMEOUT_MS=1000");
+    const redisModule = readFileSync(join(project, "apps/api/src/redis/redis.module.ts"), "utf8");
+    expect(redisModule).toContain('register("redis", () => redis.ping())');
+    expect(redisModule).toContain('services.supervise("redis", redis)');
+    expect(redisModule).toContain('"CACHE_UNAVAILABLE"');
   });
 
   it("job-progress composes the selected jobs and events providers", () => {
@@ -731,9 +748,11 @@ describe("addModule (auth / better-auth)", () => {
     const rateLimitModule = readFileSync(join(project, "apps/api/src/rate-limit/rate-limit.module.ts"), "utf8");
     expect(rateLimitModule).toContain("CacheRateLimitStorage");
     expect(rateLimitModule).toContain('["/health", "/health/ready", "/api-docs"');
-    expect(rateLimitModule).toContain('path.startsWith("/api/auth/")');
-    expect(rateLimitModule).toContain('path === "/api/auth/get-session"');
-    expect(rateLimitModule).toContain('path === "/site/settings"');
+    expect(rateLimitModule).toContain("services.register(RATE_LIMIT_ROUTES, limiter.routes)");
+    const routes = readFileSync(join(project, "apps/api/src/rate-limit/rate-limit.routes.ts"), "utf8");
+    expect(routes).toContain('pathPrefix: "/api/auth",');
+    expect(routes).toContain('method: "GET", pathPrefix: "/api/auth/get-session"');
+    expect(routes).toContain('method: "GET", pathPrefix: "/site/settings"');
     expect(rateLimitModule).toContain("RATE_LIMIT_EXCEEDED");
     expect(rateLimitModule).toContain("RATE_LIMIT_UNAVAILABLE");
     expect(rateLimitModule).toContain("REQUEST_GUARDS");
@@ -853,7 +872,9 @@ describe("addModule (auth / better-auth)", () => {
     expect(disposableUsers).toContain('testInfo.project.name === "api"');
     expect(disposableUsers).toContain("ADMIN.email");
     expect(disposableUsers).toContain("headers: origin");
-    expect(disposableUsers).toContain("if (ownsRequest) await request.dispose()");
+    expect(disposableUsers).toContain("storageState: await context.storageState()");
+    expect(disposableUsers).toContain("await request.dispose()");
+    expect(disposableUsers).not.toContain("ownsRequest");
     const impersonationBanner = readFileSync(
       join(project, "apps/web/src/lib/components/impersonation-banner.svelte"),
       "utf8",
@@ -872,7 +893,14 @@ describe("addModule (auth / better-auth)", () => {
     expect(seedTeardown).toContain("if (!existsSync(userBaselineState)) return");
     expect(readFileSync(join(project, "apps/web/src/lib/components/site-runtime.svelte"), "utf8")).toContain("applyTheme");
     const hooks = readFileSync(join(project, "apps/web/src/hooks.server.ts"), "utf8");
-    expect(hooks).toContain("event.route.id === null");
+    expect(hooks).toContain("needsRuntimeContext(event, { building, route })");
+    expect(hooks).toContain('import { routes } from "$app/manifest";');
+    expect(readFileSync(join(project, "apps/web/src/lib/server/runtime-context.ts"), "utf8")).toContain(
+      'import { APP_ASSET_PATHS } from "./asset-paths";',
+    );
+    expect(readFileSync(join(project, "apps/web/src/lib/server/asset-paths.ts"), "utf8")).toContain(
+      "export const APP_ASSET_PATHS: readonly string[] = [];",
+    );
     expect(hooks).toContain('/(<html\\b[^>]*?\\slang=)(["\'])[^"\']*\\2/i');
     expect(hooks).toContain("event.locals.authUnavailable = false");
     expect(hooks).toContain("error.status !== 401");

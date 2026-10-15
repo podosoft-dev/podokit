@@ -37,3 +37,20 @@ export function refreshHost(corsOrigin, fallback = "app.localhost") {
     return firstOrigin.replace(/^https?:\/\//, "").trim() || fallback;
   }
 }
+
+/**
+ * The app's previous .podokit/dev.json plus the direct API paths that `podo add`
+ * wrote into the regenerated one, so restoring instance config keeps them.
+ */
+export function restoreDevConfig(previousText, regeneratedText) {
+  const previous = JSON.parse(previousText);
+  const regenerated = JSON.parse(regeneratedText);
+  const base = (path) => path.replace(/\/$/, "");
+  const current = Array.isArray(previous.apiPaths) ? previous.apiPaths : [];
+  const added = (Array.isArray(regenerated.apiPaths) ? regenerated.apiPaths : []).filter(
+    (path) => !current.some((entry) => base(path) === base(entry) || base(path).startsWith(`${base(entry)}/`)),
+  );
+  if (added.length === 0) return previousText;
+  previous.apiPaths = [...current, ...added];
+  return `${JSON.stringify(previous, null, 2)}\n`;
+}

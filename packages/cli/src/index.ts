@@ -52,6 +52,7 @@ import {
 } from "./deploy-compose";
 import { revertComposeSync, syncComposeDeployment } from "./deploy-compose-sync";
 import { applyProviderChange, listProviders, planProviderChange } from "./provider";
+import { describeApiPaths, type ApiPathResult } from "./module-api-paths";
 
 const HELP = `podo — PodoKit project generator
 
@@ -256,6 +257,11 @@ export function parseArgs(argv: string[]): ParsedArgs {
   parsed.name = positionals[1];
   parsed.positionals = positionals;
   return parsed;
+}
+
+function writeApiPaths(heading: string, result: ApiPathResult, verb: "add" | "remove"): void {
+  const lines = describeApiPaths(result, verb);
+  if (lines.length) process.stdout.write(`\n${heading}\n${lines.join("\n")}\n`);
 }
 
 function fail(message: string): never {
@@ -476,6 +482,11 @@ async function main(argv: string[]): Promise<void> {
           `\nAdopted as module-managed file(s):\n${result.adopted.map((file) => `  ${file}`).join("\n")}\n`,
         );
       }
+      writeApiPaths(
+        "Direct API paths (the gateway sends them to the API without the web proxy):",
+        result.apiPaths,
+        "add",
+      );
       if (result.instructions.length) {
         process.stdout.write(`\nNext steps:\n${result.instructions.map((i) => `  ${i}`).join("\n")}\n`);
       }
@@ -508,6 +519,7 @@ async function main(argv: string[]): Promise<void> {
             "\n",
         );
       }
+      writeApiPaths("Direct API paths:", result.apiPaths, "remove");
     } catch (err) {
       fail((err as Error).message);
     }
@@ -780,6 +792,7 @@ async function main(argv: string[]): Promise<void> {
             `${result.removed.length} removed, ` +
             `${result.merged.length} merged, ${result.conflicts.length} conflict.\n`,
         );
+        writeApiPaths("Direct API paths:", result.apiPaths, "add");
         if (result.conflicts.length) {
           process.stdout.write(
             "\nResolve the following, then commit:\n" +
@@ -802,7 +815,11 @@ async function main(argv: string[]): Promise<void> {
             "\n\n",
         );
       }
-      if (!shown.length) {
+      const apiPathLines = describeApiPaths(plan.apiPaths, "add");
+      if (apiPathLines.length) {
+        process.stdout.write(`Direct API paths to add:\n${apiPathLines.join("\n")}\n\n`);
+      }
+      if (!shown.length && !plan.apiPaths.changed.length) {
         process.stdout.write("Everything is up to date.\n");
       } else {
         for (const c of shown) {
@@ -810,7 +827,7 @@ async function main(argv: string[]): Promise<void> {
           process.stdout.write(`  ${c.action.padEnd(9)} ${path}  (${c.note})\n`);
         }
         process.stdout.write(
-          `\n${counts.update} update, ${counts.add} add, ${counts.move} move, ` +
+          `${shown.length ? "\n" : ""}${counts.update} update, ${counts.add} add, ${counts.move} move, ` +
             `${counts.remove} remove, ${counts.conflict} conflict. ` +
             `Dry-run — nothing was written. Re-run with --apply to write (use --from <dir> for a 3-way merge).\n`,
         );

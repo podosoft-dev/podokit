@@ -16,7 +16,8 @@ responsibilities.
 
 PodoKit manages:
 
-- API and web workloads, their service wiring, and exact WebSocket routing when configured
+- API and web workloads, their service wiring, and exact WebSocket and direct API
+  routing when configured
 - optional PodoKit-run PostgreSQL, Redis, and S3-compatible object storage
 - an exact-image migration step before an application rollout
 - deployment planning, status, public verification, and application rollback
@@ -154,7 +155,9 @@ public verification checks.
 
 Initialization reads the manifest's active providers and installed modules. Auth
 and API-key modules add their required secret key names, distributed providers
-select PostgreSQL, Redis, or Silo, and BullMQ adds a worker. Local providers
+select PostgreSQL, Redis, or Silo, BullMQ adds a worker, and the
+[direct API paths](#direct-api-paths) that installed modules contributed, such as
+`file-upload`'s `/api/files/uploads/`, go into `exposure.apiPaths`. Local providers
 disable their managed external dependency, omit the separate worker, and constrain
 the API to one replica. Dependencies support
 `external` and `disabled` as well as PodoKit-managed. External endpoints and
@@ -328,6 +331,78 @@ plain-HTTP image can instead set its origin while building:
 docker build --build-arg PODOKIT_BUILD_ORIGIN=https://example.com -f apps/web/Dockerfile -t example-web .
 ```
 
+## Direct API paths
+
+By default every `/api/*` request goes through the web server, which proxies it
+to the API. The web server holds the whole body in memory, and adapter-bun rejects any
+body larger than `BODY_SIZE_LIMIT` (3 MiB in the generated configuration) on every
+web route; per-route `APP_BODY_LIMITS` can only lower that ceiling (see
+[request body limits](templates.md#request-body-limits)). To accept larger uploads, list the API routes that receive them under
+`exposure.apiPaths`. The gateway then sends those requests straight to the API, so
+their bodies never pass through the web process:
+
+```json
+{
+  "exposure": {
+    "mode": "ingress",
+    "apiPaths": ["/api/files/uploads/"]
+  }
+}
+```
+
+Each entry is a static prefix under `/api/`. It covers its own path and every path
+below it, so `/api/files/uploads/` covers `/api/files/uploads` and
+`/api/files/uploads/u1/parts/2`; the trailing slash is optional. The gateway
+removes `/api`, so `/api/files/uploads/u1/parts/2` reaches the API as
+`/files/uploads/u1/parts/2`, the same path the web proxy forwards. The list is
+empty by default. Modules whose routes need a direct path declare it, and
+`podo add` lists it in every existing profile while `podo deploy init` copies it
+into new ones: the `file-upload` module adds exactly this entry for its
+[resumable uploads](modules.md#resumable-uploads), whose parts exceed
+`BODY_SIZE_LIMIT`. See [module direct API paths](modules.md#module-direct-api-paths)
+for how `podo add`, `remove`, and `update` edit the list.
+
+The profile is rejected if an entry is `/api/` itself, contains a wildcard, query,
+fragment, percent-encoded character, empty segment, or traversal segment, overlaps
+another entry, or covers a `webSocketPaths` entry. `/api/auth` and the paths below
+it are rejected as well: the API serves Better Auth with the `/api/auth` prefix
+still in place, so authentication requests always go through the web proxy.
+
+| Driver | Routing |
+| --- | --- |
+| `kubernetes-helm` | Requires `exposure.mode: "ingress"` and an IngressClass served by Traefik. The application chart adds a second Ingress, `<release>-api-paths`, with an `Exact` rule for each path and an `ImplementationSpecific` rule for the path with a trailing slash, plus a Traefik `Middleware`, `<release>-strip-api-prefix`, that removes `/api`. `podo deploy doctor` checks that the `middlewares.traefik.io` CRD exists. |
+| `docker-compose` | Listed paths start the same internal Caddy gateway as WebSocket paths. It removes `/api` with `uri strip_prefix` before proxying to the API, and `trustedProxyCidrs` applies to these requests too. |
+
+The plan's rollout step names the direct paths, and the confirmation hash covers
+them through the profile digest and the rendered Ingress or Caddy configuration.
+For local development, the same paths belong in `.podokit/dev.json`, where
+`podo add` puts module paths too; see the
+[development guide](development.md#containerized-development).
+
+What changes for requests on these paths:
+
+- They stay on the public origin, so the browser sends the session cookie and
+  applies same-origin rules exactly as it does for the rest of `/api`. The API
+  authenticates them itself, as it already does for proxied requests.
+- They skip everything the web server does for `/api`: the forwarded header
+  allowlist (the API receives every request header), `APP_BODY_LIMITS`,
+  SvelteKit's cross-site form check, and any `+server.ts` routes the app added
+  under the prefix. For cookie-authenticated writes, have the API compare the
+  `Origin` header with the public origin; the session cookie's `SameSite=Lax`
+  already keeps it off most cross-site POSTs.
+- The API's CORS headers reach the browser. Keep `CORS_ORIGIN` set to the public
+  origin, as generated profiles do; without it the API reflects any origin and
+  allows credentials.
+- The API server's own body limit applies instead of `BODY_SIZE_LIMIT`: Bun's
+  `maxRequestBodySize`, 128 MiB unless the API sets another value. Enforce each
+  route's size limit in its API handler.
+- The API reads the client address from the gateway's `X-Forwarded-For` header
+  instead of from the web server. Behind an external reverse proxy, check that
+  `RATE_LIMIT_TRUSTED_PROXY_HOPS` picks the client on these paths.
+- Gateway timeouts still apply. Traefik v3 entry points close a request whose body
+  takes longer than `respondingTimeouts.readTimeout`, 60 seconds by default; raise
+  it on the ingress controller for slow uploads.
+
 ## Fast development sync (`docker-compose` only)
 
 Developing *against* a deployment through full releases is slow for a reason that has
@@ -390,18 +465,53 @@ the missing files 404, so nothing looks broken. Name those paths in the profile:
 The key is read only by `sync`. It is never rendered into the Compose project, so
 adding it changes what that one command copies and nothing about what is deployed.
 
+## Request body limit
+
+The API refuses request bodies larger than `API_MAX_REQUEST_BODY_SIZE` bytes
+with `413`. It defaults to Bun's 128 MiB. Set it in the profile's
+`runtimeConfig`, or set `maxRequestBodySize` in the application's
+`apiServerOptions` (see [API server options](templates.md#api-server-options)),
+which wins over the environment. Proxies in front of the API, including the web
+app's `BODY_SIZE_LIMIT` and any ingress, apply their own limits.
+
 ## Health probes
 
 The API serves two health endpoints. `GET /health` reports that the process is
 running. `GET /health/ready` runs `SELECT 1` against the database and every
-readiness check that installed modules register, such as Redis, the event bus, and
-the object storage bucket. It answers `503` with the `READINESS_FAILED` error code
-when any of them is down.
+readiness check that installed modules register, such as Redis, the event bus,
+the BullMQ producer, and the object storage bucket. It answers `503` with the `READINESS_FAILED` error code
+when any of them is down, and its message names them, for example
+`One or more dependencies are unavailable: redis, events`.
+
+The API starts and listens even when PostgreSQL or Redis is unreachable. Before
+listening it makes one connection attempt to each. When a server does not answer
+at all, startup waits up to the connection timeout for that attempt
+(`DB_CONNECT_TIMEOUT_MS` for PostgreSQL, 5 seconds for Redis), and once more for
+each start hook that reads the database, such as the auth module's
+configuration preload. After that the API keeps reconnecting in the background,
+starting after 250 ms and doubling the wait up to 5 seconds. A Redis connection
+that drops later is reopened the same way, while the PostgreSQL pool opens
+connections as queries need them. A Redis server that keeps the connection open
+but stops answering, such as a paused container, fails each command after
+`REDIS_COMMAND_TIMEOUT_MS`, and that connection is closed and reopened the same
+way. A PostgreSQL server that does the same fails the waiting queries after
+`DB_QUERY_TIMEOUT_MS`, and the API reopens its pool (see
+[PostgreSQL connection pools](providers.md#postgresql-connection-pools)).
+Until a dependency is back, `GET /health` answers `200`, `GET /health/ready`
+answers `503`, and requests that need it fail with their usual errors, such as
+`DATABASE_UNAVAILABLE`, `JOBS_UNAVAILABLE`, or `RATE_LIMIT_UNAVAILABLE`, instead
+of waiting for it. These `503` responses
+carry `Retry-After`, `1` second unless the code that failed set its own. The API logs
+`Dependency connection failed; retrying in the background` when a dependency
+becomes unavailable and `Dependency connection restored` with `downtimeMs` when
+it returns, not on every attempt. A pod therefore stays running while a
+dependency is down and becomes ready again without a restart.
 
 | Setting | Default | Effect |
 | --- | --- | --- |
 | `READINESS_CHECK_TIMEOUT_MS` | `800` | The longest one check may run. A slower check is reported down, and the API logs `Readiness check failed` with the check name and the reason. |
 | `READINESS_CACHE_MS` | `2000` | How long a finished result is reused. Concurrent requests always share one evaluation. `0` checks on every request. |
+| `REDIS_COMMAND_TIMEOUT_MS` | `1000` | How long the API waits for Redis to answer one command before the command fails and its connection is reopened. |
 
 Set them in the profile's `runtimeConfig`. Keep the check timeout below the probe
 timeout, so a slow dependency is reported as down instead of making the probe

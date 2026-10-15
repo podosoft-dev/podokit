@@ -16,10 +16,17 @@ POSTGRES_DB=podokit
 # queries, plus DB_AUTH_POOL_MAX for the auth module when it is installed. Keep
 # replicas x (DB_POOL_MAX + DB_AUTH_POOL_MAX), plus a few for migrations, below
 # the server's max_connections (100 by default). The timeouts are milliseconds.
+# DB_QUERY_TIMEOUT_MS bounds how long a query waits for a server that stopped
+# answering; migrations and maintenance commands are not bounded.
 # DB_POOL_MAX=20
 # DB_CONNECT_TIMEOUT_MS=10000
 # DB_IDLE_TIMEOUT_MS=30000
+# DB_QUERY_TIMEOUT_MS=10000
 # DB_AUTH_POOL_MAX=10
+
+# Largest API request body in bytes (Bun's default is 128 MiB). Requests through
+# the web app's /api proxy are also bounded by BODY_SIZE_LIMIT below.
+# API_MAX_REQUEST_BODY_SIZE=134217728
 
 # Readiness (GET /health/ready): the longest one dependency check may run, and how
 # long a result is reused across probes (0 checks on every request).
@@ -44,3 +51,6 @@ REDIS_DB=0
 # REDIS_USERNAME=
 # REDIS_PASSWORD=
 REDIS_TLS=false
+# Longest wait in milliseconds for Redis to answer one command. A command that
+# gets no reply in time fails, and its connection is closed and reopened.
+# REDIS_COMMAND_TIMEOUT_MS=1000

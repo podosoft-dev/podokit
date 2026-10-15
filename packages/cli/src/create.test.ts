@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { create, assertValidName } from "./create";
+import { readFilesLock } from "./lockfile";
 
 const REPO_TEMPLATES = resolve(process.cwd(), "..", "..", "templates");
 const DEV_WATCH = resolve(process.cwd(), "..", "..", "scripts", "dev-watch.mjs");
@@ -146,6 +147,9 @@ describe("create (integration against templates)", () => {
     const apiMain = readFileSync(join(target, "apps/api/src/main.ts"), "utf8");
     expect(apiMain).toContain("async function bootstrap(): Promise<void>");
     expect(apiMain).toContain("await services.start()");
+    expect(apiMain).toContain("...apiServerOptions(env)");
+    expect(readFileSync(join(target, "apps/api/src/app.extensions.ts"), "utf8"))
+      .toContain("export const apiServerOptions: ApiServerOptionsSource = {};");
     const landingPage = readFileSync(join(target, "apps/web/src/routes/+page.svelte"), "utf8");
     expect(landingPage).toContain("Your PodoKit application is ready.");
     expect(landingPage).not.toMatch(/\b(?:Bun|Elysia|SvelteKit)\b/);
@@ -385,6 +389,42 @@ describe("create (integration against templates)", () => {
     expect(existsSync(join(target, "apps", "api", "src", "config", "redis.connection.ts"))).toBe(true);
   });
 
+  it("ships the shadcn-svelte textarea that the blog and analytics modules use", () => {
+    const target = join(tmp(), "app");
+    create({ name: "app", templatesDir: REPO_TEMPLATES, targetDir: target });
+    const textareaDir = join(target, "apps", "web", "src", "lib", "components", "ui", "textarea");
+    const component = readFileSync(join(textareaDir, "textarea.svelte"), "utf8");
+    expect(component).toContain('from "#lib/utils.js"');
+    expect(component).toContain('"data-slot": dataSlot = "textarea"');
+    expect(component).toContain("field-sizing-content");
+    expect(readFileSync(join(textareaDir, "index.ts"), "utf8")).toContain("Root as Textarea");
+
+    // `shadcn-svelte add` needs every alias and appends the extension itself.
+    const components = JSON.parse(readFileSync(join(target, "apps", "web", "components.json"), "utf8")) as {
+      aliases: Record<string, string>;
+    };
+    expect(components.aliases).toMatchObject({ utils: "#lib/utils", hooks: "#lib/hooks", lib: "#lib", ui: "#lib/components/ui" });
+
+    // The modules rely on the shared copy instead of shipping their own, so
+    // removing one never deletes the component another page uses.
+    for (const module of ["podokit-module-blog", "podokit-module-analytics"]) {
+      const moduleDir = resolve(process.cwd(), "..", module);
+      const manifest = JSON.parse(readFileSync(join(moduleDir, "module.manifest.json"), "utf8")) as {
+        requiredProjectFiles?: string[];
+      };
+      expect(manifest.requiredProjectFiles).toEqual(
+        expect.arrayContaining([
+          "apps/web/src/lib/components/ui/textarea/index.ts",
+          "apps/web/src/lib/components/ui/textarea/textarea.svelte",
+        ]),
+      );
+      for (const required of manifest.requiredProjectFiles ?? []) {
+        expect(existsSync(join(target, required))).toBe(true);
+      }
+      expect(existsSync(join(moduleDir, "files", "apps", "web", "src", "lib", "components", "ui", "textarea"))).toBe(false);
+    }
+  });
+
   it("ships the containerized dev environment (Traefik + internal services + devcontainer)", () => {
     const target = join(tmp(), "app");
     create({ name: "app", templatesDir: REPO_TEMPLATES, targetDir: target });
@@ -393,7 +433,11 @@ describe("create (integration against templates)", () => {
     expect(existsSync(join(target, "compose.dev.yaml"))).toBe(true);
     expect(existsSync(join(target, "Dockerfile.dev"))).toBe(true);
     expect(existsSync(join(target, ".dockerignore"))).toBe(true);
-    expect(existsSync(join(target, ".env.docker"))).toBe(true);
+    // The committed example holds no secret; podo dev creates the ignored
+    // .env.docker from it, so a fresh clone gets a container environment.
+    expect(existsSync(join(target, ".env.docker.example"))).toBe(true);
+    expect(existsSync(join(target, ".env.docker"))).toBe(false);
+    expect(readFileSync(join(target, ".env.docker.example"), "utf8")).toMatch(/^BETTER_AUTH_SECRET=$/m);
     expect(existsSync(join(target, ".devcontainer", "devcontainer.json"))).toBe(true);
     expect(existsSync(join(target, "infra", "traefik", "dynamic.yml"))).toBe(true);
 
@@ -430,13 +474,17 @@ describe("create (integration against templates)", () => {
     expect(devDockerfile).toContain('bun install --frozen-lockfile --registry "$PODOKIT_NPM_REGISTRY"');
 
     // web proxies /api to the api container by service name (Traefik only routes web)
-    expect(readFileSync(join(target, ".env.docker"), "utf8")).toContain("BACKEND_INTERNAL_URL=http://api:5002");
-    expect(readFileSync(join(target, ".env.docker"), "utf8")).toContain("BETTER_AUTH_URL=http://app.localhost");
+    expect(readFileSync(join(target, ".env.docker.example"), "utf8")).toContain("BACKEND_INTERNAL_URL=http://api:5002");
+    expect(readFileSync(join(target, ".env.docker.example"), "utf8")).toContain("BETTER_AUTH_URL=http://app.localhost");
     expect(readFileSync(join(target, ".podokit", "dev.json"), "utf8")).toContain('"hostname": "app.localhost"');
     expect(readFileSync(join(target, ".podokit", "dev.json"), "utf8")).toContain(
       '"webSocketPaths": []',
     );
+    expect(readFileSync(join(target, ".podokit", "dev.json"), "utf8")).toContain(
+      '"apiPaths": []',
+    );
     expect(readFileSync(join(target, ".gitignore"), "utf8")).toContain(".podokit/runtime/");
+    expect(readFileSync(join(target, ".gitignore"), "utf8")).toContain("!.env.docker.example\n");
     const backendProxy = readFileSync(
       join(target, "apps", "web", "src", "lib", "server", "backend-proxy.ts"),
       "utf8",
@@ -458,6 +506,20 @@ describe("create (integration against templates)", () => {
     expect(readFileSync(backendProxyTest, "utf8")).toContain(
       'from "./backend-proxy"',
     );
+    // App-specific proxy headers live in an owned file the managed proxy imports.
+    expect(backendProxy).toContain('from "./proxy-headers"');
+    const proxyHeaders = "apps/web/src/lib/server/proxy-headers.ts";
+    expect(readFileSync(join(target, proxyHeaders), "utf8")).toContain(
+      "export const APP_FORWARDED_REQUEST_HEADERS: readonly string[] = [];",
+    );
+    expect(readFilesLock(target)?.files[proxyHeaders]?.tier).toBe("owned");
+    expect(backendProxy).toContain('from "./body-limits"');
+    const bodyLimits = "apps/web/src/lib/server/body-limits.ts";
+    expect(readFileSync(join(target, bodyLimits), "utf8")).toContain(
+      "export const APP_BODY_LIMITS: ReadonlyArray<{ pathPrefix: string; maxBytes: number }> = [];",
+    );
+    expect(readFilesLock(target)?.files[bodyLimits]?.tier).toBe("owned");
+    expect(readFilesLock(target)?.files["apps/web/src/lib/server/backend-proxy.ts"]?.tier).toBe("managed");
     const serverApi = readFileSync(join(target, "apps", "web", "src", "lib", "server", "api.ts"), "utf8");
     expect(serverApi).toContain('headers.set("x-forwarded-for", clientIp)');
     expect(serverApi).toContain("resolveClientIp(event.getClientAddress)");

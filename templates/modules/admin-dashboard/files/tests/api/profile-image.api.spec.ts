@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { ADMIN } from "../helpers/accounts";
+import { expectObjectLength } from "../helpers/object-response";
 
 const base = process.env.E2E_BASE_URL ?? "http://localhost:5001";
 const origin = { origin: base };
@@ -48,7 +49,7 @@ test("profile image upload, replacement, public read, and removal", async ({ pla
   expect(firstImage.ok()).toBeTruthy();
   expect(firstImage.headers()["content-type"]).toContain("image/png");
   expect(firstImage.headers()["cache-control"]).toBe("public, max-age=31536000, immutable");
-  expect(firstImage.headers()["content-length"]).toBe(String(PNG.byteLength));
+  expectObjectLength(firstImage.headers(), PNG.byteLength);
   expect((await firstImage.body()).equals(PNG)).toBe(true);
   const etag = firstImage.headers()["etag"];
   expect(etag).toMatch(/^"[^"]+"$/);

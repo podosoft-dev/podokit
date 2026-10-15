@@ -1,6 +1,10 @@
+import { APP_BODY_LIMITS } from "./body-limits";
+import { APP_FORWARDED_REQUEST_HEADERS, APP_RELAYED_RESPONSE_HEADERS } from "./proxy-headers";
+
 // Server-side proxy boundary. The browser never talks to the API directly:
 // requests go through SvelteKit server routes, which forward an allowlist of
 // headers to BACKEND_INTERNAL_URL and relay the response (including Set-Cookie).
+// Applications add their own header names in the app-owned proxy-headers.ts.
 //
 // `user-agent` is on the list for the same reason the client IP is forwarded
 // below: better-auth records it on the session and the account page shows it as
@@ -39,6 +43,171 @@ const RELAYED_RESPONSE_HEADERS = [
   "x-next-cursor",
 ];
 
+// Hop-by-hop headers describe a single connection, and the proxy sets framing,
+// cookies, and the client address itself, so application lists cannot add these.
+const HOP_BY_HOP_HEADERS = [
+  "connection",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "proxy-connection",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+];
+const RESERVED_REQUEST_HEADERS = new Set([
+  ...HOP_BY_HOP_HEADERS,
+  "host",
+  "content-length",
+  "forwarded",
+  "x-forwarded-for",
+  "x-forwarded-host",
+  "x-forwarded-port",
+  "x-forwarded-proto",
+  "x-real-ip",
+]);
+const RESERVED_RESPONSE_HEADERS = new Set([
+  ...HOP_BY_HOP_HEADERS,
+  "content-length",
+  "content-encoding",
+  "set-cookie",
+]);
+const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9a-z-]+$/;
+/** Larger response bodies stream through; smaller ones are relayed with their length. */
+export const IN_MEMORY_RESPONSE_BYTES = 2 * 1024 * 1024;
+
+/** Append an application's header names to a built-in list, lowercased and
+ *  without duplicates. Throws on an invalid or reserved name so a mistake fails
+ *  the build instead of silently dropping the header. */
+export function withAppHeaders(
+  builtIn: readonly string[],
+  app: readonly string[],
+  reserved: ReadonlySet<string>,
+  listName: string,
+): string[] {
+  const names = new Set(builtIn);
+  for (const entry of app) {
+    const name = entry.toLowerCase();
+    if (!HEADER_NAME.test(name)) {
+      throw new Error(`${listName} contains an invalid header name: ${JSON.stringify(entry)}`);
+    }
+    if (reserved.has(name)) {
+      throw new Error(`${listName} cannot contain "${name}": the proxy handles that header itself.`);
+    }
+    names.add(name);
+  }
+  return [...names];
+}
+
+const forwardedHeaders = withAppHeaders(
+  FORWARDED_HEADERS,
+  APP_FORWARDED_REQUEST_HEADERS,
+  RESERVED_REQUEST_HEADERS,
+  "APP_FORWARDED_REQUEST_HEADERS",
+);
+const relayedResponseHeaders = withAppHeaders(
+  RELAYED_RESPONSE_HEADERS,
+  APP_RELAYED_RESPONSE_HEADERS,
+  RESERVED_RESPONSE_HEADERS,
+  "APP_RELAYED_RESPONSE_HEADERS",
+);
+
+export interface BodyLimit {
+  pathPrefix: string;
+  maxBytes: number;
+}
+
+const BODY_LIMIT_PREFIX = /^\/api(?:\/[A-Za-z0-9._~!$&'()+,;=:@-]+)*\/?$/;
+
+/** Validate application body limits and order them so the longest prefix
+ *  matches first. Prefixes are stored without a trailing slash. */
+export function sortedBodyLimits(limits: ReadonlyArray<BodyLimit>): BodyLimit[] {
+  const seen = new Set<string>();
+  const sorted = limits.map(({ pathPrefix, maxBytes }) => {
+    if (
+      !BODY_LIMIT_PREFIX.test(pathPrefix) ||
+      pathPrefix.split("/").some((segment) => segment === "." || segment === "..")
+    ) {
+      throw new Error(
+        `APP_BODY_LIMITS pathPrefix must be a static path under /api/, such as "/api/feedback/": ${JSON.stringify(pathPrefix)}`,
+      );
+    }
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
+      throw new Error(`APP_BODY_LIMITS maxBytes for ${pathPrefix} must be a positive whole number of bytes.`);
+    }
+    const base = pathPrefix.endsWith("/") ? pathPrefix.slice(0, -1) : pathPrefix;
+    if (seen.has(base)) throw new Error(`APP_BODY_LIMITS lists ${pathPrefix} more than once.`);
+    seen.add(base);
+    return { pathPrefix: base, maxBytes };
+  });
+  return sorted.sort((left, right) => right.pathPrefix.length - left.pathPrefix.length);
+}
+
+const bodyLimits = sortedBodyLimits(APP_BODY_LIMITS);
+
+/** The body limit for a request path, matched on the decoded path so an encoded
+ *  segment cannot step around a prefix. */
+export function bodyLimitFor(pathname: string, limits: readonly BodyLimit[] = bodyLimits): number | undefined {
+  let path = pathname;
+  try {
+    path = decodeURIComponent(pathname);
+  } catch {
+    // Keep the raw path when it holds a malformed escape.
+  }
+  return limits.find(
+    ({ pathPrefix }) => path === pathPrefix || path.startsWith(`${pathPrefix}/`),
+  )?.maxBytes;
+}
+
+/** Read a request body, or return null as soon as it exceeds maxBytes. The rest
+ *  of an oversized body is never buffered. */
+async function readLimitedBody(request: Request, maxBytes: number): Promise<ArrayBuffer | null> {
+  const declared = request.headers.get("content-length");
+  if (declared !== null && Number(declared) > maxBytes) {
+    request.body?.cancel().catch(() => undefined);
+    return null;
+  }
+  if (!request.body) return new ArrayBuffer(0);
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) {
+      reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(value);
+  }
+  const body = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body.buffer;
+}
+
+function payloadTooLarge(path: string, maxBytes: number): Response {
+  return Response.json(
+    {
+      success: false,
+      error: {
+        code: "PAYLOAD_TOO_LARGE",
+        message: `Request body exceeds the ${maxBytes}-byte limit for this route`,
+        statusCode: 413,
+        path,
+        timestamp: new Date().toISOString(),
+        details: { maxBytes },
+      },
+    },
+    { status: 413 },
+  );
+}
+
 // SvelteKit decodes rest params, so an encoded "%2F" or "%3F" inside a path
 // segment would reach the API as "/" or "?". Forward the raw pathname instead.
 export function rawSubpath(url: URL, prefix: string): string {
@@ -75,7 +244,7 @@ export async function proxyRequest(
   clientAddress?: string,
 ): Promise<Response> {
   const headers = new Headers();
-  for (const name of FORWARDED_HEADERS) {
+  for (const name of forwardedHeaders) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
@@ -84,12 +253,24 @@ export async function proxyRequest(
   if (forwardedIp) headers.set("x-forwarded-for", forwardedIp);
 
   const hasBody = request.method !== "GET" && request.method !== "HEAD";
+  let body: ArrayBuffer | undefined;
+  if (hasBody) {
+    // Preserve multipart uploads and other binary bodies byte-for-byte. Reading
+    // them as text corrupts bytes that are not valid UTF-8 before forwarding.
+    const { pathname } = new URL(request.url);
+    const maxBytes = bodyLimitFor(pathname);
+    if (maxBytes === undefined) {
+      body = await request.arrayBuffer();
+    } else {
+      const limited = await readLimitedBody(request, maxBytes);
+      if (limited === null) return payloadTooLarge(pathname, maxBytes);
+      body = limited;
+    }
+  }
   const upstream = await fetch(targetUrl, {
     method: request.method,
     headers,
-    // Preserve multipart uploads and other binary bodies byte-for-byte. Reading
-    // them as text corrupts bytes that are not valid UTF-8 before forwarding.
-    body: hasBody ? await request.arrayBuffer() : undefined,
+    body,
     redirect: "manual",
     // Abort the upstream request when the browser disconnects. Without this, every
     // closed EventSource or aborted request keeps its API socket open until Bun's
@@ -98,20 +279,24 @@ export async function proxyRequest(
   });
 
   const responseHeaders = new Headers();
-  for (const name of RELAYED_RESPONSE_HEADERS) {
+  for (const name of relayedResponseHeaders) {
     const value = upstream.headers.get(name);
     if (value) responseHeaders.set(name, value);
   }
   // Bun's fetch decodes a compressed body but keeps the upstream content-encoding
   // and compressed content-length, which would truncate the decoded body.
   const contentLength = upstream.headers.get("content-length");
-  if (contentLength && !upstream.headers.has("content-encoding")) {
-    responseHeaders.set("content-length", contentLength);
-  }
+  const relayedLength = contentLength && !upstream.headers.has("content-encoding") ? contentLength : null;
+  if (relayedLength) responseHeaders.set("content-length", relayedLength);
   // Relay Set-Cookie so auth session cookies reach the browser.
   for (const cookie of upstream.headers.getSetCookie()) {
     responseHeaders.append("set-cookie", cookie);
   }
 
-  return new Response(upstream.body, { status: upstream.status, headers: responseHeaders });
+  // Bun sends a streamed body with chunked encoding and drops its content-length
+  // unless the body is in memory, so a body of modest, known size is read first.
+  const relayedBody = relayedLength && upstream.body && Number(relayedLength) <= IN_MEMORY_RESPONSE_BYTES
+    ? await upstream.arrayBuffer()
+    : upstream.body;
+  return new Response(relayedBody, { status: upstream.status, headers: responseHeaders });
 }

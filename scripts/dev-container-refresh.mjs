@@ -6,7 +6,8 @@
 //   3. podo dev down (all profiles, route, and gateway lifecycle)
 //   4. regenerate with dev-app.mjs --published (container-friendly, avoids the
 //      host file:-link dangling-symlink issue — docs/pitfalls.md P-008)
-//   5. restore .env.docker
+//   5. restore .env.docker and .podokit/dev.json, keeping the direct API paths
+//      the regenerated modules added
 //   6. podo dev up -d --build, then force-recreate api (env-cache fix so
 //      trustedOrigins pick up the restored CORS_ORIGIN — P-005 "Invalid origin").
 //      Going through podo reconnects the regenerated web container to the shared
@@ -17,11 +18,16 @@
 // Usage: node scripts/dev-container-refresh.mjs <appDir> [--add extra,mods]
 //   Modules default to the app's current set; --add appends more (e.g. a new module).
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, readFileSync, mkdirSync, mkdtempSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { externalPackageSpec, planRefreshModules, refreshHost } from "./dev-container-refresh-lib.mjs";
+import {
+  externalPackageSpec,
+  planRefreshModules,
+  refreshHost,
+  restoreDevConfig,
+} from "./dev-container-refresh-lib.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const cliEntry = join(repoRoot, "packages/cli/dist/index.js");
@@ -100,8 +106,10 @@ try {
     console.log("- restored .env.docker");
   }
   if (hasDevConfig) {
+    const backup = readFileSync(join(backupDir, "dev.json"), "utf8");
+    const regenerated = existsSync(devConfig) ? readFileSync(devConfig, "utf8") : backup;
     mkdirSync(dirname(devConfig), { recursive: true });
-    copyFileSync(join(backupDir, "dev.json"), devConfig);
+    writeFileSync(devConfig, restoreDevConfig(backup, regenerated));
     console.log("- restored .podokit/dev.json");
   }
 }

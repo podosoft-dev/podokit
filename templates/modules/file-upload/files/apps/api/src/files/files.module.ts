@@ -1,24 +1,29 @@
 import { AppException } from "@podosoft/podokit-contracts";
 import { Elysia, t } from "elysia";
-import { OBJECT_STORAGE, type ObjectStore } from "@podosoft/podokit-runtime";
+import { OBJECT_STORAGE, RATE_LIMIT_ROUTES, type ObjectStore } from "@podosoft/podokit-runtime";
+import { apiServerOptions } from "../config/server-options";
 import {
+  DATABASE,
+  LOGGER,
   REQUEST_IDENTITY,
   type AppPlugin,
   type ElysiaPlugin,
   type PodokitModule,
   type RequestIdentity,
+  type ServiceKey,
 } from "../core/services";
+import { ChunkedUploads } from "./chunked-uploads";
+import { allowedOrigins, chunkedUploadRoutes } from "./chunked-uploads.routes";
+import { uploadConfig } from "./upload-config";
 import { uploadAccess, uploadKey } from "./upload-keys";
+
+export const CHUNKED_UPLOADS = Symbol("chunked-uploads") as ServiceKey<ChunkedUploads>;
 
 export function filesRoutes(storage: ObjectStore, identity: RequestIdentity): ElysiaPlugin {
   return new Elysia({ name: "podokit.files" })
     .post("/files", async ({ request, body, set }) => {
       const key = uploadKey(await identity.userId(request), body.file.name);
-      await storage.put(
-        key,
-        new Uint8Array(await body.file.arrayBuffer()),
-        { contentType: body.file.type },
-      );
+      await storage.put(key, body.file, { contentType: body.file.type });
       set.status = 201;
       return { key, url: await storage.getDownloadUrl(key) };
     }, {
@@ -45,10 +50,34 @@ export function filesRoutes(storage: ObjectStore, identity: RequestIdentity): El
     });
 }
 
-const filesPlugin: AppPlugin = ({ services }) =>
-  filesRoutes(services.resolve(OBJECT_STORAGE), services.resolve(REQUEST_IDENTITY));
+const filesPlugin: AppPlugin = ({ env, services }) => {
+  const uploads = services.resolve(CHUNKED_UPLOADS);
+  const identity = services.resolve(REQUEST_IDENTITY);
+  // Registered here rather than in configure: rate-limit may configure later.
+  services.tryResolve(RATE_LIMIT_ROUTES)?.register({
+    method: "PUT",
+    pathPrefix: "/files/uploads",
+    profile: { name: "file-uploads", limit: uploads.settings.rateLimitMax },
+  });
+  return new Elysia({ name: "podokit.files.module" })
+    .use(filesRoutes(services.resolve(OBJECT_STORAGE), identity))
+    .use(chunkedUploadRoutes(uploads, identity, allowedOrigins(env.CORS_ORIGIN)));
+};
 
 export const filesModule: PodokitModule = {
   name: "file-upload",
+  configure: (env, services): void => {
+    const database = services.resolve(DATABASE);
+    const uploads = new ChunkedUploads({
+      sql: database.sql,
+      dialect: database.provider,
+      config: uploadConfig(process.env, apiServerOptions(env).maxRequestBodySize),
+      // Resolved on use: an application may replace these after this point.
+      storage: () => services.resolve(OBJECT_STORAGE),
+      logger: { warn: (details, message) => services.resolve(LOGGER).warn(details, message) },
+    });
+    services.register(CHUNKED_UPLOADS, uploads, () => uploads.close());
+    services.onStart(() => uploads.start());
+  },
   plugin: filesPlugin,
 };

@@ -8,6 +8,10 @@
     "audit-log",
     "file-upload"
   ],
+  "requiredProjectFiles": [
+    "apps/web/src/lib/components/ui/textarea/index.ts",
+    "apps/web/src/lib/components/ui/textarea/textarea.svelte"
+  ],
   "targetApp": "web",
   "dependencies": {
     "marked": "^14.1.4"
