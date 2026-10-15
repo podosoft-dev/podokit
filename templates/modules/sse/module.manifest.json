@@ -29,6 +29,7 @@
     "Use publishAsync for confirmed delivery, publish for best-effort delivery, or publishLocal for events already fanned out to every replica.",
     "Restrict who may subscribe to a topic with events.topics.register(topic, authorizer).",
     "Register EVENT_IDENTITY in app.extensions.ts to give streams roles beyond admin and an active organization.",
+    "In the browser, subscribe(topic, handler) from $lib/events shares one EventSource per tab.",
     "Select events=redis for multiple replicas or events=memory for a single process."
   ]
 }

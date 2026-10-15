@@ -633,6 +633,7 @@ describe("addModule (auth / better-auth)", () => {
     expect(service).toContain("publishAsync(event: EventEnvelope)");
     expect(service).toContain("publishLocal(event: EventEnvelope)");
     expect(service).toContain('this.readiness.register("events"');
+    expect(existsSync(join(project, "apps/web/src/lib/events.ts"))).toBe(true);
     const providerModule = readFileSync(
       join(project, "apps/api/src/events-provider-redis/events-redis.module.ts"),
       "utf8",

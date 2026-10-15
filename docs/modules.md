@@ -489,6 +489,7 @@ Server-Sent Events scoped by topic and audience. The module provides:
 - `POST /events`, a broadcast tool for administrators.
 - `EventsService`, which any module (a queue processor, for example) uses to
   publish.
+- A browser helper in `$lib/events` that shares one `EventSource` per tab.
 
 ```bash
 npx @podosoft/podokit add sse
@@ -630,6 +631,30 @@ Each connection buffers at most 256 events. A client that falls further behind
 loses the backlog and receives one `resync` instead of letting the queue grow
 without bound. A connection uses one heartbeat timer. When the client disconnects,
 the connection's subscription and timer are released at once.
+
+#### Browser helper
+
+`$lib/events` keeps one `EventSource` per tab and reference-counts subscribers.
+It reconnects with exponential backoff (one to thirty seconds, with jitter) and
+closes when the last subscriber leaves. A subscriber receives
+`{ resync: true, topic }` after a server `resync` and after the stream
+reconnects. Subscribe from `$effect` or `onMount`, so the stream opens only in
+the browser:
+
+```svelte
+<script lang="ts">
+  import { subscribe } from "$lib/events";
+
+  let progress = $state(0);
+
+  $effect(() =>
+    subscribe("job-progress", (message) => {
+      if (message.resync) void reload();
+      else progress = (message.data as { progress: number }).progress;
+    })
+  );
+</script>
+```
 
 #### Upgrading from the open broadcast stream
 
