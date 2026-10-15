@@ -15,11 +15,22 @@ const FORWARDED_HEADERS = [
   "origin",
   "referer",
   "user-agent",
+  "if-none-match",
+  "if-modified-since",
+  "range",
+  "if-range",
 ];
 const RELAYED_RESPONSE_HEADERS = [
   "content-type",
+  "content-disposition",
+  "content-range",
+  "accept-ranges",
   "location",
   "cache-control",
+  "etag",
+  "last-modified",
+  "vary",
+  "x-content-type-options",
   "retry-after",
   "ratelimit-limit",
   "ratelimit-remaining",
@@ -81,6 +92,12 @@ export async function proxyRequest(
   for (const name of RELAYED_RESPONSE_HEADERS) {
     const value = upstream.headers.get(name);
     if (value) responseHeaders.set(name, value);
+  }
+  // Bun's fetch decodes a compressed body but keeps the upstream content-encoding
+  // and compressed content-length, which would truncate the decoded body.
+  const contentLength = upstream.headers.get("content-length");
+  if (contentLength && !upstream.headers.has("content-encoding")) {
+    responseHeaders.set("content-length", contentLength);
   }
   // Relay Set-Cookie so auth session cookies reach the browser.
   for (const cookie of upstream.headers.getSetCookie()) {
