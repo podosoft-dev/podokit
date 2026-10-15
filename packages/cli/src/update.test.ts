@@ -1235,3 +1235,46 @@ describe("app-owned body limits", () => {
     expect(readFileSync(join(project, SEED), "utf8")).toBe(own);
   });
 });
+
+describe("app-owned asset paths", () => {
+  const SEED = "apps/web/src/lib/server/asset-paths.ts";
+  const DECISION = "apps/web/src/lib/server/runtime-context.ts";
+  const HOOKS = "apps/web/src/hooks.server.ts";
+
+  // The admin-dashboard layout before the hook consulted an app-owned asset list.
+  function templatesWithoutAssetPaths(): string {
+    const dir = join(tmp(), "old-templates");
+    cpSync(REPO_TEMPLATES, dir, { recursive: true });
+    const module = join(dir, "modules/admin-dashboard");
+    rmSync(join(module, "files", SEED));
+    rmSync(join(module, "files", DECISION));
+    rmSync(join(module, "files", "apps/web/src/lib/server/runtime-context.test.ts"));
+    const manifestPath = join(module, "module.manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { ownedGlobs: string[] };
+    manifest.ownedGlobs = manifest.ownedGlobs.filter((glob) => glob !== SEED);
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    return dir;
+  }
+
+  it("creates the owned list once for an existing app and keeps the app's entries", () => {
+    const oldTemplates = templatesWithoutAssetPaths();
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: project });
+    addModule({ projectRoot: project, module: "admin-dashboard", modulesDir: join(oldTemplates, "modules") });
+    expect(existsSync(join(project, SEED))).toBe(false);
+
+    const plan = planUpdate(project, REPO_TEMPLATES);
+    expect(plan.changes.find((change) => change.path === SEED)).toMatchObject({ action: "add", tier: "owned" });
+    expect(plan.changes.find((change) => change.path === DECISION)?.action).toBe("add");
+    applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+
+    expect(readFileSync(join(project, SEED), "utf8")).toContain("export const APP_ASSET_PATHS: readonly string[] = [];");
+    expect(readFileSync(join(project, HOOKS), "utf8")).toContain("needsRuntimeContext(event, { building, route })");
+    expect(readFilesLock(project)?.files[SEED]?.tier).toBe("owned");
+
+    writeFileSync(join(project, SEED), 'export const APP_ASSET_PATHS: readonly string[] = ["/docs"];\n');
+    expect(planUpdate(project, REPO_TEMPLATES).changes.find((change) => change.path === SEED)?.action).toBe("skip");
+    applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+    expect(readFileSync(join(project, SEED), "utf8")).toContain('"/docs"');
+  });
+});

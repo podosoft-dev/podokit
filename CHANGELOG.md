@@ -34,6 +34,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   the ceiling for every web route, since Bun rejects larger bodies before
   SvelteKit runs, so routes that need more use `apiPaths`. `podo update`
   creates the file once in existing apps and never overwrites it.
+- `apps/web/src/lib/server/asset-paths.ts` (admin-dashboard) is an
+  application-owned `APP_ASSET_PATHS` list. A `+server.ts` endpoint under a
+  listed prefix, such as one that serves documentation files under `/docs`,
+  answers without the API calls for the session and site settings, and sees an
+  anonymous `locals.user`. A page under the prefix still gets both, so it keeps
+  its sign-in and maintenance checks. `podo update` creates the file once and
+  never overwrites it.
 
 ### Upgrade notes
 
@@ -49,6 +56,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `podo dev` with more than one `webSocketPaths` entry rendered a Traefik
   `Path` matcher with several values, which Traefik v3 rejects, so none of the
   WebSocket paths reached the API. Each path now has its own matcher.
+- The admin-dashboard `hooks.server.ts` loads the session and site settings for
+  SvelteKit's 404 page, which renders the root layout. It skipped them for every
+  unmatched path, so a signed-in visitor on a missing page was sent to
+  `/login`, which sent them back. A missing image, script, or other subresource
+  still skips both calls, and so does prerendering, where the API is not
+  running. Files in `static/` and prerendered pages never reach the hook.
+
 
 ## [1.3.0] - 2026-10-15
 

@@ -984,6 +984,23 @@ your own public pages, such as marketing or legal pages and `robots.txt`, in
 its subpaths. The file is application-owned: `podo add` and `podo update` create
 it once, empty, and never overwrite it, and the managed `guards.ts` includes the
 list. Give those pages' loaders a fallback for when the API is down.
+
+`hooks.server.ts` loads the site settings and the session before SvelteKit
+answers a page, a `__data.json` request, a form action, a remote function, or
+its 404 page, because each of them can render a layout or read the signed-in
+user. It skips both API calls for the `/api` proxy, for a missing subresource
+(a `Sec-Fetch-Dest` such as `image` or `script` that SvelteKit answers with a
+plain 404), and while prerendering. Files in `static/` and prerendered pages
+never reach the hook. When a `+server.ts` endpoint serves files or feeds, for
+example documentation under `/docs`, add its prefix to `APP_ASSET_PATHS` in the
+application-owned `apps/web/src/lib/server/asset-paths.ts`. Requests under a
+listed prefix then skip both calls and see an anonymous `locals.user`, unless
+they ask for a page: a navigation that accepts HTML, a page data request, or a
+form action still loads the full context, so a page under that prefix keeps its
+sign-in and maintenance checks. Do not list an endpoint that reads
+`locals.user`. `podo add` and `podo update` create the file once, empty, and
+never overwrite it.
+
 Server loads read `/account/capabilities` through `getCapabilities(event)` from
 the managed `#lib/server/capabilities.js`. It fetches once per request, for a
 full render or a `__data.json` navigation, and every layout and page load of

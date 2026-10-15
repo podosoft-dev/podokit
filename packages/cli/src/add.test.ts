@@ -872,7 +872,14 @@ describe("addModule (auth / better-auth)", () => {
     expect(seedTeardown).toContain("if (!existsSync(userBaselineState)) return");
     expect(readFileSync(join(project, "apps/web/src/lib/components/site-runtime.svelte"), "utf8")).toContain("applyTheme");
     const hooks = readFileSync(join(project, "apps/web/src/hooks.server.ts"), "utf8");
-    expect(hooks).toContain("event.route.id === null");
+    expect(hooks).toContain("needsRuntimeContext(event, { building, route })");
+    expect(hooks).toContain('import { routes } from "$app/manifest";');
+    expect(readFileSync(join(project, "apps/web/src/lib/server/runtime-context.ts"), "utf8")).toContain(
+      'import { APP_ASSET_PATHS } from "./asset-paths";',
+    );
+    expect(readFileSync(join(project, "apps/web/src/lib/server/asset-paths.ts"), "utf8")).toContain(
+      "export const APP_ASSET_PATHS: readonly string[] = [];",
+    );
     expect(hooks).toContain('/(<html\\b[^>]*?\\slang=)(["\'])[^"\']*\\2/i');
     expect(hooks).toContain("event.locals.authUnavailable = false");
     expect(hooks).toContain("error.status !== 401");
