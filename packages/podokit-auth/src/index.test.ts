@@ -154,7 +154,7 @@ describe("config store snapshot", () => {
     const repository = fakeRepository(tables);
     const store = createConfigStore(repository);
 
-    await store.load();
+    const first = await store.load();
     await store.capabilitiesSnapshot();
     await store.settings();
     expect(repository.versions).toHaveBeenCalledTimes(1);
@@ -162,7 +162,7 @@ describe("config store snapshot", () => {
     expect(repository.listSettings).toHaveBeenCalledTimes(1);
 
     vi.advanceTimersByTime(3_100);
-    await store.load();
+    expect(await store.load()).toBe(first);
     expect(repository.versions).toHaveBeenCalledTimes(2);
     expect(repository.list).toHaveBeenCalledTimes(1);
     expect(repository.listSettings).toHaveBeenCalledTimes(1);
@@ -175,16 +175,18 @@ describe("config store snapshot", () => {
     };
     const repository = fakeRepository(tables);
     const store = createConfigStore(repository);
-    const magicLink = store.selectSettings((settings) => settings.get("magicLink") === "true");
-    await store.load();
+    const flags = vi.fn((settings: ReadonlyMap<string, string>) => settings.get("magicLink") === "true");
+    const magicLink = store.selectSettings(flags);
+    const config = await store.load();
     expect(await magicLink()).toBe(true);
 
     tables.settings = [{ key: "magicLink", value: "false", updatedAt: "2026-01-01T00:00:01Z" }];
     vi.advanceTimersByTime(3_100);
     expect(await magicLink()).toBe(false);
-    await store.load();
+    expect(await store.load()).toBe(config);
     expect(repository.list).toHaveBeenCalledTimes(1);
     expect(repository.listSettings).toHaveBeenCalledTimes(2);
+    expect(flags).toHaveBeenCalledTimes(2);
   });
 
   it("detects a deleted row that was not the newest on another replica", async () => {
@@ -213,9 +215,11 @@ describe("config store snapshot", () => {
     const list = vi.fn(async (): Promise<readonly AuthConfigRow[]> => rows);
     const store = createConfigStore({ list });
     const before = await store.currentVersion();
+    const config = await store.load();
 
     vi.advanceTimersByTime(3_100);
     expect(await store.currentVersion()).toBe(before);
+    expect(await store.load()).toBe(config);
 
     rows = rows.filter((row) => row.key !== socialKey("google"));
     vi.advanceTimersByTime(3_100);
@@ -241,11 +245,15 @@ describe("config store snapshot", () => {
     expect(repository.listSettings).toHaveBeenCalledTimes(2);
   });
 
-  it("keeps the version when a reload returns the same content", async () => {
+  it("keeps derived values when a reload returns the same content", async () => {
     const tables: FakeTables = { auth: [providerRow("google", "2026-01-01T00:00:00Z")], settings: [] };
     const store = createConfigStore(fakeRepository(tables));
     const version = await store.currentVersion();
+    const config = await store.load();
+    const smtp = await store.smtpConfig();
     store.invalidate();
+    expect(await store.load()).toBe(config);
+    expect(await store.smtpConfig()).toBe(smtp);
     expect(await store.currentVersion()).toBe(version);
   });
 
@@ -278,6 +286,12 @@ describe("config store snapshot", () => {
     release();
     await stale;
     expect((await store.capabilitiesSnapshot()).auditLog).toBe(false);
+  });
+
+  it("returns a capabilities copy that callers cannot use to corrupt the snapshot", async () => {
+    const store = createConfigStore(fakeRepository({ auth: [providerRow("google", "2026-01-01T00:00:00Z")], settings: [] }));
+    (await store.capabilitiesSnapshot()).providers.push("tampered");
+    expect((await store.capabilitiesSnapshot()).providers).toEqual(["google"]);
   });
 
   it("fails open to the environment and setting defaults when the probe fails", async () => {
@@ -342,12 +356,34 @@ describe("config store snapshot", () => {
     expect(statements.map((sql) => sql.includes("count(*)"))).toEqual([true, false, true]);
   });
 
-  it("honours a custom TTL", async () => {
-    const repository = fakeRepository({ auth: [], settings: [] });
+  it("decrypts SMTP once per change and honours a custom TTL", async () => {
+    const tables: FakeTables = {
+      auth: [{ key: "smtp", enabled: true, config: { host: "smtp.example.com", port: 465, secure: true, user: "mailer" }, secret: encryptSecret("pw"), updatedAt: "2026-01-01T00:00:00Z" }],
+      settings: [],
+    };
+    const repository = fakeRepository(tables);
     const store = createConfigStore(repository, { ttlMs: 500 });
-    await store.smtpConfig();
+    const smtp = await store.smtpConfig();
+    expect(smtp).toMatchObject({ host: "smtp.example.com", port: 465, secure: true, user: "mailer", pass: "pw" });
     vi.advanceTimersByTime(600);
-    await store.smtpConfig();
+    expect(await store.smtpConfig()).toBe(smtp);
     expect(repository.versions).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("secret key derivation", () => {
+  it("re-derives the key when BETTER_AUTH_SECRET changes", () => {
+    const previous = process.env.BETTER_AUTH_SECRET;
+    try {
+      process.env.BETTER_AUTH_SECRET = "first-secret-value-with-32-characters!";
+      const envelope = encryptSecret("value");
+      process.env.BETTER_AUTH_SECRET = "second-secret-value-with-32-characters";
+      expect(() => decryptSecret(envelope)).toThrow();
+      process.env.BETTER_AUTH_SECRET = "first-secret-value-with-32-characters!";
+      expect(decryptSecret(envelope)).toBe("value");
+    } finally {
+      if (previous === undefined) delete process.env.BETTER_AUTH_SECRET;
+      else process.env.BETTER_AUTH_SECRET = previous;
+    }
   });
 });

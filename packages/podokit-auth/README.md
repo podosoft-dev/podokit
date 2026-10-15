@@ -25,7 +25,8 @@ and by the `@better-auth/cli` during migrations.
   memory. It serves one snapshot for a short TTL (3 seconds by default). After
   the TTL it runs one cheap version probe (`count(*)` and `max("updatedAt")`)
   and reads a table again only when the probe changes, so a deleted row is
-  detected too.
+  detected too. Values derived from a snapshot (the decrypted config, the
+  capabilities snapshot, the SMTP config) are computed once per change.
 
 ## Install
 
@@ -56,11 +57,12 @@ const store = createConfigStore({
   versions: readVersions,                   // { authConfig, appSettings } change tokens
 });
 const magicLinkEnabled = store.selectSettings((settings) => settings.get("magicLink") !== "false");
-await magicLinkEnabled();
+await magicLinkEnabled();                   // recomputed only when the settings change
 ```
 
-A failed read falls back to the environment configuration and empty settings,
-and is retried after the TTL.
+Objects returned by `load()` and `smtpConfig()` are shared until the
+configuration changes; treat them as read-only. A failed read falls back to the
+environment configuration and empty settings, and is retried after the TTL.
 
 Set `sessionIdleTimeoutMinutes` to an integer from 5 through 10080 to build a
 sliding server-side session lifetime. `null` keeps better-auth's default

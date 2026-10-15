@@ -320,9 +320,10 @@ import { sendMail, actionEmail } from "../mail/mailer"; // path relative to your
 await sendMail({ to: "a@example.com", subject: "Hi", text: "Hello", html: actionEmail(...) });
 ```
 
-- **SMTP resolution** (applied live, ~3s TTL): admin Settings page (DB, when
-  `auth` is installed) → `SMTP_*` env → none, in which case messages are logged
-  to the console so dev links stay grabbable.
+- **SMTP resolution** (applied live through the shared settings snapshot, within
+  about 3 seconds): admin Settings page (DB, when `auth` is installed) → `SMTP_*`
+  env → none, in which case messages are logged to the console so dev links stay
+  grabbable. The transport is rebuilt only when the SMTP settings change.
 - Depends on no other module (reads the DB SMTP config defensively), so `auth`
   can require it without a cycle.
 - **Override the transport** (e.g. a provider SDK) from the owned DI slot

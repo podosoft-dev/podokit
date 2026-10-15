@@ -11,9 +11,10 @@ import {
 // fallback per field) and, optionally, the app_setting key/value table, as one
 // snapshot behind a short TTL. Safe to use from CJS/outside DI and by the runtime
 // rebuild. When the repository offers a version probe, a TTL tick costs one cheap
-// query and the tables are read again only after the probe changes. Secrets are
-// decrypted only here, in memory, at read time; a decrypt failure disables just
-// that item (logged by key name only — never the secret).
+// query and the tables are read again only after the probe changes. Values derived
+// from a snapshot (decrypted config, capabilities, SMTP, setting projections) are
+// computed once per change. Secrets are decrypted only here, in memory; a decrypt
+// failure disables just that item (logged by key name only — never the secret).
 
 export type SmtpConfig = { host: string; port: number; secure: boolean; user?: string; pass?: string; from?: string };
 
@@ -63,15 +64,17 @@ export type ConfigStoreOptions = {
 export interface ConfigStore {
   /** Opaque token that changes whenever auth_config changes (drives auth rebuild). */
   currentVersion(): Promise<string>;
-  /** Full resolved config for buildAuth(): DB rows override env field-by-field. */
+  /** Full resolved config for buildAuth(): DB rows override env field-by-field.
+   *  The same object is returned until auth_config changes; treat it as read-only. */
   load(): Promise<AuthConfig>;
-  /** SMTP transport config for the mailer (DB-first, env fallback). null → no SMTP. */
+  /** SMTP transport config for the mailer (DB-first, env fallback). null → no SMTP.
+   *  The same object is returned until auth_config changes; treat it as read-only. */
   smtpConfig(): Promise<SmtpConfig | null>;
   /** Booleans/provider names for the capabilities endpoint — never any secret. */
   capabilitiesSnapshot(): Promise<CapabilitiesSnapshot>;
   /** app_setting values by key. Empty when the repository has no settings or the read failed. */
   settings(): Promise<ReadonlyMap<string, string>>;
-  /** A getter for a projection of the current app_setting values. */
+  /** A getter for a projection of app_setting that is recomputed only when the settings change. */
   selectSettings<T>(project: (settings: ReadonlyMap<string, string>) => T): () => Promise<T>;
   /** Forget the snapshot so the next read reloads every table, e.g. after a local write. */
   invalidate(): void;
@@ -120,6 +123,20 @@ function object(value: unknown): Record<string, unknown> {
     }
   }
   return {};
+}
+
+/** Recompute only when the source object changes identity. */
+function memoize<S extends object, T>(source: () => S, compute: (value: S) => T): () => T {
+  let key: S | undefined;
+  let value: T | undefined;
+  return (): T => {
+    const current = source();
+    if (key !== current) {
+      value = compute(current);
+      key = current;
+    }
+    return value as T;
+  };
 }
 
 function oauthFromRow(row: AuthConfigRow): OAuthProviderConfig {
@@ -245,7 +262,7 @@ export function createConfigStore(
     return rows.length === 0 ? "env" : `db:${revision}`;
   }
 
-  // Keep the previous object when the content is unchanged.
+  // Keep the previous object when the content is unchanged, so memoized values survive.
   function nextAuth(rows: readonly AuthConfigRow[], token: string | null): void {
     // Without ORDER BY, row order may differ between reads of the same content.
     const sorted = [...rows].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
@@ -330,7 +347,9 @@ export function createConfigStore(
     settingsPart = { ...settingsPart, token: null };
   }
 
-  const config = (): AuthConfig => configFrom(auth.value, versionOf(auth.value));
+  const config = memoize(() => auth.value, (rows) => configFrom(rows, versionOf(rows)));
+  const capabilities = memoize(config, capabilitiesFrom);
+  const smtp = memoize(() => auth.value, smtpFrom);
 
   return {
     async currentVersion(): Promise<string> {
@@ -343,20 +362,22 @@ export function createConfigStore(
     },
     async smtpConfig(): Promise<SmtpConfig | null> {
       await sync();
-      return smtpFrom(auth.value);
+      return smtp();
     },
     async capabilitiesSnapshot(): Promise<CapabilitiesSnapshot> {
       await sync();
-      return capabilitiesFrom(config());
+      const snapshot = capabilities();
+      return { ...snapshot, providers: [...snapshot.providers] };
     },
     async settings(): Promise<ReadonlyMap<string, string>> {
       await sync();
       return settingsPart.value;
     },
     selectSettings<T>(project: (settings: ReadonlyMap<string, string>) => T): () => Promise<T> {
+      const select = memoize(() => settingsPart.value, project);
       return async (): Promise<T> => {
         await sync();
-        return project(settingsPart.value);
+        return select();
       };
     },
     invalidate,
