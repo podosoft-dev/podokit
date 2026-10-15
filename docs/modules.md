@@ -885,8 +885,10 @@ without Redis and handlers stay registered across reconnects. The API starts
 while Redis is down; the transport reconnects in the background and subscribes
 its channel again on a fresh connection after every drop, because Bun keeps the
 listener of a dropped connection but not its server subscription. Publishing
-fails at once while it is disconnected, which the `POST /events` route answers
-with 503 `EVENTS_TRANSPORT_UNAVAILABLE`. Events published while a replica is
+fails at once while it is disconnected, and after `REDIS_COMMAND_TIMEOUT_MS`
+when Redis keeps the connection open without answering, which the
+`POST /events` route answers with 503 `EVENTS_TRANSPORT_UNAVAILABLE`. A
+connection that timed out is closed and reopened. Events published while a replica is
 disconnected are not replayed to it; its open streams receive one `resync` once
 it is subscribed again. Settings change events (`config.changed`) use the same
 subscription, so replicas return from the settings TTL to immediate updates
@@ -908,7 +910,16 @@ configuration without logging credentials.
 The API starts while Redis is down and reconnects in the background, also after
 Redis restarts (see [Health probes](deployment.md#health-probes)). While the
 connection is closed, commands fail at once instead of queueing, so the cache
-endpoints and the rate limiter answer with an error rather than waiting.
+endpoints and the rate limiter answer with an error rather than waiting. A
+command that Redis does not answer within `REDIS_COMMAND_TIMEOUT_MS` (default
+`1000`), for example while the server is paused, fails with
+`RedisCommandTimeoutError`. Redis answers a connection's commands in order, so
+the connection is then closed, which fails the commands waiting behind it, and
+reopened in the background. The demo cache endpoints answer `503` with
+`CACHE_UNAVAILABLE` and `Retry-After` while Redis cannot be reached. Run other
+commands through `redis.command((client) => client.hget(key, field))` instead of
+`redis.client` so they are bounded the same way. A write that timed out may still
+be applied if the server resumes.
 `RedisService.subscribe(channel, handler)` resolves without waiting for Redis:
 the subscription starts once Redis is reachable and is opened again after every
 reconnect on a fresh connection. Messages published while it is closed are not

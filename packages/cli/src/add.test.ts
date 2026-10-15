@@ -667,9 +667,12 @@ describe("addModule (auth / better-auth)", () => {
     );
     expect(redisService).toContain("redisConnectionUrl()");
     expect(redisService).toContain("autoReconnect: false");
+    expect(redisService).toContain("withReplyTimeout(send(this.client)");
+    expect(readFileSync(join(project, ".env.example"), "utf8")).toContain("# REDIS_COMMAND_TIMEOUT_MS=1000");
     const redisModule = readFileSync(join(project, "apps/api/src/redis/redis.module.ts"), "utf8");
     expect(redisModule).toContain('register("redis", () => redis.ping())');
     expect(redisModule).toContain('services.supervise("redis", redis)');
+    expect(redisModule).toContain('"CACHE_UNAVAILABLE"');
   });
 
   it("job-progress composes the selected jobs and events providers", () => {

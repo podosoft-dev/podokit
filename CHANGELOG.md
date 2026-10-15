@@ -193,6 +193,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   the stream enqueues and closes within one pull. `LocalObjectStore` now reads
   objects up to 2 MiB whole; larger ones still stream in 64 KiB chunks and are
   sent chunked.
+- Redis commands no longer hang while Redis keeps the connection open without
+  answering, as a paused container does. `RedisService` and the Redis `CACHE`
+  store had no reply timeout, so cache reads and writes waited indefinitely,
+  and the connection still looked open, so neither readiness nor the
+  supervisor noticed. Each command now fails after `REDIS_COMMAND_TIMEOUT_MS`
+  (default `1000`) with `RedisCommandTimeoutError`, and the connection is
+  closed, which fails the commands queued behind it, and reopened in the
+  background. The `events-redis` transport bounds publishing and its channel
+  subscription the same way, and the demo `/cache` endpoints answer `503`
+  `CACHE_UNAVAILABLE` instead of `500` while Redis cannot be reached. Run
+  commands that `RedisService` does not wrap through `redis.command(...)` to
+  bound them too.
+
 - Better Auth endpoints answer `503` with `DATABASE_UNAVAILABLE` while
   PostgreSQL is unreachable. `POST /api/auth/sign-in/email`,
   `GET /api/auth/get-session` with a session, and every route that needs a

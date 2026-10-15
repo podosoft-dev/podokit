@@ -48,3 +48,6 @@ REDIS_DB=0
 # REDIS_USERNAME=
 # REDIS_PASSWORD=
 REDIS_TLS=false
+# Longest wait in milliseconds for Redis to answer one command. A command that
+# gets no reply in time fails, and its connection is closed and reopened.
+# REDIS_COMMAND_TIMEOUT_MS=1000

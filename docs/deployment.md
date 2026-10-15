@@ -491,7 +491,10 @@ each start hook that reads the database, such as the auth module's
 configuration preload. After that the API keeps reconnecting in the background,
 starting after 250 ms and doubling the wait up to 5 seconds. A Redis connection
 that drops later is reopened the same way, while the PostgreSQL pool opens
-connections as queries need them. Until a dependency is back, `GET /health`
+connections as queries need them. A Redis server that keeps the connection open
+but stops answering, such as a paused container, fails each command after
+`REDIS_COMMAND_TIMEOUT_MS`, and that connection is closed and reopened the same
+way. Until a dependency is back, `GET /health`
 answers `200`, `GET /health/ready` answers `503`, and requests that need it fail
 with their usual errors, such as `DATABASE_UNAVAILABLE` or
 `RATE_LIMIT_UNAVAILABLE`, instead of waiting for it. These `503` responses
@@ -505,6 +508,7 @@ dependency is down and becomes ready again without a restart.
 | --- | --- | --- |
 | `READINESS_CHECK_TIMEOUT_MS` | `800` | The longest one check may run. A slower check is reported down, and the API logs `Readiness check failed` with the check name and the reason. |
 | `READINESS_CACHE_MS` | `2000` | How long a finished result is reused. Concurrent requests always share one evaluation. `0` checks on every request. |
+| `REDIS_COMMAND_TIMEOUT_MS` | `1000` | How long the API waits for Redis to answer one command before the command fails and its connection is reopened. |
 
 Set them in the profile's `runtimeConfig`. Keep the check timeout below the probe
 timeout, so a slow dependency is reported as down instead of making the probe

@@ -9,7 +9,8 @@
     "apps/api/src/health/readiness.service.ts"
   ],
   "requiredProjectContents": {
-    "apps/api/src/core/services.ts": ["supervise(name: string, connection: SupervisedConnection): void {"]
+    "apps/api/src/core/services.ts": ["supervise(name: string, connection: SupervisedConnection): void {"],
+    "apps/api/src/config/redis.connection.ts": ["export async function withReplyTimeout<T>("]
   },
   "managedGlobs": [
     "apps/api/src/redis/**",

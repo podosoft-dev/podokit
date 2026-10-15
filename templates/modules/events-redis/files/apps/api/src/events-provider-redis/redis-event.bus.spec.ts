@@ -1,12 +1,17 @@
 import type { RedisClient } from "bun";
 import { describe, expect, it } from "bun:test";
+import { RedisCommandTimeoutError } from "../config/redis.connection";
 import { RedisEventBus } from "./redis-event.bus";
 
 type Listener = (message: string, channel: string) => void;
 
-/** One Redis server shared by fake clients: it can go down, and it drops every connection when it does. */
+/**
+ * One Redis server shared by fake clients: it can go down, and it drops every
+ * connection when it does. While paused it keeps connections open and answers nothing.
+ */
 class FakeRedis {
   up = true;
+  paused = false;
   readonly clients: FakeClient[] = [];
 
   client(): RedisClient {
@@ -36,8 +41,17 @@ class FakeClient {
   onclose: ((error: Error) => void) | null = null;
   readonly channels = new Set<string>();
   listener?: Listener;
+  private readonly pending = new Set<(error: Error) => void>();
 
   constructor(private readonly server: FakeRedis) {}
+
+  /** Never answers while the server is paused; closing the connection fails the command. */
+  private answer<T>(value: () => T): Promise<T> {
+    if (!this.server.paused) return Promise.resolve(value());
+    return new Promise<T>((_resolve, reject) => {
+      this.pending.add(reject);
+    });
+  }
 
   connect(): Promise<void> {
     if (!this.server.up) {
@@ -49,21 +63,23 @@ class FakeClient {
   }
 
   ping(): Promise<string> {
-    return this.connected ? Promise.resolve("PONG") : Promise.reject(new Error("Connection closed"));
+    return this.connected ? this.answer(() => "PONG") : Promise.reject(new Error("Connection closed"));
   }
 
   publish(channel: string, message: string): Promise<number> {
     if (!this.connected) {
       return Promise.reject(new Error("Connection is closed and offline queue is disabled"));
     }
-    return Promise.resolve(this.server.deliver(channel, message));
+    return this.answer(() => this.server.deliver(channel, message));
   }
 
   subscribe(channel: string, listener: Listener): Promise<number> {
     if (!this.connected) return Promise.reject(new Error("Connection closed"));
-    this.channels.add(channel);
-    this.listener = listener;
-    return Promise.resolve(this.channels.size);
+    return this.answer(() => {
+      this.channels.add(channel);
+      this.listener = listener;
+      return this.channels.size;
+    });
   }
 
   drop(): void {
@@ -77,12 +93,17 @@ class FakeClient {
   close(): void {
     if (!this.connected) return;
     this.connected = false;
+    for (const reject of this.pending) reject(new Error("Connection closed"));
+    this.pending.clear();
     this.onclose?.(new Error("Connection closed"));
   }
 }
 
 function bus(server: FakeRedis): RedisEventBus {
-  return new RedisEventBus({ EVENTS_REDIS_CHANNEL: "test:events" }, () => server.client());
+  return new RedisEventBus(
+    { EVENTS_REDIS_CHANNEL: "test:events", REDIS_COMMAND_TIMEOUT_MS: "50" },
+    () => server.client(),
+  );
 }
 
 describe("RedisEventBus reconnects", () => {
@@ -156,5 +177,48 @@ describe("RedisEventBus reconnects", () => {
 
     events.close();
     expect(lost).toEqual([]);
+  });
+
+  it("fails a publish Redis does not answer and hands the publisher to the supervisor", async () => {
+    const server = new FakeRedis();
+    const events = bus(server);
+    const lost: unknown[] = [];
+    events.onLost((reason) => { lost.push(reason); });
+    let interruptions = 0;
+    events.onInterruption(() => { interruptions += 1; });
+    const received: unknown[] = [];
+    await events.subscribe("sse", (event) => { received.push(event); });
+    await events.connect();
+
+    server.paused = true;
+    const started = Date.now();
+    await expect(events.publish("sse", { id: 1 })).rejects.toBeInstanceOf(RedisCommandTimeoutError);
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(lost.length).toBe(1);
+    await expect(events.ready()).rejects.toThrow("Connection closed");
+
+    server.paused = false;
+    await events.connect();
+    await events.publish("sse", { id: 2 });
+    expect(received).toEqual([{ id: 2 }]);
+    expect(interruptions).toBe(0);
+    events.close();
+  });
+
+  it("fails a subscription Redis does not confirm and subscribes on the next attempt", async () => {
+    const server = new FakeRedis();
+    server.paused = true;
+    const events = bus(server);
+    let interruptions = 0;
+    events.onInterruption(() => { interruptions += 1; });
+
+    await expect(events.connect()).rejects.toBeInstanceOf(RedisCommandTimeoutError);
+    await expect(events.ready()).rejects.toThrow("not subscribed");
+
+    server.paused = false;
+    await events.connect();
+    await events.ready();
+    expect(interruptions).toBe(1);
+    events.close();
   });
 });

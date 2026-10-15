@@ -1,6 +1,10 @@
 import { RedisClient } from "bun";
 import type { EventBus, EventHandler, Unsubscribe } from "@podosoft/podokit-runtime";
-import { redisConnectionUrl } from "../config/redis.connection";
+import {
+  redisCommandTimeoutMs,
+  redisConnectionUrl,
+  withReplyTimeout,
+} from "../config/redis.connection";
 import type { SupervisedConnection } from "../core/services";
 
 /**
@@ -26,6 +30,7 @@ export class RedisEventBus implements EventBus, SupervisedConnection {
   private readonly publisher: RedisClient;
   private readonly channel: string;
   private readonly maxEventBytes: number;
+  private readonly commandTimeoutMs: number;
   private readonly createClient: () => RedisClient;
   private readonly handlers = new Map<string, Set<EventHandler>>();
   private readonly interruptionListeners = new Set<() => void>();
@@ -48,6 +53,7 @@ export class RedisEventBus implements EventBus, SupervisedConnection {
     if (!Number.isSafeInteger(this.maxEventBytes) || this.maxEventBytes < 1) {
       throw new Error("SSE_MAX_EVENT_BYTES must be a positive integer");
     }
+    this.commandTimeoutMs = redisCommandTimeoutMs(env);
   }
 
   onLost(listener: (reason: unknown) => void): void {
@@ -71,7 +77,7 @@ export class RedisEventBus implements EventBus, SupervisedConnection {
   /** Rejects until the channel is subscribed and while the publisher cannot reach Redis. */
   async ready(): Promise<void> {
     if (!this.subscriber) throw new Error("Event transport is not subscribed");
-    await this.publisher.ping();
+    await this.send(() => this.publisher.ping());
   }
 
   async publish(topic: string, event: unknown): Promise<void> {
@@ -80,7 +86,7 @@ export class RedisEventBus implements EventBus, SupervisedConnection {
     if (Buffer.byteLength(message, "utf8") > this.maxEventBytes) {
       throw new Error(`Event exceeds maxEventBytes (${this.maxEventBytes})`);
     }
-    await this.publisher.publish(this.channel, message);
+    await this.send(() => this.publisher.publish(this.channel, message));
   }
 
   subscribe(topic: string, handler: EventHandler): Promise<Unsubscribe> {
@@ -109,6 +115,11 @@ export class RedisEventBus implements EventBus, SupervisedConnection {
     this.publisher.close();
   }
 
+  /** Fails a publisher command Redis does not answer in time and closes the connection for the supervisor to reopen. */
+  private async send<T>(command: () => Promise<T>): Promise<T> {
+    return withReplyTimeout(command(), this.commandTimeoutMs, () => this.publisher.close());
+  }
+
   private readonly receive = (message: string): void => {
     if (Buffer.byteLength(message, "utf8") > this.maxEventBytes) return;
     try {
@@ -135,7 +146,11 @@ export class RedisEventBus implements EventBus, SupervisedConnection {
     };
     try {
       await subscriber.connect();
-      await subscriber.subscribe(this.channel, this.receive);
+      await withReplyTimeout(
+        subscriber.subscribe(this.channel, this.receive),
+        this.commandTimeoutMs,
+        () => subscriber.close(),
+      );
     } catch (error) {
       subscriber.close();
       throw error;

@@ -1,5 +1,10 @@
 import { RedisClient } from "bun";
-import { redisConnectionUrl } from "../config/redis.connection";
+import {
+  RedisCommandTimeoutError,
+  redisCommandTimeoutMs,
+  redisConnectionUrl,
+  withReplyTimeout,
+} from "../config/redis.connection";
 import type { SupervisedConnection } from "../core/services";
 
 export type RedisMessageHandler = (message: string) => void;
@@ -27,7 +32,10 @@ export class RedisService implements SupervisedConnection {
   private lostListener?: (reason: unknown) => void;
   private closed = false;
 
-  constructor(private readonly createClient: () => RedisClient = createRedisClient) {
+  constructor(
+    private readonly createClient: () => RedisClient = createRedisClient,
+    private readonly commandTimeoutMs = redisCommandTimeoutMs(),
+  ) {
     this.client = createClient();
     this.client.onclose = (error) => this.report(error);
   }
@@ -39,29 +47,44 @@ export class RedisService implements SupervisedConnection {
   /** Opens the command connection and restores every subscription. */
   async connect(): Promise<void> {
     if (!this.client.connected) await this.client.connect();
-    await this.client.ping();
+    await this.ping();
     if (this.channels.size > 0) await this.listen();
   }
 
+  /**
+   * Runs `send` on the command connection. When Redis does not answer within
+   * `REDIS_COMMAND_TIMEOUT_MS`, it fails with `RedisCommandTimeoutError` and the
+   * connection is closed and reopened by the supervisor. Use it for commands
+   * this service does not wrap, instead of calling `client` directly.
+   */
+  async command<T>(send: (client: RedisClient) => Promise<T>): Promise<T> {
+    return withReplyTimeout(send(this.client), this.commandTimeoutMs, () => this.client.close());
+  }
+
+  /** Whether a failed command means Redis could not be reached, rather than that it refused the command. */
+  isUnavailable(error: unknown): boolean {
+    return error instanceof RedisCommandTimeoutError || !this.client.connected;
+  }
+
   async ping(): Promise<void> {
-    await this.client.ping();
+    await this.command((client) => client.ping());
   }
 
   get(key: string): Promise<string | null> {
-    return this.client.get(key);
+    return this.command((client) => client.get(key));
   }
 
   async set(key: string, value: string, ttlSeconds?: number): Promise<void> {
-    await this.client.set(key, value);
-    if (ttlSeconds !== undefined) await this.client.expire(key, ttlSeconds);
+    await this.command((client) => client.set(key, value));
+    if (ttlSeconds !== undefined) await this.command((client) => client.expire(key, ttlSeconds));
   }
 
   del(key: string): Promise<number> {
-    return this.client.del(key);
+    return this.command((client) => client.del(key));
   }
 
   publish(channel: string, message: string): Promise<number> {
-    return this.client.publish(channel, message);
+    return this.command((client) => client.publish(channel, message));
   }
 
   /**
@@ -103,7 +126,11 @@ export class RedisService implements SupervisedConnection {
     const subscriber = this.subscriber ?? await (this.opening ??= this.openSubscriber());
     const missing = [...this.channels.keys()].filter((channel) => !this.active.has(channel));
     if (missing.length === 0) return;
-    await subscriber.subscribe(missing, this.dispatch);
+    await withReplyTimeout(
+      subscriber.subscribe(missing, this.dispatch),
+      this.commandTimeoutMs,
+      () => subscriber.close(),
+    );
     if (this.subscriber !== subscriber) return;
     for (const channel of missing) this.active.add(channel);
   }

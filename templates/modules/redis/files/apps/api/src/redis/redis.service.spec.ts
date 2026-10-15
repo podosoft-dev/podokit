@@ -1,12 +1,18 @@
 import type { RedisClient } from "bun";
 import { describe, expect, it } from "bun:test";
+import { RedisCommandTimeoutError } from "../config/redis.connection";
 import { RedisService } from "./redis.service";
 
 type Listener = (message: string, channel: string) => void;
 
-/** One Redis server shared by fake clients: it can go down, and it drops every connection when it does. */
+/**
+ * One Redis server shared by fake clients: it can go down, and it drops every
+ * connection when it does. While paused it keeps connections open and answers nothing.
+ */
 class FakeRedis {
   up = true;
+  paused = false;
+  readonly values = new Map<string, string>();
   readonly clients: FakeClient[] = [];
 
   client(): RedisClient {
@@ -36,8 +42,29 @@ class FakeClient {
   onclose: ((error: Error) => void) | null = null;
   readonly channels = new Set<string>();
   listener?: Listener;
+  private readonly pending = new Set<(error: Error) => void>();
 
   constructor(private readonly server: FakeRedis) {}
+
+  /** Answers with `value` unless disconnected, or never while the server is paused; closing fails it. */
+  private reply<T>(value: () => T): Promise<T> {
+    if (!this.connected) return Promise.reject(new Error("Connection closed"));
+    if (!this.server.paused) return Promise.resolve(value());
+    return new Promise<T>((_resolve, reject) => {
+      this.pending.add(reject);
+    });
+  }
+
+  get(key: string): Promise<string | null> {
+    return this.reply(() => this.server.values.get(key) ?? null);
+  }
+
+  set(key: string, value: string): Promise<"OK"> {
+    return this.reply(() => {
+      this.server.values.set(key, value);
+      return "OK" as const;
+    });
+  }
 
   connect(): Promise<void> {
     if (!this.server.up) {
@@ -49,7 +76,7 @@ class FakeClient {
   }
 
   ping(): Promise<string> {
-    return this.connected ? Promise.resolve("PONG") : Promise.reject(new Error("Connection closed"));
+    return this.reply(() => "PONG");
   }
 
   subscribe(channels: string | string[], listener: Listener): Promise<number> {
@@ -75,9 +102,49 @@ class FakeClient {
   close(): void {
     if (!this.connected) return;
     this.connected = false;
+    for (const reject of this.pending) reject(new Error("Connection closed"));
+    this.pending.clear();
     this.onclose?.(new Error("Connection closed"));
   }
 }
+
+describe("RedisService commands", () => {
+  it("fails a command Redis does not answer and hands the connection to the supervisor", async () => {
+    const server = new FakeRedis();
+    const service = new RedisService(() => server.client(), 50);
+    const lost: unknown[] = [];
+    service.onLost((reason) => { lost.push(reason); });
+    await service.connect();
+    await service.set("greeting", "hi");
+
+    server.paused = true;
+    const started = Date.now();
+    const error = await service.get("greeting").then(() => undefined, (reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(RedisCommandTimeoutError);
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(service.isUnavailable(error)).toBe(true);
+    expect(service.client.connected).toBe(false);
+    expect(lost.length).toBe(1);
+    await expect(service.get("greeting")).rejects.toThrow("Connection closed");
+
+    server.paused = false;
+    await service.connect();
+    await expect(service.get("greeting")).resolves.toBe("hi");
+    expect(service.isUnavailable(new Error("WRONGTYPE Operation against a key"))).toBe(false);
+    service.close();
+  });
+
+  it("fails a reconnect attempt that Redis accepts but does not answer", async () => {
+    const server = new FakeRedis();
+    server.paused = true;
+    const service = new RedisService(() => server.client(), 50);
+
+    await expect(service.connect()).rejects.toBeInstanceOf(RedisCommandTimeoutError);
+    expect(service.client.connected).toBe(false);
+    service.close();
+  });
+});
 
 describe("RedisService subscriptions", () => {
   it("subscribes once Redis becomes reachable after starting without it", async () => {
