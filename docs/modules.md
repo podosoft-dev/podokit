@@ -226,7 +226,9 @@ migration Job before a rolling deployment.
   in-process snapshot. The replica that handled a write applies it before responding. Other
   replicas run one version probe (row count and latest update time of both tables) at most every
   3 seconds, and read the tables again only when the probe changes, so they converge within
-  3 seconds, deleted providers included.
+  3 seconds, deleted providers included. When the app has an events provider (`events-redis`
+  across replicas), a write also publishes `config.changed` so the other replicas reload at once;
+  without one they rely on the probe.
 - **Social login is dynamic.** The "Social login" card manages providers add/edit/delete: pick
   any better-auth-supported provider (Google, GitHub, Apple, Microsoft, Discord, Kakao, Naver,
   … — see `auth/auth-config.ts` `SUPPORTED_SOCIAL_PROVIDERS`), paste its client id/secret, and it

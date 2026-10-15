@@ -35,13 +35,17 @@ describe("SettingsService", () => {
     setSystemTime();
   });
 
-  test("applies a local write at once", async () => {
+  test("applies a local write at once and reports the change", async () => {
     const { sql, store } = table();
-    const settings = new SettingsService(sql, store());
+    let changes = 0;
+    const settings = new SettingsService(sql, store(), async () => {
+      changes += 1;
+    });
     expect(await settings.getBool("require2fa")).toBe(false);
     const flags = await settings.setMany({ require2fa: true });
     expect(flags.require2fa).toBe(true);
     expect(await settings.getBool("require2fa")).toBe(true);
+    expect(changes).toBe(1);
   });
 
   test("follows another replica's write within the snapshot TTL", async () => {

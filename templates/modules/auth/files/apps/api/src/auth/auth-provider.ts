@@ -1,6 +1,7 @@
 import type { AuthConfig } from "@podosoft/podokit-auth";
 import { auth as bootstrapAuth, buildAuth } from "./auth";
 import { authConfigStore } from "./auth-config-store";
+import { publishConfigChanged } from "./config-events";
 
 // Runtime auth instance that rebuilds when the DB config changes, so admin edits
 // (OAuth credentials, SMTP, server-enforced toggles) apply WITHOUT a restart.
@@ -40,13 +41,15 @@ export async function refreshIfStale(): Promise<void> {
   }
 }
 
-/** Apply a successful in-process admin write before the response is returned. */
+/** Apply a successful in-process admin write before the response is returned,
+ *  and tell other replicas when an events provider is installed. */
 export async function refreshAuthNow(): Promise<void> {
   authConfigStore.invalidate();
   // Force a rebuild even if the write left the version token unchanged.
   currentVersion = `stale:${Date.now()}`;
   failedVersion = null;
   await refreshIfStale();
+  await publishConfigChanged();
 }
 
 // Stable handler reference the adapter captures once; redispatches per request.

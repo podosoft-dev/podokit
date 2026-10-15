@@ -15,6 +15,7 @@ export class SettingsService {
   constructor(
     private readonly sql: SQL,
     private readonly snapshot: SettingsSnapshot,
+    private readonly onChange: () => Promise<void> = async () => undefined,
   ) {
     this.current = snapshot.selectSettings(flagsFrom);
   }
@@ -49,6 +50,7 @@ export class SettingsService {
       // Also after a failure: earlier rows of the update may have been written.
       await this.refresh();
     }
+    await this.onChange();
     return this.flags();
   }
 }
