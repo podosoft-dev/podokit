@@ -7,6 +7,9 @@
     "apps/api/src/config/providers.ts",
     "apps/api/src/config/redis.connection.ts"
   ],
+  "requiredProjectContents": {
+    "apps/api/src/core/services.ts": ["supervise(name: string, connection: SupervisedConnection): void {"]
+  },
   "managedGlobs": [
     "apps/api/src/events-provider-redis/**"
   ],

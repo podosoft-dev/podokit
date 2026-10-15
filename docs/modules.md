@@ -873,6 +873,18 @@ including its topic and audience, and each replica filters for its own streams.
 and on receipt. Delivery is at-most-once. See [`sse`](#sse) for the publishing
 API.
 
+The Redis transport keeps its handlers in the process, so `subscribe` resolves
+without Redis and handlers stay registered across reconnects. The API starts
+while Redis is down; the transport reconnects in the background and subscribes
+its channel again on a fresh connection after every drop, because Bun keeps the
+listener of a dropped connection but not its server subscription. Publishing
+fails at once while it is disconnected, which the `POST /events` route answers
+with 503 `EVENTS_TRANSPORT_UNAVAILABLE`. Events published while a replica is
+disconnected are not replayed to it; its open streams receive one `resync` once
+it is subscribed again. Settings change events (`config.changed`) use the same
+subscription, so replicas return from the settings TTL to immediate updates
+when Redis returns.
+
 ### `redis`
 
 Bun's native Redis client with `get`/`set`/`del` and `publish`/`subscribe`,

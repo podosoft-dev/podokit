@@ -193,6 +193,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   the stream enqueues and closes within one pull. `LocalObjectStore` now reads
   objects up to 2 MiB whole; larger ones still stream in 64 KiB chunks and are
   sent chunked.
+- The `events-redis` transport starts while Redis is down and keeps delivering
+  across replicas after Redis restarts. Startup waited on its connection, logged
+  `Settings change events are unavailable; replicas converge on the settings
+  TTL`, and then failed. When Redis restarted under a running API, Bun
+  reconnected without the channel subscription, and stopped reconnecting after
+  about 30 seconds of outage, so SSE events and settings change events from
+  other replicas silently stopped arriving. Handlers are now registered locally
+  without waiting for Redis, the
+  registry reconnects the transport in the background, and the channel is
+  subscribed again on a fresh connection after every drop. Open SSE streams
+  receive `resync` once delivery resumes, and the `events` readiness check
+  reports the transport down until it is subscribed.
+
 - The `redis` module no longer stops the API from starting while Redis is down,
   and it recovers from a Redis restart without restarting the API. The client
   gave up after its first failed reconnect, so the API exited at startup with

@@ -649,6 +649,7 @@ describe("addModule (auth / better-auth)", () => {
       "utf8",
     );
     expect(providerModule).not.toContain('register("events"');
+    expect(providerModule).toContain('services.supervise("events", events)');
   });
 
   it("adds redis with a client and cache endpoints", () => {
