@@ -37,36 +37,56 @@ async function objectBuffer(object: ObjectData): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
+// Every page render reads the site settings, so one short-lived snapshot serves
+// concurrent renders. Writes on this replica clear it immediately; another
+// replica sees the change within this window.
+const SNAPSHOT_TTL_MS = 3_000;
+
+interface Snapshot {
+  values: Record<string, string>;
+  expiresAt: number;
+}
+
 export class SiteSettingsService {
+  private snapshot: Snapshot | null = null;
+  private pending: Promise<Record<string, string>> | null = null;
+  private generation = 0;
+
   constructor(
     private readonly sql: SQL,
     private readonly storage: ObjectStore,
+    private readonly now: () => number = Date.now,
   ) {}
 
+  /** Every `site.*` setting, keyed without the prefix. */
   async getAll(): Promise<Record<string, string>> {
-    const rows = await this.sql<SiteSettingRow[]>`
-      SELECT "key", "value" FROM "app_setting" WHERE "key" LIKE 'site.%'
-    `;
-    const result: Record<string, string> = {};
-    for (const row of rows) result[row.key.slice(PREFIX.length)] = row.value;
-    return result;
+    const snapshot = this.snapshot;
+    if (snapshot && snapshot.expiresAt > this.now()) return { ...snapshot.values };
+    return { ...(await this.load()) };
   }
 
   async get(key: string): Promise<string | null> {
-    const rows = await this.sql<SiteSettingRow[]>`
-      SELECT "key", "value" FROM "app_setting" WHERE "key" = ${PREFIX + key}
-    `;
-    return rows[0]?.value ?? null;
+    return (await this.getAll())[key] ?? null;
   }
 
   async setMany(update: Record<string, string>): Promise<Record<string, string>> {
-    for (const [key, value] of Object.entries(update)) {
-      await this.sql`
-        INSERT INTO "app_setting" ("key", "value", "updatedAt")
-        VALUES (${PREFIX + key}, ${value}, CURRENT_TIMESTAMP)
-        ON CONFLICT ("key") DO UPDATE
-        SET "value" = EXCLUDED."value", "updatedAt" = CURRENT_TIMESTAMP
-      `;
+    const entries = Object.entries(update);
+    if (entries.length > 0) {
+      try {
+        await this.sql.begin(async (tx) => {
+          for (const [key, value] of entries) {
+            await tx`
+              INSERT INTO "app_setting" ("key", "value", "updatedAt")
+              VALUES (${PREFIX + key}, ${value}, CURRENT_TIMESTAMP)
+              ON CONFLICT ("key") DO UPDATE
+              SET "value" = EXCLUDED."value", "updatedAt" = CURRENT_TIMESTAMP
+            `;
+          }
+        });
+      } finally {
+        // Also after a failure: the outcome of an interrupted commit is unknown.
+        this.invalidate();
+      }
     }
     return this.getAll();
   }
@@ -91,5 +111,39 @@ export class SiteSettingsService {
 
   faviconVersion(): Promise<string | null> {
     return this.get("faviconUpdatedAt");
+  }
+
+  /** One query at a time; concurrent readers share it. */
+  private load(): Promise<Record<string, string>> {
+    if (this.pending) return this.pending;
+    const generation = this.generation;
+    const pending = this.query()
+      .then((values) => {
+        // A write that finished meanwhile may not be in these rows.
+        if (generation === this.generation) {
+          this.snapshot = { values, expiresAt: this.now() + SNAPSHOT_TTL_MS };
+        }
+        return values;
+      })
+      .finally(() => {
+        if (this.pending === pending) this.pending = null;
+      });
+    this.pending = pending;
+    return pending;
+  }
+
+  private invalidate(): void {
+    this.generation += 1;
+    this.snapshot = null;
+    this.pending = null;
+  }
+
+  private async query(): Promise<Record<string, string>> {
+    const rows = await this.sql<SiteSettingRow[]>`
+      SELECT "key", "value" FROM "app_setting" WHERE "key" LIKE 'site.%'
+    `;
+    const result: Record<string, string> = {};
+    for (const row of rows) result[row.key.slice(PREFIX.length)] = row.value;
+    return result;
   }
 }

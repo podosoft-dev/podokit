@@ -759,6 +759,12 @@ OAuth, SMTP, and sign-up approval configuration.
 - **/account** — the signed-in user's profile and profile image, password, 2FA, passkeys, API keys, and sessions without the admin shell.
 - **/admin/account** — the same account controls inside the admin shell, retained for existing links and applications.
 
+Every page render loads the public site settings and the session in parallel.
+`GET /site/settings` reads all `site.*` rows, favicon fields included, in one
+query and serves them from a 3-second in-process snapshot. A save clears the
+snapshot on the replica that handled it, so the next read there is current;
+other replicas show the change, including maintenance mode, within 3 seconds.
+
 Admin, account, authentication, maintenance, and API routes send
 `X-Robots-Tag: noindex, nofollow` by default. This keeps generated applications'
 private and transitional screens out of search results without relying on
