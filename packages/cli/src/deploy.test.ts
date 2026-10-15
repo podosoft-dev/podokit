@@ -207,6 +207,15 @@ describe("deployment rendering and planning", () => {
       'image: "ghcr.io/example/example-app-api:v1.2.3"',
     );
     expect(runtime.applicationManifest).toContain("path: /health/ready");
+    const apiDeployment = runtime.applicationManifest
+      .split(/^---$/m)
+      .find((document) =>
+        document.includes("kind: Deployment") && document.includes("name: example-app-api\n"),
+      ) ?? "";
+    for (const probe of ["readinessProbe", "livenessProbe", "startupProbe"]) {
+      const block = apiDeployment.split(`${probe}:`)[1]?.split(/\n {10}\S/)[0] ?? "";
+      expect(block).toContain("timeoutSeconds: 2");
+    }
     expect(runtime.applicationManifest).toContain(
       "labels:\n        app.kubernetes.io/name: example-app-api",
     );

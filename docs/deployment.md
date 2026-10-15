@@ -405,7 +405,10 @@ when any of them is down.
 
 Set them in the profile's `runtimeConfig`. Keep the check timeout below the probe
 timeout, so a slow dependency is reported as down instead of making the probe
-itself time out.
+itself time out. The rendered Kubernetes readiness, liveness, and startup probes
+give the API `timeoutSeconds: 2` instead of the Kubernetes default of one second.
+The Compose healthcheck allows `5s`, because it starts a Node process for every
+check.
 
 ## Status and verification
 

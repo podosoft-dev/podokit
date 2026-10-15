@@ -525,6 +525,21 @@ describe("plan stability", () => {
   });
 });
 
+describe("api service", () => {
+  it("bounds the readiness healthcheck above the API's check timeout", () => {
+    const profile = composeProfileOf(initialized(["auth"]));
+    const document = renderComposeDocument(
+      profile,
+      "v1.2.3",
+      defaultComposeImages(profile, "v1.2.3"),
+      "sha256:0",
+    );
+    const api = document.split("\n  example-app-api:\n")[1]?.split(/\n  \S/)[0] ?? "";
+    expect(api).toContain("/health/ready");
+    expect(api).toContain("  timeout: 5s\n");
+  });
+});
+
 describe("worker service", () => {
   it("disables the healthcheck it would inherit from the API image", () => {
     const profile = composeProfileOf(initialized(["auth", "bullmq"]));

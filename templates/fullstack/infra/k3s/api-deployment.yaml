@@ -24,6 +24,8 @@ spec:
           readinessProbe:
             httpGet: { path: /health/ready, port: 3000 }
             initialDelaySeconds: 5
+            timeoutSeconds: 2
           livenessProbe:
             httpGet: { path: /health, port: 3000 }
             initialDelaySeconds: 15
+            timeoutSeconds: 2
