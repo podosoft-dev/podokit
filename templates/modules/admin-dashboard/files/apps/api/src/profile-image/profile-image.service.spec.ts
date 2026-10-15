@@ -7,11 +7,8 @@ import { ProfileImageService } from "./profile-image.service";
 describe("ProfileImageService account deletion cleanup", () => {
   const storage = {
     put: mock(async () => undefined),
-    get: mock(async () => ({
-      key: "profile-images/example.webp",
-      size: 0,
-      body: (async function* (): AsyncGenerator<Uint8Array> { yield Buffer.alloc(0); })(),
-    })),
+    get: mock(async () => null),
+    stat: mock(async () => null),
     exists: mock(async () => true),
     getDownloadUrl: mock(async () => "https://example.com/image"),
     delete: mock(async () => undefined),

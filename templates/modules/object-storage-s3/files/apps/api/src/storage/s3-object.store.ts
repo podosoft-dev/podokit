@@ -2,6 +2,7 @@ import type {
   DownloadUrlOptions,
   ObjectBody,
   ObjectData,
+  ObjectInfo,
   ObjectStore,
   PutObjectOptions,
   StoredObject,
@@ -16,10 +17,6 @@ async function bodyBytes(body: ObjectBody): Promise<Uint8Array> {
   return Buffer.concat(chunks);
 }
 
-async function* oneChunk(body: Uint8Array): AsyncGenerator<Uint8Array> {
-  yield body;
-}
-
 export class S3ObjectStore implements ObjectStore {
   constructor(private readonly storage: StorageService) {}
 
@@ -29,9 +26,12 @@ export class S3ObjectStore implements ObjectStore {
     return { key, size: bytes.byteLength, ...options };
   }
 
-  async get(key: string): Promise<ObjectData> {
-    const bytes = await this.storage.get(key);
-    return { key, size: bytes.byteLength, body: oneChunk(bytes) };
+  get(key: string): Promise<ObjectData | null> {
+    return this.storage.open(key);
+  }
+
+  stat(key: string): Promise<ObjectInfo | null> {
+    return this.storage.stat(key);
   }
 
   exists(key: string): Promise<boolean> {

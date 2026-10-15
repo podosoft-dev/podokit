@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { AppException } from "@podosoft/podokit-contracts";
-import type { ObjectBody, ObjectData, ObjectStore } from "@podosoft/podokit-runtime";
+import type { ObjectBody, ObjectInfo, ObjectStore } from "@podosoft/podokit-runtime";
 import { Elysia } from "elysia";
 import type { RequestIdentity } from "../core/services";
 import { filesRoutes } from "./files.module";
@@ -13,23 +13,35 @@ async function bytes(body: ObjectBody): Promise<Uint8Array> {
   return Buffer.concat(chunks);
 }
 
-async function* single(value: Uint8Array): AsyncGenerator<Uint8Array> {
-  yield value;
+function streamOf(value: Uint8Array): ReadableStream<Uint8Array> {
+  return new ReadableStream({
+    start(controller): void {
+      controller.enqueue(value);
+      controller.close();
+    },
+  });
 }
 
 function memoryStore(): ObjectStore {
   const objects = new Map<string, Uint8Array>();
+  const info = (key: string): ObjectInfo | null => {
+    const value = objects.get(key);
+    return value
+      ? { key, size: value.byteLength, etag: `"${value.byteLength}"`, lastModified: new Date(0) }
+      : null;
+  };
   return {
     put: async (key, body, options) => {
       const value = await bytes(body);
       objects.set(key, value);
       return { key, size: value.byteLength, ...options };
     },
-    get: async (key): Promise<ObjectData> => {
+    get: async (key) => {
+      const found = info(key);
       const value = objects.get(key);
-      if (!value) throw new Error("missing");
-      return { key, size: value.byteLength, body: single(value) };
+      return found && value ? { ...found, body: streamOf(value) } : null;
     },
+    stat: async (key) => info(key),
     exists: async (key) => objects.has(key),
     delete: async (key) => {
       objects.delete(key);

@@ -2,6 +2,7 @@ import { AppException } from "@podosoft/podokit-contracts";
 import {
   LocalObjectStore,
   OBJECT_STORAGE,
+  objectResponse,
   type ObjectData,
   type ObjectStore,
 } from "@podosoft/podokit-runtime";
@@ -28,35 +29,10 @@ import {
 export const DOWNLOAD_BASE_URL = "/files/content";
 export const LOCAL_DOWNLOAD_URLS = Symbol("local-download-urls") as ServiceKey<DownloadUrlSigner>;
 
-function responseBody(object: ObjectData): ReadableStream<Uint8Array> {
-  const iterator = object.body[Symbol.asyncIterator]();
-  return new ReadableStream<Uint8Array>({
-    async pull(controller): Promise<void> {
-      const next = await iterator.next();
-      if (next.done) controller.close();
-      else controller.enqueue(next.value);
-    },
-    async cancel(): Promise<void> {
-      await iterator.return?.();
-    },
-  });
-}
-
-async function bodyText(object: ObjectData): Promise<string> {
-  const chunks: Uint8Array[] = [];
-  for await (const chunk of object.body) chunks.push(chunk);
-  return Buffer.concat(chunks).toString("utf8");
-}
-
 async function readObject(storage: ObjectStore, key: string): Promise<ObjectData> {
-  try {
-    return await storage.get(key);
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-      throw storageObjectNotFound();
-    }
-    throw error;
-  }
+  const object = await storage.get(key);
+  if (!object) throw storageObjectNotFound();
+  return object;
 }
 
 // Local objects are served from the app's own origin with the type the uploader
@@ -86,7 +62,7 @@ export function localStorageRoutes(
   identity: RequestIdentity,
 ): ElysiaPlugin {
   return new Elysia({ name: "podokit.storage-local" })
-    .get("/files/content/*", async ({ params, query, set }) => {
+    .get("/files/content/*", async ({ request, params, query }) => {
       const key = objectKeyFromPath(params["*"]);
       if (key === undefined || !(await signer.verify(key, query.expires, query.signature))) {
         throw new AppException(
@@ -96,10 +72,7 @@ export function localStorageRoutes(
         );
       }
       const object = await readObject(storage, key);
-      if (object.contentType) set.headers["content-type"] = object.contentType;
-      set.headers["content-length"] = String(object.size);
-      Object.assign(set.headers, downloadSafetyHeaders(object.contentType));
-      return new Response(responseBody(object));
+      return objectResponse(request, object, { headers: downloadSafetyHeaders(object.contentType) });
     }, {
       query: t.Object({
         expires: t.Optional(t.String()),
@@ -126,7 +99,7 @@ export function localStorageRoutes(
     .get("/storage/:key", async ({ request, params }) => {
       await requireStorageAdmin(identity, request);
       const object = await readObject(storage, demoObjectKey(params.key));
-      return { key: params.key, content: await bodyText(object) };
+      return objectResponse(request, object, { headers: downloadSafetyHeaders(object.contentType) });
     }, {
       params: demoKeyParams,
       detail: { tags: ["storage"], summary: "Read a demo object (administrators only)" },

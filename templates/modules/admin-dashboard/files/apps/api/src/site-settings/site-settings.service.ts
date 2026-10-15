@@ -32,9 +32,7 @@ export interface SiteFavicon {
 }
 
 async function objectBuffer(object: ObjectData): Promise<Buffer> {
-  const chunks: Uint8Array[] = [];
-  for await (const chunk of object.body) chunks.push(chunk);
-  return Buffer.concat(chunks);
+  return Buffer.from(await new Response(object.body).arrayBuffer());
 }
 
 // Every page render reads the site settings, so one short-lived snapshot serves
@@ -103,7 +101,8 @@ export class SiteSettingsService {
     const contentType = await this.get("faviconContentType");
     if (!contentType) return null;
     try {
-      return { body: await objectBuffer(await this.storage.get(FAVICON_KEY)), contentType };
+      const object = await this.storage.get(FAVICON_KEY);
+      return object ? { body: await objectBuffer(object), contentType } : null;
     } catch {
       return null;
     }

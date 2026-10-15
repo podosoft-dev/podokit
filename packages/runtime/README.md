@@ -22,3 +22,35 @@ await objects.put("uploads/hello.txt", "hello", { contentType: "text/plain" });
 
 Local providers are intended for a single application process or desktop runtime.
 Use distributed providers when multiple API or worker replicas share state.
+
+## Object storage
+
+`ObjectStore.get(key)` resolves `null` for a missing key. Otherwise it returns the
+object's metadata and a `ReadableStream` body:
+
+| Field | Meaning |
+| --- | --- |
+| `size` | Content length in bytes |
+| `contentType` | The type given to `put()`, when known |
+| `etag` | An HTTP entity tag, quotes included, that changes with the content |
+| `lastModified` | When the content was last written |
+
+The body is opened only when it is first read, so reading the metadata costs no
+download. Read the body to the end or cancel it. `stat(key)` returns the
+metadata alone.
+
+`objectResponse()` turns an object into an HTTP response without buffering it.
+It sets `content-type`, `content-length`, `etag`, and `last-modified`, and it
+answers a matching `If-None-Match` (or, without one, `If-Modified-Since`) with
+`304` and cancels the body unread:
+
+```ts
+import { objectResponse } from "@podosoft/podokit-runtime";
+
+const object = await objects.get("uploads/hello.txt");
+if (!object) return new Response(null, { status: 404 });
+return objectResponse(request, object, { cacheControl: "no-cache" });
+```
+
+`readObjectBytes(store, key)` reads a small object into one buffer. It rejects
+objects larger than `maxBytes` (16 MiB by default) before reading them.

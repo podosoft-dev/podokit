@@ -386,7 +386,10 @@ command `bun dist/main-worker.js`).
 S3-compatible object storage that works with **AWS S3 and MinIO-compatible servers**,
 selected by the `STORAGE_PROVIDER` env var (`minio` or `aws`). Local development
 uses a pinned [Silo](https://github.com/pgsty/silo) image. Provides a `StorageService`
-(put/get/delete + presigned URLs) and demo `/storage` endpoints.
+(put, buffered `get`, streamed `open`, `stat`, delete, and presigned URLs) and demo
+`/storage` endpoints. `open(key)` reads the object's metadata first and starts
+the download only when the body is read; prefer it to `get` for anything that can
+be large.
 The Compose service and file keep their `minio` names for existing endpoints.
 
 **Security note:** the demo endpoints require the `auth` module and an
@@ -409,7 +412,7 @@ bun run dev
 curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-in/email \
   -H 'content-type: application/json' -d '{"email":"admin@example.com","password":"<password>"}'
 curl -b cookies.txt -XPUT localhost:5002/storage/hello -H 'content-type: application/json' -d '{"content":"hi"}'
-curl -b cookies.txt localhost:5002/storage/hello            # { key, content }
+curl -b cookies.txt localhost:5002/storage/hello            # hi (streamed, with ETag)
 curl -b cookies.txt localhost:5002/storage/hello/presigned  # { url } for demo/hello
 ```
 
@@ -449,6 +452,10 @@ a fresh URL when needed.
 The module serves the same administrator-only demo routes as `object-storage-s3`
 (`PUT /storage/:key`, `GET /storage/:key`, `GET /storage/:key/presigned`),
 confined to `demo/`.
+
+Downloads and demo reads stream the file from disk in 64 KiB chunks. Each
+response carries `content-length`, `etag`, and `last-modified`, and a matching
+`If-None-Match` receives `304` without reading the file.
 
 ### `file-upload`
 

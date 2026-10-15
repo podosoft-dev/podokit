@@ -174,6 +174,32 @@ modules are the only layer that should import Redis, S3, BullMQ, or local storag
 implementation details. Application-owned replacements can use the same
 contracts through `apps/api/src/app.extensions.ts`.
 
+### Object storage reads
+
+`ObjectStore.get(key)` streams instead of buffering. It resolves `null` for a
+missing key; otherwise it returns `size`, `contentType`, `etag`, and
+`lastModified` with a `ReadableStream` body that opens on the first read. Read
+the body to the end or cancel it. `stat(key)` returns the same metadata without
+a body. Provider errors, such as an unreachable bucket, are thrown rather than
+reported as a missing object.
+
+The S3 provider asks for the metadata first and starts the download only when
+the body is read, because a missing key would otherwise surface only after a
+response had started. The download is a presigned GET paced by the reader,
+because Bun's `S3File.stream()` reads ahead without backpressure and would hold
+the rest of the object in memory for a slow client. The GET carries `If-Match`,
+so an object overwritten after its metadata was read fails the stream instead of
+mixing two versions. The local provider derives the entity tag from the file's
+inode, size, and modification time, and fails the stream rather than send a file
+that was replaced after its metadata was read.
+
+Serve objects with `objectResponse(request, object, options)` from the runtime
+package. It sets `content-type`, `content-length`, `etag`, and `last-modified`,
+answers a matching `If-None-Match` with `304` without reading the content, and
+accepts a `cacheControl` value and extra headers. Use
+`readObjectBytes(store, key, { maxBytes })` only for small objects you must hold
+in memory.
+
 ## Local persistence and backup
 
 SQLite defaults to `./data/podokit.sqlite`; local object storage defaults to

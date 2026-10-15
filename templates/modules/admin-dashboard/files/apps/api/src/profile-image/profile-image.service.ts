@@ -34,9 +34,7 @@ const updateAuthUser: UpdateAuthUser = (image, headers) =>
   getAuth().api.updateUser({ body: { image }, headers });
 
 async function objectBuffer(object: ObjectData): Promise<Buffer> {
-  const chunks: Uint8Array[] = [];
-  for await (const chunk of object.body) chunks.push(chunk);
-  return Buffer.concat(chunks);
+  return Buffer.from(await new Response(object.body).arrayBuffer());
 }
 
 export class ProfileImageService {
@@ -90,9 +88,11 @@ export class ProfileImageService {
     const key = this.keyFromFileName(fileName);
     if (!key) throw new AppException(PROFILE_IMAGE_NOT_FOUND, "Profile image not found.", 404);
     try {
+      const object = await this.storage.get(key);
+      if (!object) throw new Error("Profile image object is missing");
       const extension = fileName.slice(fileName.lastIndexOf(".") + 1);
       return {
-        body: await objectBuffer(await this.storage.get(key)),
+        body: await objectBuffer(object),
         contentType: CONTENT_TYPES[extension] ?? "application/octet-stream",
       };
     } catch {

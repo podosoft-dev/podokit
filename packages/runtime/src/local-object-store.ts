@@ -1,4 +1,4 @@
-import { createReadStream } from "node:fs";
+import { constants, type Stats } from "node:fs";
 import {
   lstat,
   mkdir,
@@ -7,9 +7,9 @@ import {
   realpath,
   rename,
   rm,
-  stat,
   unlink,
   writeFile,
+  type FileHandle,
 } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
@@ -17,6 +17,7 @@ import type {
   DownloadUrlOptions,
   ObjectBody,
   ObjectData,
+  ObjectInfo,
   ObjectStore,
   PutObjectOptions,
   StoredObject,
@@ -25,6 +26,8 @@ import type {
 interface ObjectMetadata {
   contentType?: string;
 }
+
+const CHUNK_BYTES = 64 * 1024;
 
 export interface LocalObjectStoreOptions {
   rootDirectory: string;
@@ -55,11 +58,71 @@ async function* objectChunks(body: ObjectBody): AsyncGenerator<Uint8Array> {
   for await (const chunk of body) yield chunk;
 }
 
-async function* fileChunks(path: string): AsyncGenerator<Uint8Array> {
-  for await (const chunk of createReadStream(path)) {
-    if (typeof chunk === "string") yield Buffer.from(chunk);
-    else yield chunk;
-  }
+function errorCode(error: unknown): string | undefined {
+  return error instanceof Error && "code" in error && typeof error.code === "string"
+    ? error.code
+    : undefined;
+}
+
+function isMissing(error: unknown): boolean {
+  const code = errorCode(error);
+  return code === "ENOENT" || code === "ENOTDIR";
+}
+
+function sameFile(left: Stats, right: Stats): boolean {
+  return left.ino === right.ino && left.size === right.size && left.mtimeMs === right.mtimeMs;
+}
+
+/**
+ * Puts replace files by rename, never in place, so the inode, size, and
+ * modification time identify one version of the content.
+ */
+function entityTag(details: Stats): string {
+  const modified = Math.floor(details.mtimeMs * 1000);
+  return `"${details.ino.toString(16)}-${details.size.toString(16)}-${modified.toString(16)}"`;
+}
+
+/**
+ * Opens the file on the first read and refuses to stream a different file than
+ * the one described, which also stops a swapped-in symbolic link.
+ */
+function fileBody(path: string, expected: Stats): ReadableStream<Uint8Array> {
+  let handle: FileHandle | undefined;
+  let position = 0;
+  const close = async (): Promise<void> => {
+    const current = handle;
+    handle = undefined;
+    await current?.close();
+  };
+  return new ReadableStream<Uint8Array>({
+    async pull(controller): Promise<void> {
+      try {
+        if (!handle) {
+          handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+          if (!sameFile(await handle.stat(), expected)) {
+            throw new Error("Object changed while it was being read");
+          }
+        }
+        if (position < expected.size) {
+          const chunk = new Uint8Array(Math.min(CHUNK_BYTES, expected.size - position));
+          const { bytesRead } = await handle.read(chunk, 0, chunk.byteLength, position);
+          if (bytesRead === 0) throw new Error("Object changed while it was being read");
+          position += bytesRead;
+          controller.enqueue(bytesRead === chunk.byteLength ? chunk : chunk.subarray(0, bytesRead));
+        }
+        if (position === expected.size) {
+          await close();
+          controller.close();
+        }
+      } catch (error) {
+        await close().catch(() => undefined);
+        controller.error(error);
+      }
+    },
+    async cancel(): Promise<void> {
+      await close();
+    },
+  }, { highWaterMark: 0 });
 }
 
 export class LocalObjectStore implements ObjectStore {
@@ -99,28 +162,18 @@ export class LocalObjectStore implements ObjectStore {
     return { key: normalized, size, ...options };
   }
 
-  async get(key: string): Promise<ObjectData> {
-    const normalized = normalizeKey(key);
-    const path = await this.safePath(normalized, false);
-    const details = await stat(path);
-    if (!details.isFile()) throw new Error("Object is not a file");
-    const metadata = await this.readMetadata(normalized);
-    return {
-      key: normalized,
-      size: details.size,
-      ...metadata,
-      body: fileChunks(path),
-    };
+  async get(key: string): Promise<ObjectData | null> {
+    const found = await this.find(key);
+    if (!found) return null;
+    return { ...found.info, body: fileBody(found.path, found.details) };
+  }
+
+  async stat(key: string): Promise<ObjectInfo | null> {
+    return (await this.find(key))?.info ?? null;
   }
 
   async exists(key: string): Promise<boolean> {
-    try {
-      const value = await this.get(key);
-      return value.size >= 0;
-    } catch (error) {
-      if (error instanceof Error && "code" in error && error.code === "ENOENT") return false;
-      throw error;
-    }
+    return (await this.find(key)) !== null;
   }
 
   async delete(key: string): Promise<void> {
@@ -141,6 +194,34 @@ export class LocalObjectStore implements ObjectStore {
   }
 
   close(): void {}
+
+  private async find(
+    key: string,
+  ): Promise<{ path: string; details: Stats; info: ObjectInfo } | null> {
+    const normalized = normalizeKey(key);
+    let path: string;
+    let details: Stats;
+    try {
+      path = await this.safePath(normalized, false);
+      details = await lstat(path);
+    } catch (error) {
+      if (isMissing(error)) return null;
+      throw error;
+    }
+    if (!details.isFile()) return null;
+    const metadata = await this.readMetadata(normalized);
+    return {
+      path,
+      details,
+      info: {
+        key: normalized,
+        size: details.size,
+        ...metadata,
+        etag: entityTag(details),
+        lastModified: details.mtime,
+      },
+    };
+  }
 
   private async initialize(): Promise<string> {
     await mkdir(this.rootDirectory, { recursive: true, mode: 0o700 });
@@ -166,7 +247,10 @@ export class LocalObjectStore implements ObjectStore {
       try {
         const details = await lstat(current);
         if (details.isSymbolicLink() || !details.isDirectory()) {
-          throw new Error("Object path contains a non-directory or symbolic link");
+          const error = new Error("Object path contains a non-directory or symbolic link");
+          // A file where a directory would be means the key does not exist.
+          if (!details.isSymbolicLink()) Object.assign(error, { code: "ENOTDIR" });
+          throw error;
         }
       } catch (error) {
         if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;

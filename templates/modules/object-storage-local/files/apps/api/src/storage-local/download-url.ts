@@ -5,6 +5,7 @@ import type {
   DownloadUrlOptions,
   ObjectBody,
   ObjectData,
+  ObjectInfo,
   ObjectStore,
   PutObjectOptions,
   StoredObject,
@@ -121,8 +122,12 @@ export class SignedDownloadStore implements ObjectStore {
     return this.store.put(key, body, options);
   }
 
-  get(key: string): Promise<ObjectData> {
+  get(key: string): Promise<ObjectData | null> {
     return this.store.get(key);
+  }
+
+  stat(key: string): Promise<ObjectInfo | null> {
+    return this.store.stat(key);
   }
 
   exists(key: string): Promise<boolean> {
