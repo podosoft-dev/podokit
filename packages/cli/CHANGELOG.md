@@ -1,5 +1,22 @@
 # @podosoft/podokit
 
+## 1.2.0
+
+### Minor Changes
+
+- [#216](https://github.com/podosoft-dev/podokit/pull/216) [`99a1305`](https://github.com/podosoft-dev/podokit/commit/99a1305eb040745ba3bbfaab9427fb8320533da4) Thanks [@korone00](https://github.com/korone00)! - Make runtime settings and the audit log scale. The settings store probes `auth_config` and `app_setting` versions with one cheap query per tick and reloads only on change, detects deleted rows, memoizes derived settings and the secret key, and refreshes `SettingsService` across replicas (with immediate invalidation over the events bus when one is installed). Auth settings save on SQLite. The audit log honours its toggle on every write, can defer non-security writes, pages with a cursor and server-side filters, indexes those filters, stores metadata as JSON, and can prune entries after `AUDIT_LOG_RETENTION_DAYS`.
+
+- [#215](https://github.com/podosoft-dev/podokit/pull/215) [`526c506`](https://github.com/podosoft-dev/podokit/commit/526c50657fc0f64f7b84ccf553f94b141904e2c6) Thanks [@korone00](https://github.com/korone00)! - Cut the fixed cost of every request in generated apps. Session reads no longer sign an unused JWT header, unsigned bearer values are rejected without a session lookup, and rate limiting keys signed sessions by a verified cookie hash instead of a database lookup. Server rendering loads site settings and the session together, memoizes capabilities per request, and stops resending the message catalog on client navigation. `Capabilities` gains `require2fa`. Site settings come from one cached query, the merged OpenAPI document is reused, the rate-limit script runs by SHA, and OAuth consent sends the signed authorization query.
+
+- [#213](https://github.com/podosoft-dev/podokit/pull/213) [`5dacc53`](https://github.com/podosoft-dev/podokit/commit/5dacc5344fc007aa4499280e270fcd200cd1b44f) Thanks [@korone00](https://github.com/korone00)! - Harden generated apps at runtime. The web proxy now aborts the API request when the client disconnects, relays cache and download headers, and forwards encoded paths unchanged. Readiness re-checks the database on every probe with per-check timeouts and a short shared cache, and API probes get a two-second timeout. Database pool size and connection timeouts are configurable, and an exhausted pool answers 503 `DATABASE_UNAVAILABLE`. The container dev stack caps every service's memory. Demo storage routes are admin-only under a `demo/` prefix, uploads are presigned only for their uploader or an admin, and local downloads require a signed URL and never render script.
+
+- [#217](https://github.com/podosoft-dev/podokit/pull/217) [`a8c131d`](https://github.com/podosoft-dev/podokit/commit/a8c131dfebb5fe9c93655cb03dce713aa0cee244) Thanks [@korone00](https://github.com/korone00)! - Scope event streams and stream stored objects. SSE events carry a topic and an optional audience, each stream receives only the topics and audiences it may read, queues are bounded with a `resync` event, `POST /events` is admin-only, job progress reaches only its owner, and web apps get a shared `EventSource` helper in `$lib/events`. `RequestIdentity` gains `roles()` and `activeOrganizationId()`. The admin sessions and users pages page on the server (`GET`/`DELETE /admin/sessions`), and admin reads use the general rate budget. `ObjectStore.get` returns metadata with a lazily opened stream, `stat()` and paged `list()` are new, `objectResponse()` serves objects with validators and 304, and favicons and profile images stream from storage with versioned favicons cached as immutable. The 2FA QR code loads on demand and idle-timeout tracking writes storage at most every five seconds.
+
+### Patch Changes
+
+- Updated dependencies [[`a8c131d`](https://github.com/podosoft-dev/podokit/commit/a8c131dfebb5fe9c93655cb03dce713aa0cee244)]:
+  - @podosoft/podokit-runtime@0.3.0
+
 ## 1.1.6
 
 ### Patch Changes
