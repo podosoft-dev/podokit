@@ -193,6 +193,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   the stream enqueues and closes within one pull. `LocalObjectStore` now reads
   objects up to 2 MiB whole; larger ones still stream in 64 KiB chunks and are
   sent chunked.
+- Requests that enqueue a BullMQ job no longer hang while Redis is down. The
+  API's queues shared the workers' connection settings, whose
+  `maxRetriesPerRequest: null` makes a command wait for Redis indefinitely, so
+  `POST /jobs` and `POST /progress` waited until Redis returned. The API
+  now adds and reads jobs over one producer connection that fails at once while
+  disconnected and after `REDIS_COMMAND_TIMEOUT_MS` without a reply, answering
+  `503` `JOBS_UNAVAILABLE` with `Retry-After`. The service registry supervises
+  that connection, so the API starts while Redis is down, and the new `jobs`
+  readiness check reports it. Workers keep their blocking connections and now
+  reconnect with backoff from 250 ms up to 5 seconds instead of up to 20
+  seconds. The module requires BullMQ 5.57 or later.
+
 - Redis commands no longer hang while Redis keeps the connection open without
   answering, as a paused container does. `RedisService` and the Redis `CACHE`
   store had no reply timeout, so cache reads and writes waited indefinitely,

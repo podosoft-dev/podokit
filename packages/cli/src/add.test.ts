@@ -548,6 +548,12 @@ describe("addModule (auth / better-auth)", () => {
       'command: ["bun", "dist/main-worker.js"]',
     );
     expect(readFileSync(join(project, "apps/api/src/app.ts"), "utf8")).toContain("jobsModule,");
+    const jobsModule = readFileSync(join(project, "apps/api/src/jobs/jobs.module.ts"), "utf8");
+    expect(jobsModule).toContain('register("jobs", () => queue.ready())');
+    expect(jobsModule).toContain('services.supervise("jobs", queue)');
+    const connections = readFileSync(join(project, "apps/api/src/jobs/queue.ts"), "utf8");
+    expect(connections).toContain("enableOfflineQueue: false");
+    expect(connections).toContain("maxRetriesPerRequest: null");
   });
 
   it("renders Bun commands into module scripts and worker manifests", () => {

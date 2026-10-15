@@ -478,8 +478,8 @@ app's `BODY_SIZE_LIMIT` and any ingress, apply their own limits.
 
 The API serves two health endpoints. `GET /health` reports that the process is
 running. `GET /health/ready` runs `SELECT 1` against the database and every
-readiness check that installed modules register, such as Redis, the event bus, and
-the object storage bucket. It answers `503` with the `READINESS_FAILED` error code
+readiness check that installed modules register, such as Redis, the event bus,
+the BullMQ producer, and the object storage bucket. It answers `503` with the `READINESS_FAILED` error code
 when any of them is down, and its message names them, for example
 `One or more dependencies are unavailable: redis, events`.
 
@@ -496,7 +496,7 @@ but stops answering, such as a paused container, fails each command after
 `REDIS_COMMAND_TIMEOUT_MS`, and that connection is closed and reopened the same
 way. Until a dependency is back, `GET /health`
 answers `200`, `GET /health/ready` answers `503`, and requests that need it fail
-with their usual errors, such as `DATABASE_UNAVAILABLE` or
+with their usual errors, such as `DATABASE_UNAVAILABLE`, `JOBS_UNAVAILABLE`, or
 `RATE_LIMIT_UNAVAILABLE`, instead of waiting for it. These `503` responses
 carry `Retry-After`, `1` second unless the code that failed set its own. The API logs
 `Dependency connection failed; retrying in the background` when a dependency

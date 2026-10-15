@@ -371,6 +371,20 @@ curl localhost:5002/jobs/<id>   # waiting -> active -> completed
 
 Without the worker running, jobs stay `waiting`; start the worker and they complete.
 
+The API adds and reads jobs over one producer connection that fails fast
+instead of waiting for Redis. While Redis is down, `POST /jobs`, `GET /jobs/{id}`,
+and every other `JOBS` call answer `503` with `JOBS_UNAVAILABLE` and
+`Retry-After` at once. A command that Redis does not answer within
+`REDIS_COMMAND_TIMEOUT_MS`, for example while the server is paused, fails the
+same way, and the connection is replaced. The API starts while Redis is down,
+reconnects the producer in the background like its other dependencies, and
+reports it as the `jobs` readiness check. Workers keep BullMQ's blocking
+connections, which wait for Redis instead of failing, and reconnect by
+themselves with the same backoff, from 250 ms up to 5 seconds, so they resume
+processing shortly after Redis returns. A job whose enqueue timed out may still
+be added if the server resumes; pass `deduplicationKey` when a retried enqueue
+must not create a second job.
+
 ### `jobs-local`
 
 A database-persistent job queue with an embedded worker in the API process. It
