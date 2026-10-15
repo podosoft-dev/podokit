@@ -85,6 +85,36 @@ The provider configuration selects the implementation; environment settings
 configure its connection or paths. Setting `DATABASE_URL` alone does not change
 the recorded database provider.
 
+### PostgreSQL connection pools
+
+The API queries PostgreSQL through one Bun SQL pool. The auth module keeps a
+second, `pg` pool for Better Auth. Both read these settings:
+
+| Setting | Default | Effect |
+| --- | --- | --- |
+| `DB_POOL_MAX` | `20` | Maximum connections in the Bun SQL pool. |
+| `DB_AUTH_POOL_MAX` | `10` | Maximum connections in the auth module's pool. |
+| `DB_CONNECT_TIMEOUT_MS` | `10000` | How long opening a connection may take. For the auth pool it also bounds the wait for a free connection when the pool is full. |
+| `DB_IDLE_TIMEOUT_MS` | `30000` | How long an unused connection stays open. `0` keeps it open. |
+
+Each API replica can hold `DB_POOL_MAX + DB_AUTH_POOL_MAX` connections, 30 with
+the defaults. Multiply that by the API replica count, add a few connections for
+the migration job and for administration, and keep the total below the server's
+`max_connections`. PostgreSQL defaults to 100, so three replicas with the
+defaults already use 90. Lower the pool sizes, raise `max_connections`, or put a
+connection pooler such as PgBouncer in front before adding replicas.
+
+Bun SQL queues a query while every connection is busy and does not time out that
+wait. While the pool stays full, the readiness check reports the database as down
+once `READINESS_CHECK_TIMEOUT_MS` passes. The API answers `503` with the
+`DATABASE_UNAVAILABLE` error code instead of `500` when either pool times out
+opening a connection, when the auth pool has no free connection in time, and
+when Bun SQL cannot reach the server or loses the connection.
+
+These settings bound connections only and set no statement timeout, so a long
+migration is not cut short. Application migrations open their own TypeORM
+connection and ignore them.
+
 ### S3-compatible storage
 
 `object-storage=s3` supports AWS S3 and Silo/MinIO-compatible services through

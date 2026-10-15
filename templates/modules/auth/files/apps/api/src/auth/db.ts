@@ -15,7 +15,12 @@ function databaseProvider(): DatabaseProviderName {
 const provider = databaseProvider();
 
 export const postgresPool = provider === "postgres"
-  ? new Pool({ connectionString: url })
+  ? new Pool({
+      connectionString: url,
+      max: env.DB_AUTH_POOL_MAX,
+      connectionTimeoutMillis: env.DB_CONNECT_TIMEOUT_MS,
+      idleTimeoutMillis: env.DB_IDLE_TIMEOUT_MS,
+    })
   : null;
 
 export const sqliteDatabase = provider === "sqlite"
