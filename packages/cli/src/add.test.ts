@@ -879,6 +879,9 @@ describe("addModule (auth / better-auth)", () => {
     expect(rootLayout.indexOf("requireBackendAvailable(locals)")).toBeLessThan(
       rootLayout.indexOf("redirect(303, `/login?redirect="),
     );
+    expect(rootLayout).not.toContain("loadMessages");
+    const rootUniversalLayout = readFileSync(join(project, "apps/web/src/routes/+layout.ts"), "utf8");
+    expect(rootUniversalLayout).toContain("messages: await loadMessages(data.locale, data.site?.locale)");
     const guards = readFileSync(join(project, "apps/web/src/lib/server/guards.ts"), "utf8");
     expect(guards).toContain('error(503, "Service temporarily unavailable")');
     expect(guards).toContain("export function isPublicPath");

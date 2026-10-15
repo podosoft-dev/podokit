@@ -1,7 +1,6 @@
 import type { LayoutServerLoad } from "./$types";
 import { redirect } from "@sveltejs/kit";
 import { safeAuthRedirect } from "#lib/auth-redirect.js";
-import { loadMessages } from "#lib/i18n/messages.js";
 import { getCapabilities } from "#lib/server/capabilities.js";
 import { isPublicPath, requireBackendAvailable } from "#lib/server/guards.js";
 
@@ -49,6 +48,7 @@ export const load: LayoutServerLoad = async (event) => {
   const sessionIdleTimeoutMinutes = locals.user
     ? ((await getCapabilities(event)).sessionIdleTimeoutMinutes ?? null)
     : null;
-  const messages = await loadMessages(locals.locale, site?.locale);
-  return { user: locals.user, locale: locals.locale, messages, site, sessionIdleTimeoutMinutes };
+  // Messages are resolved by the universal +layout.ts. This load re-runs on every
+  // client navigation for the path checks above and must not resend them.
+  return { user: locals.user, locale: locals.locale, site, sessionIdleTimeoutMinutes };
 };
