@@ -10,6 +10,7 @@ import {
   SUPPORTED_PROVIDER_IDS,
   SUPPORTED_SOCIAL_PROVIDERS,
 } from "@podosoft/podokit-auth";
+import type { DatabaseProviderName } from "@podosoft/podokit-runtime";
 import { refreshAuthNow } from "../auth/auth-provider";
 
 export type SocialProviderView = {
@@ -102,7 +103,10 @@ function booleanField(source: Record<string, unknown>, key: string, fallback: bo
 }
 
 export class AuthConfigService {
-  constructor(private readonly sql: SQL) {}
+  constructor(
+    private readonly sql: SQL,
+    private readonly provider: DatabaseProviderName = "postgres",
+  ) {}
 
   private async rows(): Promise<AuthConfigRow[]> {
     return this.sql<AuthConfigRow[]>`
@@ -119,7 +123,9 @@ export class AuthConfigService {
   }
 
   private async upsert(row: AuthConfigRow): Promise<void> {
-    const config = object(row.config);
+    // PostgreSQL stores a jsonb object only when bound as an object (P-022), while
+    // SQLite keeps the column as text and rejects object parameters.
+    const config = this.provider === "sqlite" ? JSON.stringify(object(row.config)) : object(row.config);
     await this.sql`
       INSERT INTO "auth_config" ("key", "enabled", "config", "secret", "updatedAt")
       VALUES (${row.key}, ${row.enabled}, ${config}, ${row.secret}, CURRENT_TIMESTAMP)

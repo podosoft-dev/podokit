@@ -160,7 +160,7 @@ export const authModule: PodokitModule = {
     const settings = new SettingsService(database.sql, authConfigStore, publishConfigChanged);
     const authService = new AuthService(settings, accessPolicy);
     services.register(SETTINGS, settings);
-    services.register(AUTH_CONFIG, new AuthConfigService(database.sql));
+    services.register(AUTH_CONFIG, new AuthConfigService(database.sql, database.provider));
     services.register(AUTH, authService, () => authService.close());
     services.onStart(async () => {
       await primeAuth();
