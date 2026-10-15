@@ -15,14 +15,17 @@ type CreateUserInput = {
   role?: string;
 };
 
+// UI specs pass the browser's create-user response; API specs pass a request response.
+type CreatedUserResponse = Pick<APIResponse, "ok" | "json">;
+
 export type DisposableUsers = {
   create(input: CreateUserInput): Promise<string>;
-  trackResponse(response: APIResponse): Promise<string>;
+  trackResponse(response: CreatedUserResponse): Promise<string>;
   track(userId: string): void;
   forget(userId: string): void;
 };
 
-async function readCreatedUserId(response: APIResponse): Promise<string> {
+async function readCreatedUserId(response: CreatedUserResponse): Promise<string> {
   expect(response.ok()).toBeTruthy();
   const body = (await response.json()) as { user?: { id?: unknown } };
   expect(typeof body.user?.id).toBe("string");
