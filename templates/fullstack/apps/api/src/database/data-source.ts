@@ -15,6 +15,9 @@ const migrations = existsSync(compiledMigrations)
 const commonOptions = {
   entities: [],
   migrations,
+  // One transaction per migration, so a migration can set `transaction = false`
+  // for statements such as CREATE INDEX CONCURRENTLY.
+  migrationsTransactionMode: "each" as const,
   synchronize: false,
 };
 

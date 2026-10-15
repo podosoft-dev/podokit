@@ -831,10 +831,12 @@ action codes for filter menus. The admin **Audit log** page uses both.
 The `IndexAuditLogFilters` migration backs these queries with
 `("createdAt", "id")`, `("action", "createdAt")`, `("actorEmail", "createdAt")`,
 and `("targetLabel", "createdAt")` indexes, replacing the initial single-column
-`action` and `createdAt` indexes. Migrations run in one transaction, so it uses a
-plain `CREATE INDEX`, which blocks writes to `audit_logs` while it builds. For a
-large PostgreSQL table, create the same indexes beforehand with
-`CREATE INDEX CONCURRENTLY` under the same names; the migration then skips them.
+`action` and `createdAt` indexes. On PostgreSQL it runs outside a transaction
+and uses `CREATE INDEX CONCURRENTLY` and `DROP INDEX CONCURRENTLY`, so audit
+writes continue while the indexes build. It skips indexes that already exist and
+rebuilds one left invalid by an interrupted build. SQLite uses plain statements.
+PostgreSQL migrations therefore run one transaction per migration
+(`migrationsTransactionMode: "each"`).
 
 Entries are kept forever by default. Set `AUDIT_LOG_RETENTION_DAYS` to a whole
 number of days to delete older entries: when the API starts, and then about once
