@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-15
+
 ### Added
 
 - `AUDIT_LOG_RETENTION_DAYS` prunes audit entries older than the given number of
@@ -131,9 +133,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The proxy relays `etag`, `last-modified`, `content-disposition`, `vary`, and
   range headers, and relays `content-length` only for uncompressed responses.
 - Kubernetes API probes allow two seconds instead of the one-second default.
-- Skip Better Auth's startup schema check in the generated migration runner, so
-  `migrate:all` no longer logs a schema mismatch for the schema it is about to
-  migrate. API servers keep validating the schema at startup.
 - Any signed-in user could call `POST /events` and push a message to every open
   stream. It now requires an administrator; publish from server code with
   `EventsService`.
@@ -152,6 +151,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - A local object store that was never used could crash the process with an
   unhandled rejection when its directory went away. The root is now prepared on
   first use, and a failed attempt is retried.
+
+## [1.1.6] - 2026-10-10
+
+### Fixed
+
+- Skip Better Auth's startup schema check in the generated migration runner, so
+  `migrate:all` no longer logs a schema mismatch for the schema it is about to
+  migrate. API servers keep validating the schema at startup.
 
 ## Released package history
 
