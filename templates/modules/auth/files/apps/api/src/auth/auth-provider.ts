@@ -2,6 +2,8 @@ import type { AuthConfig } from "@podosoft/podokit-auth";
 import { auth as bootstrapAuth, buildAuth } from "./auth";
 import { authConfigStore } from "./auth-config-store";
 import { publishConfigChanged } from "./config-events";
+import { checkAuthResponse } from "./database-outage";
+import { authDatabaseReachable } from "./db";
 
 // Runtime auth instance that rebuilds when the DB config changes, so admin edits
 // (OAuth credentials, SMTP, server-enforced toggles) apply WITHOUT a restart.
@@ -55,7 +57,7 @@ export async function refreshAuthNow(): Promise<void> {
 // Stable handler reference the adapter captures once; redispatches per request.
 const dynamicHandler: typeof bootstrapAuth.handler = async (request) => {
   await refreshIfStale();
-  return current.handler(request);
+  return checkAuthResponse(await current.handler(request), authDatabaseReachable);
 };
 
 export const authRuntime: typeof bootstrapAuth = new Proxy(bootstrapAuth, {

@@ -193,6 +193,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   the stream enqueues and closes within one pull. `LocalObjectStore` now reads
   objects up to 2 MiB whole; larger ones still stream in 64 KiB chunks and are
   sent chunked.
+- Better Auth endpoints answer `503` with `DATABASE_UNAVAILABLE` while
+  PostgreSQL is unreachable. `POST /api/auth/sign-in/email`,
+  `GET /api/auth/get-session` with a session, and every route that needs a
+  session answered `500`, because Better Auth turns a failed query into a bare
+  `500` and its session lookup drops the cause. After such a server error the
+  auth module now runs `SELECT 1` on its pool, bounded by
+  `READINESS_CHECK_TIMEOUT_MS`, and answers `503` only when that fails as well;
+  client errors such as `401` and unrelated `500` errors are unchanged. Every
+  `503` error envelope now carries `Retry-After: 1` unless the failing code set
+  its own value, so `DATABASE_UNAVAILABLE` tells clients when to retry as
+  `RATE_LIMIT_UNAVAILABLE` already did.
+
 - The `events-redis` transport starts while Redis is down and keeps delivering
   across replicas after Redis restarts. Startup waited on its connection, logged
   `Settings change events are unavailable; replicas converge on the settings

@@ -291,6 +291,13 @@ migration Job before a rolling deployment.
   AES-256-GCM, the key derived from `BETTER_AUTH_SECRET` (never in the DB it protects). They are
   never returned to the browser (the API exposes only a `hasSecret` flag). Keep
   `BETTER_AUTH_SECRET` stable — rotating it makes previously-saved DB secrets undecryptable.
+- **Database outages answer 503.** While PostgreSQL is unreachable, Better Auth endpoints such
+  as `POST /api/auth/sign-in/email` and `GET /api/auth/get-session`, and every route that needs a
+  session, answer `503` with `DATABASE_UNAVAILABLE` and `Retry-After` instead of `500`. Better
+  Auth reports a failed query as a bare `500`, and its session lookup drops the cause, so after a
+  server error the module runs `SELECT 1` on its pool, bounded by `READINESS_CHECK_TIMEOUT_MS`,
+  and answers `503` only when that fails too. Client errors such as `401` and other `500` errors
+  are passed on unchanged.
 - **Bearer tokens (API/mobile clients)**: always on. Sign-in returns the session token in
   a `set-auth-token` response header; send it back as `Authorization: Bearer <token>` to
   authenticate without a cookie. Useful for native apps and server-to-server calls.

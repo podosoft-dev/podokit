@@ -494,7 +494,8 @@ that drops later is reopened the same way, while the PostgreSQL pool opens
 connections as queries need them. Until a dependency is back, `GET /health`
 answers `200`, `GET /health/ready` answers `503`, and requests that need it fail
 with their usual errors, such as `DATABASE_UNAVAILABLE` or
-`RATE_LIMIT_UNAVAILABLE`, instead of waiting for it. The API logs
+`RATE_LIMIT_UNAVAILABLE`, instead of waiting for it. These `503` responses
+carry `Retry-After`, `1` second unless the code that failed set its own. The API logs
 `Dependency connection failed; retrying in the background` when a dependency
 becomes unavailable and `Dependency connection restored` with `downtimeMs` when
 it returns, not on every attempt. A pod therefore stays running while a

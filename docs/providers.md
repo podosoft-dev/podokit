@@ -107,9 +107,14 @@ connection pooler such as PgBouncer in front before adding replicas.
 Bun SQL queues a query while every connection is busy and does not time out that
 wait. While the pool stays full, the readiness check reports the database as down
 once `READINESS_CHECK_TIMEOUT_MS` passes. The API answers `503` with the
-`DATABASE_UNAVAILABLE` error code instead of `500` when either pool times out
-opening a connection, when the auth pool has no free connection in time, and
-when Bun SQL cannot reach the server or loses the connection.
+`DATABASE_UNAVAILABLE` error code and `Retry-After: 1` instead of `500` when
+either pool times out opening a connection, when the auth pool has no free
+connection in time, and when Bun SQL cannot reach the server or loses the
+connection. Better Auth reports a failed query as a bare `500`, so when one of
+its endpoints under `/api/auth`, or the session lookup of a protected route,
+fails with a server error, the auth module runs `SELECT 1` on its pool and
+answers `DATABASE_UNAVAILABLE` when that does not succeed within
+`READINESS_CHECK_TIMEOUT_MS`. Other `500` errors stay `500`.
 
 These settings bound connections only and set no statement timeout, so a long
 migration is not cut short. Application migrations open their own TypeORM

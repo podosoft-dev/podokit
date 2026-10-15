@@ -6,6 +6,7 @@ import type { DatabaseProviderName } from "@podosoft/podokit-runtime";
 import { validateEnv } from "../config/env.validation";
 import { PROVIDERS } from "../config/providers";
 import { databaseUrl, sqliteDatabasePath } from "../database/database";
+import { answersWithin, sharedProbe, type DatabaseProbe } from "./database-outage";
 
 const env = validateEnv(process.env);
 const url = databaseUrl(env);
@@ -29,6 +30,12 @@ export const sqliteDatabase = provider === "sqlite"
 
 export const authDatabase = postgresPool ?? sqliteDatabase;
 if (!authDatabase) throw new Error("No authentication database is configured");
+
+/** Whether the authentication database answers `SELECT 1` within the readiness check timeout. */
+export const authDatabaseReachable: DatabaseProbe = sharedProbe(async () => {
+  if (!postgresPool) return true;
+  return answersWithin(() => postgresPool.query("SELECT 1"), env.READINESS_CHECK_TIMEOUT_MS);
+});
 
 let queryDatabase: SQL | undefined;
 
