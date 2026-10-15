@@ -18,6 +18,13 @@ import { storageSettings, type StorageSettings } from "./storage.config";
 export const STREAM_PART_BYTES = 8 * 1024 * 1024;
 /** Parts of one streamed write that may be in flight at once. */
 const STREAM_QUEUE_SIZE = 2;
+/**
+ * Objects up to this size are read into memory by `open()`. Bun sends any
+ * streamed response body with chunked encoding and drops its Content-Length
+ * unless the body is in memory or a file, so this keeps the length of images
+ * and other small objects.
+ */
+export const IN_MEMORY_READ_BYTES = 2 * 1024 * 1024;
 
 function isMissingObject(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "NoSuchKey";
@@ -37,42 +44,27 @@ function objectInfo(key: string, stats: S3Stats): ObjectInfo {
   };
 }
 
-/**
- * Downloads on the first read, so an unread body costs no request. Bun's
- * `S3File.stream()` reads ahead without backpressure and would hold the rest of
- * the object for a slow client; a presigned GET through fetch is paced by the
- * socket instead, and If-Match keeps it on the version that was described.
- */
-function download(client: S3Client, key: string, etag: string): ReadableStream<Uint8Array> {
-  const abort = new AbortController();
-  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
-  return new ReadableStream<Uint8Array>({
-    async pull(controller): Promise<void> {
-      if (!reader) {
-        const response = await fetch(client.presign(key, { expiresIn: 60 }), {
-          headers: { "if-match": etag },
-          decompress: false,
-          signal: abort.signal,
-        });
-        if (!response.ok || !response.body) {
-          await response.body?.cancel();
-          throw new Error(
-            response.status === 404 || response.status === 412
-              ? `Object ${key} changed while it was being read`
-              : `Object ${key} download failed with status ${response.status}`,
-          );
-        }
-        reader = response.body.getReader();
-      }
-      const next = await reader.read();
-      if (next.done) controller.close();
-      else controller.enqueue(next.value);
-    },
-    async cancel(reason): Promise<void> {
-      abort.abort(reason);
-      await reader?.cancel(reason).catch(() => undefined);
-    },
-  }, { highWaterMark: 0 });
+function downloadedObjectInfo(key: string, headers: Headers): ObjectInfo {
+  const length = headers.get("content-length");
+  const etag = headers.get("etag");
+  const lastModified = new Date(headers.get("last-modified") ?? "");
+  const contentType = headers.get("content-type");
+  if (length === null || !/^\d+$/.test(length) || !etag || Number.isNaN(lastModified.getTime())) {
+    throw new Error(`Object ${key} download lacks its length, entity tag, or modification time`);
+  }
+  return {
+    key,
+    size: Number(length),
+    ...(contentType ? { contentType } : {}),
+    etag: entityTag(etag),
+    lastModified,
+  };
+}
+
+/** The S3 error code of a failed request, such as NoSuchKey or NoSuchBucket. */
+async function errorCode(response: Response): Promise<string | undefined> {
+  const text = await response.text().catch(() => "");
+  return /<Code>([^<]+)<\/Code>/.exec(text)?.[1];
 }
 
 function multipartClient(settings: StorageSettings): S3Multipart | undefined {
@@ -234,14 +226,34 @@ export class StorageService {
   }
 
   /**
-   * Metadata plus a streamed body, or null when the key does not exist. The
-   * metadata request comes first because a missing key would otherwise only
-   * fail the stream, after a response has already started.
+   * Metadata plus a streamed body, or null when the key does not exist. One
+   * GET describes and streams the same version, so the metadata always matches
+   * the content. Objects up to `IN_MEMORY_READ_BYTES` are read before this
+   * resolves. Larger ones stream from the GET, paced by the socket; Bun's
+   * `S3File.stream()` reads ahead without backpressure and would hold the rest
+   * of the object for a slow client. That download is already open, so read the
+   * body to the end or cancel it.
    */
   async open(key: string): Promise<ObjectData | null> {
-    const info = await this.stat(key);
-    if (!info) return null;
-    return { ...info, body: download(this.client, key, info.etag) };
+    const response = await fetch(this.client.presign(key, { expiresIn: 60 }), { decompress: false });
+    if (!response.ok || !response.body) {
+      const code = await errorCode(response);
+      if (response.status === 404 && code === "NoSuchKey") return null;
+      throw new Error(`Object ${key} download failed with status ${response.status}${code ? ` (${code})` : ""}`);
+    }
+    let info: ObjectInfo;
+    try {
+      info = downloadedObjectInfo(key, response.headers);
+    } catch (error) {
+      await response.body.cancel().catch(() => undefined);
+      throw error;
+    }
+    if (info.size > IN_MEMORY_READ_BYTES) return { ...info, body: response.body };
+    const bytes = await response.bytes();
+    if (bytes.byteLength !== info.size) {
+      throw new Error(`Object ${key} download ended after ${bytes.byteLength} of ${info.size} bytes`);
+    }
+    return { ...info, body: new Blob([bytes]).stream() };
   }
 
   /** One page of the keys under `prefix`; the bucket is never listed in full. */

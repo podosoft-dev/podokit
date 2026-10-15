@@ -193,6 +193,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Objects up to 2 MiB served from the S3 provider, such as profile images and
+  favicons, lost their `Content-Length`: `objectResponse` set it, but Bun sends
+  a streamed body with chunked encoding unless the body is in memory or a file.
+  `StorageService.open()`, behind `OBJECT_STORAGE.get()`, now sends one GET
+  instead of a HEAD and a later GET, takes the metadata from that response, and
+  reads objects up to 2 MiB into memory before it resolves. Larger objects still
+  stream from the GET and go out chunked; their GET stays open until the body is
+  read or cancelled. A missing bucket now throws instead of being reported as a
+  missing object.
+
 - The object storage documentation no longer says that local storage responses
   carry `Content-Length`. `LocalObjectStore` streams files through a JavaScript
   `ReadableStream`, which Bun sends with `Transfer-Encoding: chunked`, dropping

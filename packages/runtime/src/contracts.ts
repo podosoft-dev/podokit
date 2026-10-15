@@ -139,8 +139,9 @@ export interface ObjectInfo extends StoredObject {
 
 export interface ObjectData extends ObjectInfo {
   /**
-   * The content, fetched only once it is read. Read it to the end or cancel it,
-   * as with a fetch response body.
+   * The content. A provider may open it on the first read or have its download
+   * under way already, so read it to the end or cancel it, as with a fetch
+   * response body.
    */
   body: ReadableStream<Uint8Array>;
 }
@@ -186,7 +187,7 @@ export interface CompletedPart {
 export interface ObjectStore {
   /** Writes the whole object; streamed bodies are written as they are read. */
   put(key: string, body: ObjectBody, options?: PutObjectOptions): Promise<StoredObject>;
-  /** Metadata and a lazily opened body, or null when the object does not exist. */
+  /** Metadata and the content to read or cancel, or null when the object does not exist. */
   get(key: string): Promise<ObjectData | null>;
   /** Metadata only, or null when the object does not exist. */
   stat(key: string): Promise<ObjectInfo | null>;

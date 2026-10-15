@@ -36,9 +36,10 @@ object's metadata and a `ReadableStream` body:
 | `etag` | An HTTP entity tag, quotes included, that changes with the content |
 | `lastModified` | When the content was last written |
 
-The body is opened only when it is first read, so reading the metadata costs no
-download. Read the body to the end or cancel it. `stat(key)` returns the
-metadata alone.
+Read the body to the end or cancel it. A provider may open it on the first read,
+as `LocalObjectStore` does, or have the download under way when `get()`
+resolves, so an abandoned body can hold a file handle or connection.
+`stat(key)` returns the metadata alone, without reading the content.
 
 `objectResponse()` turns an object into an HTTP response without buffering it.
 It sets `content-type`, `content-length`, `etag`, and `last-modified`, and it

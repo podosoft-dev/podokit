@@ -208,22 +208,31 @@ contracts through `apps/api/src/app.extensions.ts`.
 
 ### Object storage reads
 
-`ObjectStore.get(key)` streams instead of buffering. It resolves `null` for a
-missing key; otherwise it returns `size`, `contentType`, `etag`, and
-`lastModified` with a `ReadableStream` body that opens on the first read. Read
-the body to the end or cancel it. `stat(key)` returns the same metadata without
-a body. Provider errors, such as an unreachable bucket, are thrown rather than
-reported as a missing object.
+`ObjectStore.get(key)` resolves `null` for a missing key; otherwise it returns
+`size`, `contentType`, `etag`, and `lastModified` with a `ReadableStream` body.
+Read the body to the end or cancel it, because a provider may already have the
+download open. `stat(key)` returns the same metadata without reading the
+content. Provider errors, such as an unreachable bucket, are thrown rather than
+reported as a missing object. The S3 provider's `get()` also throws for a missing
+bucket; its `stat()` uses a HEAD request, whose 404 cannot tell the two apart.
 
-The S3 provider asks for the metadata first and starts the download only when
-the body is read, because a missing key would otherwise surface only after a
-response had started. The download is a presigned GET paced by the reader,
-because Bun's `S3File.stream()` reads ahead without backpressure and would hold
-the rest of the object in memory for a slow client. The GET carries `If-Match`,
-so an object overwritten after its metadata was read fails the stream instead of
-mixing two versions. The local provider derives the entity tag from the file's
-inode, size, and modification time, and fails the stream rather than send a file
-that was replaced after its metadata was read.
+The S3 provider sends one presigned GET from `get()` and takes the metadata from
+its response headers, so the metadata always describes the content that follows
+and a missing key resolves `null` before a response has started. Objects up to
+2 MiB (`IN_MEMORY_READ_BYTES` in `storage.service.ts`) are read into memory
+before `get()` resolves, so `objectResponse` keeps their `content-length`.
+Larger objects stream from the GET's body, paced by the reader, because Bun's
+`S3File.stream()` reads ahead without backpressure and would hold the rest of the
+object in memory for a slow client; Bun sends them chunked. Until such a body is
+read or cancelled, the GET stays open, and an S3-compatible server may hold back
+overwrites of that key meanwhile: Silo waited about 30 seconds and then dropped
+the GET. An overwrite during a read never switches the stream to the new content;
+at worst the stream fails.
+
+The local provider opens the file on the first read and streams it in 64 KiB
+chunks, so its responses are chunked too. It derives the entity tag from the
+file's inode, size, and modification time, and fails the stream rather than send
+a file that was replaced after its metadata was read.
 
 Serve objects with `objectResponse(request, object, options)` from the runtime
 package. It sets `content-type`, `content-length`, `etag`, and `last-modified`,

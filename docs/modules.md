@@ -419,9 +419,10 @@ S3-compatible object storage that works with **AWS S3 and MinIO-compatible serve
 selected by the `STORAGE_PROVIDER` env var (`minio` or `aws`). Local development
 uses a pinned [Silo](https://github.com/pgsty/silo) image. Provides a `StorageService`
 (put, buffered `get`, streamed `open`, `stat`, paged `list`, delete, and presigned URLs) and demo
-`/storage` endpoints. `open(key)` reads the object's metadata first and starts
-the download only when the body is read; prefer it to `get` for anything that can
-be large.
+`/storage` endpoints. `open(key)` sends one GET and takes the object's metadata
+from its response, reading objects up to 2 MiB into memory so responses built
+from them keep their `content-length`; larger objects stream, chunked. Read or
+cancel the body it returns. Prefer it to `get` for anything that can be large.
 The Compose service and file keep their `minio` names for existing endpoints.
 
 **Security note:** the demo endpoints require the `auth` module and an
@@ -1436,9 +1437,10 @@ The module stores image objects through the selected object-storage provider and
 the resulting versioned path in better-auth's `user.image`. The bucket stays
 private; `GET /api/profile-images/:fileName` streams the UUID path from storage
 with `etag`, `last-modified`, and immutable cache headers, and answers a
-matching `If-None-Match` with `304` without reading the object. The local
-provider's responses are chunked, without `content-length` (see
-`object-storage-local`). A
+matching `If-None-Match` with `304` without reading the object. With the S3
+provider the API's response carries `content-length`, because images of at most
+2 MiB are read into memory first; the local provider's responses are chunked,
+without it (see `object-storage-local`). A
 missing image returns 404; a storage failure is reported as a server error rather
 than a missing image. Replacing, removing, or self-deleting the account removes
 managed objects on a best-effort basis. Existing external/social avatar URLs are
