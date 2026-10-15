@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- `E2E_SKIP_RATE_LIMIT=true` skips the rate-limit module's Playwright spec, so a
+  local stack with raised limits can run the rest of the suite in one go.
+
 - The MCP server's `add_module` tool lists the direct API paths it merged into
   `.podokit/dev.json` and the deployment profiles, and `preview_update` lists the
   ones an update would add, with the reason for any it would skip.

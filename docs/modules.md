@@ -1085,6 +1085,12 @@ owned `app.extensions.ts` file. Register application services in
 Keep the managed `rateLimitModule` registered once. Application-specific identity
 code must validate the credential before producing a stable internal identifier.
 
+The module's `tests/api/rate-limit.api.spec.ts` checks the limits the stack runs
+with: pass `RATE_LIMIT_MAX`, `RATE_LIMIT_AUTH_MAX`, and `RATE_LIMIT_RUNTIME_MAX`
+to Playwright when they differ from the defaults. A local stack that raises the
+limits to run the whole suite quickly can set `E2E_SKIP_RATE_LIMIT=true` to skip
+the file, then run it on its own against a stack with the default limits.
+
 #### Route profiles
 
 Routes can have a budget of their own, or be exempt, through the

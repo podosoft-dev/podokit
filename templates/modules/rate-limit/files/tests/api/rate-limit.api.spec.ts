@@ -11,6 +11,10 @@ const origin = { origin: base };
 // Honor RATE_LIMIT_MAX when the test runner has it (a dedicated app sets a small
 // value so the window is crossed in a handful of requests); otherwise fall back
 // to the module default and allow a little headroom.
+// A local stack that raises the limits to run the whole suite quickly sets
+// E2E_SKIP_RATE_LIMIT=true and runs this file separately against the defaults.
+test.skip(process.env.E2E_SKIP_RATE_LIMIT === "true", "assumes the configured limits; run it on its own");
+
 const limit = Number(process.env.RATE_LIMIT_MAX ?? 300);
 const authLimit = Number(process.env.RATE_LIMIT_AUTH_MAX ?? 20);
 const runtimeLimit = Number(process.env.RATE_LIMIT_RUNTIME_MAX ?? 1000);
