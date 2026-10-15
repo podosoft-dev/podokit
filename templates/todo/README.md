@@ -66,7 +66,8 @@ When the API exposes WebSocket endpoints, add their exact paths to
 directly to the API and leaves every other path on the web app. Routes that accept
 bodies larger than the web server's `BODY_SIZE_LIMIT`, such as file uploads, go under
 `apiPaths` as prefixes like `/api/files/uploads/`; the gateway removes `/api` and
-sends them to the API without the web proxy. Add `publicUrl` to the same file when
+sends them to the API without the web proxy. `podo add` adds the paths a module
+declares, such as `file-upload`'s, to this file and to every deployment profile. Add `publicUrl` to the same file when
 an HTTPS tunnel preserves its public `Host` header.
 
 The containers read `.env.docker`, which Git ignores. `dev` commands create it from

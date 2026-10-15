@@ -155,7 +155,9 @@ public verification checks.
 
 Initialization reads the manifest's active providers and installed modules. Auth
 and API-key modules add their required secret key names, distributed providers
-select PostgreSQL, Redis, or Silo, and BullMQ adds a worker. Local providers
+select PostgreSQL, Redis, or Silo, BullMQ adds a worker, and the
+[direct API paths](#direct-api-paths) that installed modules contributed, such as
+`file-upload`'s `/api/files/uploads/`, go into `exposure.apiPaths`. Local providers
 disable their managed external dependency, omit the separate worker, and constrain
 the API to one replica. Dependencies support
 `external` and `disabled` as well as PodoKit-managed. External endpoints and
@@ -353,9 +355,12 @@ below it, so `/api/files/uploads/` covers `/api/files/uploads` and
 `/api/files/uploads/u1/parts/2`; the trailing slash is optional. The gateway
 removes `/api`, so `/api/files/uploads/u1/parts/2` reaches the API as
 `/files/uploads/u1/parts/2`, the same path the web proxy forwards. The list is
-empty by default. Apps with the `file-upload` module need exactly this entry for
-its [resumable uploads](modules.md#resumable-uploads), whose parts exceed
-`BODY_SIZE_LIMIT`.
+empty by default. Modules whose routes need a direct path declare it, and
+`podo add` lists it in every existing profile while `podo deploy init` copies it
+into new ones: the `file-upload` module adds exactly this entry for its
+[resumable uploads](modules.md#resumable-uploads), whose parts exceed
+`BODY_SIZE_LIMIT`. See [module direct API paths](modules.md#module-direct-api-paths)
+for how `podo add`, `remove`, and `update` edit the list.
 
 The profile is rejected if an entry is `/api/` itself, contains a wildcard, query,
 fragment, percent-encoded character, empty segment, or traversal segment, overlaps
@@ -370,7 +375,8 @@ still in place, so authentication requests always go through the web proxy.
 
 The plan's rollout step names the direct paths, and the confirmation hash covers
 them through the profile digest and the rendered Ingress or Caddy configuration.
-For local development, list the same paths in `.podokit/dev.json`; see the
+For local development, the same paths belong in `.podokit/dev.json`, where
+`podo add` puts module paths too; see the
 [development guide](development.md#containerized-development).
 
 What changes for requests on these paths:

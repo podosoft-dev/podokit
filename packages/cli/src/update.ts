@@ -34,6 +34,12 @@ import {
   migrateConfiguredPath,
   planModuleMigrations,
 } from "./module-migrations";
+import {
+  addApiPaths,
+  pendingApiPaths,
+  type ApiPathResult,
+  type ModuleApiPath,
+} from "./module-api-paths";
 
 /**
  * `podo update` planner. For now it produces a dry-run plan only: it assembles
@@ -81,6 +87,8 @@ export interface UpdatePlan {
   /** Modules the update adds, ordered ahead of the modules that need them. */
   addedModules: AddedModule[];
   changes: FileChange[];
+  /** Direct API paths that modules newly declare, per configuration file. */
+  apiPaths: ApiPathResult;
 }
 
 function treeText(tree: VfsTree, path: string): string | null {
@@ -174,6 +182,30 @@ function targetModules(
     visit(module.name);
   }
   return { modules: ordered, added };
+}
+
+interface TargetApiPaths {
+  /** Every path each target module declares, by module name. */
+  declared: Map<string, string[]>;
+  /** Declared paths the project has not merged yet. */
+  pending: ModuleApiPath[];
+}
+
+function targetApiPaths(
+  projectRoot: string,
+  templatesDir: string,
+  modules: ManifestModule[],
+): TargetApiPaths {
+  const modulesDir = join(templatesDir, "modules");
+  const declared = new Map<string, string[]>();
+  const pending: ModuleApiPath[] = [];
+  for (const module of modules) {
+    const resolved = resolveModule(module.packageName ?? module.name, modulesDir, projectRoot);
+    const paths = resolved ? (readModuleManifest(resolved.dir).apiPaths ?? []) : [];
+    declared.set(module.name, paths);
+    pending.push(...pendingApiPaths(module, paths));
+  }
+  return { declared, pending };
 }
 
 function targetManagedOverrides(
@@ -368,6 +400,20 @@ export function planUpdate(
     });
   }
 
+  // A configuration file the update creates, such as a missing
+  // .podokit/dev.json, receives the paths after it is written.
+  const created = new Set(
+    changes.filter((change) => change.action === "add").map((change) => change.path),
+  );
+  const apiPaths = options.onlyPaths
+    ? { changed: [], skipped: [] }
+    : addApiPaths(projectRoot, targetApiPaths(projectRoot, templatesDir, modules).pending, {
+        dryRun: true,
+        read: (file) =>
+          diskContent(projectRoot, file)?.toString("utf8")
+          ?? (created.has(file) ? treeText(newTree, file) : null),
+      });
+
   return {
     fromVersion: manifest.podokitVersion,
     toVersion: podokitVersion(),
@@ -375,6 +421,7 @@ export function planUpdate(
     modules: modules.map((module) => module.name),
     addedModules: added,
     changes,
+    apiPaths,
   };
 }
 
@@ -403,6 +450,8 @@ export interface ApplyResult {
   merged: string[];
   /** Files written with conflict markers for manual resolution. */
   conflicts: string[];
+  /** Direct API paths added to `.podokit/dev.json` and deployment profiles. */
+  apiPaths: ApiPathResult;
 }
 
 function assertRecordedExternalModules(
@@ -662,6 +711,7 @@ export function applyUpdate(
     removed: [],
     merged: [],
     conflicts: [],
+    apiPaths: { changed: [], skipped: [] },
   };
 
   for (const change of plan.changes) {
@@ -686,6 +736,9 @@ export function applyUpdate(
       else result.merged.push(change.path);
     }
   }
+
+  const apiPaths = options.onlyPaths ? undefined : targetApiPaths(projectRoot, templatesDir, modules);
+  if (apiPaths) result.apiPaths = addApiPaths(projectRoot, apiPaths.pending);
 
   // Keep the assembled target as the managed baseline. A merged working file
   // intentionally remains drifted so a future update performs another 3-way
@@ -716,6 +769,12 @@ export function applyUpdate(
         ...(appliedMigrations.get(module.name) ?? []),
       ]),
     ];
+    const appliedApiPaths = [
+      ...new Set([
+        ...(module.appliedApiPaths ?? []),
+        ...(apiPaths?.declared.get(module.name) ?? []),
+      ]),
+    ];
     return {
       ...module,
       ...(resolved?.packageName
@@ -725,6 +784,7 @@ export function applyUpdate(
           }
         : {}),
       ...(applied.length ? { appliedMigrations: applied } : {}),
+      ...(appliedApiPaths.length ? { appliedApiPaths } : {}),
     };
   });
   writeManifest(projectRoot, {

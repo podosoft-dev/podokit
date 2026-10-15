@@ -28,7 +28,10 @@ and run API scripts as `bun run --cwd apps/api <script>`.
 - may declare `requiredProjectFiles` and `requiredProjectContents` when an
   overlay depends on newer generated baseline paths or source contracts; the CLI
   checks them before mutation and asks you to run
-  `podo update --apply` when the project is stale, and
+  `podo update --apply` when the project is stale,
+- may declare `apiPaths`, prefixes under `/api/` that its routes need sent
+  straight to the API (see [Module direct API paths](#module-direct-api-paths)),
+  and
 - prints follow-up steps.
 
 ## Provider capabilities
@@ -619,10 +622,12 @@ added about 47 MiB of API memory in a 40 MiB upload to Silo. With the
 `rate-limit` module installed, part uploads count against their own
 `file-uploads` budget instead of the general one.
 
-**Route the parts past the web server.** Parts are larger than the web
-server's `BODY_SIZE_LIMIT` (3 MiB by default), so a production build answers
-`413` if they go through the `/api` proxy. List the upload path as a
-[direct API path](deployment.md#direct-api-paths) in every deployment profile:
+**Parts go past the web server.** Parts are larger than the web server's
+`BODY_SIZE_LIMIT` (3 MiB by default), so a production build answers `413` if
+they go through the `/api` proxy. The module declares `/api/files/uploads/` as a
+[direct API path](deployment.md#direct-api-paths), and `podo add file-upload`
+lists it in `.podokit/dev.json` for `podo dev` and in `exposure.apiPaths` of
+every deployment profile under `.podokit/deploy/`:
 
 ```json
 {
@@ -632,18 +637,10 @@ server's `BODY_SIZE_LIMIT` (3 MiB by default), so a production build answers
 }
 ```
 
-and in `.podokit/dev.json` for `podo dev`, so development takes the same route:
-
-```json
-{
-  "schemaVersion": 1,
-  "hostname": "myapp.localhost",
-  "apiPaths": ["/api/files/uploads/"]
-}
-```
-
-`podo add file-upload` cannot write these files for you: the deployment profile
-and `.podokit/dev.json` belong to the application. The Vite development server
+`podo deploy init` adds it to profiles created later, and `podo remove
+file-upload` takes it out again. A profile that cannot take the path, such as a
+Kubernetes profile with `nodePort` exposure, is left unchanged and reported; see
+[Module direct API paths](#module-direct-api-paths). The Vite development server
 sets no body limit, so `bun run dev` without a gateway also accepts the parts
 through the proxy. Requests on the direct path reach the API with the gateway's
 timeouts; see [direct API paths](deployment.md#direct-api-paths) for raising
@@ -1605,7 +1602,8 @@ version independently. A package module is just a `module.manifest.json` (with a
 `manifestVersion`) plus a `files/` overlay, resolved and applied exactly like a
 bundled one; the CLI rejects a manifest that needs a newer PodoKit. Manifest v2
 can also declare idempotent path `migrations` for file or directory moves and
-verified text replacements. A module's
+verified text replacements, and manifest v4 can declare
+[direct API paths](#module-direct-api-paths). A module's
 `requiredProjectFiles` and `requiredProjectContents` are checked before files,
 dependencies, or marker injections are changed, so an older generated project
 fails closed with an update instruction rather than receiving broken imports or
@@ -1615,6 +1613,45 @@ legacy `dependencies`, `devDependencies`, and `scripts` fields apply to its
 under `packageOverlays.<app>`; `podo add`, `update`, and `remove` apply them
 symmetrically. `podo add` with no argument lists both bundled and installed
 package modules.
+
+## Module direct API paths
+
+Some module routes take request bodies larger than the web server's
+`BODY_SIZE_LIMIT`, so the gateway has to send them straight to the API (see
+[direct API paths](deployment.md#direct-api-paths)). A module declares those
+prefixes in its manifest:
+
+```json
+{
+  "manifestVersion": 4,
+  "name": "file-upload",
+  "apiPaths": ["/api/files/uploads/"]
+}
+```
+
+Each entry follows the same rules as `exposure.apiPaths`: a static prefix under
+`/api/`, outside `/api/auth`, without wildcards or overlapping entries. The CLI
+rejects a manifest that breaks them before it changes anything. The development
+configuration and the deployment profiles belong to the application, so the CLI
+edits only their `apiPaths` lists, keeps every other key and the file's
+indentation, and never writes a file that would stop validating:
+
+- `podo add` appends each path to `apiPaths` in `.podokit/dev.json` (creating
+  the key when it is missing) and to `exposure.apiPaths` in every
+  `.podokit/deploy/*.json` profile, then prints what it added. A path that an
+  existing entry already covers is left alone. A path that would overlap
+  another entry or cover a WebSocket path, or a profile that cannot route
+  direct paths (Kubernetes `nodePort` exposure), is reported and left for you
+  to resolve. A missing `.podokit/dev.json` is reported, not created.
+- `.podokit/manifest.json` records the paths under the module's
+  `appliedApiPaths`, and `podo deploy init` copies them into new profiles.
+- `podo remove` deletes the exact paths the module contributed unless another
+  installed module still declares them. A Compose profile whose
+  `trustedProxyCidrs` would be left without a direct path keeps it, and the
+  CLI reports that.
+- `podo update` lists the paths a newer module version declares under "Direct
+  API paths to add" and writes them with `--apply`, using the same rules. A path
+  you deleted after it was added stays deleted.
 
 ## Adding admin nav & settings (module registry)
 
@@ -1645,6 +1682,9 @@ It is deliberately conservative:
   deps/env another module still declares) is preserved.
 - **Edited owned files stay owned.** Module-owned globs are removed with the
   module unless another module or a preserved edited file still needs them.
+- **Shared direct API paths stay.** The module's
+  [direct API paths](#module-direct-api-paths) leave `.podokit/dev.json` and the
+  deployment profiles unless another installed module declares them too.
 
 Database tables a module created are **not** dropped — removing the code leaves
 your data intact. Drop them yourself with a migration if you no longer need them.

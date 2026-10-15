@@ -68,6 +68,12 @@ requirement, such as `sse` requiring `events`, adds the module that implements
 the project's selected provider (`podo provider list`). The plan lists these
 under "Modules to add".
 
+A module that starts declaring a [direct API path](modules.md#module-direct-api-paths)
+in a newer version gets it added to `.podokit/dev.json` and every deployment
+profile. The plan lists these under "Direct API paths to add", including any it
+cannot add and why, and `--apply` writes them. `.podokit/manifest.json` records
+each module's applied paths, so a path you removed afterwards is not restored.
+
 Modules configure in manifest order, so a provider always comes before the
 modules that use it. `podo add` places a newly added provider ahead of installed
 modules that require it, and `podo update --apply` moves a provider recorded
@@ -121,8 +127,8 @@ layout.
 podo remove <module>
 ```
 
-Removal reverses registrations, files, package overlays, and environment
-examples. It refuses to remove a module required by another installed module,
+Removal reverses registrations, files, package overlays, environment
+examples, and the direct API paths only that module declared. It refuses to remove a module required by another installed module,
 keeps locally edited files, and never drops database tables.
 
 ## Taking ownership

@@ -23,7 +23,7 @@ import {
   validateImageRepository,
   STABLE_SEMVER_TAG_PATTERN,
 } from "./deploy-schema";
-import { parseApiPaths } from "./api-paths";
+import { installedApiPaths, parseApiPaths } from "./api-paths";
 import { parseExactWebSocketPaths } from "./websocket-paths";
 
 export { profileDirectory, profilePath } from "./deploy-schema";
@@ -210,7 +210,7 @@ function parseRedisDependency(
   return parseStatefulDependency(value, field);
 }
 
-function parseProfile(value: unknown): DeployProfileV1 {
+export function parseDeploymentProfile(value: unknown): DeployProfileV1 {
   if (!isRecord(value)) throw new Error("Deployment profile must be a JSON object.");
   assertOnlyKeys(
     value,
@@ -417,7 +417,7 @@ export function loadDeploymentProfile(projectRoot: string, name: string): Deploy
   } catch (error) {
     throw new Error(`Cannot read deployment profile "${name}": ${(error as Error).message}`);
   }
-  return parseProfile(parsed);
+  return parseDeploymentProfile(parsed);
 }
 
 export function listDeploymentProfiles(projectRoot: string): DeploymentProfileSummary[] {
@@ -497,7 +497,7 @@ export function initializeDeploymentProfile(
       ingressClassName: "traefik",
       tlsSecretName: null,
       webSocketPaths: [],
-      apiPaths: [],
+      apiPaths: installedApiPaths(manifest.modules),
     },
     workloads: {
       api: {
@@ -597,7 +597,7 @@ export function initializeDeploymentProfile(
       ],
     },
   };
-  const validated = parseProfile(defaultProfile);
+  const validated = parseDeploymentProfile(defaultProfile);
   mkdirSync(profileDirectory(projectRoot), { recursive: true });
   writeFileSync(path, `${JSON.stringify(validated, null, 2)}\n`, { flag: "wx" });
   return { name, path, profile: validated };

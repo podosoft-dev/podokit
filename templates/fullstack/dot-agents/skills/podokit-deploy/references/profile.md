@@ -22,7 +22,9 @@ Review these fields before planning:
   `apiPaths` lists static prefixes under `/api/` (such as `/api/files/uploads/`)
   for bodies above the web `BODY_SIZE_LIMIT`; a second Ingress with a Traefik
   `stripPrefix` Middleware sends them to API without `/api`. It needs a
-  Traefik-served IngressClass, and `/api/auth` is rejected.
+  Traefik-served IngressClass, and `/api/auth` is rejected. `podo deploy init`
+  and `podo add` fill in the paths installed modules declare (file-upload:
+  `/api/files/uploads/`); keep them.
 - `workloads`: API/web replicas and resources plus an optional worker
 - `dependencies`: PostgreSQL, Redis, and object storage mode, image, Secret name, and storage
 - `secrets`: API/optional web Secret names and required key names, plus image-pull Secret

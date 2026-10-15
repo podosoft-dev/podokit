@@ -108,9 +108,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `resumeUpload` send parts three at a time, retry failures with backoff that
   honors `Retry-After`, report progress, and cancel the upload when their
   signal aborts. A 40 MiB upload to Silo through the API added about 47 MiB of
-  API memory. Parts exceed the web `BODY_SIZE_LIMIT`, so list
-  `/api/files/uploads/` in `exposure.apiPaths` and `.podokit/dev.json`
-  `apiPaths`.
+  API memory. Parts exceed the web `BODY_SIZE_LIMIT`, so the module declares
+  `/api/files/uploads/` as a direct API path.
+- Modules declare the direct API paths their routes need with `apiPaths` in
+  `module.manifest.json` (manifest v4), validated like `exposure.apiPaths`.
+  `podo add` appends them to `.podokit/dev.json` and to `exposure.apiPaths` in
+  every deployment profile and prints what it added, keeping every other key
+  and the file's indentation. A path an entry already covers is left alone, and
+  one that would overlap another entry, cover a WebSocket path, or land in a
+  profile that cannot route it (Kubernetes `nodePort` exposure) is reported
+  instead of written. `.podokit/manifest.json` records them as the module's
+  `appliedApiPaths`, `podo deploy init` copies them into new profiles, `podo
+  remove` deletes the ones no other installed module declares, and `podo
+  update` lists the paths a newer module version declares under "Direct API
+  paths to add" and writes them with `--apply`. `file-upload` declares
+  `/api/files/uploads/`, so its parts no longer need a manual configuration
+  step.
 
 ### Changed
 
@@ -131,6 +144,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Upgrade notes
 
+- Apps that already have the `file-upload` module get `/api/files/uploads/` in
+  `.podokit/dev.json` and every deployment profile from `podo update --apply`.
+  Review the "Direct API paths to add" section of the plan first.
 - If you added header names to `FORWARDED_HEADERS` or `RELAYED_RESPONSE_HEADERS`
   in `apps/web/src/lib/server/backend-proxy.ts`, `podo update` merges the new
   proxy below your lists without a conflict and keeps your names working. Then

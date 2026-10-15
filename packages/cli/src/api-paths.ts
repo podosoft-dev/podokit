@@ -15,6 +15,12 @@ function covers(base: string, path: string): boolean {
   return path === base || path.startsWith(`${base}/`);
 }
 
+/** The entry in `paths` that already routes `path` directly, if any. */
+export function coveringApiPath(paths: readonly string[], path: string): string | undefined {
+  const base = apiPathBase(path);
+  return paths.find((entry) => covers(apiPathBase(entry), base));
+}
+
 /**
  * Validate the direct API path allowlist. Each entry covers its own path and
  * every path below it, and must stay under /api/ outside the authentication
@@ -70,6 +76,51 @@ export function parseApiPaths(
     paths.push(path);
   }
   return paths;
+}
+
+export interface ApiPathMerge {
+  /** The resulting list: the current entries followed by the added ones. */
+  paths: string[];
+  added: string[];
+  /** Paths left out because the list would no longer validate. */
+  rejected: { path: string; reason: string }[];
+}
+
+/**
+ * Append `additions` to `current`, skipping paths an entry already covers and
+ * paths that would make `validate` throw, such as an entry covering an existing
+ * one or a WebSocket path.
+ */
+export function mergeApiPaths(
+  current: readonly string[],
+  additions: readonly string[],
+  validate: (paths: string[]) => void,
+): ApiPathMerge {
+  const paths = [...current];
+  const added: string[] = [];
+  const rejected: { path: string; reason: string }[] = [];
+  for (const path of additions) {
+    if (coveringApiPath(paths, path) !== undefined) continue;
+    const candidate = [...paths, path];
+    try {
+      validate(candidate);
+    } catch (error) {
+      rejected.push({ path, reason: (error as Error).message });
+      continue;
+    }
+    paths.push(path);
+    added.push(path);
+  }
+  return { paths, added, rejected };
+}
+
+/** The direct API paths installed modules contributed, as a valid list for a new configuration. */
+export function installedApiPaths(modules: readonly { appliedApiPaths?: string[] }[]): string[] {
+  return mergeApiPaths(
+    [],
+    modules.flatMap((module) => module.appliedApiPaths ?? []),
+    (paths) => parseApiPaths(paths, "apiPaths", []),
+  ).paths;
 }
 
 /** Plan text naming the paths that reach the API without the web proxy. */

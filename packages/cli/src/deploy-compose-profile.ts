@@ -24,7 +24,7 @@ import {
   validateImage,
   STABLE_SEMVER_TAG_PATTERN,
 } from "./deploy-schema";
-import { parseApiPaths } from "./api-paths";
+import { installedApiPaths, parseApiPaths } from "./api-paths";
 import { parseExactWebSocketPaths } from "./websocket-paths";
 
 /**
@@ -600,6 +600,7 @@ export function initializeComposeProfile(
     || providers.events === "memory"
     || providers.jobs === "local";
   draft.workloads.api.replicas = usesEmbeddedProviders ? 1 : 2;
+  draft.exposure.apiPaths = installedApiPaths(manifest.modules);
   draft.dependencies.postgres.mode = providers.database === "postgres" ? "managed" : "disabled";
   draft.dependencies.redis.mode = usesRedis ? "managed" : "disabled";
   draft.dependencies.objectStorage.mode = providers["object-storage"] === "s3"

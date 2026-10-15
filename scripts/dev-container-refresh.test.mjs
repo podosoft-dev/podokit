@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { externalPackageSpec, planRefreshModules, refreshHost } from "./dev-container-refresh-lib.mjs";
+import {
+  externalPackageSpec,
+  planRefreshModules,
+  refreshHost,
+  restoreDevConfig,
+} from "./dev-container-refresh-lib.mjs";
 
 test("plans bundled and external modules separately", () => {
   const plan = planRefreshModules([
@@ -37,4 +42,29 @@ test("uses the first configured CORS origin for the health-check host", () => {
     "admin-demo.localhost",
   );
   assert.equal(refreshHost(""), "app.localhost");
+});
+
+test("restores dev.json with the direct API paths the regenerated modules added", () => {
+  const previous = `${JSON.stringify({
+    schemaVersion: 1,
+    hostname: "admin-demo.localhost",
+    publicUrl: "https://demo.example.com",
+    webSocketPaths: [],
+    apiPaths: ["/api/import"],
+  }, null, 2)}\n`;
+  const regenerated = JSON.stringify({
+    schemaVersion: 1,
+    hostname: "app.localhost",
+    webSocketPaths: [],
+    apiPaths: ["/api/import/", "/api/files/uploads/"],
+  });
+
+  assert.deepEqual(JSON.parse(restoreDevConfig(previous, regenerated)), {
+    schemaVersion: 1,
+    hostname: "admin-demo.localhost",
+    publicUrl: "https://demo.example.com",
+    webSocketPaths: [],
+    apiPaths: ["/api/import", "/api/files/uploads/"],
+  });
+  assert.equal(restoreDevConfig(previous, previous), previous);
 });

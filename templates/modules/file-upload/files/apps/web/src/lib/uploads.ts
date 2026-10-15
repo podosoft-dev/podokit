@@ -2,8 +2,9 @@ import { ApiError, type ApiClient } from "@podosoft/podokit-api-client";
 import { api } from "./api";
 
 // Resumable uploads through the API's /files/uploads routes (file-upload module).
-// Parts go to the same-origin /api/files/uploads path; list it in the gateway's
-// apiPaths so parts larger than the web server's BODY_SIZE_LIMIT reach the API.
+// Parts go to the same-origin /api/files/uploads path. The module declares it as
+// a direct API path, so `podo add` lists it in the gateway's apiPaths and parts
+// larger than the web server's BODY_SIZE_LIMIT reach the API.
 
 export interface UploadSession {
   id: string;
