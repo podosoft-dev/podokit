@@ -486,6 +486,67 @@ describe("PodoKit development gateway", () => {
     expect(() => runDevCommand(root, "up", ["-d"], runner)).toThrow("podo update --apply");
   });
 
+  it("stops this project's Compose Watch before taking the stack down", () => {
+    const root = project();
+    const other = project("other-app");
+    process.env.PODOKIT_DEV_HOME = temporaryDirectory("podokit-dev-home-");
+    const own = resolveDevRuntime(root).runtimeComposePath;
+    const foreign = resolveDevRuntime(other).runtimeComposePath;
+    const alive = new Set([4101, 4102, 4201, 4301]);
+    const calls: string[][] = [];
+    const runner: CommandRunner = (command, args) => {
+      calls.push([command, ...args]);
+      if (command === "ps") {
+        return {
+          status: 0,
+          stdout: [
+            `4101 docker compose -f compose.dev.yaml -f ${own} --profile cache watch`,
+            `4102 /usr/libexec/docker/cli-plugins/docker-compose compose -f compose.dev.yaml -f ${own} --profile cache watch`,
+            `4201 /usr/libexec/docker/cli-plugins/docker-compose compose -f compose.dev.yaml -f ${foreign} watch`,
+            `4301 docker compose -f compose.dev.yaml -f ${own} logs -f`,
+          ].join("\n"),
+          stderr: "",
+        };
+      }
+      if (command === "kill") {
+        const pids = args.slice(1).map(Number);
+        if (args[0] === "-0") return { status: pids.some((pid) => alive.has(pid)) ? 0 : 1, stdout: "", stderr: "" };
+        for (const pid of pids) alive.delete(pid);
+        return { status: 0, stdout: "", stderr: "" };
+      }
+      if (args[0] === "info") return { status: 0, stdout: "27.0.0\n", stderr: "" };
+      return { status: 0, stdout: "", stderr: "" };
+    };
+
+    // A watch left running keeps Compose's project lock, so the next
+    // `podo dev watch` failed with "cannot take exclusive lock".
+    runDevCommand(root, "down", [], runner);
+
+    const signals = calls.filter(([command, flag]) => command === "kill" && flag === "-TERM");
+    expect(signals).toEqual([["kill", "-TERM", "4101", "4102"]]);
+    expect(alive).toEqual(new Set([4201, 4301]));
+    const stopIndex = calls.findIndex(([command]) => command === "kill");
+    const downIndex = calls.findIndex((call) => call.includes("down"));
+    expect(stopIndex).toBeGreaterThan(-1);
+    expect(stopIndex).toBeLessThan(downIndex);
+  });
+
+  it("ends a watch stopped by podo dev down without an error", () => {
+    const root = project();
+    const devHome = temporaryDirectory("podokit-dev-home-");
+    process.env.PODOKIT_DEV_HOME = devHome;
+    const runner: CommandRunner = (_command, args) => {
+      if (args[0] === "info") return { status: 0, stdout: "27.0.0\n", stderr: "" };
+      if (args[0] === "network" && args[1] === "inspect") return { status: 0, stdout: "present\n", stderr: "" };
+      if (args[0] === "inspect") return { status: 0, stdout: "1 true 2\n", stderr: "" };
+      if (args.includes("watch")) return { status: 130, stdout: "", stderr: "" };
+      return { status: 0, stdout: "", stderr: "" };
+    };
+
+    expect(() => runDevCommand(root, "watch", [], runner)).not.toThrow();
+    expect(existsSync(join(devHome, "projects", `${resolveDevRuntime(root).routeId}.json`))).toBe(false);
+  });
+
   it("rejects a public host already registered by another project", () => {
     const first = project("first-app");
     const second = project("second-app");

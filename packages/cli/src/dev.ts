@@ -443,6 +443,68 @@ function runCompose(runtime: DevRuntime, args: string[], runner: CommandRunner):
   }
 }
 
+// Exit statuses of a Compose process stopped by SIGINT or SIGTERM.
+const STOPPED_STATUSES = new Set([130, 143]);
+const WATCH_STOP_TIMEOUT_MS = 10_000;
+
+function pause(milliseconds: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
+/**
+ * Process IDs of the Compose Watch that `podo dev watch` started for this
+ * project. The project-specific runtime overlay path in the command line
+ * identifies it, so watches of other projects never match.
+ */
+export function findWatchProcesses(runtime: DevRuntime, psOutput: string): number[] {
+  const prefix = `compose ${composeArgs(runtime, []).slice(1).join(" ")} `;
+  const pids: number[] = [];
+  for (const line of psOutput.split("\n")) {
+    const match = /^\s*(\d+)\s+(.*)$/.exec(line);
+    if (!match?.[1] || !match[2]) continue;
+    const start = match[2].indexOf(prefix);
+    if (start === -1) continue;
+    const tokens = match[2].slice(start + prefix.length).split(/\s+/);
+    let index = 0;
+    while (tokens[index] === "--profile" || tokens[index]?.startsWith("--profile=")) {
+      index += tokens[index] === "--profile" ? 2 : 1;
+    }
+    if (tokens[index] === "watch") pids.push(Number(match[1]));
+  }
+  return pids;
+}
+
+function anyAlive(pids: number[], runner: CommandRunner): boolean {
+  return pids.some((pid) => commandSucceeded(runner("kill", ["-0", String(pid)], { capture: true })));
+}
+
+/**
+ * Stop this project's Compose Watch. Compose holds a per-project lock for as
+ * long as it watches, so a watch left behind by `down` made the next
+ * `podo dev watch` fail with "cannot take exclusive lock".
+ */
+function stopWatch(runtime: DevRuntime, runner: CommandRunner): void {
+  let listing: CommandResult;
+  try {
+    listing = runner("ps", ["-A", "-ww", "-o", "pid=,args="], { capture: true });
+  } catch {
+    return;
+  }
+  if (!commandSucceeded(listing)) return;
+  const pids = findWatchProcesses(runtime, listing.stdout);
+  if (pids.length === 0) return;
+  runner("kill", ["-TERM", ...pids.map(String)], { capture: true });
+  const deadline = Date.now() + WATCH_STOP_TIMEOUT_MS;
+  while (anyAlive(pids, runner)) {
+    if (Date.now() >= deadline) {
+      runner("kill", ["-KILL", ...pids.map(String)], { capture: true });
+      break;
+    }
+    pause(100);
+  }
+  process.stdout.write(`Stopped podo dev watch for this project (pid ${pids.join(", ")}).\n`);
+}
+
 function composeCommand(
   action: "down" | "exec" | "logs" | "ps" | "up" | "watch",
   args: string[],
@@ -524,7 +586,18 @@ export function runDevCommand(
       ensureGateway(runner);
       process.stdout.write(`Development URL: http://${runtime.config.hostname}\n`);
       if (runtime.config.publicUrl) process.stdout.write(`Public OAuth URL: ${runtime.config.publicUrl}\n`);
-      runCompose(runtime, composeCommand("watch", args, profiles), runner);
+      const watchArgs = composeCommand("watch", args, profiles);
+      const result = runner("docker", composeArgs(runtime, watchArgs), { capture: false });
+      if (!commandSucceeded(result)) {
+        // `podo dev down` or Ctrl+C ends the watch with SIGTERM or SIGINT.
+        if (result.status !== null && STOPPED_STATUSES.has(result.status)) {
+          unregisterRoute(runtime);
+          stopGatewayWhenUnused(runner);
+          process.stdout.write("Stopped watching.\n");
+          return;
+        }
+        throw new Error(`docker compose ${watchArgs.join(" ")} exited with status ${String(result.status)}.`);
+      }
     } catch (error) {
       unregisterRoute(runtime);
       stopGatewayWhenUnused(runner);
@@ -550,6 +623,7 @@ export function runDevCommand(
   }
 
   if (action === "down") {
+    stopWatch(runtime, runner);
     runCompose(runtime, composeCommand("down", args, profiles), runner);
     unregisterRoute(runtime);
     stopGatewayWhenUnused(runner);

@@ -100,6 +100,8 @@ Useful commands:
   exact API WebSocket allowlist; never use a prefix or wildcard for that allowlist.
   `podo dev up` rebuilds the images from the current source so a recreated
   container never runs code older than the files Compose Watch synced.
+  `podo dev down` also stops this project's running `podo dev watch`; do not
+  kill Compose processes by hand.
   The containers read the untracked `.env.docker`; `podo dev` creates it from the
   committed `.env.docker.example` with generated secrets when it is missing. Never
   commit `.env.docker` or put secrets in the example.

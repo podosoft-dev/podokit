@@ -155,7 +155,13 @@ containers, not into their images, so `podo dev up` runs `docker compose up
 last built image. This also holds while `podo dev watch` is running, and Watch
 keeps syncing into the recreated containers. Pass `--no-build` to start from the
 existing images. Use `podo dev ps`, `logs`, `exec`, and
-`down` for lifecycle operations. Install native dependencies inside the target
+`down` for lifecycle operations. `podo dev down` first stops the Compose Watch
+that `podo dev watch` started for the same project, found by the project's
+`.podokit/runtime/dev.compose.yaml` path in its command line, and waits for it
+to exit. Compose holds a per-project lock while it watches, so a watch left
+running made the next `podo dev watch` fail with "cannot take exclusive lock".
+Watches of other projects and the shared gateway are not touched. The stopped
+`podo dev watch` prints `Stopped watching.` and exits successfully. Install native dependencies inside the target
 container with `podo dev exec api bun install` when validating Linux-specific
 artifacts.
 

@@ -85,6 +85,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   container that `up` recreated, for example after a memory limit or
   `.env.docker` change while `podo dev watch` was running, started from the
   last built image and lost every synced edit.
+- `podo dev down` stops the `podo dev watch` of the same project before it
+  removes the stack. The watch kept running and held Compose's per-project
+  lock, so the next `podo dev watch` failed with "cannot take exclusive lock"
+  until someone killed it by hand. Other projects' watches and the shared
+  gateway are untouched, and the stopped watch exits without an error.
 - A fresh clone of a generated app can start its containers. Git ignored the
   generated `.env.docker`, so `podo dev` failed with "env file .env.docker not
   found" until someone recreated it by hand.

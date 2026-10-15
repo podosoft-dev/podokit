@@ -98,7 +98,8 @@ You can still activate an additional Compose profile explicitly:
 ```
 
 Explicit profile flags are preserved for other lifecycle commands. `dev down`
-activates all profiles while removing this project's stack and route. If it is
+first stops this project's running `dev watch`, so the next `dev watch` starts
+cleanly, then activates all profiles while removing this project's stack and route. If it is
 the final registered
 project, it also removes the shared gateway and network. Source changes are synced
 through Compose Watch, including Vite HMR on the same portless browser origin.
