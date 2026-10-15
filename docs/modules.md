@@ -862,6 +862,9 @@ app issues tokens to registered clients — other apps can "Sign in with this ap
 built on `@better-auth/oauth-provider` and signs id_tokens with the `jwt` plugin's keys
 (exposed at the discovery `jwks_uri`). Discovery is at
 `GET /api/auth/.well-known/openid-configuration` (404 while disabled).
+Session reads do not attach a `set-auth-jwt` header, so they never pay for a JWT
+signature. A client that needs a JWT for the signed-in session requests one from
+`GET /api/auth/token` and verifies it against `GET /api/auth/jwks`.
 
 Register a client, then run the authorization-code + PKCE flow:
 

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { createPublicKey, verify, type JsonWebKey } from "node:crypto";
 import { ADMIN, USER } from "../helpers/accounts";
 import { clearSms, smsSinkReachable, waitForSmsOtp } from "../helpers/sms";
 import { totpCode } from "../helpers/totp";
@@ -239,6 +240,30 @@ test("bearer token authenticates API requests without a cookie", async ({ playwr
   expect(authed.ok()).toBeTruthy();
   expect((await authed.json())?.email).toBe(email);
   await api.dispose();
+});
+
+test("a session JWT is issued on request and verifies against the JWKS", async ({ playwright }) => {
+  const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  const email = `jwt-${Date.now()}@example.com`;
+  await ctx.post("/api/auth/sign-up/email", { data: { email, password: "Podokit3e-Str0ng!pw", name: "JWT" } });
+  // Session reads do not sign a JWT; a client that needs one requests it here.
+  const issued = await ctx.get("/api/auth/token");
+  expect(issued.ok(), await issued.text()).toBeTruthy();
+  const token = String((await issued.json())?.token ?? "");
+  const [header = "", payload = "", signature = ""] = token.split(".");
+  const { kid } = JSON.parse(Buffer.from(header, "base64url").toString("utf8")) as { kid?: string };
+  const jwks = (await (await ctx.get("/api/auth/jwks")).json()) as { keys: Array<JsonWebKey & { kid?: string }> };
+  const key = jwks.keys.find((candidate) => candidate.kid === kid);
+  expect(key, "the token's signing key is published").toBeTruthy();
+  const valid = verify(
+    null,
+    Buffer.from(`${header}.${payload}`),
+    createPublicKey({ key: key ?? {}, format: "jwk" }),
+    Buffer.from(signature, "base64url"),
+  );
+  expect(valid).toBe(true);
+  expect(JSON.parse(Buffer.from(payload, "base64url").toString("utf8"))?.email).toBe(email);
+  await ctx.dispose();
 });
 
 test("a user can create, list and revoke a personal API key", async ({ playwright }) => {

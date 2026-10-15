@@ -114,7 +114,10 @@ export function buildAuth(config: AuthConfig) {
     // mobile clients. Infrastructure plugin (always on), like jwt(); no UI toggle.
     bearer(),
     // JWT/JWKS signing keys — required by the OAuth provider to sign id_tokens.
-    jwt(),
+    // Without disableSettingJwtHeader, every session lookup (including server-side
+    // getSession calls) signs an unused `set-auth-jwt` header. Clients that need a
+    // JWT call GET /api/auth/token.
+    jwt({ disableSettingJwtHeader: true }),
     // Act as an OAuth2/OIDC identity provider: other apps can "Sign in with this app".
     // Register clients at /api/auth/oauth2/create-client; discovery at
     // /api/auth/.well-known/openid-configuration. See docs/modules.md.
