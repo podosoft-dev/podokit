@@ -21,7 +21,7 @@ import { authConfigStore } from "./auth-config-store";
 import { getAuth, authRuntime, primeAuth } from "./auth-provider";
 import { cachedAuthOpenApiDocuments } from "./auth.openapi";
 import { ROLE_NAMES } from "./permissions";
-import { AuthService, rolesOf } from "./auth.service";
+import { AuthService, createRequestIdentity } from "./auth.service";
 import { configureAuthQueryDatabase } from "./db";
 import { configEvents, publishConfigChanged } from "./config-events";
 import { setMailConfigStore } from "../mail/mailer";
@@ -177,13 +177,7 @@ export const authModule: PodokitModule = {
         );
       }
     });
-    services.override(REQUEST_IDENTITY, {
-      userId: async (request) => (await authService.session(request))?.user.id,
-      isAdmin: async (request) => {
-        const session = await authService.session(request);
-        return session !== null && rolesOf(session.user).includes("admin");
-      },
-    });
+    services.override(REQUEST_IDENTITY, createRequestIdentity(authService));
     accessPolicy.register("*", "/api/auth", "public");
     accessPolicy.register("*", "/api/auth/*", "public");
     accessPolicy.register("GET", "/account/capabilities", "public");

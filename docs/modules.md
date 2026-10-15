@@ -178,8 +178,14 @@ Adding it installs a **global Elysia request guard**, so the API is **secure by 
 every route requires a session except `/health` and `/api/auth/*`. Opt routes out
 by registering a public access policy; read the current user through `AuthService`.
 Modules that must also work without `auth` read the caller through the core
-`REQUEST_IDENTITY` service instead: `userId(request)` and `isAdmin(request)`
-return `undefined` and `false` when no identity provider is installed.
+`REQUEST_IDENTITY` service instead. It answers four questions about a request:
+`userId(request)`, `isAdmin(request)`, `roles(request)`, and
+`activeOrganizationId(request)`. Without an identity provider every request is
+anonymous: `undefined`, `false`, `[]`, and `undefined`. With `auth`, `roles`
+returns the user's roles as an array (the admin plugin's comma-separated value is
+split for you) and `activeOrganizationId` returns the session's active
+organization when the organization plugin has set one. All four share the one
+session lookup memoized per request, so asking several costs a single read.
 
 ```bash
 bunx @podosoft/podokit add auth

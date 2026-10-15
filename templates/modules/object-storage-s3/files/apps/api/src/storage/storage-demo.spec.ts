@@ -30,7 +30,12 @@ function memoryStorage(): MemoryStorage {
 }
 
 function caller(userId: string | undefined, admin = false): RequestIdentity {
-  return { userId: async () => userId, isAdmin: async () => admin };
+  return {
+    userId: async () => userId,
+    isAdmin: async () => admin,
+    roles: async () => (admin ? ["admin"] : []),
+    activeOrganizationId: async () => undefined,
+  };
 }
 
 interface Reply {

@@ -47,7 +47,12 @@ function servicesWithSessionStore(): {
 } {
   const registry = new ServiceRegistry();
   const userId = mock(async (_request: Request): Promise<string | undefined> => "user-secret-id");
-  registry.register(REQUEST_IDENTITY, { userId, isAdmin: async () => false });
+  registry.register(REQUEST_IDENTITY, {
+    userId,
+    isAdmin: async () => false,
+    roles: async () => [],
+    activeOrganizationId: async () => undefined,
+  });
   return { registry, userId };
 }
 
