@@ -1,23 +1,50 @@
 {
   "manifestVersion": 3,
   "name": "file-upload",
-  "description": "Multipart file upload endpoint that stores each user's files via object storage and presigns them only for the uploader or an administrator.",
+  "description": "File uploads through object storage: a single-request multipart endpoint and resumable chunked uploads whose state lives in the database, with downloads presigned only for the uploader or an administrator.",
   "requiresCapabilities": ["object-storage"],
   "targetApp": "api",
+  "requiredProjectFiles": ["apps/api/src/config/server-options.ts"],
   "requiredProjectContents": {
-    "apps/api/src/core/services.ts": ["isAdmin(request: Request): Promise<boolean>;"]
+    "apps/api/src/core/services.ts": [
+      "isAdmin(request: Request): Promise<boolean>;",
+      "tryResolve<T>(key: ServiceKey<T>): T | undefined {"
+    ]
   },
-  "env": [],
+  "env": [
+    "# file-upload: resumable chunked uploads. Largest file per upload, in bytes (1 GiB).",
+    "FILE_UPLOAD_MAX_BYTES=1073741824",
+    "# Part size in bytes: at least 5 MiB and within API_MAX_REQUEST_BODY_SIZE (8 MiB).",
+    "FILE_UPLOAD_PART_BYTES=8388608",
+    "# Seconds an unfinished upload may sit idle before it expires; each part restarts it.",
+    "FILE_UPLOAD_SESSION_TTL=86400",
+    "# Seconds between sweeps that abort expired uploads on every replica; 0 turns it off.",
+    "FILE_UPLOAD_SWEEP_INTERVAL=300",
+    "# Part uploads per caller in each RATE_LIMIT_TTL window when rate-limit is installed.",
+    "FILE_UPLOAD_RATE_LIMIT_MAX=3000"
+  ],
   "inject": [
     { "file": "apps/api/src/app.ts", "marker": "// podokit:end:imports", "text": "import { filesModule } from \"./files/files.module\";" },
-    { "file": "apps/api/src/app.ts", "marker": "// podokit:end:modules", "text": "filesModule," }
+    { "file": "apps/api/src/app.ts", "marker": "// podokit:end:modules", "text": "filesModule," },
+    {
+      "file": "AGENTS.md",
+      "marker": "<!-- podokit:end:agents-modules -->",
+      "optional": true,
+      "text": "### file-upload\n- `POST /files` stores one multipart file under `uploads/<userId>/`; `GET /files/:key/url` presigns it for the owner or an administrator.\n- For large files use the resumable upload in the browser: `uploadFile(file, { onProgress, signal })` and `resumeUpload(id, file)` from `$lib/uploads`. They create a session (`POST /files/uploads`), send parts (`PUT /files/uploads/:id/parts/:n`, `application/octet-stream`, `Content-Length` equal to the part size), retry failed parts honoring `Retry-After`, and complete (`POST /files/uploads/:id/complete`). `GET /files/uploads/:id` lists stored parts; `DELETE` cancels.\n- Upload sessions live in the database (`file_upload_sessions`, `file_upload_parts`), so any API replica serves any request; never keep upload state in memory. Run `{{apiRun}} migration:run{{apiWorkspaceArg}}` after adding the module.\n- Parts are larger than the web `BODY_SIZE_LIMIT`: list `/api/files/uploads/` in each deployment profile's `exposure.apiPaths` and in `.podokit/dev.json` `apiPaths`.\n- POST bodies must be `application/json` and parts `application/octet-stream` (else 415 `UNSUPPORTED_MEDIA_TYPE`), and a browser `Origin` outside `CORS_ORIGIN` gets 403. Branch on `error.code`: `UPLOAD_NOT_FOUND`, `UPLOAD_TOO_LARGE`, `UPLOAD_PART_SIZE_MISMATCH`, `UPLOAD_INCOMPLETE`, `UPLOAD_COMPLETING`, `UPLOAD_EXPIRED`, `UPLOAD_ABORTED`.\n"
+    }
   ],
   "instructions": [
     "Configure the selected object-storage provider before uploading files.",
+    "Run migrations to create the upload session tables: {{apiRun}} migration:run{{apiWorkspaceArg}}",
     "Uploads are stored as uploads/<userId>/<uuid>-<name>. Add the auth module so every upload has an owner.",
     "Upload a file:  curl -b cookies.txt -F 'file=@./some.png' localhost:5002/files",
     "The response includes { key, url } — an S3 presigned URL or a signed local download URL.",
     "Presign it again (owner or administrator, key URL-encoded):  curl -b cookies.txt localhost:5002/files/uploads%2F<userId>%2F<file>/url",
-    "Uploads stored before per-user keys (uploads/<file>) can only be presigned by administrators."
+    "Uploads stored before per-user keys (uploads/<file>) can only be presigned by administrators.",
+    "Start a resumable upload:  curl -b cookies.txt -XPOST localhost:5002/files/uploads -H 'content-type: application/json' -d '{\"filename\":\"big.bin\",\"size\":20000000}'",
+    "Send each part with its exact size:  curl -b cookies.txt -XPUT localhost:5002/files/uploads/<id>/parts/1 -H 'content-type: application/octet-stream' --data-binary @part-1",
+    "Resume from GET /files/uploads/<id> (receivedParts), finish with POST /files/uploads/<id>/complete and '{}' as JSON, or cancel with DELETE /files/uploads/<id>.",
+    "In the browser, call uploadFile(file, { onProgress, signal }) or resumeUpload(id, file) from $lib/uploads.",
+    "Parts exceed the web server's BODY_SIZE_LIMIT. Add \"/api/files/uploads/\" to exposure.apiPaths in each deployment profile and to apiPaths in .podokit/dev.json so parts reach the API directly."
   ]
 }

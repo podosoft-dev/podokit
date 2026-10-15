@@ -353,7 +353,9 @@ below it, so `/api/files/uploads/` covers `/api/files/uploads` and
 `/api/files/uploads/u1/parts/2`; the trailing slash is optional. The gateway
 removes `/api`, so `/api/files/uploads/u1/parts/2` reaches the API as
 `/files/uploads/u1/parts/2`, the same path the web proxy forwards. The list is
-empty by default.
+empty by default. Apps with the `file-upload` module need exactly this entry for
+its [resumable uploads](modules.md#resumable-uploads), whose parts exceed
+`BODY_SIZE_LIMIT`.
 
 The profile is rejected if an entry is `/api/` itself, contains a wildcard, query,
 fragment, percent-encoded character, empty segment, or traversal segment, overlaps

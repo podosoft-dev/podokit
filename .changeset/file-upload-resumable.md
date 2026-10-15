@@ -1,0 +1,5 @@
+---
+"@podosoft/podokit": minor
+---
+
+Add resumable chunked uploads to the file-upload module. `POST /files/uploads`, `PUT /files/uploads/{id}/parts/{partNumber}`, `GET /files/uploads/{id}`, `POST /files/uploads/{id}/complete`, and `DELETE /files/uploads/{id}` stream parts into an object storage multipart upload, keep every session in the database (`file_upload_sessions`, `file_upload_parts`) with conditional state transitions and an expiry sweep so any API replica can serve an upload, answer other users with 404, require JSON or binary content types (415 `UNSUPPORTED_MEDIA_TYPE`), reject browser origins outside `CORS_ORIGIN`, and register a `file-uploads` rate-limit budget for parts. `FILE_UPLOAD_MAX_BYTES`, `FILE_UPLOAD_PART_BYTES`, `FILE_UPLOAD_SESSION_TTL`, `FILE_UPLOAD_SWEEP_INTERVAL`, and `FILE_UPLOAD_RATE_LIMIT_MAX` configure it, and the managed `$lib/uploads` web helper uploads and resumes files with retries, progress, and cancellation. List `/api/files/uploads/` in `exposure.apiPaths` and `.podokit/dev.json` so parts bypass the web server's body limit.

@@ -146,6 +146,8 @@ and sends the request straight to the API container, so
 without passing through SvelteKit. The rules and their security implications are
 the same as for `exposure.apiPaths` in a
 [deployment profile](deployment.md#direct-api-paths); list the same paths in both.
+The `file-upload` module's [resumable uploads](modules.md#resumable-uploads) use
+`/api/files/uploads/`.
 
 `podo dev watch` delegates to Compose Watch. Vite handles web HMR and Bun's
 watch process reloads the Elysia API. Compose Watch syncs edits into the running

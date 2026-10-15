@@ -88,6 +88,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   Upload chunks no longer have to fit the general budget, and applications
   that waited out `Retry-After` between chunks can register an upload budget
   instead.
+- Resumable chunked uploads in the `file-upload` module. `POST /files/uploads`
+  starts a session and returns its part size and count, `PUT
+  /files/uploads/{id}/parts/{n}` streams one `application/octet-stream` part
+  of an exact `Content-Length` into an object storage multipart upload,
+  `GET /files/uploads/{id}` lists the stored parts for resuming, `POST
+  .../complete` assembles the file, and `DELETE` cancels it. Sessions live in
+  two new tables (`file_upload_sessions`, `file_upload_parts`; run
+  `migration:run`), every transition is a conditional `UPDATE`, and a periodic
+  sweep aborts expired uploads, so any number of API replicas can serve one
+  upload and only one completes or aborts it. Other users receive 404. POST
+  bodies must be JSON and parts binary (415 `UNSUPPORTED_MEDIA_TYPE`
+  otherwise), so cross-origin browser calls always need a CORS preflight, and
+  a browser `Origin` outside `CORS_ORIGIN` receives 403. Part uploads get their
+  own `file-uploads` rate-limit budget. `FILE_UPLOAD_MAX_BYTES`,
+  `FILE_UPLOAD_PART_BYTES`, `FILE_UPLOAD_SESSION_TTL`,
+  `FILE_UPLOAD_SWEEP_INTERVAL`, and `FILE_UPLOAD_RATE_LIMIT_MAX` configure it.
+  The module ships `$lib/uploads` for the browser: `uploadFile` and
+  `resumeUpload` send parts three at a time, retry failures with backoff that
+  honors `Retry-After`, report progress, and cancel the upload when their
+  signal aborts. A 40 MiB upload to Silo through the API added about 47 MiB of
+  API memory. Parts exceed the web `BODY_SIZE_LIMIT`, so list
+  `/api/files/uploads/` in `exposure.apiPaths` and `.podokit/dev.json`
+  `apiPaths`.
 
 ### Changed
 

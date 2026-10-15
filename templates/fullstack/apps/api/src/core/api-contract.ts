@@ -71,7 +71,15 @@ const MODULE_ROUTES: Record<string, string[]> = {
     "DELETE /admin/blog/{id}",
   ],
   bullmq: ["POST /jobs", "GET /jobs/{id}"],
-  "file-upload": ["POST /files", "GET /files/{key}/url"],
+  "file-upload": [
+    "POST /files",
+    "GET /files/{key}/url",
+    "POST /files/uploads",
+    "GET /files/uploads/{id}",
+    "PUT /files/uploads/{id}/parts/{partNumber}",
+    "POST /files/uploads/{id}/complete",
+    "DELETE /files/uploads/{id}",
+  ],
   "job-progress": ["POST /progress"],
   "object-storage-local": [
     "GET /files/content/*",

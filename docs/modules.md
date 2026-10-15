@@ -482,9 +482,9 @@ removed when a later upload starts.
 
 ### `file-upload`
 
-A multipart upload endpoint that stores files through the `OBJECT_STORAGE`
-contract and returns a download URL. `podo add file-upload` automatically adds
-the selected S3 or local implementation.
+A multipart upload endpoint and resumable chunked uploads that store files
+through the `OBJECT_STORAGE` contract and return a download URL. `podo add
+file-upload` automatically adds the selected S3 or local implementation.
 
 ```bash
 npx @podosoft/podokit add file-upload   # also adds the selected provider
@@ -516,6 +516,138 @@ Uploads stored by earlier versions use that unowned format. Once `auth` is
 installed, only administrators can presign them. To return such files to their
 owners, move each object to `uploads/<userId>/<name>` using ownership your
 application already records.
+
+#### Resumable uploads
+
+`POST /files` takes the whole file in one request, so it is bounded by the web
+server's `BODY_SIZE_LIMIT` and restarts from zero when the connection drops.
+For large files, the module also provides resumable uploads: the client creates
+an upload session, sends the file in numbered parts, and completes it. Each
+part is streamed into an object storage multipart upload without being
+buffered whole, a failed part is simply sent again, and a client that lost its
+place reads which parts the server already has.
+
+Sessions and received parts are stored in the database
+(`file_upload_sessions` and `file_upload_parts`), never in process memory, so
+any API replica can serve any request of an upload. Every state change is a
+conditional `UPDATE`: two concurrent completes produce one object, and replicas
+sweeping expired sessions at the same time never abort the same upload twice.
+Run the migration after adding the module:
+
+```bash
+bun run --cwd apps/api migration:run   # or migrate:all with the auth module
+```
+
+In the browser, use the managed helper `$lib/uploads`:
+
+```ts
+import { resumeUpload, uploadFile } from "$lib/uploads";
+
+const controller = new AbortController();
+const stored = await uploadFile(file, {
+  onProgress: (sent, total) => (progress = sent / total),
+  onSession: ({ id }) => localStorage.setItem("upload", id), // to resume after a reload
+  signal: controller.signal, // abort() cancels the upload on the server
+});
+// stored = { id, status: "completed", key, size, contentType, url }
+
+// After a reload, with the same File:
+await resumeUpload(localStorage.getItem("upload") ?? "", file);
+```
+
+`uploadFile` sends three parts at a time (`concurrency`), retries a part that
+fails with a network error, 408, 425, 429, or 5xx up to five times (`retries`)
+with exponential backoff from 500 ms (`retryDelayMs`), and waits for the
+server's `Retry-After` when there is one. Progress is reported as each part is
+stored. Aborting the signal stops the transfer and deletes the session.
+
+The HTTP contract, as the API receives it (the browser calls the same paths
+under `/api`):
+
+| Request | Body | Response |
+| --- | --- | --- |
+| `POST /files/uploads` | `application/json`: `{ filename, size, contentType? }` | `201 { id, partSize, partCount, expiresAt }` |
+| `PUT /files/uploads/{id}/parts/{partNumber}` | `application/octet-stream`, the part's bytes, `Content-Length` equal to `partSize` (the last part holds the remainder) | `200 { partNumber, size }` |
+| `GET /files/uploads/{id}` | | `200 { id, status, filename, contentType, size, partSize, partCount, receivedParts, expiresAt, key? }` |
+| `POST /files/uploads/{id}/complete` | `application/json`: `{}` | `200 { id, status: "completed", key, size, contentType, url }` |
+| `DELETE /files/uploads/{id}` | | `204` |
+
+Parts may arrive in any order, and sending a part again replaces it. `status`
+is `open`, `completing`, `completed`, or `aborted`; `key` appears once the upload
+has completed. Completing a completed upload returns the same result, and
+deleting an aborted one succeeds. Uploads are stored as
+`uploads/<userId>/<id>-<filename>`, so `GET /files/{key}/url` presigns them like
+any other upload.
+
+| Error code | Status | Meaning |
+| --- | --- | --- |
+| `UPLOAD_NOT_FOUND` | 404 | No such session, it belongs to another user, or storage no longer has it. Other users always receive 404, never 403. |
+| `UPLOAD_SIZE_INVALID` | 400 | `size` is not a positive whole number of bytes. |
+| `UPLOAD_TOO_LARGE` | 413 | `size` is above `FILE_UPLOAD_MAX_BYTES`. |
+| `UPLOAD_PART_OUT_OF_RANGE` | 400 | The part number is not between 1 and `partCount`. |
+| `UPLOAD_LENGTH_REQUIRED` | 411 | The part was sent without `Content-Length`. |
+| `UPLOAD_PART_SIZE_MISMATCH` | 400 | `Content-Length`, or the body actually received, differs from the part's size. |
+| `UPLOAD_INCOMPLETE` | 409 | Complete was called before every part arrived; read the status and send the missing parts. |
+| `UPLOAD_COMPLETING` | 409 | Another request is completing the upload; retry shortly. |
+| `UPLOAD_COMPLETED` | 409 | A part or delete arrived after completion. |
+| `UPLOAD_INVALID_PART` | 409 | Storage rejected a stored part as changed; send the parts again. |
+| `UPLOAD_CONFLICT` | 409 | The upload changed state while a part was being stored; read the status. |
+| `UPLOAD_EXPIRED`, `UPLOAD_ABORTED` | 410 | The session expired or was cancelled; start a new upload. |
+| `UNSUPPORTED_MEDIA_TYPE` | 415 | A POST without `application/json` or a part without `application/octet-stream`. |
+| `ORIGIN_NOT_ALLOWED` | 403 | A browser `Origin` outside `CORS_ORIGIN`. |
+
+The content-type rule keeps every cross-origin browser call to these routes
+from being a CORS "simple" request: the browser must send a preflight first,
+and the API's CORS refuses origins outside `CORS_ORIGIN`. This matters because
+a direct API path skips the web server's cross-site form check. A browser
+`Origin` header outside `CORS_ORIGIN` is also rejected outright; requests
+without one, such as `curl`, are authenticated by the session alone.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `FILE_UPLOAD_MAX_BYTES` | `1073741824` (1 GiB) | Largest file one upload may hold. |
+| `FILE_UPLOAD_PART_BYTES` | `8388608` (8 MiB) | Part size, at least 5 MiB (the S3 minimum). Files that would need more than 10,000 parts get larger parts, in whole MiB. |
+| `FILE_UPLOAD_SESSION_TTL` | `86400` | Seconds an unfinished upload may sit idle; each stored part restarts the clock. With local storage, keep it at or below `LOCAL_STORAGE_MULTIPART_MAX_AGE`. |
+| `FILE_UPLOAD_SWEEP_INTERVAL` | `300` | Seconds between sweeps that abort expired uploads, retry failed storage aborts, and delete finished sessions a TTL after they end. `0` turns the sweep off. |
+| `FILE_UPLOAD_RATE_LIMIT_MAX` | `3000` | Part uploads per caller in each `RATE_LIMIT_TTL` window. |
+
+The part size of the largest allowed upload must fit in the API's request body
+limit (`API_MAX_REQUEST_BODY_SIZE`, 128 MiB by default, or `apiServerOptions`);
+the API refuses to start otherwise. The S3 provider holds each part in memory
+while it sends it, so keep parts in the tens of MiB: three 8 MiB parts in flight
+added about 47 MiB of API memory in a 40 MiB upload to Silo. With the
+`rate-limit` module installed, part uploads count against their own
+`file-uploads` budget instead of the general one.
+
+**Route the parts past the web server.** Parts are larger than the web
+server's `BODY_SIZE_LIMIT` (3 MiB by default), so a production build answers
+`413` if they go through the `/api` proxy. List the upload path as a
+[direct API path](deployment.md#direct-api-paths) in every deployment profile:
+
+```json
+{
+  "exposure": {
+    "apiPaths": ["/api/files/uploads/"]
+  }
+}
+```
+
+and in `.podokit/dev.json` for `podo dev`, so development takes the same route:
+
+```json
+{
+  "schemaVersion": 1,
+  "hostname": "myapp.localhost",
+  "apiPaths": ["/api/files/uploads/"]
+}
+```
+
+`podo add file-upload` cannot write these files for you: the deployment profile
+and `.podokit/dev.json` belong to the application. The Vite development server
+sets no body limit, so `bun run dev` without a gateway also accepts the parts
+through the proxy. Requests on the direct path reach the API with the gateway's
+timeouts; see [direct API paths](deployment.md#direct-api-paths) for raising
+Traefik's read timeout on slow connections.
 
 ### `sse`
 
@@ -1445,7 +1577,7 @@ hand-written list. Inspect the complete result at `/api-docs` or
 | `blog` | `GET /blog`<br>`POST /blog/images`<br>`GET /blog/images/{id}`<br>`GET /blog/mine`<br>`GET /blog/manage/{slug}`<br>`GET /blog/{postRef}/comments`<br>`GET /blog/{postRef}`<br>`POST /blog`<br>`PATCH /blog/{postRef}`<br>`DELETE /blog/{postRef}`<br>`POST /blog/{postRef}/comments`<br>`PATCH /blog/comments/{id}`<br>`DELETE /blog/comments/{id}`<br>`GET /admin/blog`<br>`GET /admin/blog/{id}`<br>`POST /admin/blog`<br>`PATCH /admin/blog/{id}`<br>`DELETE /admin/blog/{id}` |
 | `bullmq` | `POST /jobs`<br>`GET /jobs/{id}` |
 | `jobs-local` | `POST /jobs`<br>`GET /jobs/{id}` |
-| `file-upload` | `POST /files`<br>`GET /files/{key}/url` |
+| `file-upload` | `POST /files`<br>`GET /files/{key}/url`<br>`POST /files/uploads`<br>`GET /files/uploads/{id}`<br>`PUT /files/uploads/{id}/parts/{partNumber}`<br>`POST /files/uploads/{id}/complete`<br>`DELETE /files/uploads/{id}` |
 | `job-progress` | `POST /progress` |
 | `object-storage-s3` | `PUT /storage/{key}`<br>`GET /storage/{key}`<br>`GET /storage/{key}/presigned` |
 | `object-storage-local` | `GET /files/content/*`<br>`PUT /storage/{key}`<br>`GET /storage/{key}`<br>`GET /storage/{key}/presigned` |
