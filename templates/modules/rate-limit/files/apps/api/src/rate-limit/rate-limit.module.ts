@@ -105,6 +105,11 @@ export class RateLimiter {
     ) {
       return { name: "runtime", ttlSeconds: this.config.ttlSeconds, limit: this.config.runtimeLimit };
     }
+    // Admin reads need an admin session and are not credential attempts; the
+    // server-paged admin tables issue one per page, sort, or search.
+    if (method === "GET" && path.startsWith("/api/auth/admin/")) {
+      return { name: "general", ttlSeconds: this.config.ttlSeconds, limit: this.config.limit };
+    }
     if (path === "/api/auth" || path.startsWith("/api/auth/")) {
       return { name: "auth", ttlSeconds: this.config.authTtlSeconds, limit: this.config.authLimit };
     }

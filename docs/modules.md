@@ -1038,8 +1038,10 @@ of accounts.
   lower case; searches by name are case-sensitive on PostgreSQL. The endpoint
   accepts one filter, so the Role and Status filters are mutually exclusive:
   choosing one resets the other. Status offers *Pending approval* and *Banned*.
-  Every page, sort, or search is one `/api/auth/admin/list-users` request, which
-  the `rate-limit` module counts against the stricter authentication budget.
+  Every page, sort, or search is one `/api/auth/admin/list-users` request. The
+  `rate-limit` module counts admin reads (`GET /api/auth/admin/*`) against the
+  general budget; admin writes and other authentication routes keep the stricter
+  authentication budget.
 - **Sessions** come from `GET /admin/sessions`, an admin-only endpoint that
   joins sessions to their users and returns only active sessions, newest first:
 
