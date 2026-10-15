@@ -18,6 +18,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `banned`) filters that combine. The admin users page uses it, so Role and
   Status no longer replace each other and the *Active* status is back.
   Mutations still go through Better Auth.
+- `apps/web/src/lib/server/public-paths.ts` (admin-dashboard) is an
+  application-owned `APP_PUBLIC_PATHS` list that the managed `guards.ts`
+  includes, so an app's own public pages render without a session and stay up
+  when the API or site settings are unavailable. `podo update` creates it once
+  in existing apps and never overwrites it.
 
 ### Deprecated
 
@@ -77,6 +82,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - A user with more than eight tabs streaming events from one replica now gets
   429 `EVENTS_STREAM_LIMIT` for the extra streams; `$lib/events` retries them
   with backoff. Raise `SSE_MAX_STREAMS_PER_USER` if your users need more.
+- Move public pages you added to the `PUBLIC_PATHS` list in `guards.ts` into
+  `APP_PUBLIC_PATHS` in `apps/web/src/lib/server/public-paths.ts` before
+  updating. If you already import `./public-paths` and spread it right after
+  `"/maintenance"`, update merges your edit without a conflict and keeps your
+  file.
 - `/admin/users/+page.svelte` is application-owned, so update keeps your page,
   which still uses Better Auth `listUsers` with one filter. Compare it with the
   template page to adopt `GET /admin/users`.

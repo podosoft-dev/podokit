@@ -19,5 +19,12 @@ description: Use when adding or changing a SvelteKit page/route in apps/web — 
    skill, added with the admin-dashboard module).
 5. **i18n**: no hardcoded user-facing strings — add keys to
    `apps/web/src/lib/i18n/messages.ts` for **every** locale.
-6. **Verify**: `{{webRun}} build` (includes `svelte-check`)
+6. **Public pages** (with the admin-dashboard module): every page outside the
+   sign-in flow, `/`, and module pages requires a session and answers 503 while
+   the API is unavailable. Add the prefix of a page anonymous visitors should see
+   (marketing, pricing, legal, `robots.txt`) to `APP_PUBLIC_PATHS` in the
+   app-owned `apps/web/src/lib/server/public-paths.ts`. A prefix covers its
+   subpaths. Give such a page's loader a fallback for when the API is down
+   instead of throwing. Never edit `PUBLIC_PATHS` in the managed `guards.ts`.
+7. **Verify**: `{{webRun}} build` (includes `svelte-check`)
    and add/adjust a Playwright test in `tests/`.

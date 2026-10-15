@@ -976,6 +976,14 @@ The generated `routes/(admin)` group and
 visual shell, so applications can place signed-in product pages there. A
 different protected group must call
 `requireBackendAvailable(locals)` before authentication redirects.
+
+Every page except the sign-in flow, `/`, and the pages modules register requires
+a session, and answers 503 while the API or site settings are unavailable. List
+your own public pages, such as marketing or legal pages and `robots.txt`, in
+`APP_PUBLIC_PATHS` in `apps/web/src/lib/server/public-paths.ts`. A prefix covers
+its subpaths. The file is application-owned: `podo add` and `podo update` create
+it once, empty, and never overwrite it, and the managed `guards.ts` includes the
+list. Give those pages' loaders a fallback for when the API is down.
 Server loads read `/account/capabilities` through `getCapabilities(event)` from
 the managed `#lib/server/capabilities.js`. It fetches once per request, for a
 full render or a `__data.json` navigation, and every layout and page load of

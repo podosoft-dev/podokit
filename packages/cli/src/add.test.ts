@@ -1137,3 +1137,18 @@ describe("admin bootstrap command", () => {
     },
   );
 });
+
+describe("app-owned public paths", () => {
+  it("seeds an owned public path list that the managed guards read", () => {
+    const project = generate("fullstack");
+    addModule({ projectRoot: project, module: "admin-dashboard", modulesDir: MODULES });
+    const seed = "apps/web/src/lib/server/public-paths.ts";
+    expect(readFileSync(join(project, seed), "utf8")).toContain(
+      "export const APP_PUBLIC_PATHS: readonly string[] = [];",
+    );
+    expect(readFilesLock(project)?.files[seed]?.tier).toBe("owned");
+    expect(readFileSync(join(project, "apps/web/src/lib/server/guards.ts"), "utf8")).toContain(
+      '  "/maintenance",\n  ...APP_PUBLIC_PATHS,\n',
+    );
+  });
+});

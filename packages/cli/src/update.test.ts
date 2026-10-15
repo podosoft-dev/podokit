@@ -1015,3 +1015,81 @@ describe("provider requirements introduced by target templates", () => {
     expect(app.indexOf(moduleLine("events-redis"))).toBeLessThan(app.indexOf(moduleLine("sse")));
   });
 });
+
+describe("app-owned public paths", () => {
+  const SEED = "apps/web/src/lib/server/public-paths.ts";
+  const GUARDS = "apps/web/src/lib/server/guards.ts";
+
+  // The admin-dashboard layout before it shipped the app-owned public path list.
+  function templatesWithoutPublicPaths(): string {
+    const dir = join(tmp(), "old-templates");
+    cpSync(REPO_TEMPLATES, dir, { recursive: true });
+    const module = join(dir, "modules/admin-dashboard");
+    rmSync(join(module, "files", SEED));
+    const guardsPath = join(module, "files", GUARDS);
+    writeFileSync(
+      guardsPath,
+      readFileSync(guardsPath, "utf8")
+        .replace('import { APP_PUBLIC_PATHS } from "./public-paths";\n', "")
+        .replace("  ...APP_PUBLIC_PATHS,\n", ""),
+    );
+    const manifestPath = join(module, "module.manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { ownedGlobs: string[] };
+    manifest.ownedGlobs = manifest.ownedGlobs.filter((glob) => glob !== SEED);
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    return dir;
+  }
+
+  function oldApp(oldTemplates: string): string {
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: project });
+    addModule({ projectRoot: project, module: "admin-dashboard", modulesDir: join(oldTemplates, "modules") });
+    expect(existsSync(join(project, SEED))).toBe(false);
+    return project;
+  }
+
+  it("creates the owned file for an existing app and wires it into the guards", () => {
+    const oldTemplates = templatesWithoutPublicPaths();
+    const project = oldApp(oldTemplates);
+
+    const plan = planUpdate(project, REPO_TEMPLATES);
+    expect(plan.changes.find((change) => change.path === SEED)).toMatchObject({ action: "add", tier: "owned" });
+    applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+
+    expect(readFileSync(join(project, SEED), "utf8")).toContain("export const APP_PUBLIC_PATHS: readonly string[] = [];");
+    const guards = readFileSync(join(project, GUARDS), "utf8");
+    expect(guards).toContain('import { APP_PUBLIC_PATHS } from "./public-paths";');
+    expect(guards).toContain('  "/maintenance",\n  ...APP_PUBLIC_PATHS,\n');
+    expect(readFilesLock(project)?.files[SEED]?.tier).toBe("owned");
+
+    // The application owns the list from now on.
+    writeFileSync(join(project, SEED), 'export const APP_PUBLIC_PATHS: readonly string[] = ["/pricing"];\n');
+    expect(planUpdate(project, REPO_TEMPLATES).changes.find((change) => change.path === SEED)?.action).toBe("skip");
+    applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+    expect(readFileSync(join(project, SEED), "utf8")).toContain('"/pricing"');
+  });
+
+  it("keeps an app's own list and merges the same guards edit cleanly", () => {
+    const oldTemplates = templatesWithoutPublicPaths();
+    const project = oldApp(oldTemplates);
+    // An app that already made this change by hand before updating.
+    const own = 'export const APP_PUBLIC_PATHS: readonly string[] = ["/about"];\n';
+    writeFileSync(join(project, SEED), own);
+    writeFileSync(
+      join(project, GUARDS),
+      readFileSync(join(project, GUARDS), "utf8")
+        .replace('import { error } from "@sveltejs/kit";\n', 'import { error } from "@sveltejs/kit";\nimport { APP_PUBLIC_PATHS } from "./public-paths";\n')
+        .replace('  "/maintenance",\n', '  "/maintenance",\n  ...APP_PUBLIC_PATHS,\n'),
+    );
+
+    const result = applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+
+    expect(result.conflicts).toEqual([]);
+    expect(readFileSync(join(project, SEED), "utf8")).toBe(own);
+    const guards = readFileSync(join(project, GUARDS), "utf8");
+    expect(guards.match(/\.\.\.APP_PUBLIC_PATHS,/g)).toHaveLength(1);
+    expect(guards.match(/from "\.\/public-paths"/g)).toHaveLength(1);
+    expect(planUpdate(project, REPO_TEMPLATES).changes.find((change) => change.path === GUARDS)?.action)
+      .toBe("up-to-date");
+  });
+});
