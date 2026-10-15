@@ -12,7 +12,12 @@ import {
 } from "@podosoft/podokit-auth";
 import type { DatabaseProviderName } from "@podosoft/podokit-runtime";
 import { refreshAuthNow } from "../auth/auth-provider";
-import { authConfigParam } from "./config-param";
+import {
+  readAuthConfigRow,
+  readAuthConfigRows,
+  writeAuthConfigRow,
+  type AuthConfigRow,
+} from "./auth-config.rows";
 
 export type SocialProviderView = {
   id: string;
@@ -73,13 +78,6 @@ export type AuthConfigUpdate = {
   };
 };
 
-interface AuthConfigRow {
-  key: string;
-  enabled: boolean;
-  config: unknown;
-  secret: string | null;
-}
-
 function object(value: unknown): Record<string, unknown> {
   if (value !== null && typeof value === "object" && !Array.isArray(value)) {
     return value as Record<string, unknown>;
@@ -110,30 +108,15 @@ export class AuthConfigService {
   ) {}
 
   private async rows(): Promise<AuthConfigRow[]> {
-    return this.sql<AuthConfigRow[]>`
-      SELECT "key", "enabled", "config", "secret" FROM "auth_config"
-    `;
+    return readAuthConfigRows(this.sql);
   }
 
   private async row(key: string): Promise<AuthConfigRow | null> {
-    const rows = await this.sql<AuthConfigRow[]>`
-      SELECT "key", "enabled", "config", "secret"
-      FROM "auth_config" WHERE "key" = ${key}
-    `;
-    return rows[0] ?? null;
+    return readAuthConfigRow(this.sql, key);
   }
 
   private async upsert(row: AuthConfigRow): Promise<void> {
-    const config = authConfigParam(this.provider, object(row.config));
-    await this.sql`
-      INSERT INTO "auth_config" ("key", "enabled", "config", "secret", "updatedAt")
-      VALUES (${row.key}, ${row.enabled}, ${config}, ${row.secret}, CURRENT_TIMESTAMP)
-      ON CONFLICT ("key") DO UPDATE SET
-        "enabled" = EXCLUDED."enabled",
-        "config" = EXCLUDED."config",
-        "secret" = EXCLUDED."secret",
-        "updatedAt" = CURRENT_TIMESTAMP
-    `;
+    await writeAuthConfigRow(this.sql, this.provider, row);
   }
 
   async describe(): Promise<AuthConfigView> {
