@@ -74,6 +74,8 @@ const RESERVED_RESPONSE_HEADERS = new Set([
   "set-cookie",
 ]);
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9a-z-]+$/;
+/** Larger response bodies stream through; smaller ones are relayed with their length. */
+export const IN_MEMORY_RESPONSE_BYTES = 2 * 1024 * 1024;
 
 /** Append an application's header names to a built-in list, lowercased and
  *  without duplicates. Throws on an invalid or reserved name so a mistake fails
@@ -284,13 +286,17 @@ export async function proxyRequest(
   // Bun's fetch decodes a compressed body but keeps the upstream content-encoding
   // and compressed content-length, which would truncate the decoded body.
   const contentLength = upstream.headers.get("content-length");
-  if (contentLength && !upstream.headers.has("content-encoding")) {
-    responseHeaders.set("content-length", contentLength);
-  }
+  const relayedLength = contentLength && !upstream.headers.has("content-encoding") ? contentLength : null;
+  if (relayedLength) responseHeaders.set("content-length", relayedLength);
   // Relay Set-Cookie so auth session cookies reach the browser.
   for (const cookie of upstream.headers.getSetCookie()) {
     responseHeaders.append("set-cookie", cookie);
   }
 
-  return new Response(upstream.body, { status: upstream.status, headers: responseHeaders });
+  // Bun sends a streamed body with chunked encoding and drops its content-length
+  // unless the body is in memory, so a body of modest, known size is read first.
+  const relayedBody = relayedLength && upstream.body && Number(relayedLength) <= IN_MEMORY_RESPONSE_BYTES
+    ? await upstream.arrayBuffer()
+    : upstream.body;
+  return new Response(relayedBody, { status: upstream.status, headers: responseHeaders });
 }

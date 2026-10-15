@@ -193,6 +193,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Responses relayed by the web app's `/api` proxy lost their `Content-Length`
+  above a few KiB, because Bun sends a streamed body, a `fetch()` response body
+  included, with chunked encoding. The proxy now reads an uncompressed body of up
+  to 2 MiB with a known length before relaying it, so images and JSON responses
+  reach the browser with their length; larger bodies still stream through.
+
 - Objects up to 2 MiB served from the S3 provider, such as profile images and
   favicons, lost their `Content-Length`: `objectResponse` set it, but Bun sends
   a streamed body with chunked encoding unless the body is in memory or a file.

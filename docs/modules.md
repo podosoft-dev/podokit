@@ -1438,9 +1438,9 @@ the resulting versioned path in better-auth's `user.image`. The bucket stays
 private; `GET /api/profile-images/:fileName` streams the UUID path from storage
 with `etag`, `last-modified`, and immutable cache headers, and answers a
 matching `If-None-Match` with `304` without reading the object. With the S3
-provider the API's response carries `content-length`, because images of at most
-2 MiB are read into memory first; the local provider's responses are chunked,
-without it (see `object-storage-local`). A
+provider the response carries `content-length`, because the store and the web
+proxy read images of at most 2 MiB into memory first; the local provider's
+responses are chunked, without it (see `object-storage-local`). A
 missing image returns 404; a storage failure is reported as a server error rather
 than a missing image. Replacing, removing, or self-deleting the account removes
 managed objects on a best-effort basis. Existing external/social avatar URLs are

@@ -4,6 +4,7 @@ import { gzipSync } from "node:zlib";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   bodyLimitFor,
+  IN_MEMORY_RESPONSE_BYTES,
   proxyRequest,
   rawSubpath,
   resolveClientIp,
@@ -178,6 +179,47 @@ describe("backend proxy client address handling", () => {
 
     expect(response.headers.get("content-length")).toBe("10");
     expect(await response.text()).toBe("0123456789");
+  });
+
+  it("reads a body of known, modest size before relaying it, so Bun keeps its length", async () => {
+    let pulls = 0;
+    vi.stubGlobal("fetch", async () => new Response(new ReadableStream<Uint8Array>({
+      pull(controller): void {
+        pulls += 1;
+        controller.enqueue(new TextEncoder().encode("0123456789"));
+        controller.close();
+      },
+    }, { highWaterMark: 0 }), { headers: { "content-length": "10" } }));
+
+    const response = await proxyRequest(
+      new Request("http://app.localhost/api/profile-images/a.png"),
+      "http://api:5002/profile-images/a.png",
+    );
+
+    expect(pulls).toBe(1);
+    expect(response.headers.get("content-length")).toBe("10");
+    expect(await response.text()).toBe("0123456789");
+  });
+
+  it("streams a larger body through without reading it first", async () => {
+    const size = IN_MEMORY_RESPONSE_BYTES + 1;
+    let pulls = 0;
+    vi.stubGlobal("fetch", async () => new Response(new ReadableStream<Uint8Array>({
+      pull(controller): void {
+        pulls += 1;
+        controller.enqueue(new Uint8Array(size));
+        controller.close();
+      },
+    }, { highWaterMark: 0 }), { headers: { "content-length": String(size) } }));
+
+    const response = await proxyRequest(
+      new Request("http://app.localhost/api/storage/large"),
+      "http://api:5002/storage/large",
+    );
+
+    expect(pulls).toBe(0);
+    expect(response.headers.get("content-length")).toBe(String(size));
+    expect((await response.arrayBuffer()).byteLength).toBe(size);
   });
 
   it("drops content-length when the upstream body was compressed", async () => {

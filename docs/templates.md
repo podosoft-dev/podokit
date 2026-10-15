@@ -123,6 +123,12 @@ conditional and range requests, the user agent) and relays an allowlist of
 response headers back (content and caching headers, `location`, rate-limit
 headers, `x-next-cursor`, and `set-cookie`). Every other header is dropped.
 
+The proxy relays the API's `content-length` unless the body was compressed.
+Bun sends a streamed body with chunked encoding and drops its length unless the
+body is in memory, so the proxy reads a body of up to 2 MiB with a known length
+before relaying it, such as a profile image or a JSON response, and streams
+larger ones through, chunked.
+
 Add the headers your own API uses to the application-owned
 `apps/web/src/lib/server/proxy-headers.ts`:
 
