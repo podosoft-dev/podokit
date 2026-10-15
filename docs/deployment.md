@@ -457,6 +457,15 @@ the missing files 404, so nothing looks broken. Name those paths in the profile:
 The key is read only by `sync`. It is never rendered into the Compose project, so
 adding it changes what that one command copies and nothing about what is deployed.
 
+## Request body limit
+
+The API refuses request bodies larger than `API_MAX_REQUEST_BODY_SIZE` bytes
+with `413`. It defaults to Bun's 128 MiB. Set it in the profile's
+`runtimeConfig`, or set `maxRequestBodySize` in the application's
+`apiServerOptions` (see [API server options](templates.md#api-server-options)),
+which wins over the environment. Proxies in front of the API, including the web
+app's `BODY_SIZE_LIMIT` and any ingress, apply their own limits.
+
 ## Health probes
 
 The API serves two health endpoints. `GET /health` reports that the process is

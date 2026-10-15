@@ -159,6 +159,33 @@ upload route in `apiPaths` so the gateway sends it straight to the API; see
 [direct API paths](deployment.md#direct-api-paths). An app that splits uploads
 into chunks small enough for the web proxy can send larger parts that way.
 
+### API server options
+
+`main.ts` is managed, so applications set Bun server options through the
+`apiServerOptions` export of the owned `apps/api/src/app.extensions.ts`:
+
+```ts
+import type { ApiServerOptionsSource } from "./config/server-options";
+
+export const apiServerOptions: ApiServerOptionsSource = {
+  maxRequestBodySize: 1024 ** 3, // bytes per request body
+  idleTimeout: 120, // seconds, 0 to 255
+};
+```
+
+| Option | Default | Effect |
+| --- | --- | --- |
+| `maxRequestBodySize` | `API_MAX_REQUEST_BODY_SIZE`, else 128 MiB (Bun's default) | Larger bodies are refused with `413` before a handler runs. |
+| `idleTimeout` | 30 seconds (Elysia's default) | How long a connection may stay idle; `0` disables the timeout. |
+
+Values in the export win over the environment. Export a function to derive
+them from the validated environment instead, for example
+`(env) => ({ maxRequestBodySize: Math.max(env.API_MAX_REQUEST_BODY_SIZE, 1024 ** 3) })`.
+The export is optional: an `app.extensions.ts` written before it existed keeps
+compiling, and `API_MAX_REQUEST_BODY_SIZE` still applies. Invalid values stop
+the API at startup. Requests through the web app's `/api` proxy are also
+bounded by the web server's `BODY_SIZE_LIMIT`.
+
 ## `todo`
 
 The Todo template adds:

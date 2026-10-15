@@ -21,6 +21,10 @@ POSTGRES_DB=podokit
 # DB_IDLE_TIMEOUT_MS=30000
 # DB_AUTH_POOL_MAX=10
 
+# Largest API request body in bytes (Bun's default is 128 MiB). Requests through
+# the web app's /api proxy are also bounded by BODY_SIZE_LIMIT below.
+# API_MAX_REQUEST_BODY_SIZE=134217728
+
 # Readiness (GET /health/ready): the longest one dependency check may run, and how
 # long a result is reused across probes (0 checks on every request).
 # READINESS_CHECK_TIMEOUT_MS=800

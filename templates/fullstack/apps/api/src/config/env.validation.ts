@@ -4,6 +4,8 @@ import { z } from "zod";
 const schema = z.object({
   NODE_ENV: z.string().default("development"),
   PORT: z.coerce.number().default(5002),
+  // Bytes one request body may hold; 128 MiB is Bun's default.
+  API_MAX_REQUEST_BODY_SIZE: z.coerce.number().int().positive().default(128 * 1024 * 1024),
   CORS_ORIGIN: z.string().optional(),
   DATABASE_URL: z.string().optional(),
   POSTGRES_HOST: z.string().default("localhost"),
