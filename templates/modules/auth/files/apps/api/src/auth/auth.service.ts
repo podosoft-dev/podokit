@@ -62,7 +62,7 @@ export class AuthService {
   async guard(request: Request): Promise<void> {
     if (this.accessPolicy.resolve(request) !== "session") return;
     const session = await this.requireSession(request);
-    if (!this.settings.getBool("require2fa") || session.user.twoFactorEnabled) return;
+    if (session.user.twoFactorEnabled || !(await this.settings.getBool("require2fa"))) return;
     const path = new URL(request.url).pathname;
     if (path === "/account/require-2fa" || path === "/account/settings") return;
     throw new AppException(

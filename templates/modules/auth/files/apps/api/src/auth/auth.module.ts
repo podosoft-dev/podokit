@@ -1,8 +1,10 @@
 import type { Capabilities } from "@podosoft/podokit-contracts";
 import { Elysia, t } from "elysia";
+import { EVENTS } from "@podosoft/podokit-runtime";
 import {
   ACCESS_POLICY,
   DATABASE,
+  LOGGER,
   OPENAPI,
   REQUEST_GUARDS,
   REQUEST_IDENTITY,
@@ -21,6 +23,7 @@ import { cachedAuthOpenApiDocuments } from "./auth.openapi";
 import { ROLE_NAMES } from "./permissions";
 import { AuthService, rolesOf } from "./auth.service";
 import { configureAuthQueryDatabase } from "./db";
+import { configEvents, publishConfigChanged } from "./config-events";
 import { setMailConfigStore } from "../mail/mailer";
 
 export const AUTH = Symbol("auth") as ServiceKey<AuthService>;
@@ -69,12 +72,14 @@ const accountPlugin: AppPlugin = ({ services }) => {
     }, {
       detail: { tags: ["account"], summary: "Get the current account" },
     })
-    .get("/account/require-2fa", () => ({ require2fa: settings.getBool("require2fa") }), {
+    .get("/account/require-2fa", async () => ({ require2fa: await settings.getBool("require2fa") }), {
       detail: { tags: ["account"], summary: "Get the two-factor enrolment policy" },
     })
     .get("/account/capabilities", async (): Promise<Capabilities> => {
-      const flags = settings.flags();
-      const snapshot = await authConfigStore.capabilitiesSnapshot();
+      const [flags, snapshot] = await Promise.all([
+        settings.flags(),
+        authConfigStore.capabilitiesSnapshot(),
+      ]);
       return {
         twoFactor: flags.twoFactor,
         magicLink: flags.magicLink,
@@ -152,14 +157,25 @@ export const authModule: PodokitModule = {
     configureAuthQueryDatabase(database.sql);
     setMailConfigStore(authConfigStore);
     const accessPolicy = services.resolve(ACCESS_POLICY);
-    const settings = new SettingsService(database.sql);
+    const settings = new SettingsService(database.sql, authConfigStore, publishConfigChanged);
     const authService = new AuthService(settings, accessPolicy);
     services.register(SETTINGS, settings);
-    services.register(AUTH_CONFIG, new AuthConfigService(database.sql));
+    services.register(AUTH_CONFIG, new AuthConfigService(database.sql, database.provider));
     services.register(AUTH, authService, () => authService.close());
     services.onStart(async () => {
-      await settings.refresh();
       await primeAuth();
+      // Optional: with an events provider, other replicas' settings writes apply
+      // at once instead of at the next version probe.
+      const events = services.tryResolve(EVENTS);
+      if (!events) return;
+      try {
+        await configEvents.listen(events, () => authConfigStore.invalidate());
+      } catch (error) {
+        services.resolve(LOGGER).warn(
+          { reason: error instanceof Error ? error.message : String(error) },
+          "Settings change events are unavailable; replicas converge on the settings TTL",
+        );
+      }
     });
     services.override(REQUEST_IDENTITY, {
       userId: async (request) => (await authService.session(request))?.user.id,

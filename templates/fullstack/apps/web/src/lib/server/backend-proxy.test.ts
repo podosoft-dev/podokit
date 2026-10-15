@@ -122,6 +122,19 @@ describe("backend proxy client address handling", () => {
     expect(response.headers.get("ratelimit-remaining")).toBe("0");
   });
 
+  it("relays the next-page cursor of a cursor-paged list", async () => {
+    vi.stubGlobal("fetch", async () => new Response("[]", {
+      headers: { "content-type": "application/json", "x-next-cursor": "WyIyMDI2Il0" },
+    }));
+
+    const response = await proxyRequest(
+      new Request("http://app.localhost/api/audit-logs?limit=15"),
+      "http://api:5002/audit-logs?limit=15",
+    );
+
+    expect(response.headers.get("x-next-cursor")).toBe("WyIyMDI2Il0");
+  });
+
   it("relays cache validator and download headers", async () => {
     vi.stubGlobal("fetch", async () => new Response("report", {
       headers: {

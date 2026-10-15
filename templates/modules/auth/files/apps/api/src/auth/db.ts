@@ -1,7 +1,7 @@
 import { Database as SqliteDatabase } from "bun:sqlite";
 import type { SQL } from "bun";
 import { Pool } from "pg";
-import type { AuthConfigRow } from "@podosoft/podokit-auth";
+import type { AuthConfigRow, ConfigVersions } from "@podosoft/podokit-auth";
 import type { DatabaseProviderName } from "@podosoft/podokit-runtime";
 import { validateEnv } from "../config/env.validation";
 import { PROVIDERS } from "../config/providers";
@@ -54,6 +54,30 @@ export async function readAuthConfig(): Promise<AuthConfigRow[]> {
     SELECT "key", "enabled", "config", "secret", "updatedAt" FROM "auth_config"
   `;
   return rows.map((row) => ({ ...row, enabled: row.enabled === true || row.enabled === 1 }));
+}
+
+type VersionRow = {
+  authConfigCount: number | string | bigint;
+  authConfigUpdatedAt: string | null;
+  appSettingCount: number | string | bigint;
+  appSettingUpdatedAt: string | null;
+};
+
+/** One cheap statement that changes whenever either settings table changes. The
+ *  count catches deletes; the text cast keeps PostgreSQL's microsecond precision. */
+export async function readConfigVersions(): Promise<ConfigVersions> {
+  const sql = queries();
+  const [row] = await sql<VersionRow[]>`
+    SELECT
+      (SELECT count(*) FROM "auth_config") AS "authConfigCount",
+      (SELECT CAST(max("updatedAt") AS TEXT) FROM "auth_config") AS "authConfigUpdatedAt",
+      (SELECT count(*) FROM "app_setting") AS "appSettingCount",
+      (SELECT CAST(max("updatedAt") AS TEXT) FROM "app_setting") AS "appSettingUpdatedAt"
+  `;
+  return {
+    authConfig: `${String(row?.authConfigCount ?? 0)}:${row?.authConfigUpdatedAt ?? ""}`,
+    appSettings: `${String(row?.appSettingCount ?? 0)}:${row?.appSettingUpdatedAt ?? ""}`,
+  };
 }
 
 export async function closeAuthDatabase(): Promise<void> {

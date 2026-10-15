@@ -222,6 +222,13 @@ migration Job before a rolling deployment.
   `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are required env vars; the rest are optional
   fallbacks/overrides that the DB config takes precedence over (handy for secrets-manager
   injection in production).
+- **How settings changes reach every replica.** `auth_config` and `app_setting` share one
+  in-process snapshot. The replica that handled a write applies it before responding. Other
+  replicas run one version probe (row count and latest update time of both tables) at most every
+  3 seconds, and read the tables again only when the probe changes, so they converge within
+  3 seconds, deleted providers included. When the app has an events provider (`events-redis`
+  across replicas), a write also publishes `config.changed` so the other replicas reload at once;
+  without one they rely on the probe.
 - **Social login is dynamic.** The "Social login" card manages providers add/edit/delete: pick
   any better-auth-supported provider (Google, GitHub, Apple, Microsoft, Discord, Kakao, Naver,
   … — see `auth/auth-config.ts` `SUPPORTED_SOCIAL_PROVIDERS`), paste its client id/secret, and it
@@ -315,9 +322,10 @@ import { sendMail, actionEmail } from "../mail/mailer"; // path relative to your
 await sendMail({ to: "a@example.com", subject: "Hi", text: "Hello", html: actionEmail(...) });
 ```
 
-- **SMTP resolution** (applied live, ~3s TTL): admin Settings page (DB, when
-  `auth` is installed) → `SMTP_*` env → none, in which case messages are logged
-  to the console so dev links stay grabbable.
+- **SMTP resolution** (applied live through the shared settings snapshot, within
+  about 3 seconds): admin Settings page (DB, when `auth` is installed) → `SMTP_*`
+  env → none, in which case messages are logged to the console so dev links stay
+  grabbable. The transport is rebuilt only when the SMTP settings change.
 - Depends on no other module (reads the DB SMTP config defensively), so `auth`
   can require it without a cycle.
 - **Override the transport** (e.g. a provider SDK) from the owned DI slot
@@ -589,12 +597,65 @@ request, and module logs use the same pino instance.
 
 ### `audit-log`
 
-Audit logging built on `auth` (added automatically). A **global Elysia hook**
-records every mutating request (POST/PUT/PATCH/DELETE) to an `audit_logs` table
-with the **acting user**, method, path, and status. Read recent entries at
-`/audit-logs`. On/off is an **admin toggle on the Settings page** (stored in the
-DB, applied live — no restart); `AUDIT_LOG_ENABLED` is only the fallback default
-until an admin sets it (leave it `true` so the trail is on out of the box).
+Audit logging built on `auth` (added automatically). Entries follow an
+actor / action / target model and are stored in the `audit_logs` table. A Better
+Auth hook records sign-in, sign-up, password, session, two-factor, and admin user
+actions (`auth.login`, `user.ban`, `user.role_change`, ...). Nothing else is
+recorded automatically: application code records its own semantic events with
+`AuditService.recordRequest()` or `recordAudit()`. Admins read entries at
+`/audit-logs`.
+
+On/off is an **admin toggle on the Settings page** (stored in the DB, applied
+live — no restart); `AUDIT_LOG_ENABLED` is only the fallback default until an
+admin sets it (leave it `true` so the trail is on out of the box). Every write
+path checks the toggle in `AuditService`, so turning it off stops Better Auth
+entries and application entries alike.
+
+Writes are awaited by default, so a response waits for its audit INSERT. For
+high-volume events that are not security relevant, `recordAuditLater()` (or
+`recordRequest(..., { defer: true })`) queues the entry instead. Queued entries
+are written with one multi-row INSERT every 250 ms, as soon as 100 are waiting,
+and on a clean shutdown. The trade-off is durability: **entries still queued when
+the API process crashes or is killed are lost**. The queue holds at most 1,000
+entries; past that, new deferred entries are dropped with a warning and an
+`audit.dropped` entry records how many were lost. The Better Auth hook and
+`auth.*` / `user.*` actions always use the awaited path.
+
+`GET /audit-logs` (admin only) returns one page as a JSON array, newest first.
+It pages with a keyset cursor on `("createdAt", "id")`, so a deep page costs the
+same as the first:
+
+| Query | Meaning |
+| --- | --- |
+| `limit` | Entries per page, 1 to 100 (default 50) |
+| `cursor` | The `X-Next-Cursor` value from the previous page |
+| `order` | `desc` (default) or `asc` |
+| `action` | Exact action code |
+| `actor` | Exact actor email |
+| `target` | Exact target label (the email or title the list shows) |
+
+When more entries follow, the response carries the next page's cursor in the
+`X-Next-Cursor` header (opaque base64url), and the last page has none. The
+SvelteKit proxy relays the header to browser code. A cursor the API did not
+issue returns `400 INVALID_CURSOR`. `GET /audit-logs/actions` lists the recorded
+action codes for filter menus. The admin **Audit log** page uses both.
+
+The `IndexAuditLogFilters` migration backs these queries with
+`("createdAt", "id")`, `("action", "createdAt")`, `("actorEmail", "createdAt")`,
+and `("targetLabel", "createdAt")` indexes, replacing the initial single-column
+`action` and `createdAt` indexes. Migrations run in one transaction, so it uses a
+plain `CREATE INDEX`, which blocks writes to `audit_logs` while it builds. For a
+large PostgreSQL table, create the same indexes beforehand with
+`CREATE INDEX CONCURRENTLY` under the same names; the migration then skips them.
+
+Entries are kept forever by default. Set `AUDIT_LOG_RETENTION_DAYS` to a whole
+number of days to delete older entries: when the API starts, and then about once
+an hour, each API process deletes entries older than the cutoff in batches of
+1,000 rows per statement until none are left, and records an `audit.pruned`
+entry with the count and cutoff. Unset or `0` turns pruning off; a negative or
+non-integer value stops the API at startup. **Leave it unset unless a written
+retention policy requires deletion**: many compliance regimes require audit
+trails to be kept for a minimum period, and pruned entries cannot be recovered.
 
 ```bash
 npx @podosoft/podokit add audit-log   # also adds auth
@@ -603,11 +664,10 @@ docker compose -f infra/docker/docker-compose.yml up -d
 bun run --cwd apps/api migrate:all   # creates auth and audit tables
 bun run dev
 
-# sign in, make a change, then see who did it
-curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-up/email \
-  -H 'content-type: application/json' -d '{"email":"a@example.com","password":"password123","name":"A"}'
-curl -b cookies.txt -XPOST localhost:5002/todos -H 'content-type: application/json' -d '{"title":"hi"}'
-curl -b cookies.txt localhost:5002/audit-logs   # [{ userId, method:"POST", path:"/todos", statusCode:201, ... }]
+# sign in as an admin (ADMIN_EMAILS), then read the trail
+curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-in/email \
+  -H 'content-type: application/json' -d '{"email":"admin@example.com","password":"<password>"}'
+curl -b cookies.txt localhost:5002/audit-logs   # [{ action:"auth.login", actorEmail:"admin@example.com", ... }]
 ```
 
 ### `rate-limit`
@@ -1009,7 +1069,7 @@ hand-written list. Inspect the complete result at `/api-docs` or
 | `auth` application routes | `GET /account/me`<br>`GET /account/require-2fa`<br>`GET /account/capabilities`<br>`PUT /account/settings`<br>`GET /account/auth-config`<br>`PUT /account/auth-config`<br>`POST /account/org-member`<br>`GET /api/auth/get-session`<br>`POST /api/auth/sign-in/email` |
 | `admin-dashboard` | `GET /site/settings`<br>`PUT /site/settings`<br>`POST /site/favicon`<br>`GET /site/favicon`<br>`POST /account/profile-image`<br>`DELETE /account/profile-image`<br>`GET /profile-images/{fileName}` |
 | `api-key-auth` | `GET /machine/ping` |
-| `audit-log` | `GET /audit-logs` |
+| `audit-log` | `GET /audit-logs`<br>`GET /audit-logs/actions` |
 | `analytics` | `GET /analytics/config`<br>`GET /admin/analytics/config`<br>`PUT /admin/analytics/config`<br>`DELETE /admin/analytics/config/credentials`<br>`POST /admin/analytics/config/test`<br>`GET /admin/analytics/report`<br>`GET /admin/analytics/realtime` |
 | `blog` | `GET /blog`<br>`POST /blog/images`<br>`GET /blog/images/{id}`<br>`GET /blog/mine`<br>`GET /blog/manage/{slug}`<br>`GET /blog/{postRef}/comments`<br>`GET /blog/{postRef}`<br>`POST /blog`<br>`PATCH /blog/{postRef}`<br>`DELETE /blog/{postRef}`<br>`POST /blog/{postRef}/comments`<br>`PATCH /blog/comments/{id}`<br>`DELETE /blog/comments/{id}`<br>`GET /admin/blog`<br>`GET /admin/blog/{id}`<br>`POST /admin/blog`<br>`PATCH /admin/blog/{id}`<br>`DELETE /admin/blog/{id}` |
 | `bullmq` | `POST /jobs`<br>`GET /jobs/{id}` |

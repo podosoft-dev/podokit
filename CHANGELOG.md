@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- `AUDIT_LOG_RETENTION_DAYS` prunes audit entries older than the given number of
+  days in batches. It is off by default; enable it only where retention policy
+  allows deleting audit history.
+- `GET /audit-logs` pages with an opaque `X-Next-Cursor` header and filters by
+  `action`, `actor` (email), and `target` (label) on the server.
+  `GET /audit-logs/actions` lists the recorded action codes.
+- `recordAuditLater()` defers non-security audit writes into a bounded queue that
+  is written in batches and flushed on shutdown.
 - `Capabilities.require2fa` reports the two-factor policy, so the protected
   layout no longer calls `/account/require-2fa`. The endpoint stays.
 - `DB_POOL_MAX`, `DB_AUTH_POOL_MAX`, `DB_CONNECT_TIMEOUT_MS`, and
@@ -21,6 +29,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- The settings store runs one version probe per tick instead of reading every
+  settings row, reloads only when a table changes (deletes included), and
+  refreshes `SettingsService` on every replica. With an events provider
+  installed, a settings write invalidates other replicas immediately.
+- The admin audit page pages and filters on the server. Apps created earlier own
+  `routes/(admin)/admin/audit/+page.svelte` and keep showing only the latest 50
+  entries until they take the new page.
+- `AuditService` takes `{ dialect, enabled }`, `close()` is async, and `recent()`
+  is replaced by `list()`.
 - Session reads no longer set the `set-auth-jwt` header. Clients that need a
   JWT call `GET /api/auth/token`.
 - Bearer authentication accepts only signed session values (the
@@ -42,6 +59,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Auth settings (OAuth providers, SMTP, server toggles) save on SQLite apps;
+  Bun's SQLite driver rejected the object parameter.
+- The audit toggle applies to every write, not only request and auth hooks.
+- Audit metadata is stored as a JSON object in PostgreSQL and as JSON text in
+  SQLite. SQLite rows written before stored `0` and cannot be recovered.
 - OAuth consent sends the signed authorization query, so allowing consent no
   longer fails with `missing oauth query`. Apps created earlier own
   `routes/oauth2/consent/+page.svelte`; send

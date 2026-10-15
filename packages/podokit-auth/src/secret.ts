@@ -10,11 +10,19 @@ import { hkdfSync, randomBytes, createCipheriv, createDecipheriv } from "node:cr
 const INFO = "podokit-auth-config-v1"; // domain separation for the derived key
 const ALGO = "aes-256-gcm";
 
+let derived: { secret: string; key: Buffer } | undefined;
+
 function key(): Buffer {
   const secret = process.env.BETTER_AUTH_SECRET ?? "change-me-in-production-min-32-characters";
+  // HKDF is the expensive part of a decrypt; derive once per secret value.
+  if (derived?.secret === secret) return derived.key;
   // salt is intentionally empty: the info string provides domain separation and the
   // input secret is already high-entropy. Returns a 32-byte key for AES-256.
-  return Buffer.from(hkdfSync("sha256", Buffer.from(secret), new Uint8Array(0), Buffer.from(INFO), 32));
+  derived = {
+    secret,
+    key: Buffer.from(hkdfSync("sha256", Buffer.from(secret), new Uint8Array(0), Buffer.from(INFO), 32)),
+  };
+  return derived.key;
 }
 
 /** Encrypt a secret for at-rest storage. Returns "iv|authTag|ciphertext" (base64 parts). */

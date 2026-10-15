@@ -21,8 +21,12 @@ and by the `@better-auth/cli` during migrations.
   `envAuthConfig()` (the env-only fallback),
   the supported-provider allowlist, and `socialKey` helpers.
 - **A config store** — `createConfigStore(pool)` loads the current config from
-  the `auth_config` table (with per-field env fallback) and decrypts secrets on
-  read.
+  the `auth_config` table (with per-field env fallback) and decrypts secrets in
+  memory. It serves one snapshot for a short TTL (3 seconds by default). After
+  the TTL it runs one cheap version probe (`count(*)` and `max("updatedAt")`)
+  and reads a table again only when the probe changes, so a deleted row is
+  detected too. Values derived from a snapshot (the decrypted config, the
+  capabilities snapshot, the SMTP config) are computed once per change.
 
 ## Install
 
@@ -40,7 +44,25 @@ import { createConfigStore, envAuthConfig } from "@podosoft/podokit-auth";
 const store = createConfigStore(pool);      // reads auth_config, env fallback
 const config = await store.load();          // AuthConfig (secrets decrypted)
 const smtp = await store.smtpConfig();      // resolved SMTP transport config, or null
+store.invalidate();                         // after a local write: reload on next read
 ```
+
+A repository can also share the snapshot with a key/value settings table and
+supply its own probe, for example to cover both tables in one statement:
+
+```ts
+const store = createConfigStore({
+  list: readAuthConfigRows,                 // auth_config rows
+  listSettings: readAppSettingRows,         // { key, value } rows
+  versions: readVersions,                   // { authConfig, appSettings } change tokens
+});
+const magicLinkEnabled = store.selectSettings((settings) => settings.get("magicLink") !== "false");
+await magicLinkEnabled();                   // recomputed only when the settings change
+```
+
+Objects returned by `load()` and `smtpConfig()` are shared until the
+configuration changes; treat them as read-only. A failed read falls back to the
+environment configuration and empty settings, and is retried after the TTL.
 
 Set `sessionIdleTimeoutMinutes` to an integer from 5 through 10080 to build a
 sliding server-side session lifetime. `null` keeps better-auth's default

@@ -6,7 +6,10 @@
   "env": [
     "# audit-log: managed on the admin Settings page, stored in the DB,",
     "# and applied without restart. This environment value is the fallback.",
-    "AUDIT_LOG_ENABLED=true"
+    "AUDIT_LOG_ENABLED=true",
+    "# audit-log: delete entries older than this many days. Unset or 0 keeps them",
+    "# forever; set it only when your retention policy requires deleting them.",
+    "AUDIT_LOG_RETENTION_DAYS=0"
   ],
   "inject": [
     {
@@ -32,8 +35,8 @@
   ],
   "instructions": [
     "Run migrations to create the audit_logs table: {{apiRun}} migration:run{{apiWorkspaceArg}}",
-    "Auth/admin actions are recorded by a Better Auth hook. Record semantic application events with AuditService.recordRequest() or recordAudit().",
-    "List recent entries (admin session required): curl -b cookies.txt localhost:5002/audit-logs"
+    "Auth/admin actions are recorded by a Better Auth hook. Record semantic application events with AuditService.recordRequest() or recordAudit(); use recordAuditLater() only for high-volume, non-security events.",
+    "List entries newest first (admin session required): curl -i -b cookies.txt 'localhost:5002/audit-logs?limit=50' and pass the X-Next-Cursor header back as ?cursor= for the next page"
   ],
   "dependencies": {
     "@podosoft/podokit-auth": "^0.4.0"

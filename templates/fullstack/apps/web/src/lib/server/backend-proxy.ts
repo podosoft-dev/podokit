@@ -35,6 +35,8 @@ const RELAYED_RESPONSE_HEADERS = [
   "retry-after",
   "ratelimit-limit",
   "ratelimit-remaining",
+  // Cursor-paged lists (such as the audit log) return the next page's cursor here.
+  "x-next-cursor",
 ];
 
 // SvelteKit decodes rest params, so an encoded "%2F" or "%3F" inside a path
