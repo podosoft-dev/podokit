@@ -63,7 +63,15 @@ During apply:
 
 The target module graph is authoritative. If a module gains a requirement,
 PodoKit applies the dependency first so services, imports, package dependencies,
-environment examples, and tests arrive together.
+environment examples, and tests arrive together. A new provider capability
+requirement, such as `sse` requiring `events`, adds the module that implements
+the project's selected provider (`podo provider list`). The plan lists these
+under "Modules to add".
+
+Modules configure in manifest order, so a provider always comes before the
+modules that use it. `podo add` places a newly added provider ahead of installed
+modules that require it, and `podo update --apply` moves a provider recorded
+after its dependents back in front of them.
 
 ## Bun-only v1 boundary
 

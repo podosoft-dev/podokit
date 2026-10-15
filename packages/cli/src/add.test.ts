@@ -1,5 +1,14 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { create } from "./create";
@@ -13,6 +22,7 @@ import {
   writeManifest,
 } from "./lockfile";
 import { applyProviderChange } from "./provider";
+import { planUpdate } from "./update";
 
 const REPO_TEMPLATES = resolve(process.cwd(), "..", "..", "templates");
 const MODULES = join(REPO_TEMPLATES, "modules");
@@ -987,5 +997,104 @@ describe("addModule (auth / better-auth)", () => {
     expect(() => addModule({ projectRoot: empty, module: "auth", modulesDir: MODULES })).toThrow(
       /does not look like a PodoKit project/,
     );
+  });
+});
+
+describe("provider ordering", () => {
+  // An earlier release in which no module declared requiresCapabilities.
+  function templatesWithoutCapabilityRequirements(): string {
+    const dir = join(tmp(), "old-templates");
+    cpSync(REPO_TEMPLATES, dir, { recursive: true });
+    const modulesDir = join(dir, "modules");
+    for (const name of readdirSync(modulesDir)) {
+      const manifestPath = join(modulesDir, name, "module.manifest.json");
+      const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+      delete manifest.requiresCapabilities;
+      writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    }
+    return dir;
+  }
+
+  function moduleLine(name: string): string {
+    const manifest = JSON.parse(
+      readFileSync(join(MODULES, name, "module.manifest.json"), "utf8"),
+    ) as { inject: { marker: string; text: string }[] };
+    return manifest.inject.find((entry) => entry.marker === "// podokit:end:modules")!.text;
+  }
+
+  function recordedModules(project: string): string[] {
+    return [...(readManifest(project)?.modules ?? [])]
+      .sort((a, b) => a.order - b.order)
+      .map((module) => module.name);
+  }
+
+  function expectBefore(project: string, first: string, second: string): void {
+    const order = recordedModules(project);
+    expect(order.indexOf(first)).toBeGreaterThan(-1);
+    expect(order.indexOf(first)).toBeLessThan(order.indexOf(second));
+    const app = readFileSync(join(project, "apps/api/src/app.ts"), "utf8");
+    expect(app.indexOf(moduleLine(first))).toBeGreaterThan(-1);
+    expect(app.indexOf(moduleLine(first))).toBeLessThan(app.indexOf(moduleLine(second)));
+  }
+
+  it.each([
+    { module: "sse", providers: ["events-redis"] },
+    { module: "file-upload", providers: ["object-storage-s3"] },
+    { module: "rate-limit", providers: ["redis"] },
+    { module: "job-progress", providers: ["bullmq", "events-redis"] },
+  ])("adds $providers.0 ahead of an installed $module that requires it", ({ module, providers }) => {
+    const oldTemplates = templatesWithoutCapabilityRequirements();
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: project });
+    addModule({ projectRoot: project, module, modulesDir: join(oldTemplates, "modules") });
+
+    for (const provider of providers) {
+      addModule({ projectRoot: project, module: provider, modulesDir: MODULES });
+      expectBefore(project, provider, module);
+    }
+    expect(readManifest(project)?.modules.map((entry) => entry.order).sort((a, b) => a - b))
+      .toEqual(recordedModules(project).map((_, index) => index));
+    // The written wiring matches what update assembles for the same module order.
+    const plan = planUpdate(project, REPO_TEMPLATES);
+    for (const path of ["apps/api/src/app.ts", ".env.example"]) {
+      expect(plan.changes.find((change) => change.path === path)?.action).toBe("up-to-date");
+    }
+  });
+
+  it("adds the missing provider first when a dependent module is added again", () => {
+    const oldTemplates = templatesWithoutCapabilityRequirements();
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: project });
+    addModule({ projectRoot: project, module: "sse", modulesDir: join(oldTemplates, "modules") });
+
+    const result = addModule({ projectRoot: project, module: "sse", modulesDir: MODULES });
+
+    expect(result.added).toEqual(["events-redis"]);
+    expect(recordedModules(project)).toEqual(["events-redis", "sse"]);
+    expectBefore(project, "events-redis", "sse");
+  });
+
+  it("orders a switched provider ahead of the modules that use it", () => {
+    const project = generate("fullstack");
+    addModule({ projectRoot: project, module: "sse", modulesDir: MODULES });
+    addModule({ projectRoot: project, module: "logging", modulesDir: MODULES });
+
+    applyProviderChange(project, "events", "memory", { modulesDir: MODULES });
+
+    expect(recordedModules(project)).toEqual(["events-redis", "events-memory", "sse", "logging"]);
+    expectBefore(project, "events-memory", "sse");
+  });
+
+  it("records nested requirements in the order they were applied", () => {
+    const project = generate("fullstack");
+    const result = addModule({ projectRoot: project, module: "rate-limit", modulesDir: MODULES });
+    expect(result.added).toEqual(["mailer", "auth", "api-key-auth", "redis"]);
+    expect(recordedModules(project)).toEqual([
+      "mailer",
+      "auth",
+      "api-key-auth",
+      "redis",
+      "rate-limit",
+    ]);
   });
 });

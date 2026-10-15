@@ -24,9 +24,10 @@ import {
   type FilesLock,
   type ManifestModule,
 } from "./lockfile";
+import type { ProviderCapability, ProviderSelections } from "@podosoft/podokit-runtime";
 import type { Toolchain } from "./toolchain";
 import { NotAProjectError } from "./inspect";
-import { readModuleManifest, resolveModule } from "./add";
+import { readModuleManifest, resolveModule, selectedProviderModule } from "./add";
 import {
   applyModuleMigrations,
   collectPendingMigrations,
@@ -61,11 +62,24 @@ export interface FileChange {
   note: string;
 }
 
+/** A module the target version needs that the project does not record yet. */
+export interface AddedModule {
+  name: string;
+  /** Installed or added module that needs it. */
+  requiredBy: string;
+  /** Provider capability it implements, when added for a capability requirement. */
+  capability?: ProviderCapability;
+  /** Selected provider it implements. */
+  provider?: string;
+}
+
 export interface UpdatePlan {
   fromVersion: string;
   toVersion: string;
   template: string;
   modules: string[];
+  /** Modules the update adds, ordered ahead of the modules that need them. */
+  addedModules: AddedModule[];
   changes: FileChange[];
 }
 
@@ -80,24 +94,34 @@ function diskContent(projectRoot: string, path: string): Buffer | null {
   return existsSync(abs) ? readFileSync(abs) : null;
 }
 
+interface TargetModules {
+  modules: ManifestModule[];
+  added: AddedModule[];
+}
+
 /**
  * Expand the recorded module list against the target manifests. A module may
- * gain a new requirement after it was first added to a project; updates must
- * apply that requirement before rebuilding the dependent module or the target
- * tree can contain imports and wiring for files that were never installed.
+ * gain a new requirement after it was first added to a project, either another
+ * module or a provider capability. Updates must apply that requirement before
+ * the dependent module: modules configure in this order, and the target tree
+ * would otherwise wire files that were never installed. A capability resolves
+ * to the module implementing the project's selected provider, as `podo add`
+ * would choose it.
  */
 function targetModules(
   projectRoot: string,
   templatesDir: string,
   modules: ManifestModule[],
-): ManifestModule[] {
+  providers: ProviderSelections,
+): TargetModules {
   const modulesDir = join(templatesDir, "modules");
   const recorded = new Map(modules.map((module) => [module.name, module]));
   const ordered: ManifestModule[] = [];
+  const added: AddedModule[] = [];
   const visiting = new Set<string>();
   const visited = new Set<string>();
 
-  const visit = (name: string, requiredBy?: string): void => {
+  const visit = (name: string, requiredBy?: string, capability?: ProviderCapability): void => {
     if (visited.has(name)) return;
     if (visiting.has(name)) {
       throw new Error(`Module dependency cycle detected at "${name}".`);
@@ -116,13 +140,25 @@ function targetModules(
     visiting.add(name);
     const moduleManifest = readModuleManifest(resolved.dir);
     for (const required of moduleManifest.requires ?? []) visit(required, name);
+    for (const required of moduleManifest.requiresCapabilities ?? []) {
+      visit(selectedProviderModule(modulesDir, projectRoot, providers, required), name, required);
+    }
     visiting.delete(name);
     visited.add(name);
 
+    if (!existing && requiredBy) {
+      added.push({
+        name: resolved.name,
+        requiredBy,
+        ...(capability ? { capability, provider: providers[capability] } : {}),
+      });
+    }
     ordered.push({
       ...(existing ?? {
         name: resolved.name,
         addedWith: podokitVersion(),
+        // A freshly added module ships its current layout, as `podo add` records it.
+        appliedMigrations: (moduleManifest.migrations ?? []).map((migration) => migration.id),
       }),
       order: ordered.length,
       ...(resolved.packageName
@@ -137,7 +173,7 @@ function targetModules(
   for (const module of [...modules].sort((a, b) => a.order - b.order)) {
     visit(module.name);
   }
-  return ordered;
+  return { modules: ordered, added };
 }
 
 function targetManagedOverrides(
@@ -193,7 +229,12 @@ export function planUpdate(
   const manifest = readManifest(projectRoot);
   const lock = readFilesLock(projectRoot);
   if (!manifest || !lock) throw new NotAProjectError();
-  const modules = targetModules(projectRoot, templatesDir, manifest.modules);
+  const { modules, added } = targetModules(
+    projectRoot,
+    templatesDir,
+    manifest.modules,
+    manifest.providers,
+  );
 
   const newTree = assembleProject({
     templatesDir,
@@ -332,6 +373,7 @@ export function planUpdate(
     toVersion: podokitVersion(),
     template: manifest.template,
     modules: modules.map((module) => module.name),
+    addedModules: added,
     changes,
   };
 }
@@ -351,6 +393,8 @@ export interface ApplyOptions {
 }
 
 export interface ApplyResult {
+  /** Modules added because the target version requires them. */
+  addedModules: string[];
   written: string[];
   /** Files relocated by module update migrations. */
   moved: { from: string; to: string }[];
@@ -525,7 +569,12 @@ export function applyUpdate(
     forceManagedPaths: options.forceManagedPaths,
     onlyPaths: options.onlyPaths,
   });
-  const modules = targetModules(projectRoot, templatesDir, manifest.modules);
+  const { modules } = targetModules(
+    projectRoot,
+    templatesDir,
+    manifest.modules,
+    manifest.providers,
+  );
   const newTree = assembleProject({
     templatesDir,
     template: manifest.template,
@@ -607,6 +656,7 @@ export function applyUpdate(
   }
 
   const result: ApplyResult = {
+    addedModules: plan.addedModules.map((module) => module.name),
     written: [],
     moved: applyModuleMigrations(projectRoot, migrationPlan),
     removed: [],
@@ -687,6 +737,13 @@ export function applyUpdate(
     podokitVersion: podokitVersion(),
   });
   return result;
+}
+
+/** Why an update adds a module, for the plan report. */
+export function addedModuleReason(module: AddedModule): string {
+  return module.capability
+    ? `${module.capability} provider "${module.provider}" required by ${module.requiredBy}`
+    : `required by ${module.requiredBy}`;
 }
 
 /** Count actions for a one-line summary. */

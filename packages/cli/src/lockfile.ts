@@ -375,28 +375,38 @@ export function recordModules(
   ownedGlobs?: string[],
   lockSnapshot?: RecordModulesLockSnapshot,
   managedOverrides?: string[],
+  /** Installed module that newly recorded modules must configure before. */
+  insertBefore?: string,
 ): void {
   const manifest = readManifest(projectRoot);
   if (!manifest) return;
   const stampedWith = version ?? podokitVersion();
-  const known = new Set(manifest.modules.map((m) => m.name));
+  const fresh: ManifestModule[] = [];
   for (const input of moduleInputs) {
     const module = typeof input === "string" ? { name: input } : input;
-    const existing = manifest.modules.find((entry) => entry.name === module.name);
+    const existing = manifest.modules.find((entry) => entry.name === module.name)
+      ?? fresh.find((entry) => entry.name === module.name);
     if (existing) {
       existing.packageName = module.packageName ?? existing.packageName;
       existing.moduleVersion = module.moduleVersion ?? existing.moduleVersion;
       continue;
     }
-    manifest.modules.push({
+    fresh.push({
       name: module.name,
-      order: manifest.modules.length,
+      order: manifest.modules.length + fresh.length,
       addedWith: stampedWith,
       packageName: module.packageName,
       moduleVersion: module.moduleVersion,
       appliedMigrations: module.appliedMigrations,
     });
-    known.add(module.name);
+  }
+  const ordered = [...manifest.modules].sort((a, b) => a.order - b.order);
+  const position = insertBefore ? ordered.findIndex((entry) => entry.name === insertBefore) : -1;
+  if (position === -1) {
+    manifest.modules.push(...fresh);
+  } else {
+    ordered.splice(position, 0, ...fresh);
+    manifest.modules = ordered.map((entry, order) => ({ ...entry, order }));
   }
   if (ownedGlobs?.length) manifest.ownedGlobs = mergeOwnedGlobs(manifest.ownedGlobs, ownedGlobs);
   if (managedOverrides?.length) {
