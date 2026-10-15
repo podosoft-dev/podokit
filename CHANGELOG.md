@@ -31,6 +31,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   migrations use `migrationsTransactionMode: "each"`. SQLite is unchanged.
 - The auth configuration service returns `enabled` as a boolean on SQLite
   instead of `0` or `1`.
+- Changing the session idle timeout on SQLite no longer fails with a syntax
+  error. Active sessions get the new lifetime as ISO 8601 text, the format
+  Better Auth stores on SQLite.
 - The request budget, OIDC consent, user row menu, and password reset UI specs
   wait for hydration or read each response before navigating on, so they pass
   on slower development servers.

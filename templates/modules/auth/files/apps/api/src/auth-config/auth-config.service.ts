@@ -18,6 +18,7 @@ import {
   writeAuthConfigRow,
   type AuthConfigRow,
 } from "./auth-config.rows";
+import { resetSessionExpirations } from "./session-expiry";
 
 export type SocialProviderView = {
   id: string;
@@ -199,7 +200,12 @@ export class AuthConfigService {
     if (update.server) await this.upsertServer(update.server);
     await refreshAuthNow();
     if (update.server?.sessionIdleTimeoutMinutes !== undefined) {
-      await this.resetSessionExpirations(update.server.sessionIdleTimeoutMinutes);
+      const minutes = update.server.sessionIdleTimeoutMinutes;
+      await resetSessionExpirations(
+        this.sql,
+        this.provider,
+        minutes === null ? DEFAULT_SESSION_LIFETIME_SECONDS : minutes * 60,
+      );
     }
     return this.describe();
   }
@@ -267,15 +273,5 @@ export class AuthConfigService {
       config.sessionIdleTimeoutMinutes = update.sessionIdleTimeoutMinutes;
     }
     await this.upsert({ ...current, config });
-  }
-
-  private async resetSessionExpirations(minutes: number | null): Promise<void> {
-    const lifetimeSeconds = minutes === null ? DEFAULT_SESSION_LIFETIME_SECONDS : minutes * 60;
-    await this.sql`
-      UPDATE "session"
-      SET "expiresAt" = CURRENT_TIMESTAMP + (${lifetimeSeconds} * INTERVAL '1 second'),
-          "updatedAt" = CURRENT_TIMESTAMP
-      WHERE "expiresAt" > CURRENT_TIMESTAMP
-    `;
   }
 }
