@@ -196,14 +196,19 @@ working full-stack app, use `fullstack` or `todo` with local providers instead.
 ## UI foundation
 
 `fullstack` and `todo` include Svelte 5, Tailwind v4, mode-watcher,
-typesafe-i18n, and shadcn-svelte primitives for forms, cards, dialogs, menus,
-tables, tabs, feedback, and navigation.
+typesafe-i18n, and shadcn-svelte primitives for forms (including `input`,
+`textarea`, `select`, `checkbox`, and `switch`), cards, dialogs, menus, tables,
+tabs, feedback, and navigation.
 
 Add another official component from `apps/web`:
 
 ```bash
-bunx --bun shadcn-svelte@latest add dialog badge
+bunx --bun shadcn-svelte@latest add accordion progress
 ```
+
+`components.json` maps the CLI's `utils`, `hooks`, and `lib` aliases to the
+`#lib` import map, so vendored components import `#lib/utils.js` like the
+shipped ones.
 
 Application components should wrap the vendored primitives rather than editing
 `src/lib/components/ui/**`. Colors and radius are CSS variables in `app.css`.

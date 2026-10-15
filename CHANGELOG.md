@@ -44,6 +44,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `podo dev env` creates `.env.docker` from `.env.docker.example` without
   starting the stack. The generated devcontainer runs it as its
   `initializeCommand`.
+- The generated UI set includes the shadcn-svelte `textarea`
+  (`apps/web/src/lib/components/ui/textarea`), vendored from the official
+  registry like the other primitives. The blog and analytics modules use it
+  instead of shipping their own copy and list it as a required project file.
 
 ### Changed
 
@@ -84,6 +88,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - A fresh clone of a generated app can start its containers. Git ignored the
   generated `.env.docker`, so `podo dev` failed with "env file .env.docker not
   found" until someone recreated it by hand.
+- `bunx --bun shadcn-svelte@latest add <component>` works in a generated app.
+  `components.json` lacked the `hooks` and `lib` aliases, so the CLI stopped
+  with an invalid alias error, and its `utils` alias ended in `.js`, so
+  vendored files imported `#lib/utils.js.js`.
 
 
 ## [1.3.0] - 2026-10-15

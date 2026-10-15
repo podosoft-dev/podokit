@@ -15,6 +15,11 @@ bun install
 bun run --cwd apps/api migration:run
 ```
 
+The module uses the shadcn-svelte `textarea` from the application's
+`apps/web/src/lib/components/ui/` set. Projects generated before PodoKit shipped
+that component get it from `podo update --apply`; `podo add analytics` stops with a
+"newer PodoKit project baseline" message until then.
+
 Open **Settings → Analytics** as an administrator and enter:
 
 1. the web stream measurement ID (`G-...`);

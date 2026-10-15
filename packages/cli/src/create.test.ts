@@ -386,6 +386,42 @@ describe("create (integration against templates)", () => {
     expect(existsSync(join(target, "apps", "api", "src", "config", "redis.connection.ts"))).toBe(true);
   });
 
+  it("ships the shadcn-svelte textarea that the blog and analytics modules use", () => {
+    const target = join(tmp(), "app");
+    create({ name: "app", templatesDir: REPO_TEMPLATES, targetDir: target });
+    const textareaDir = join(target, "apps", "web", "src", "lib", "components", "ui", "textarea");
+    const component = readFileSync(join(textareaDir, "textarea.svelte"), "utf8");
+    expect(component).toContain('from "#lib/utils.js"');
+    expect(component).toContain('"data-slot": dataSlot = "textarea"');
+    expect(component).toContain("field-sizing-content");
+    expect(readFileSync(join(textareaDir, "index.ts"), "utf8")).toContain("Root as Textarea");
+
+    // `shadcn-svelte add` needs every alias and appends the extension itself.
+    const components = JSON.parse(readFileSync(join(target, "apps", "web", "components.json"), "utf8")) as {
+      aliases: Record<string, string>;
+    };
+    expect(components.aliases).toMatchObject({ utils: "#lib/utils", hooks: "#lib/hooks", lib: "#lib", ui: "#lib/components/ui" });
+
+    // The modules rely on the shared copy instead of shipping their own, so
+    // removing one never deletes the component another page uses.
+    for (const module of ["podokit-module-blog", "podokit-module-analytics"]) {
+      const moduleDir = resolve(process.cwd(), "..", module);
+      const manifest = JSON.parse(readFileSync(join(moduleDir, "module.manifest.json"), "utf8")) as {
+        requiredProjectFiles?: string[];
+      };
+      expect(manifest.requiredProjectFiles).toEqual(
+        expect.arrayContaining([
+          "apps/web/src/lib/components/ui/textarea/index.ts",
+          "apps/web/src/lib/components/ui/textarea/textarea.svelte",
+        ]),
+      );
+      for (const required of manifest.requiredProjectFiles ?? []) {
+        expect(existsSync(join(target, required))).toBe(true);
+      }
+      expect(existsSync(join(moduleDir, "files", "apps", "web", "src", "lib", "components", "ui", "textarea"))).toBe(false);
+    }
+  });
+
   it("ships the containerized dev environment (Traefik + internal services + devcontainer)", () => {
     const target = join(tmp(), "app");
     create({ name: "app", templatesDir: REPO_TEMPLATES, targetDir: target });
