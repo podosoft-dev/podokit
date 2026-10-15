@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { gzipSync } from "node:zlib";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { proxyRequest, resolveClientIp } from "./backend-proxy";
+import { proxyRequest, rawSubpath, resolveClientIp } from "./backend-proxy";
 
 describe("backend proxy client address handling", () => {
   afterEach(() => {
@@ -262,5 +262,17 @@ describe("backend proxy client address handling", () => {
     expect(response.headers.get("accept-ranges")).toBe("bytes");
     expect(response.headers.get("content-length")).toBe("4");
     expect(await response.text()).toBe("0123");
+  });
+});
+
+describe("backend proxy raw path", () => {
+  it("keeps encoded separators inside a path segment", () => {
+    const url = new URL("http://localhost/api/files/uploads%2Fu1%2Fa%3Fb.png/url?x=1");
+    expect(rawSubpath(url, "/api/")).toBe("files/uploads%2Fu1%2Fa%3Fb.png/url");
+  });
+
+  it("strips only the given prefix", () => {
+    expect(rawSubpath(new URL("http://localhost/api/auth/get-session"), "/api/auth/")).toBe("get-session");
+    expect(rawSubpath(new URL("http://localhost/other"), "/api/")).toBe("/other");
   });
 });

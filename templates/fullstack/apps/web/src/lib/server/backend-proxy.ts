@@ -36,6 +36,12 @@ const RELAYED_RESPONSE_HEADERS = [
   "ratelimit-remaining",
 ];
 
+// SvelteKit decodes rest params, so an encoded "%2F" or "%3F" inside a path
+// segment would reach the API as "/" or "?". Forward the raw pathname instead.
+export function rawSubpath(url: URL, prefix: string): string {
+  return url.pathname.startsWith(prefix) ? url.pathname.slice(prefix.length) : url.pathname;
+}
+
 export function backendBaseUrl(): string {
   return process.env.BACKEND_INTERNAL_URL ?? "http://localhost:5002";
 }
