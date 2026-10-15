@@ -62,6 +62,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `/login`, which sent them back. A missing image, script, or other subresource
   still skips both calls, and so does prerendering, where the API is not
   running. Files in `static/` and prerendered pages never reach the hook.
+- `podo dev up` rebuilds the development images from the current source by
+  passing `--build` to `docker compose up`; `--no-build` keeps the old
+  behaviour. Compose Watch syncs edits into running containers only, so a
+  container that `up` recreated, for example after a memory limit or
+  `.env.docker` change while `podo dev watch` was running, started from the
+  last built image and lost every synced edit.
 
 
 ## [1.3.0] - 2026-10-15

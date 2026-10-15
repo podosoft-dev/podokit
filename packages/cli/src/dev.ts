@@ -436,6 +436,12 @@ function composeCommand(
       command.push(value);
     }
   }
+  // Compose Watch syncs edits into the running containers, not into the image.
+  // A plain `up` that recreates a container would start it from the last
+  // built image and drop those edits, so `up` rebuilds unless told otherwise.
+  if (action === "up" && !command.includes("--build") && !command.includes("--no-build")) {
+    command.unshift("--build");
+  }
   const activeProfiles =
     action === "down"
       ? ["--profile", "*"]

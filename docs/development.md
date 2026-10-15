@@ -134,7 +134,13 @@ the same as for `exposure.apiPaths` in a
 [deployment profile](deployment.md#direct-api-paths); list the same paths in both.
 
 `podo dev watch` delegates to Compose Watch. Vite handles web HMR and Bun's
-watch process reloads the Elysia API. Use `podo dev ps`, `logs`, `exec`, and
+watch process reloads the Elysia API. Compose Watch syncs edits into the running
+containers, not into their images, so `podo dev up` runs `docker compose up
+--build`: when Compose recreates a container, for example after a memory limit or
+`.env.docker` change, the new container runs the current source instead of the
+last built image. This also holds while `podo dev watch` is running, and Watch
+keeps syncing into the recreated containers. Pass `--no-build` to start from the
+existing images. Use `podo dev ps`, `logs`, `exec`, and
 `down` for lifecycle operations. Install native dependencies inside the target
 container with `podo dev exec api bun install` when validating Linux-specific
 artifacts.

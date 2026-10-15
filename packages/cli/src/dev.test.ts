@@ -412,6 +412,33 @@ describe("PodoKit development gateway", () => {
     expect(existsSync(join(devHome, "projects", `${renamedRuntime.routeId}.json`))).toBe(true);
   });
 
+  it("rebuilds images on up so a recreated container runs the current source", () => {
+    const root = project();
+    process.env.PODOKIT_DEV_HOME = temporaryDirectory("podokit-dev-home-");
+    const calls: string[][] = [];
+    const runner: CommandRunner = (_command, args) => {
+      calls.push(args);
+      if (args[0] === "info") return { status: 0, stdout: "27.0.0\n", stderr: "" };
+      if (args[0] === "network" && args[1] === "inspect") return { status: 0, stdout: "present\n", stderr: "" };
+      if (args[0] === "inspect") return { status: 0, stdout: "1 true 2\n", stderr: "" };
+      return { status: 0, stdout: "", stderr: "" };
+    };
+    const upArgs = (): string[] | undefined => calls.filter((args) => args.includes("up")).at(-1);
+
+    // Watch syncs edits into running containers only. A plain `up` that
+    // recreates one (a changed limit or env file) used the image from the
+    // last build and silently dropped every synced edit.
+    runDevCommand(root, "up", ["-d"], runner);
+    expect(upArgs()?.slice(-3)).toEqual(["up", "--build", "-d"]);
+
+    runDevCommand(root, "up", ["-d", "--no-build"], runner);
+    expect(upArgs()?.slice(-3)).toEqual(["up", "-d", "--no-build"]);
+    expect(upArgs()).not.toContain("--build");
+
+    runDevCommand(root, "up", ["--build", "web"], runner);
+    expect(upArgs()?.filter((value) => value === "--build")).toHaveLength(1);
+  });
+
   it("rejects a public host already registered by another project", () => {
     const first = project("first-app");
     const second = project("second-app");

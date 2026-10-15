@@ -98,6 +98,8 @@ Useful commands:
 - `podo dev watch|up|ps|logs|exec|down` — run container development through the
   shared loopback gateway. `.podokit/dev.json` owns the local/public hosts and the
   exact API WebSocket allowlist; never use a prefix or wildcard for that allowlist.
+  `podo dev up` rebuilds the images from the current source so a recreated
+  container never runs code older than the files Compose Watch synced.
 - `podo add <module>` — add a feature (auth, admin-dashboard, redis, bullmq, …). It wires itself into the app; run `podo add` with no argument to list modules.
 - `podo remove <module>` — un-apply a module (inverse of add; refuses if another module needs it, keeps files you edited).
 - `podo provider list` / `podo provider set <capability> <provider> [--apply]` — inspect or switch database, cache, object storage, events, and jobs. Set is dry-run by default and never migrates or deletes provider data. Local providers require one API process.

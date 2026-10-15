@@ -83,7 +83,9 @@ In a second terminal, apply the included Todo migration and use the lifecycle he
 `dev watch` reads `.podokit/manifest.json` and automatically activates `cache`,
 `storage`, and `queue` when installed modules require Redis, Silo, or a worker.
 `dev up` uses the same shared gateway and module profiles without keeping Compose
-Watch attached.
+Watch attached. It rebuilds the images from the current source first, because Compose
+Watch syncs edits into running containers only: a container recreated from an older
+image would lose them. Pass `--no-build` to start from the existing images.
 You can still activate an additional Compose profile explicitly:
 
 ```bash
