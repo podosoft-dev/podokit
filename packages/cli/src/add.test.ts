@@ -670,8 +670,13 @@ describe("addModule (auth / better-auth)", () => {
       join(project, "apps/api/src/progress/job-progress.module.ts"),
       "utf8",
     );
-    expect(module).toContain('queue.process("progress"');
     expect(module).toContain("events.publishAsync");
+    expect(module).toContain("{ steps: body.steps ?? 5, ownerId }");
+    const worker = readFileSync(
+      join(project, "apps/api/src/progress/progress.worker.ts"),
+      "utf8",
+    );
+    expect(worker).toContain("this.queue.process(PROGRESS_JOB");
   });
 
   it("adds structured pino logging with env and wiring", () => {

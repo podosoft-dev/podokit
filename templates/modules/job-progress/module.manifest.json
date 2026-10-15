@@ -12,8 +12,8 @@
   ],
   "instructions": [
     "Configure the selected jobs and events providers before starting the API.",
-    "Watch progress:  curl -N -b cookies.txt 'localhost:5002/events/stream?topics=job-progress'",
-    "Start a job:     curl -b cookies.txt -XPOST localhost:5002/progress -H 'content-type: application/json' -d '{\"steps\":5}'",
-    "The stream shows job-progress events 20 -> 40 -> ... -> 100 through the selected events provider."
+    "Watch progress as a signed-in user:  curl -N -b cookies.txt 'localhost:5002/events/stream?topics=job-progress'",
+    "Start a job as the same user:        curl -b cookies.txt -XPOST localhost:5002/progress -H 'content-type: application/json' -d '{\"steps\":5}'",
+    "The stream shows job-progress events 20 -> 40 -> ... -> 100, delivered only to the user who started the job."
   ]
 }

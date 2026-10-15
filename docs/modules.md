@@ -726,9 +726,15 @@ curl -b cookies.txt -XPOST localhost:5002/progress -H 'content-type: application
 # the stream shows job-progress events: 20 -> 40 -> 60 -> 80 -> 100
 ```
 
-Progress is published on the `job-progress` topic as `{ jobId, progress }`.
-Earlier versions sent `{ type: "job-progress", jobId, progress }` as the whole
-event.
+`POST /progress` requires a signed-in user and records that user as the job's
+owner in the job payload. Progress is published on the `job-progress` topic as
+`{ jobId, progress }` with the audience `{ userIds: [ownerId] }`, so only the
+user who started the job receives it. Other users' streams never carry it.
+
+**Upgrade note:** earlier versions broadcast `{ type: "job-progress", jobId,
+progress }` to every stream. Clients now read `{ jobId, progress }` from the
+`data` of a `job-progress` message. Jobs enqueued before the upgrade have no
+owner, so they run without publishing progress.
 
 ### `logging`
 
