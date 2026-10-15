@@ -444,9 +444,30 @@ bun install
 docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml up -d
 bun run dev
 
-curl -F 'file=@./photo.png' localhost:5002/files
-# → { key, url }  (presigned for S3, application-local for local storage)
+curl -b cookies.txt -F 'file=@./photo.png' localhost:5002/files
+# → { key, url }  (presigned for S3, a signed API path for local storage)
+curl -b cookies.txt localhost:5002/files/uploads%2F<userId>%2F<file>/url
+# → { url }  (owner or administrator only)
 ```
+
+**Security note:** uploads are stored per user as
+`uploads/<userId>/<uuid>-<name>`. `GET /files/:key/url` takes the full key,
+URL-encoded as one path segment, and presigns it only for:
+
+- the user whose id is the key's owner segment, or
+- an administrator, who may presign any upload key.
+
+Other signed-in users receive 403 `FILE_FORBIDDEN`. Keys outside `uploads/`,
+such as profile images or the site favicon, return 404 `FILE_NOT_FOUND` for
+everyone, so the endpoint can no longer presign arbitrary objects. Add the `auth`
+module so uploads have an owner. In an app without `auth`, uploads keep the
+unowned `uploads/<uuid>-<name>` format and every caller may presign them, as
+before.
+
+Uploads stored by earlier versions use that unowned format. Once `auth` is
+installed, only administrators can presign them. To return such files to their
+owners, move each object to `uploads/<userId>/<name>` using ownership your
+application already records.
 
 ### `sse`
 

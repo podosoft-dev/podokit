@@ -1,9 +1,12 @@
 {
   "manifestVersion": 3,
   "name": "file-upload",
-  "description": "Multipart file upload endpoint that stores files via object storage and returns a presigned URL.",
+  "description": "Multipart file upload endpoint that stores each user's files via object storage and presigns them only for the uploader or an administrator.",
   "requiresCapabilities": ["object-storage"],
   "targetApp": "api",
+  "requiredProjectContents": {
+    "apps/api/src/core/services.ts": ["isAdmin(request: Request): Promise<boolean>;"]
+  },
   "env": [],
   "inject": [
     { "file": "apps/api/src/app.ts", "marker": "// podokit:end:imports", "text": "import { filesModule } from \"./files/files.module\";" },
@@ -11,7 +14,10 @@
   ],
   "instructions": [
     "Configure the selected object-storage provider before uploading files.",
-    "Upload a file:  curl -F 'file=@./some.png' localhost:5002/files",
-    "The response includes { key, url } — an S3 presigned URL or a local download URL."
+    "Uploads are stored as uploads/<userId>/<uuid>-<name>. Add the auth module so every upload has an owner.",
+    "Upload a file:  curl -b cookies.txt -F 'file=@./some.png' localhost:5002/files",
+    "The response includes { key, url } — an S3 presigned URL or a signed local download URL.",
+    "Presign it again (owner or administrator, key URL-encoded):  curl -b cookies.txt localhost:5002/files/uploads%2F<userId>%2F<file>/url",
+    "Uploads stored before per-user keys (uploads/<file>) can only be presigned by administrators."
   ]
 }

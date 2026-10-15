@@ -1,13 +1,19 @@
+import { AppException } from "@podosoft/podokit-contracts";
 import { Elysia, t } from "elysia";
-import { OBJECT_STORAGE } from "@podosoft/podokit-runtime";
-import type { AppPlugin, PodokitModule } from "../core/services";
+import { OBJECT_STORAGE, type ObjectStore } from "@podosoft/podokit-runtime";
+import {
+  REQUEST_IDENTITY,
+  type AppPlugin,
+  type ElysiaPlugin,
+  type PodokitModule,
+  type RequestIdentity,
+} from "../core/services";
+import { uploadAccess, uploadKey } from "./upload-keys";
 
-const filesPlugin: AppPlugin = ({ services }) => {
-  const storage = services.resolve(OBJECT_STORAGE);
+export function filesRoutes(storage: ObjectStore, identity: RequestIdentity): ElysiaPlugin {
   return new Elysia({ name: "podokit.files" })
-    .post("/files", async ({ body, set }) => {
-      const safeName = body.file.name.replace(/[^\w.-]+/g, "_");
-      const key = `uploads/${crypto.randomUUID()}-${safeName}`;
+    .post("/files", async ({ request, body, set }) => {
+      const key = uploadKey(await identity.userId(request), body.file.name);
       await storage.put(
         key,
         new Uint8Array(await body.file.arrayBuffer()),
@@ -19,13 +25,28 @@ const filesPlugin: AppPlugin = ({ services }) => {
       body: t.Object({ file: t.File() }),
       detail: { tags: ["files"], summary: "Upload a file" },
     })
-    .get("/files/:key/url", async ({ params }) => ({
-      url: await storage.getDownloadUrl(params.key),
-    }), {
-      params: t.Object({ key: t.String({ minLength: 1 }) }),
-      detail: { tags: ["files"], summary: "Presign a file download" },
+    .get("/files/:key/url", async ({ request, params }) => {
+      const access = uploadAccess(params.key, {
+        userId: await identity.userId(request),
+        admin: await identity.isAdmin(request),
+      });
+      if (access === "not-found") throw new AppException("FILE_NOT_FOUND", "File not found", 404);
+      if (access === "forbidden") {
+        throw new AppException("FILE_FORBIDDEN", "You cannot access this file", 403);
+      }
+      return { url: await storage.getDownloadUrl(params.key) };
+    }, {
+      params: t.Object({ key: t.String({ minLength: 1, maxLength: 1024 }) }),
+      detail: {
+        tags: ["files"],
+        summary: "Presign a download of your upload",
+        description: "Pass the upload key URL-encoded as one path segment. Owners and administrators only.",
+      },
     });
-};
+}
+
+const filesPlugin: AppPlugin = ({ services }) =>
+  filesRoutes(services.resolve(OBJECT_STORAGE), services.resolve(REQUEST_IDENTITY));
 
 export const filesModule: PodokitModule = {
   name: "file-upload",

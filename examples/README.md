@@ -85,9 +85,11 @@ installed:
 curl -b cookies.txt -F 'file=@./photo.png' localhost:5002/files
 ```
 
-The response contains `{ key, url }`. Local storage returns an application-local
-URL; S3 returns a presigned URL. Local files default to `./data/files` relative
-to the API working directory. See [File uploads](../docs/modules.md#file-upload).
+The response contains `{ key, url }`. Local storage returns a signed,
+expiring application-local URL; S3 returns a presigned URL. With auth, keys are
+`uploads/<userId>/...` and only the uploader or an administrator can presign
+them again. Local files default to `./data/files` relative to the API working
+directory. See [File uploads](../docs/modules.md#file-upload).
 
 ## Local jobs and live progress
 
