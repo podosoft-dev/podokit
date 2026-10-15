@@ -804,6 +804,13 @@ loses the backlog and receives one `resync` instead of letting the queue grow
 without bound. A connection uses one heartbeat timer. When the client disconnects,
 the connection's subscription and timer are released at once.
 
+Every open stream on a replica also receives one `resync` when that replica's
+event transport delivers again after an outage, such as a Redis restart, because
+events published in the meantime never reach it. The stream itself stays open.
+A transport reports this through the optional `onInterruption(listener)` of the
+runtime `EventBus` contract; the memory transport cannot lose events and leaves
+it out.
+
 #### Browser helper
 
 `$lib/events` keeps one `EventSource` per tab and reference-counts subscribers.

@@ -144,6 +144,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   drop. It logs once when a dependency becomes unavailable and once when it is
   restored. `services.onStart` stays for work that must finish before the
   server listens.
+- `EventBus.onInterruption(listener)`, an optional member of the runtime
+  contract, reports that delivery resumed after an outage in which events may
+  have been lost, and `EventBus.subscribe` is documented to register handlers
+  without waiting for the transport. The `sse` module sends one `resync` to
+  every open stream when its transport reports an interruption, so clients
+  reload the state they missed while the stream stayed open.
 
 
 ### Changed

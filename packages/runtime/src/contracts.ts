@@ -220,9 +220,20 @@ export type EventHandler = (event: unknown) => void | Promise<void>;
 export type Unsubscribe = () => void | Promise<void>;
 
 export interface EventBus {
+  /** Resolves while published events reach subscribers; rejects otherwise, without waiting for a connection. */
   ready(): Promise<void>;
   publish(topic: string, event: unknown): Promise<void>;
+  /**
+   * Registers `handler` for `topic`. The registration does not wait for the
+   * transport to connect and stays in place across reconnects.
+   */
   subscribe(topic: string, handler: EventHandler): Promise<Unsubscribe>;
+  /**
+   * Calls `listener` each time delivery resumes after an interruption in which
+   * events may have been lost, so consumers can tell their clients to reload.
+   * A transport that cannot lose events leaves it out.
+   */
+  onInterruption?(listener: () => void): () => void;
   close(): void | Promise<void>;
 }
 
