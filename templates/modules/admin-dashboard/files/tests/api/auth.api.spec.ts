@@ -157,6 +157,11 @@ test("require-2fa: gates an un-enrolled user until they enrol", async ({ playwri
   try {
     // Turn the policy on (admin; the toggle endpoint is allow-listed by the guard).
     await admin.put("/api/account/settings", { data: { require2fa: true } });
+    // Capabilities carry the same policy as the dedicated endpoint.
+    await expect(async () => {
+      expect((await (await admin.get("/api/account/capabilities")).json()).require2fa).toBe(true);
+      expect(await (await admin.get("/api/account/require-2fa")).json()).toEqual({ require2fa: true });
+    }).toPass({ timeout: 8000 });
     // The guard caches for a few seconds — poll until the un-enrolled user is gated.
     await expect(async () => {
       expect((await user.get("/api/account/me")).status()).toBe(403);

@@ -86,6 +86,7 @@ const accountPlugin: AppPlugin = ({ services }) => {
         passkey: flags.passkey,
         organization: flags.organization,
         oidcProvider: flags.oidcProvider,
+        require2fa: flags.require2fa,
         providers: snapshot.providers,
         deleteAccount: snapshot.allowDelete,
         emailVerification: snapshot.requireEmailVerification,

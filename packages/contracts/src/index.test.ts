@@ -53,9 +53,10 @@ describe("AppException", () => {
 
 describe("contract shapes", () => {
   it("Capabilities and ErrorEnvelope are structurally usable", () => {
-    const caps: Pick<Capabilities, "twoFactor" | "signupApprovalRequired" | "roles"> = {
+    const caps: Pick<Capabilities, "twoFactor" | "signupApprovalRequired" | "require2fa" | "roles"> = {
       twoFactor: true,
       signupApprovalRequired: true,
+      require2fa: false,
       roles: ["admin"],
     };
     const envelope: ErrorEnvelope = {
@@ -63,6 +64,7 @@ describe("contract shapes", () => {
       error: { code: "X", message: "m", statusCode: 400, path: "/x", timestamp: "t" },
     };
     expect(caps.roles).toEqual(["admin"]);
+    expect(caps.require2fa).toBe(false);
     expect(SIGNUP_APPROVAL_REQUIRED).toBe("SIGNUP_APPROVAL_REQUIRED");
     expect(PUBLIC_SIGNUP_DISABLED).toBe("PUBLIC_SIGNUP_DISABLED");
     expect(envelope.error.code).toBe("X");

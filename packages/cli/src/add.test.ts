@@ -871,6 +871,10 @@ describe("addModule (auth / better-auth)", () => {
     const appTypes = readFileSync(join(project, "apps/web/src/app.d.ts"), "utf8");
     expect(appTypes).toContain("authUnavailable: boolean");
     expect(appTypes).toContain("siteUnavailable: boolean");
+    expect(appTypes).toContain("capabilities?: Promise<Capabilities>");
+    const protectedLayout = readFileSync(join(project, "apps/web/src/lib/server/protected-layout.ts"), "utf8");
+    expect(protectedLayout).toContain("await getCapabilities(event)");
+    expect(protectedLayout).not.toContain("/api/account/require-2fa");
     const rootLayout = readFileSync(join(project, "apps/web/src/routes/+layout.server.ts"), "utf8");
     expect(rootLayout.indexOf("requireBackendAvailable(locals)")).toBeLessThan(
       rootLayout.indexOf("redirect(303, `/login?redirect="),

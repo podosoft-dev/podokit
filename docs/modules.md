@@ -718,6 +718,11 @@ The generated `routes/(admin)` group and
 visual shell, so applications can place signed-in product pages there. A
 different protected group must call
 `requireBackendAvailable(locals)` before authentication redirects.
+Server loads read `/account/capabilities` through `getCapabilities(event)` from
+the managed `#lib/server/capabilities.js`. It fetches once per request, for a
+full render or a `__data.json` navigation, and every layout and page load of
+that request shares the response. The response includes the `require2fa`
+policy, so the two-factor enrolment redirect needs no separate request.
 
 ```bash
 npx @podosoft/podokit add admin-dashboard   # also adds auth
