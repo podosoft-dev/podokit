@@ -117,6 +117,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- The admin-dashboard `disposableUsers` Playwright fixture cleans up through its
+  own request context in UI tests, holding a copy of the browser's admin cookies
+  taken when the test starts. A UI test that signed its page in as another user
+  used to turn cleanup into that user's requests, which failed with 403.
+
 - `podo dev` with more than one `webSocketPaths` entry rendered a Traefik
   `Path` matcher with several values, which Traefik v3 rejects, so none of the
   WebSocket paths reached the API. Each path now has its own matcher.
