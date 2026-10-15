@@ -6,6 +6,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- `podo update` adds the module that implements the project's selected provider
+  when an installed module gains a capability requirement, and lists it under
+  "Modules to add". In 1.2.0 `sse` requires `events`, so an app updated from an
+  earlier release without an events provider started with "Required service is
+  not registered". Update also moves a provider recorded after the modules that
+  use it in front of them, because modules configure in manifest order.
+- `podo add` places a newly added provider ahead of installed modules that
+  require it: in `.podokit/manifest.json`, in marker wiring such as the
+  `apps/api/src/app.ts` module list, and in `.env.example`.
+- Template dependency ranges for PodoKit packages now name the current
+  versions. The web template requires `@podosoft/podokit-api-client` `^0.8.5`,
+  whose contracts provide `Capabilities.require2fa`; an app that kept an older
+  lockfile entry failed `svelte-check`.
+- `admin:bootstrap` imported modules the API build never emitted. It now loads
+  the bundled `dist/bootstrap-admin-runtime.js` under `NODE_ENV=production` and
+  the source otherwise, on PostgreSQL and SQLite.
+- The `IndexAuditLogFilters` migration builds and drops its PostgreSQL indexes
+  with `CONCURRENTLY` outside a transaction, so audit writes continue while it
+  runs, and rebuilds an index left invalid by an interrupted build. TypeORM
+  migrations use `migrationsTransactionMode: "each"`. SQLite is unchanged.
+- The auth configuration service returns `enabled` as a boolean on SQLite
+  instead of `0` or `1`.
+- The request budget, OIDC consent, user row menu, and password reset UI specs
+  wait for hydration or read each response before navigating on, so they pass
+  on slower development servers.
+
+### Upgrade notes
+
+- Run `podo update` with this version and review the plan. An app that has
+  `sse` (or `job-progress`) but no events provider shows the provider under
+  "Modules to add"; `podo update --apply` installs it ahead of its dependents.
+  An app where `podo add events-redis` already appended the provider after
+  `sse` gets a clean update of `apps/api/src/app.ts` that restores the order.
+  The same applies to `cache`, `object-storage`, and `jobs` providers.
+- After `podo update --apply`, run `bun install` so the lockfile picks up the
+  raised `@podosoft/podokit-api-client` range.
+- Apps that already applied `IndexAuditLogFilters1792000000000` are unaffected;
+  the migration does not run again. Custom TypeORM migrations now each run in
+  their own transaction rather than all pending migrations in one.
+- If your app worked around `admin:bootstrap` with its own bundled entry,
+  revert that workaround (the entry file, its `scripts/build.mjs` target, and
+  the script edit) before `podo update`, so update installs the generated
+  `src/bootstrap-admin-runtime.ts` without conflicts.
+
 ## [1.2.0] - 2026-10-15
 
 ### Added
