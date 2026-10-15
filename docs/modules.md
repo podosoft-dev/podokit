@@ -879,6 +879,15 @@ individual host and port settings. The Redis module registers a readiness check,
 and rate limiting, BullMQ, SSE, and the Redis service share the same connection
 configuration without logging credentials.
 
+The API starts while Redis is down and reconnects in the background, also after
+Redis restarts (see [Health probes](deployment.md#health-probes)). While the
+connection is closed, commands fail at once instead of queueing, so the cache
+endpoints and the rate limiter answer with an error rather than waiting.
+`RedisService.subscribe(channel, handler)` resolves without waiting for Redis:
+the subscription starts once Redis is reachable and is opened again after every
+reconnect on a fresh connection. Messages published while it is closed are not
+delivered.
+
 As the `CACHE` implementation, the module runs the fixed-window counter script
 with `EVALSHA`, using a SHA1 computed in the process. When Redis has dropped the
 script after a restart, failover, or `SCRIPT FLUSH`, the store falls back to

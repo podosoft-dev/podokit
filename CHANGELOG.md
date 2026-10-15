@@ -168,6 +168,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Apps that already have the `file-upload` module get `/api/files/uploads/` in
   `.podokit/dev.json` and every deployment profile from `podo update --apply`.
   Review the "Direct API paths to add" section of the plan first.
+- `RedisService` no longer takes a `ReadinessService` or registers the `redis`
+  readiness check; the `redis` module registers it with `redis.ping()`. Code
+  that constructs a `RedisService` itself registers its own check and passes
+  the service to `services.supervise`.
+
 - If you added header names to `FORWARDED_HEADERS` or `RELAYED_RESPONSE_HEADERS`
   in `apps/web/src/lib/server/backend-proxy.ts`, `podo update` merges the new
   proxy below your lists without a conflict and keeps your names working. Then
@@ -182,6 +187,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   the stream enqueues and closes within one pull. `LocalObjectStore` now reads
   objects up to 2 MiB whole; larger ones still stream in 64 KiB chunks and are
   sent chunked.
+- The `redis` module no longer stops the API from starting while Redis is down,
+  and it recovers from a Redis restart without restarting the API. The client
+  gave up after its first failed reconnect, so the API exited at startup with
+  `RedisError: Connection closed`, and a running API whose Redis was stopped
+  for ten seconds kept failing readiness and answering `RATE_LIMIT_UNAVAILABLE`
+  until the API itself was restarted. Commands now fail at
+  once while disconnected, the registry reconnects in the background, and
+  `RedisService.subscribe` subscriptions are restored after every reconnect;
+  Bun keeps their listeners but not the server subscription.
+
 - The generated API starts and listens while PostgreSQL is unreachable, answers
   `/health/ready` with 503 until the database is back, and becomes ready without
   a restart. It used to exit at startup with `ERR_POSTGRES_CONNECTION_REFUSED`,

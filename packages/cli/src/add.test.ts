@@ -665,7 +665,10 @@ describe("addModule (auth / better-auth)", () => {
       "utf8",
     );
     expect(redisService).toContain("redisConnectionUrl()");
-    expect(redisService).toContain('readiness?.register("redis"');
+    expect(redisService).toContain("autoReconnect: false");
+    const redisModule = readFileSync(join(project, "apps/api/src/redis/redis.module.ts"), "utf8");
+    expect(redisModule).toContain('register("redis", () => redis.ping())');
+    expect(redisModule).toContain('services.supervise("redis", redis)');
   });
 
   it("job-progress composes the selected jobs and events providers", () => {

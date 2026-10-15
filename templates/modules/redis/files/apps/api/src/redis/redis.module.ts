@@ -40,10 +40,11 @@ export const redisModule: PodokitModule = {
   name: "redis",
   configure: (_env, services): void => {
     if (PROVIDERS.cache !== "redis") return;
-    const redis = new RedisService(services.resolve(READINESS));
+    const redis = new RedisService();
     services.register(REDIS, redis, () => redis.close());
     services.register(CACHE, new RedisCacheStore(redis));
-    services.onStart(() => redis.connect());
+    services.resolve(READINESS).register("redis", () => redis.ping());
+    services.supervise("redis", redis);
   },
   plugin: cachePlugin,
 };

@@ -483,18 +483,22 @@ the object storage bucket. It answers `503` with the `READINESS_FAILED` error co
 when any of them is down, and its message names them, for example
 `One or more dependencies are unavailable: redis, events`.
 
-The API starts and listens even when PostgreSQL is unreachable. Before listening
-it makes one connection attempt. When the server does not answer at all, startup
-waits up to `DB_CONNECT_TIMEOUT_MS` for that attempt, and once more for each
-start hook that reads the database, such as the auth module's configuration
-preload. After that the API keeps reconnecting in the background, starting after
-250 ms and doubling the wait up to 5 seconds. Until the database is back,
-`GET /health` answers `200`, `GET /health/ready` answers `503`, and requests
-that need it fail with their usual errors, such as `DATABASE_UNAVAILABLE`. The
-API logs `Dependency connection failed; retrying in the background` when a
-dependency becomes unavailable and `Dependency connection restored` with
-`downtimeMs` when it returns, not on every attempt. A pod therefore stays
-running while the database is down and becomes ready again without a restart.
+The API starts and listens even when PostgreSQL or Redis is unreachable. Before
+listening it makes one connection attempt to each. When a server does not answer
+at all, startup waits up to the connection timeout for that attempt
+(`DB_CONNECT_TIMEOUT_MS` for PostgreSQL, 5 seconds for Redis), and once more for
+each start hook that reads the database, such as the auth module's
+configuration preload. After that the API keeps reconnecting in the background,
+starting after 250 ms and doubling the wait up to 5 seconds. A Redis connection
+that drops later is reopened the same way, while the PostgreSQL pool opens
+connections as queries need them. Until a dependency is back, `GET /health`
+answers `200`, `GET /health/ready` answers `503`, and requests that need it fail
+with their usual errors, such as `DATABASE_UNAVAILABLE` or
+`RATE_LIMIT_UNAVAILABLE`, instead of waiting for it. The API logs
+`Dependency connection failed; retrying in the background` when a dependency
+becomes unavailable and `Dependency connection restored` with `downtimeMs` when
+it returns, not on every attempt. A pod therefore stays running while a
+dependency is down and becomes ready again without a restart.
 
 | Setting | Default | Effect |
 | --- | --- | --- |

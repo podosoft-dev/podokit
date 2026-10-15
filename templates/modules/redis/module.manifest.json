@@ -8,6 +8,9 @@
     "apps/api/src/config/redis.connection.ts",
     "apps/api/src/health/readiness.service.ts"
   ],
+  "requiredProjectContents": {
+    "apps/api/src/core/services.ts": ["supervise(name: string, connection: SupervisedConnection): void {"]
+  },
   "managedGlobs": [
     "apps/api/src/redis/**",
     "tests/api/redis.api.spec.ts"
