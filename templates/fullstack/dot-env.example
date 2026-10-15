@@ -12,6 +12,20 @@ POSTGRES_USER=podokit
 POSTGRES_PASSWORD=podokit
 POSTGRES_DB=podokit
 
+# PostgreSQL pools. Each API replica opens up to DB_POOL_MAX connections for
+# queries, plus DB_AUTH_POOL_MAX for the auth module when it is installed. Keep
+# replicas x (DB_POOL_MAX + DB_AUTH_POOL_MAX), plus a few for migrations, below
+# the server's max_connections (100 by default). The timeouts are milliseconds.
+# DB_POOL_MAX=20
+# DB_CONNECT_TIMEOUT_MS=10000
+# DB_IDLE_TIMEOUT_MS=30000
+# DB_AUTH_POOL_MAX=10
+
+# Readiness (GET /health/ready): the longest one dependency check may run, and how
+# long a result is reused across probes (0 checks on every request).
+# READINESS_CHECK_TIMEOUT_MS=800
+# READINESS_CACHE_MS=2000
+
 # Web -> API boundary (server-side only; not exposed to the browser)
 BACKEND_INTERNAL_URL=http://localhost:5002
 

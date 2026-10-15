@@ -7,6 +7,9 @@
   "requiredProjectFiles": [
     "apps/api/src/config/providers.ts"
   ],
+  "requiredProjectContents": {
+    "apps/api/src/core/services.ts": ["isAdmin(request: Request): Promise<boolean>;"]
+  },
   "managedGlobs": [
     "apps/api/src/storage-local/**"
   ],
@@ -29,6 +32,8 @@
   ],
   "instructions": [
     "Local object storage is single-host. Back up LOCAL_STORAGE_PATH together with the database.",
-    "Keep the API at one replica or select the S3 provider."
+    "Keep the API at one replica or select the S3 provider.",
+    "Download URLs are signed and expire after one hour by default. The signing key lives in LOCAL_STORAGE_PATH/.podokit/download-url.key; deleting it invalidates every issued URL.",
+    "The /storage demo routes need the auth module and an administrator session, and only reach keys under demo/."
   ]
 }

@@ -11,6 +11,7 @@ import {
   type PodokitModule,
   type ServiceRegistry,
 } from "./core/services";
+import { isDatabaseUnavailable } from "./database/database";
 import { healthPlugin } from "./health/health.plugin";
 // podokit:begin:imports
 // podokit:end:imports
@@ -123,6 +124,10 @@ const buildApp = (options: CreateAppOptions = {}) => {
       if (error instanceof AppException) {
         set.status = error.statusCode;
         return errorEnvelope(error.code, error.message, error.statusCode, path);
+      }
+      if (isDatabaseUnavailable(error)) {
+        set.status = 503;
+        return errorEnvelope("DATABASE_UNAVAILABLE", "The database is temporarily unavailable", 503, path);
       }
       const statusCode = code === "NOT_FOUND" ? 404 : code === "VALIDATION" ? 400 : 500;
       set.status = statusCode;

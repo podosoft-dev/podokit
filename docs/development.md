@@ -121,6 +121,36 @@ watch process reloads the Elysia API. Use `podo dev ps`, `logs`, `exec`, and
 container with `podo dev exec api bun install` when validating Linux-specific
 artifacts.
 
+Every service in `compose.dev.yaml` has a memory limit equal to its swap limit.
+A runaway process is OOM-killed inside its container instead of exhausting the
+host. The defaults are:
+
+| Variable | Service | Default |
+| --- | --- | --- |
+| `API_MEM_LIMIT` | `api` | `2g` |
+| `WEB_MEM_LIMIT` | `web` | `2g` |
+| `WORKER_MEM_LIMIT` | `worker` | `1g` |
+| `POSTGRES_MEM_LIMIT` | `postgres` | `1g` |
+| `REDIS_MEM_LIMIT` | `redis` | `256m` |
+| `MINIO_MEM_LIMIT` | `minio` | `512m` |
+| `MINIO_INIT_MEM_LIMIT` | `minio-init` | `128m` |
+| `TRAEFIK_MEM_LIMIT` | legacy `traefik` | `256m` |
+
+`podo dev` runs `docker compose` from the project root with your shell
+environment, so Compose reads a limit from the shell or from the project's
+`.env` file. `.env.docker` only sets variables inside the containers and does
+not change a limit.
+
+```bash
+API_MEM_LIMIT=3g podo dev up -d
+# or persist it for this project:
+echo "API_MEM_LIMIT=3g" >> .env
+```
+
+Compose applies a changed limit when it recreates the container, for example on
+the next `podo dev up -d`. The devcontainer attaches the editor to the `api`
+container, so raise `API_MEM_LIMIT` if editor tooling runs out of memory there.
+
 OAuth providers should use a stable HTTPS development origin rather than
 registering changing local ports. See
 [OAuth development over HTTPS](oauth-development.md).

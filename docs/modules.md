@@ -177,6 +177,9 @@ and sessions out of the box, plus **OAuth** and **2FA** enabled by configuration
 Adding it installs a **global Elysia request guard**, so the API is **secure by default** —
 every route requires a session except `/health` and `/api/auth/*`. Opt routes out
 by registering a public access policy; read the current user through `AuthService`.
+Modules that must also work without `auth` read the caller through the core
+`REQUEST_IDENTITY` service instead: `userId(request)` and `isAdmin(request)`
+return `undefined` and `false` when no identity provider is installed.
 
 ```bash
 bunx @podosoft/podokit add auth
@@ -368,6 +371,14 @@ uses a pinned [Silo](https://github.com/pgsty/silo) image. Provides a `StorageSe
 (put/get/delete + presigned URLs) and demo `/storage` endpoints.
 The Compose service and file keep their `minio` names for existing endpoints.
 
+**Security note:** the demo endpoints require the `auth` module and an
+**administrator** session (401 without a session, 403 for other users). `:key`
+is a single name such as `hello`, stored as the object `demo/hello`. Names with
+slashes (including an encoded `%2F`) or a leading dot are rejected, so the demo
+cannot read or overwrite objects owned by other features, such as uploads,
+profile images, or the site favicon. Objects written by earlier versions at the
+bucket root are no longer reachable through these routes.
+
 ```bash
 npx @podosoft/podokit add object-storage-s3
 bun install
@@ -376,9 +387,12 @@ bun install
 docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml up -d
 bun run dev
 
-curl -XPUT localhost:5002/storage/hello -H 'content-type: application/json' -d '{"content":"hi"}'
-curl localhost:5002/storage/hello            # { key, content }
-curl localhost:5002/storage/hello/presigned  # { url }
+# sign in as an administrator (for example an ADMIN_EMAILS account)
+curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-in/email \
+  -H 'content-type: application/json' -d '{"email":"admin@example.com","password":"<password>"}'
+curl -b cookies.txt -XPUT localhost:5002/storage/hello -H 'content-type: application/json' -d '{"content":"hi"}'
+curl -b cookies.txt localhost:5002/storage/hello            # { key, content }
+curl -b cookies.txt localhost:5002/storage/hello/presigned  # { url } for demo/hello
 ```
 
 **Providers** (set in `.env`):
@@ -403,6 +417,21 @@ podo provider set object-storage local --apply
 Use an absolute path for packaged or production applications and back it up with
 the database. Local files are single-host and require one API replica.
 
+**Security note:** download URLs work like S3 presigned URLs.
+`getDownloadUrl()` returns `/files/content/<key>?expires=…&signature=…`, signed
+with HMAC-SHA256 and valid for one hour by default (at most seven days).
+`GET /files/content/*` is public but serves an object only for an unaltered,
+unexpired signature; anything else returns 403 `DOWNLOAD_URL_INVALID`. The
+signing key is created on first use at
+`LOCAL_STORAGE_PATH/.podokit/download-url.key` with mode `0600`; deleting it
+invalidates every issued URL. Unsigned `/files/content/...` URLs issued by
+earlier versions stop working, so store object keys rather than URLs and request
+a fresh URL when needed.
+
+The module serves the same administrator-only demo routes as `object-storage-s3`
+(`PUT /storage/:key`, `GET /storage/:key`, `GET /storage/:key/presigned`),
+confined to `demo/`.
+
 ### `file-upload`
 
 A multipart upload endpoint that stores files through the `OBJECT_STORAGE`
@@ -415,9 +444,30 @@ bun install
 docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml up -d
 bun run dev
 
-curl -F 'file=@./photo.png' localhost:5002/files
-# → { key, url }  (presigned for S3, application-local for local storage)
+curl -b cookies.txt -F 'file=@./photo.png' localhost:5002/files
+# → { key, url }  (presigned for S3, a signed API path for local storage)
+curl -b cookies.txt localhost:5002/files/uploads%2F<userId>%2F<file>/url
+# → { url }  (owner or administrator only)
 ```
+
+**Security note:** uploads are stored per user as
+`uploads/<userId>/<uuid>-<name>`. `GET /files/:key/url` takes the full key,
+URL-encoded as one path segment, and presigns it only for:
+
+- the user whose id is the key's owner segment, or
+- an administrator, who may presign any upload key.
+
+Other signed-in users receive 403 `FILE_FORBIDDEN`. Keys outside `uploads/`,
+such as profile images or the site favicon, return 404 `FILE_NOT_FOUND` for
+everyone, so the endpoint can no longer presign arbitrary objects. Add the `auth`
+module so uploads have an owner. In an app without `auth`, uploads keep the
+unowned `uploads/<uuid>-<name>` format and every caller may presign them, as
+before.
+
+Uploads stored by earlier versions use that unowned format. Once `auth` is
+installed, only administrators can presign them. To return such files to their
+owners, move each object to `uploads/<userId>/<name>` using ownership your
+application already records.
 
 ### `sse`
 
@@ -924,7 +974,7 @@ hand-written list. Inspect the complete result at `/api-docs` or
 | `file-upload` | `POST /files`<br>`GET /files/{key}/url` |
 | `job-progress` | `POST /progress` |
 | `object-storage-s3` | `PUT /storage/{key}`<br>`GET /storage/{key}`<br>`GET /storage/{key}/presigned` |
-| `object-storage-local` | `PUT /storage/{key}`<br>`GET /files/content/{key}` |
+| `object-storage-local` | `GET /files/content/*`<br>`PUT /storage/{key}`<br>`GET /storage/{key}`<br>`GET /storage/{key}/presigned` |
 | `redis` | `PUT /cache/{key}`<br>`GET /cache/{key}` |
 | `sse` | `GET /events/stream`<br>`POST /events` |
 

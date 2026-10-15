@@ -15,15 +15,33 @@ const FORWARDED_HEADERS = [
   "origin",
   "referer",
   "user-agent",
+  "if-none-match",
+  "if-modified-since",
+  "range",
+  "if-range",
 ];
 const RELAYED_RESPONSE_HEADERS = [
   "content-type",
+  "content-disposition",
+  "content-range",
+  "accept-ranges",
   "location",
   "cache-control",
+  "etag",
+  "last-modified",
+  "vary",
+  "x-content-type-options",
+  "content-security-policy",
   "retry-after",
   "ratelimit-limit",
   "ratelimit-remaining",
 ];
+
+// SvelteKit decodes rest params, so an encoded "%2F" or "%3F" inside a path
+// segment would reach the API as "/" or "?". Forward the raw pathname instead.
+export function rawSubpath(url: URL, prefix: string): string {
+  return url.pathname.startsWith(prefix) ? url.pathname.slice(prefix.length) : url.pathname;
+}
 
 export function backendBaseUrl(): string {
   return process.env.BACKEND_INTERNAL_URL ?? "http://localhost:5002";
@@ -71,12 +89,22 @@ export async function proxyRequest(
     // them as text corrupts bytes that are not valid UTF-8 before forwarding.
     body: hasBody ? await request.arrayBuffer() : undefined,
     redirect: "manual",
+    // Abort the upstream request when the browser disconnects. Without this, every
+    // closed EventSource or aborted request keeps its API socket open until Bun's
+    // fetch pool is exhausted and the web process stops serving requests.
+    signal: request.signal,
   });
 
   const responseHeaders = new Headers();
   for (const name of RELAYED_RESPONSE_HEADERS) {
     const value = upstream.headers.get(name);
     if (value) responseHeaders.set(name, value);
+  }
+  // Bun's fetch decodes a compressed body but keeps the upstream content-encoding
+  // and compressed content-length, which would truncate the decoded body.
+  const contentLength = upstream.headers.get("content-length");
+  if (contentLength && !upstream.headers.has("content-encoding")) {
+    responseHeaders.set("content-length", contentLength);
   }
   // Relay Set-Cookie so auth session cookies reach the browser.
   for (const cookie of upstream.headers.getSetCookie()) {

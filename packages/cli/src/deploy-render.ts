@@ -454,6 +454,9 @@ ${entries.length ? `data:\n${entries.map(([key, value]) => `  ${key}: ${quote(va
 `;
 }
 
+// Above the API's 800 ms per-check readiness bound; the Kubernetes default is 1 s.
+const API_PROBE_TIMEOUT_SECONDS = 2;
+
 function deployment(
   profile: DeployProfileV1,
   kind: "api" | "web",
@@ -473,14 +476,17 @@ function deployment(
       ? `          readinessProbe:
             httpGet: { path: /health/ready, port: 3000 }
             periodSeconds: 5
+            timeoutSeconds: ${API_PROBE_TIMEOUT_SECONDS}
           livenessProbe:
             httpGet: { path: /health, port: 3000 }
             initialDelaySeconds: 20
             periodSeconds: 10
+            timeoutSeconds: ${API_PROBE_TIMEOUT_SECONDS}
           startupProbe:
             httpGet: { path: /health, port: 3000 }
             failureThreshold: 30
             periodSeconds: 2
+            timeoutSeconds: ${API_PROBE_TIMEOUT_SECONDS}
 `
       : `          readinessProbe:
             httpGet: { path: /, port: 3000 }

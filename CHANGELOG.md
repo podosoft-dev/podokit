@@ -6,7 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `DB_POOL_MAX`, `DB_AUTH_POOL_MAX`, `DB_CONNECT_TIMEOUT_MS`, and
+  `DB_IDLE_TIMEOUT_MS` configure the API's PostgreSQL pools. A request that
+  cannot get a connection in time answers 503 `DATABASE_UNAVAILABLE` instead of
+  waiting forever. See [Providers](docs/providers.md) for the per-replica budget.
+- `READINESS_CHECK_TIMEOUT_MS` and `READINESS_CACHE_MS` bound each readiness
+  check and share one result between concurrent probes.
+- Every service in the container dev stack has a memory limit equal to its swap
+  limit, adjustable with `*_MEM_LIMIT` in the shell or `.env`.
+
+### Changed
+
+- Demo storage routes (`PUT`/`GET /storage/:key`) require an administrator and
+  only address keys under `demo/`.
+- Uploads are stored as `uploads/<userId>/…` and only their uploader or an
+  administrator can presign them. Uploads stored before this change can be
+  presigned by administrators only.
+- Local-storage downloads require a signed URL. Only script-free types render
+  inline; everything else downloads, with `nosniff` and a sandbox policy.
+
 ### Fixed
+
+- Readiness re-checks the database on every probe again. Since 1.1.2 it checked
+  once at startup, so an outage after boot stayed `ready`.
+- The web proxy aborts the upstream API request when the client disconnects, so
+  closed event streams no longer hold API sockets.
+- The web proxy forwards encoded `/` and `?` in a path segment unchanged. Apps
+  created earlier own `routes/api/[...path]/+server.ts` and
+  `routes/api/auth/[...all]/+server.ts`; update them to build the upstream path
+  with `rawSubpath(url, "/api/")` and `rawSubpath(url, "/api/auth/")`.
+- The proxy relays `etag`, `last-modified`, `content-disposition`, `vary`, and
+  range headers, and relays `content-length` only for uncompressed responses.
+- Kubernetes API probes allow two seconds instead of the one-second default.
 
 - Skip Better Auth's startup schema check in the generated migration runner, so
   `migrate:all` no longer logs a schema mismatch for the schema it is about to
