@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `SSE_MAX_STREAMS_PER_USER` (default 8) caps the event streams one user holds on
+  each API replica. Another stream answers 429 `EVENTS_STREAM_LIMIT`.
+
 ### Fixed
 
 - `podo update` adds the module that implements the project's selected provider

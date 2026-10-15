@@ -564,6 +564,14 @@ has no authorizer. The stream answers:
 - 401 `AUTH_REQUIRED` without a user.
 - 400 `EVENTS_TOPICS_INVALID` for a malformed list.
 - 403 `EVENTS_TOPIC_FORBIDDEN` when an authorizer refuses a topic.
+- 429 `EVENTS_STREAM_LIMIT` when the user already holds
+  `SSE_MAX_STREAMS_PER_USER` open streams (default 8) on that API replica.
+
+The stream limit refuses the new stream instead of closing an older one, because
+a closed stream reconnects and would then refuse another tab in turn.
+`$lib/events` retries a refused stream with backoff, so a tab connects once
+another closes. Each replica counts only its own streams, so with several
+replicas behind a load balancer a user can hold up to that many streams on each.
 
 Any signed-in user may subscribe to a topic by default. Register an authorizer to
 restrict a topic, or a pattern ending in `*` to restrict every topic with that
