@@ -237,6 +237,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   again once the server answers. Slow queries on a server that answers keep
   running, and migrations are not affected.
 
+- An auth request no longer waits for a configuration refresh that PostgreSQL
+  does not answer. Before Better Auth runs, each request may check whether the
+  auth settings changed; during an outage that check waited as long as a query
+  may wait, so a sign-in answered `503` only after two timeouts. The request now
+  waits for it at most `READINESS_CHECK_TIMEOUT_MS`, and the current
+  configuration serves it while the check finishes in the background.
+
 - Better Auth endpoints no longer hang while PostgreSQL keeps its connections
   open without answering. The auth module's `pg` pool had no query timeout, so
   `POST /api/auth/sign-in/email` and `GET /api/auth/get-session` waited for

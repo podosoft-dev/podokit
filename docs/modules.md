@@ -237,7 +237,9 @@ migration Job before a rolling deployment.
   3 seconds, and read the tables again only when the probe changes, so they converge within
   3 seconds, deleted providers included. When the app has an events provider (`events-redis`
   across replicas), a write also publishes `config.changed` so the other replicas reload at once;
-  without one they rely on the probe.
+  without one they rely on the probe. An auth request waits for the probe at most
+  `READINESS_CHECK_TIMEOUT_MS`; when the database answers later, the current configuration
+  serves that request and the probe finishes in the background.
 - **Social login is dynamic.** The "Social login" card manages providers add/edit/delete: pick
   any better-auth-supported provider (Google, GitHub, Apple, Microsoft, Discord, Kakao, Naver,
   … — see `auth/auth-config.ts` `SUPPORTED_SOCIAL_PROVIDERS`), paste its client id/secret, and it

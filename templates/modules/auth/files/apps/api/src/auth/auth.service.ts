@@ -1,7 +1,7 @@
 import { AppException } from "@podosoft/podokit-contracts";
 import type { AccessPolicy, RequestIdentity } from "../core/services";
 import type { SettingsService } from "../settings/settings.service";
-import { getAuth, refreshIfStale } from "./auth-provider";
+import { getAuth, refreshForRequest } from "./auth-provider";
 import { rethrowAuthError } from "./database-outage";
 import { authDatabaseReachable, closeAuthDatabase } from "./db";
 
@@ -19,7 +19,7 @@ export interface AuthSession {
 export type SessionResolver = (headers: Headers) => Promise<AuthSession | null>;
 
 function defaultSessionResolver(headers: Headers): Promise<AuthSession | null> {
-  return refreshIfStale()
+  return refreshForRequest()
     .then(() => getAuth().api.getSession({ headers }))
     .then(
       (session) => session as AuthSession | null,
