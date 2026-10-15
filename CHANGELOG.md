@@ -73,6 +73,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `.podokit/multipart/` and removes uploads idle longer than
   `LOCAL_STORAGE_MULTIPART_MAX_AGE` seconds (default 86400). Applications that
   wrote their own S3 multipart writer can use these instead.
+- `@podosoft/podokit-api-client` sends a `Blob`, `ArrayBuffer`, typed array, or
+  `ReadableStream` request body as it is (a stream with `duplex: "half"`), and
+  every call takes `{ contentType, headers, signal }`. JSON and `FormData`
+  bodies behave as before. `ApiError.retryAfterSeconds` holds the
+  `Retry-After` delay of a `429` or `503`. Applications that used a raw
+  `fetch` to send binary upload chunks can use the client.
 
 ### Changed
 

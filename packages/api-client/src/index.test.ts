@@ -64,6 +64,87 @@ describe("createApiClient", () => {
     expect(init?.credentials).toBe("include");
   });
 
+  it("sends Blob, ArrayBuffer, and Uint8Array bodies as they are with a content type", async () => {
+    const fetch = vi.fn(async () => jsonResponse({ ok: true }));
+    const client = createApiClient({ fetch });
+    const blob = new Blob(["chunk"], { type: "video/mp4" });
+    const buffer = new ArrayBuffer(4);
+    const bytes = new Uint8Array([1, 2, 3]);
+
+    await client.put("/uploads/1/parts/1", blob);
+    await client.put("/uploads/1/parts/2", buffer, { contentType: "application/x-chunk" });
+    await client.post("/uploads/1/parts/3", bytes, { headers: { "content-range": "bytes 0-2/3" } });
+    await client.put("/uploads/1/parts/4", new Blob(["untyped"]));
+
+    const sent = fetch.mock.calls.map(([, init]) => ({
+      body: init?.body,
+      headers: init?.headers as Record<string, string>,
+      duplex: (init as { duplex?: string } | undefined)?.duplex,
+    }));
+    expect(sent[0]).toEqual({ body: blob, headers: { "content-type": "video/mp4" }, duplex: undefined });
+    expect(sent[1]).toEqual({ body: buffer, headers: { "content-type": "application/x-chunk" }, duplex: undefined });
+    expect(sent[2]).toEqual({
+      body: bytes,
+      headers: { "content-type": "application/octet-stream", "content-range": "bytes 0-2/3" },
+      duplex: undefined,
+    });
+    expect(sent[3]?.headers).toEqual({ "content-type": "application/octet-stream" });
+  });
+
+  it("streams a ReadableStream body with half-duplex fetch", async () => {
+    const fetch = vi.fn(async () => jsonResponse({ ok: true }));
+    const client = createApiClient({ fetch });
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller): void {
+        controller.enqueue(new Uint8Array([1]));
+        controller.close();
+      },
+    });
+    const controller = new AbortController();
+    await client.put("/uploads/1/content", stream, { contentType: "application/octet-stream", signal: controller.signal });
+    const [, init] = fetch.mock.calls[0]!;
+    expect(init?.body).toBe(stream);
+    expect((init as { duplex?: string }).duplex).toBe("half");
+    expect(init?.signal).toBe(controller.signal);
+    expect((init?.headers as Record<string, string>)["content-type"]).toBe("application/octet-stream");
+  });
+
+  it("keeps JSON for plain values and lets the caller name the JSON type", async () => {
+    const fetch = vi.fn(async () => jsonResponse({ ok: true }));
+    const client = createApiClient({ fetch });
+    await client.patch("/todos/1", { done: true }, { contentType: "application/merge-patch+json" });
+    await client.del("/todos/1", { headers: { "if-match": "\"v1\"" } });
+    const [[, patch], [, del]] = fetch.mock.calls;
+    expect(patch?.body).toBe(JSON.stringify({ done: true }));
+    expect((patch?.headers as Record<string, string>)["content-type"]).toBe("application/merge-patch+json");
+    expect(del?.body).toBeUndefined();
+    expect(del?.headers).toEqual({ "if-match": "\"v1\"" });
+  });
+
+  it("reports Retry-After on errors in seconds", async () => {
+    const limited = vi.fn(async () =>
+      new Response(
+        JSON.stringify({ success: false, error: { code: "RATE_LIMIT_EXCEEDED", message: "Too many requests.", statusCode: 429 } }),
+        { status: 429, headers: { "retry-after": "7" } },
+      ),
+    );
+    await expect(createApiClient({ fetch: limited }).get("/x")).rejects.toMatchObject({
+      code: "RATE_LIMIT_EXCEEDED",
+      statusCode: 429,
+      retryAfterSeconds: 7,
+    });
+
+    const at = new Date(Date.now() + 30_000).toUTCString();
+    const unavailable = vi.fn(async () => new Response("", { status: 503, headers: { "retry-after": at } }));
+    const error = await createApiClient({ fetch: unavailable }).get("/x").catch((e: unknown) => e);
+    expect((error as ApiError).retryAfterSeconds).toBeGreaterThanOrEqual(29);
+    expect((error as ApiError).retryAfterSeconds).toBeLessThanOrEqual(30);
+
+    const plain = vi.fn(async () => new Response("", { status: 500 }));
+    const failure = await createApiClient({ fetch: plain }).get("/x").catch((e: unknown) => e);
+    expect((failure as ApiError).retryAfterSeconds).toBeUndefined();
+  });
+
   it("throws ApiError parsed from the standard error envelope", async () => {
     const fetch = vi.fn(async () =>
       jsonResponse(
