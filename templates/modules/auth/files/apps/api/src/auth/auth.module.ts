@@ -69,12 +69,14 @@ const accountPlugin: AppPlugin = ({ services }) => {
     }, {
       detail: { tags: ["account"], summary: "Get the current account" },
     })
-    .get("/account/require-2fa", () => ({ require2fa: settings.getBool("require2fa") }), {
+    .get("/account/require-2fa", async () => ({ require2fa: await settings.getBool("require2fa") }), {
       detail: { tags: ["account"], summary: "Get the two-factor enrolment policy" },
     })
     .get("/account/capabilities", async (): Promise<Capabilities> => {
-      const flags = settings.flags();
-      const snapshot = await authConfigStore.capabilitiesSnapshot();
+      const [flags, snapshot] = await Promise.all([
+        settings.flags(),
+        authConfigStore.capabilitiesSnapshot(),
+      ]);
       return {
         twoFactor: flags.twoFactor,
         magicLink: flags.magicLink,
@@ -152,13 +154,12 @@ export const authModule: PodokitModule = {
     configureAuthQueryDatabase(database.sql);
     setMailConfigStore(authConfigStore);
     const accessPolicy = services.resolve(ACCESS_POLICY);
-    const settings = new SettingsService(database.sql);
+    const settings = new SettingsService(database.sql, authConfigStore);
     const authService = new AuthService(settings, accessPolicy);
     services.register(SETTINGS, settings);
     services.register(AUTH_CONFIG, new AuthConfigService(database.sql));
     services.register(AUTH, authService, () => authService.close());
     services.onStart(async () => {
-      await settings.refresh();
       await primeAuth();
     });
     services.override(REQUEST_IDENTITY, {
