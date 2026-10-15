@@ -22,20 +22,24 @@ import { EventsService } from "./events.service";
 
 export const SSE_EVENTS = Symbol("sse-events") as ServiceKey<EventsService>;
 
-/** Resolves who opens a stream. Register one in app.extensions.ts to add roles or organizations. */
+/** Resolves who opens a stream. Register one in app.extensions.ts to replace the default. */
 export interface EventIdentity {
   subscriber(request: Request): Promise<EventSubscriber | undefined>;
 }
 
 export const EVENT_IDENTITY = Symbol("event-identity") as ServiceKey<EventIdentity>;
 
-/** The default identity: the request user, with the `admin` role when the user is one. */
+/** The default identity: the request user with their roles and active organization. */
 export function requestEventIdentity(identity: RequestIdentity): EventIdentity {
   return {
     subscriber: async (request) => {
       const userId = await identity.userId(request);
       if (!userId) return undefined;
-      return { userId, roles: (await identity.isAdmin(request)) ? ["admin"] : [] };
+      const [roles, organizationId] = await Promise.all([
+        identity.roles(request),
+        identity.activeOrganizationId(request),
+      ]);
+      return organizationId === undefined ? { userId, roles } : { userId, roles, organizationId };
     },
   };
 }

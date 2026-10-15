@@ -109,6 +109,8 @@ describe("progress routes", () => {
   const identity = (userId: string | undefined): RequestIdentity => ({
     userId: async () => userId,
     isAdmin: async () => false,
+    roles: async () => [],
+    activeOrganizationId: async () => undefined,
   });
 
   async function start(queue: JobQueue, userId: string | undefined): Promise<Response> {

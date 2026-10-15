@@ -572,29 +572,20 @@ events.topics.register("project:*", async (subscriber, topic) =>
 ```
 
 The stream resolves the subscriber's user id, roles, and active organization
-once, when it connects. By default, the user comes from the request identity
-and holds the `admin` role when the user is an administrator. Other roles and
-the active organization stay empty until you register an `EVENT_IDENTITY` in
-`app.extensions.ts`. With the `auth` module:
+once, when it connects, from the request identity (`roles(request)` and
+`activeOrganizationId(request)`; the `auth` module implements both from the
+session). Register an `EVENT_IDENTITY` in `app.extensions.ts` only to replace
+that mapping, for example with application-specific roles:
 
 ```ts
-import { AUTH } from "./auth/auth.module";
-import { rolesOf } from "./auth/auth.service";
 import type { ServiceRegistry } from "./core/services";
 import { EVENT_IDENTITY } from "./events/events.module";
 
 export function configureServices(services: ServiceRegistry): void {
-  const auth = services.resolve(AUTH);
   services.register(EVENT_IDENTITY, {
     subscriber: async (request) => {
-      const session = await auth.session(request);
-      if (!session) return undefined;
-      const organizationId = session.session.activeOrganizationId;
-      return {
-        userId: session.user.id,
-        roles: rolesOf(session.user),
-        ...(typeof organizationId === "string" ? { organizationId } : {}),
-      };
+      const user = await currentAppUser(request); // your own lookup
+      return user ? { userId: user.id, roles: user.roles, organizationId: user.teamId } : undefined;
     },
   });
 }

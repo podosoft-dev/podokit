@@ -4,13 +4,15 @@ import { MemoryEventBus } from "@podosoft/podokit-runtime";
 import { Elysia } from "elysia";
 import type { RequestIdentity } from "../core/services";
 import { ReadinessService } from "../health/readiness.service";
-import { eventsRoutes, type EventIdentity } from "./events.module";
+import { eventsRoutes, requestEventIdentity, type EventIdentity } from "./events.module";
 import { EventsService } from "./events.service";
 
-/** Maps the `x-user` and `x-admin` test headers to the request identity. */
+/** Maps the `x-user`, `x-admin`, `x-roles`, and `x-org` test headers to the request identity. */
 const headerIdentity: RequestIdentity = {
   userId: async (request) => request.headers.get("x-user") ?? undefined,
   isAdmin: async (request) => request.headers.get("x-admin") === "true",
+  roles: async (request) => (request.headers.get("x-roles") ?? "").split(",").filter(Boolean),
+  activeOrganizationId: async (request) => request.headers.get("x-org") ?? undefined,
 };
 
 const opened: Array<{ events: EventsService; controllers: AbortController[] }> = [];
@@ -184,5 +186,18 @@ describe("events routes", () => {
 
     expect(await inside.until("done")).toContain("o1 only");
     expect(await outside.until("done")).not.toContain("o1 only");
+  });
+});
+
+describe("default event identity", () => {
+  it("carries the request roles and active organization", async () => {
+    const identity = requestEventIdentity(headerIdentity);
+    const request = new Request("http://localhost/events/stream", {
+      headers: { "x-user": "u1", "x-roles": "admin,editor", "x-org": "org-1" },
+    });
+    expect(await identity.subscriber(request)).toEqual({ userId: "u1", roles: ["admin", "editor"], organizationId: "org-1" });
+    expect(await identity.subscriber(new Request("http://localhost/events/stream", { headers: { "x-user": "u2" } })))
+      .toEqual({ userId: "u2", roles: [] });
+    expect(await identity.subscriber(new Request("http://localhost/events/stream"))).toBeUndefined();
   });
 });
