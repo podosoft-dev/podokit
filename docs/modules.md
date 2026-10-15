@@ -1081,7 +1081,9 @@ of accounts.
   `limit` defaults to 20 (at most 100). `search` matches the user's email or name
   case-insensitively. Paging is keyset-based on (`createdAt`, `id`), so pass
   `nextCursor` back to read the next page; a cursor the server did not issue
-  returns `400 ADMIN_SESSION_CURSOR_INVALID`. Session tokens are never returned.
+  returns `400 ADMIN_SESSION_CURSOR_INVALID`. The `IndexSessionCreatedAt`
+  migration indexes `session ("createdAt", "id")` for this order, concurrently
+  on PostgreSQL like the audit filter indexes. Session tokens are never returned.
   `DELETE /admin/sessions/{id}` looks up the token on the server and revokes it
   through Better Auth `revokeUserSession`, so the admin permission check and the
   audit hook (`user.session_revoke`) still apply. It returns `204`, or

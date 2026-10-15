@@ -10,6 +10,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - `SSE_MAX_STREAMS_PER_USER` (default 8) caps the event streams one user holds on
   each API replica. Another stream answers 429 `EVENTS_STREAM_LIMIT`.
+- The `IndexSessionCreatedAt` migration (admin-dashboard) indexes
+  `session ("createdAt", "id")`, the order of the admin session list, so a page
+  no longer sorts the whole session table. PostgreSQL builds it concurrently.
 
 ### Fixed
 
