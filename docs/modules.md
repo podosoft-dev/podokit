@@ -521,6 +521,13 @@ individual host and port settings. The Redis module registers a readiness check,
 and rate limiting, BullMQ, SSE, and the Redis service share the same connection
 configuration without logging credentials.
 
+As the `CACHE` implementation, the module runs the fixed-window counter script
+with `EVALSHA`, using a SHA1 computed in the process. When Redis has dropped the
+script after a restart, failover, or `SCRIPT FLUSH`, the store falls back to
+`EVAL`, which loads the script again. Any other Redis error reaches the caller
+unchanged, so the rate limiter still answers `RATE_LIMIT_UNAVAILABLE`. A cache
+write with a TTL is a single `SET key value PX ms`.
+
 ```bash
 npx @podosoft/podokit add redis
 bun install
