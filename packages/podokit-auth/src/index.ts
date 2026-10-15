@@ -22,9 +22,14 @@ export {
   envAuthConfig,
 } from "./auth-config";
 export {
+  type AppSettingRow,
   type AuthConfigQueryClient,
   type AuthConfigRepository,
   type AuthConfigRow,
+  type CapabilitiesSnapshot,
+  type ConfigStore,
+  type ConfigStoreOptions,
+  type ConfigVersions,
   type SmtpConfig,
   createConfigStore,
   createQueryAuthConfigRepository,

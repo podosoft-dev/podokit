@@ -3,9 +3,10 @@ import { APIError } from "better-auth/api";
 import { twoFactor, haveIBeenPwned, magicLink, emailOTP, username, multiSession, phoneNumber, organization, jwt, bearer, openAPI } from "better-auth/plugins";
 import { actionEmail, sendMail } from "../mail/mailer";
 import { sendSms } from "../sms/sms";
-import { assertUserCreationAllowed, createFeatureGate, createSignupOpenCheck } from "./feature-gate";
+import { assertUserCreationAllowed, createFeatureGate, readSignupOpen } from "./feature-gate";
+import { featureFlags, isSignupOpen } from "./auth-config-store";
 import { orgAc, orgRoles } from "./org-permissions";
-import { authDatabase, readAppSettings } from "./db";
+import { authDatabase } from "./db";
 import { type AuthConfig, envAuthConfig, sessionIdleOptions, SUPPORTED_PROVIDER_IDS } from "@podosoft/podokit-auth";
 import { apiKey } from "@better-auth/api-key";
 import { passkey } from "@better-auth/passkey";
@@ -47,7 +48,6 @@ function buildSocial(config: AuthConfig): NonNullable<BetterAuthOptions["socialP
 // server-enforced toggles) apply without a restart. Everything below the injection
 // markers is contributed by other PodoKit modules (admin-dashboard, audit-log).
 export function buildAuth(config: AuthConfig) {
-  const isSignupOpen = createSignupOpenCheck(readAppSettings);
   const plugins: BetterAuthPlugin[] = [
     twoFactor(),
     magicLink({
@@ -142,7 +142,7 @@ export function buildAuth(config: AuthConfig) {
         before: async (user, context) => {
           const adminEmail = adminEmails.has(user.email.toLowerCase());
           const createdByAdmin = context?.path === "/admin/create-user";
-          assertUserCreationAllowed(await isSignupOpen(), context?.path);
+          assertUserCreationAllowed(await readSignupOpen(isSignupOpen), context?.path);
           return {
             data: {
               ...user,
@@ -179,10 +179,11 @@ export function buildAuth(config: AuthConfig) {
   };
 
   // Request-time hooks. The feature gate turns the admin Settings toggles into a
-  // real server boundary (disabled features 404). Other PodoKit modules add their
-  // own hooks below the marker.
+  // real server boundary (disabled features 404). It reads the process-wide
+  // settings snapshot, so a rebuild does not start a new cache. Other PodoKit
+  // modules add their own hooks below the marker.
   const hooks: NonNullable<BetterAuthOptions["hooks"]> = {
-    before: createFeatureGate(readAppSettings, isSignupOpen),
+    before: createFeatureGate({ flags: featureFlags, signupOpen: isSignupOpen }),
   };
   // podokit:begin:auth-hooks
   // podokit:end:auth-hooks

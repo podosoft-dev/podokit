@@ -222,6 +222,11 @@ migration Job before a rolling deployment.
   `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are required env vars; the rest are optional
   fallbacks/overrides that the DB config takes precedence over (handy for secrets-manager
   injection in production).
+- **How settings changes reach every replica.** `auth_config` and `app_setting` share one
+  in-process snapshot. The replica that handled a write applies it before responding. Other
+  replicas run one version probe (row count and latest update time of both tables) at most every
+  3 seconds, and read the tables again only when the probe changes, so they converge within
+  3 seconds, deleted providers included.
 - **Social login is dynamic.** The "Social login" card manages providers add/edit/delete: pick
   any better-auth-supported provider (Google, GitHub, Apple, Microsoft, Discord, Kakao, Naver,
   … — see `auth/auth-config.ts` `SUPPORTED_SOCIAL_PROVIDERS`), paste its client id/secret, and it
