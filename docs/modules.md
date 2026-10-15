@@ -993,7 +993,9 @@ unset ADMIN_BOOTSTRAP_PASSWORD
 created with `role=admin`, `emailVerified=true`, and `signupApproved=true`.
 Existing accounts are never modified: the command succeeds only when the stored
 role, flags, and password already match. Use `--check-only` for a read-only
-deployment check. Run bootstrap before enabling mandatory email verification or
+deployment check. It works with PostgreSQL and SQLite. With
+`NODE_ENV=production` it loads the bundled `dist/bootstrap-admin-runtime.js`
+from the API build, as in the container image; otherwise it runs the source. Run bootstrap before enabling mandatory email verification or
 other runtime authentication settings. The generated
 `.claude/skills/podokit-configure-auth` skill covers secret-safe bootstrap plus
 OAuth, SMTP, and sign-up approval configuration.

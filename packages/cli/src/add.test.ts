@@ -1098,3 +1098,42 @@ describe("provider ordering", () => {
     ]);
   });
 });
+
+describe("admin bootstrap command", () => {
+  it.each(["postgres", "sqlite"] as const)(
+    "builds every runtime entry the script loads on %s",
+    (database) => {
+      const project = join(tmp(), "app");
+      create({ name: "app", template: "fullstack", templatesDir: REPO_TEMPLATES, targetDir: project, database });
+      addModule({ projectRoot: project, module: "admin-dashboard", modulesDir: MODULES });
+      const api = join(project, "apps/api");
+      const script = readFileSync(join(api, "scripts/bootstrap-admin.mjs"), "utf8");
+      const build = readFileSync(join(api, "scripts/build.mjs"), "utf8");
+
+      // Bun bundles only the build targets, so every compiled module the script
+      // imports must be a top-level target whose source the module ships.
+      const compiled = [...script.matchAll(/["']\.\.\/dist\/([^"']+)\.js["']/g)].map((match) => match[1]!);
+      expect(compiled.length).toBeGreaterThan(0);
+      for (const entry of compiled) {
+        const outdir = dirname(`dist/${entry}`);
+        expect(build).toContain(`{ entrypoint: "src/${entry}.ts", outdir: "${outdir}" }`);
+        expect(existsSync(join(api, `src/${entry}.ts`))).toBe(true);
+      }
+      for (const [, source] of script.matchAll(/["']\.\.\/(src\/[^"']+\.ts)["']/g)) {
+        expect(existsSync(join(api, source!))).toBe(true);
+      }
+
+      const used = /const \{([^}]+)\} = runtime;/.exec(script)?.[1]
+        ?.split(",")
+        .map((name) => name.trim())
+        .filter(Boolean) ?? [];
+      expect(used.length).toBeGreaterThan(0);
+      const runtimeSource = readFileSync(join(api, `src/${compiled[0]}.ts`), "utf8");
+      for (const name of used) {
+        expect(runtimeSource).toMatch(
+          new RegExp(`export (?:async function|function|const) ${name}\\b|export \\{[^}]*\\b${name}\\b[^}]*\\}`),
+        );
+      }
+    },
+  );
+});
