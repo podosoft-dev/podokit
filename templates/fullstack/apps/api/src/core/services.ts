@@ -124,6 +124,7 @@ export class RequestGuardRegistry {
 
 export interface RequestIdentity {
   userId(request: Request): Promise<string | undefined>;
+  isAdmin(request: Request): Promise<boolean>;
 }
 
 export interface OpenApiContribution {
@@ -202,7 +203,10 @@ export function createCoreServices(env: AppEnv): ServiceRegistry {
   services.register(LOGGER, logger);
   services.register(ACCESS_POLICY, accessPolicy);
   services.register(REQUEST_GUARDS, requestGuards);
-  services.register(REQUEST_IDENTITY, { userId: async () => undefined });
+  services.register(REQUEST_IDENTITY, {
+    userId: async () => undefined,
+    isAdmin: async () => false,
+  });
   services.register(OPENAPI, openapiRegistry);
   return services;
 }

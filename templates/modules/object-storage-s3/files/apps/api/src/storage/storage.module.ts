@@ -3,42 +3,60 @@ import { OBJECT_STORAGE } from "@podosoft/podokit-runtime";
 import { PROVIDERS } from "../config/providers";
 import {
   type AppPlugin,
+  type ElysiaPlugin,
   type PodokitModule,
   READINESS,
+  REQUEST_IDENTITY,
+  type RequestIdentity,
   type ServiceKey,
 } from "../core/services";
 import { StorageService } from "./storage.service";
 import { S3ObjectStore } from "./s3-object.store";
+import {
+  demoKeyParams,
+  demoObjectKey,
+  storageObjectNotFound,
+  requireStorageAdmin,
+} from "./storage-demo";
 
 export const STORAGE = Symbol("storage") as ServiceKey<StorageService>;
+
+export type DemoStorage = Pick<StorageService, "put" | "get" | "exists" | "presignedGetUrl">;
+
+export function storageDemoRoutes(storage: DemoStorage, identity: RequestIdentity): ElysiaPlugin {
+  return new Elysia({ name: "podokit.storage" })
+    .put("/storage/:key", async ({ request, params, body }) => {
+      await requireStorageAdmin(identity, request);
+      await storage.put(demoObjectKey(params.key), body.content, "text/plain");
+      return { key: params.key };
+    }, {
+      params: demoKeyParams,
+      body: t.Object({ content: t.String() }),
+      detail: { tags: ["storage"], summary: "Store a demo object (administrators only)" },
+    })
+    .get("/storage/:key/presigned", async ({ request, params }) => {
+      await requireStorageAdmin(identity, request);
+      return { url: await storage.presignedGetUrl(demoObjectKey(params.key)) };
+    }, {
+      params: demoKeyParams,
+      detail: { tags: ["storage"], summary: "Presign a demo object download (administrators only)" },
+    })
+    .get("/storage/:key", async ({ request, params }) => {
+      await requireStorageAdmin(identity, request);
+      const key = demoObjectKey(params.key);
+      if (!(await storage.exists(key))) throw storageObjectNotFound();
+      return { key: params.key, content: (await storage.get(key)).toString("utf8") };
+    }, {
+      params: demoKeyParams,
+      detail: { tags: ["storage"], summary: "Read a demo object (administrators only)" },
+    });
+}
 
 const storagePlugin: AppPlugin = ({ services }) => {
   if (PROVIDERS["object-storage"] !== "s3") {
     return new Elysia({ name: "podokit.storage-s3.inactive" });
   }
-  const storage = services.resolve(STORAGE);
-  return new Elysia({ name: "podokit.storage" })
-    .put("/storage/:key", async ({ params, body }) => {
-      await storage.put(params.key, body.content, "text/plain");
-      return { key: params.key };
-    }, {
-      params: t.Object({ key: t.String({ minLength: 1 }) }),
-      body: t.Object({ content: t.String() }),
-      detail: { tags: ["storage"], summary: "Store an object" },
-    })
-    .get("/storage/:key/presigned", async ({ params }) => ({
-      url: await storage.presignedGetUrl(params.key),
-    }), {
-      params: t.Object({ key: t.String({ minLength: 1 }) }),
-      detail: { tags: ["storage"], summary: "Presign an object download" },
-    })
-    .get("/storage/:key", async ({ params }) => ({
-      key: params.key,
-      content: (await storage.get(params.key)).toString("utf8"),
-    }), {
-      params: t.Object({ key: t.String({ minLength: 1 }) }),
-      detail: { tags: ["storage"], summary: "Read an object" },
-    });
+  return storageDemoRoutes(services.resolve(STORAGE), services.resolve(REQUEST_IDENTITY));
 };
 
 export const storageModule: PodokitModule = {

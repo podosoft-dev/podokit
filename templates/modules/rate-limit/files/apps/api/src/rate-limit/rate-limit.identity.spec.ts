@@ -18,7 +18,10 @@ function request(headers: Record<string, string> = {}): Request {
 
 function services(userId?: string): ServiceRegistry {
   const registry = new ServiceRegistry();
-  registry.register(REQUEST_IDENTITY, { userId: async () => userId });
+  registry.register(REQUEST_IDENTITY, {
+    userId: async () => userId,
+    isAdmin: async () => false,
+  });
   return registry;
 }
 

@@ -7,6 +7,9 @@
   "requiredProjectFiles": [
     "apps/api/src/health/readiness.service.ts"
   ],
+  "requiredProjectContents": {
+    "apps/api/src/core/services.ts": ["isAdmin(request: Request): Promise<boolean>;"]
+  },
   "targetApp": "api",
   "env": [
     "# object storage — STORAGE_PROVIDER: minio | aws",
@@ -24,9 +27,11 @@
   ],
   "instructions": [
     "Start Silo for local dev:  docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml up -d",
-    "Store an object:  curl -XPUT localhost:5002/storage/hello -H 'content-type: application/json' -d '{\"content\":\"hi\"}'",
-    "Read it back:     curl localhost:5002/storage/hello",
-    "Presigned URL:    curl localhost:5002/storage/hello/presigned",
+    "The /storage demo routes need the auth module and an administrator session, and only reach keys under demo/.",
+    "Sign in as an administrator:  curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-in/email -H 'content-type: application/json' -d '{\"email\":\"admin@example.com\",\"password\":\"<password>\"}'",
+    "Store an object:  curl -b cookies.txt -XPUT localhost:5002/storage/hello -H 'content-type: application/json' -d '{\"content\":\"hi\"}'",
+    "Read it back:     curl -b cookies.txt localhost:5002/storage/hello",
+    "Presigned URL:    curl -b cookies.txt localhost:5002/storage/hello/presigned",
     "For AWS S3: set STORAGE_PROVIDER=aws, remove S3_ENDPOINT, set S3_FORCE_PATH_STYLE=false and real credentials/bucket."
   ]
 }
