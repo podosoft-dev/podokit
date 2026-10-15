@@ -640,6 +640,14 @@ SvelteKit proxy relays the header to browser code. A cursor the API did not
 issue returns `400 INVALID_CURSOR`. `GET /audit-logs/actions` lists the recorded
 action codes for filter menus. The admin **Audit log** page uses both.
 
+The `IndexAuditLogFilters` migration backs these queries with
+`("createdAt", "id")`, `("action", "createdAt")`, `("actorEmail", "createdAt")`,
+and `("targetLabel", "createdAt")` indexes, replacing the initial single-column
+`action` and `createdAt` indexes. Migrations run in one transaction, so it uses a
+plain `CREATE INDEX`, which blocks writes to `audit_logs` while it builds. For a
+large PostgreSQL table, create the same indexes beforehand with
+`CREATE INDEX CONCURRENTLY` under the same names; the migration then skips them.
+
 ```bash
 npx @podosoft/podokit add audit-log   # also adds auth
 bun install

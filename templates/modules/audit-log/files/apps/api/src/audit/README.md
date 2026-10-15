@@ -81,7 +81,9 @@ survives renames/deletes), `targetType/targetId/targetLabel`, `ip`, `metadata`
 - **Your routes:** call `AuditService.recordRequest()` after successful operations;
   pass `{ defer: true }` only for high-volume, non-security events.
 - **Schema:** add columns with a migration, and keep the
-  `AuditEntry` type in `audit-events.ts` in sync.
+  `AuditEntry` type in `audit-events.ts` in sync. A new list filter needs an
+  index that starts with its column and ends with `"createdAt"`, like those in
+  `1792000000000-IndexAuditLogFilters.ts`.
 - **Reading:** `GET /audit-logs` (admin only) returns a page as an array, newest
   first, filtered by exact `action`, `actor` (email), and `target` (label). Pass
   the `X-Next-Cursor` response header back as `cursor` for the next page; `limit`
