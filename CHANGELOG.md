@@ -164,6 +164,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Images and other objects served from the local storage provider lost their
+  `Content-Length`: Bun sends a `ReadableStream` body with chunked encoding unless
+  the stream enqueues and closes within one pull. `LocalObjectStore` now reads
+  objects up to 2 MiB whole; larger ones still stream in 64 KiB chunks and are
+  sent chunked.
+
 - The admin-dashboard `disposableUsers` Playwright fixture cleans up through its
   own request context in UI tests, holding a copy of the browser's admin cookies
   taken when the test starts. A UI test that signed its page in as another user

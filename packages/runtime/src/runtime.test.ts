@@ -218,10 +218,23 @@ describe("LocalObjectStore", () => {
     expect(second?.etag).not.toBe(first.etag);
   });
 
+  it("reads an object up to 2 MiB whole, so a Bun response keeps its Content-Length", async () => {
+    const root = await temporaryDirectory();
+    const store = new LocalObjectStore({ rootDirectory: root });
+    const content = Buffer.alloc(2 * 1024 * 1024, 5);
+    await store.put("whole.bin", content);
+    const object = await store.get("whole.bin");
+    if (!object) throw new Error("expected the stored object");
+    const reader = object.body.getReader();
+    const first = await reader.read();
+    expect(first.value?.byteLength).toBe(content.byteLength);
+    expect((await reader.read()).done).toBe(true);
+  });
+
   it("streams in bounded chunks and refuses a file replaced after the read began", async () => {
     const root = await temporaryDirectory();
     const store = new LocalObjectStore({ rootDirectory: root });
-    const content = Buffer.alloc(200 * 1024, 7);
+    const content = Buffer.alloc(3 * 1024 * 1024, 7);
     await store.put("large.bin", content);
     const object = await store.get("large.bin");
     if (!object) throw new Error("expected the stored object");
