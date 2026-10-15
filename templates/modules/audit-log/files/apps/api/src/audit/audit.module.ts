@@ -2,6 +2,7 @@ import { Elysia } from "elysia";
 import { AUTH } from "../auth/auth.module";
 import {
   DATABASE,
+  LOGGER,
   type AppPlugin,
   type PodokitModule,
   type ServiceKey,
@@ -27,7 +28,12 @@ export const auditModule: PodokitModule = {
   name: "audit-log",
   configure: (_env, services): void => {
     const database = services.resolve(DATABASE);
-    const audit = new AuditService(database.sql, { dialect: database.provider, enabled: auditEnabled });
+    const audit = new AuditService(database.sql, {
+      dialect: database.provider,
+      enabled: auditEnabled,
+      // Resolved on use: the logging module may replace the logger after this point.
+      logger: { warn: (details, message) => services.resolve(LOGGER).warn(details, message) },
+    });
     services.register(AUDIT, audit, () => audit.close());
     services.onStart(() => audit.connect());
   },

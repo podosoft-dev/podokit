@@ -608,8 +608,18 @@ recorded automatically: application code records its own semantic events with
 On/off is an **admin toggle on the Settings page** (stored in the DB, applied
 live — no restart); `AUDIT_LOG_ENABLED` is only the fallback default until an
 admin sets it (leave it `true` so the trail is on out of the box). Every write
-path checks the toggle in `AuditService.record()`, so turning it off stops Better
-Auth entries and application entries alike.
+path checks the toggle in `AuditService`, so turning it off stops Better Auth
+entries and application entries alike.
+
+Writes are awaited by default, so a response waits for its audit INSERT. For
+high-volume events that are not security relevant, `recordAuditLater()` (or
+`recordRequest(..., { defer: true })`) queues the entry instead. Queued entries
+are written with one multi-row INSERT every 250 ms, as soon as 100 are waiting,
+and on a clean shutdown. The trade-off is durability: **entries still queued when
+the API process crashes or is killed are lost**. The queue holds at most 1,000
+entries; past that, new deferred entries are dropped with a warning and an
+`audit.dropped` entry records how many were lost. The Better Auth hook and
+`auth.*` / `user.*` actions always use the awaited path.
 
 ```bash
 npx @podosoft/podokit add audit-log   # also adds auth
