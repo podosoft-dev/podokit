@@ -34,6 +34,16 @@ also adds `routes/blog/+layout.svelte`, which renders the shared `AccountMenu` i
 the top-right corner. Existing customized blog layouts should place the same
 managed component in their site header instead of duplicating its menu logic.
 
+The managed loaders in `#lib/blog/blog-data.server.js` keep the public blog up
+while the API is unavailable. `loadBlogPosts` and `loadBlogComments` return an
+empty page with `unavailable: true` instead of failing, a post page answers 404
+for a missing post and a retryable 503 during an outage, and other API errors
+pass through. Owned wrappers created before 1.0.3 should show a message when
+`posts.unavailable` or `comments.unavailable` is set (the `blog.unavailable` and
+`blog.commentsUnavailable` strings arrive in the managed catalog), and
+`routes/blog/mine/+page.server.ts` should call `requireBackendAvailable(event.locals)`
+before its sign-in redirect, as the write and edit loaders do.
+
 The admin wrapper lives under `routes/(admin)/admin/blog`. When upgrading
 alongside the admin-dashboard route-group migration, update this package before
 running `podo update`; the CLI then moves the owned wrapper with the rest of the

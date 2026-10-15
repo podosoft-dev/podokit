@@ -14,6 +14,11 @@ test("blog list renders pagination-ready content @smoke", async ({ page }) => {
   await expect(page.locator("main")).toBeVisible();
 });
 
+test("a missing post answers 404 instead of a server error", async ({ page }) => {
+  const response = await page.goto(`/blog/missing-${Date.now()}`);
+  expect(response?.status()).toBe(404);
+});
+
 test.describe("signed-in blog author", () => {
   test.use({ storageState: anonState });
 

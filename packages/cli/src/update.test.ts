@@ -8,6 +8,7 @@ import {
   cpSync,
   mkdirSync,
   renameSync,
+  readdirSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -912,5 +913,183 @@ describe("applyUpdate", () => {
       writeFileSync(tplMain, original);
     }
     expect(existsSync(appMain)).toBe(true);
+  });
+});
+
+describe("provider requirements introduced by target templates", () => {
+  // An earlier release in which no module declared requiresCapabilities.
+  function templatesWithoutCapabilityRequirements(): string {
+    const dir = join(tmp(), "old-templates");
+    cpSync(REPO_TEMPLATES, dir, { recursive: true });
+    const modulesDir = join(dir, "modules");
+    for (const name of readdirSync(modulesDir)) {
+      const manifestPath = join(modulesDir, name, "module.manifest.json");
+      const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+      delete manifest.requiresCapabilities;
+      writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    }
+    return dir;
+  }
+
+  function moduleLine(name: string): string {
+    const manifest = JSON.parse(
+      readFileSync(join(REPO_TEMPLATES, "modules", name, "module.manifest.json"), "utf8"),
+    ) as { inject: { marker: string; text: string }[] };
+    return manifest.inject.find((entry) => entry.marker === "// podokit:end:modules")!.text;
+  }
+
+  function recordedModules(project: string): string[] {
+    const manifest = JSON.parse(
+      readFileSync(join(project, ".podokit/manifest.json"), "utf8"),
+    ) as { modules: { name: string; order: number }[] };
+    return [...manifest.modules].sort((a, b) => a.order - b.order).map((module) => module.name);
+  }
+
+  it.each([
+    { module: "sse", providers: ["events-redis"] },
+    { module: "file-upload", providers: ["object-storage-s3"] },
+    { module: "rate-limit", providers: ["redis"] },
+    { module: "job-progress", providers: ["bullmq", "events-redis"] },
+  ])("adds the selected provider $providers.0 that $module now requires, ahead of it", ({ module, providers }) => {
+    const oldTemplates = templatesWithoutCapabilityRequirements();
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: project });
+    addModule({ projectRoot: project, module, modulesDir: join(oldTemplates, "modules") });
+    for (const provider of providers) expect(recordedModules(project)).not.toContain(provider);
+
+    const plan = planUpdate(project, REPO_TEMPLATES);
+    expect(plan.addedModules.map((added) => added.name).sort()).toEqual([...providers].sort());
+    for (const added of plan.addedModules) expect(added.capability).toBeDefined();
+
+    const result = applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+    expect(result.addedModules.sort()).toEqual([...providers].sort());
+    expect(result.conflicts).toEqual([]);
+
+    const order = recordedModules(project);
+    const app = readFileSync(join(project, "apps/api/src/app.ts"), "utf8");
+    for (const provider of providers) {
+      expect(order.indexOf(provider)).toBeLessThan(order.indexOf(module));
+      expect(app.indexOf(moduleLine(provider))).toBeGreaterThan(-1);
+      expect(app.indexOf(moduleLine(provider))).toBeLessThan(app.indexOf(moduleLine(module)));
+    }
+    const replanned = planUpdate(project, REPO_TEMPLATES);
+    expect(replanned.addedModules).toEqual([]);
+    expect(replanned.changes.filter((change) => !["up-to-date", "skip"].includes(change.action)))
+      .toEqual([]);
+  });
+
+  it("follows the project's provider selection", () => {
+    const oldTemplates = templatesWithoutCapabilityRequirements();
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: project });
+    addModule({ projectRoot: project, module: "sse", modulesDir: join(oldTemplates, "modules") });
+    const manifestPath = join(project, ".podokit/manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+      providers: Record<string, string>;
+    };
+    manifest.providers.events = "memory";
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
+    expect(planUpdate(project, REPO_TEMPLATES).addedModules).toEqual([
+      { name: "events-memory", requiredBy: "sse", capability: "events", provider: "memory" },
+    ]);
+  });
+
+  it("moves a provider recorded after its dependent ahead of it", () => {
+    const oldTemplates = templatesWithoutCapabilityRequirements();
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: project });
+    addModule({ projectRoot: project, module: "sse", modulesDir: join(oldTemplates, "modules") });
+    addModule({ projectRoot: project, module: "events-redis", modulesDir: join(oldTemplates, "modules") });
+    expect(recordedModules(project)).toEqual(["sse", "events-redis"]);
+
+    const plan = planUpdate(project, REPO_TEMPLATES);
+    expect(plan.addedModules).toEqual([]);
+    expect(plan.modules).toEqual(["events-redis", "sse"]);
+    expect(plan.changes.find((change) => change.path === "apps/api/src/app.ts")?.action)
+      .toBe("update");
+
+    applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+    expect(recordedModules(project)).toEqual(["events-redis", "sse"]);
+    const app = readFileSync(join(project, "apps/api/src/app.ts"), "utf8");
+    expect(app.indexOf(moduleLine("events-redis"))).toBeLessThan(app.indexOf(moduleLine("sse")));
+  });
+});
+
+describe("app-owned public paths", () => {
+  const SEED = "apps/web/src/lib/server/public-paths.ts";
+  const GUARDS = "apps/web/src/lib/server/guards.ts";
+
+  // The admin-dashboard layout before it shipped the app-owned public path list.
+  function templatesWithoutPublicPaths(): string {
+    const dir = join(tmp(), "old-templates");
+    cpSync(REPO_TEMPLATES, dir, { recursive: true });
+    const module = join(dir, "modules/admin-dashboard");
+    rmSync(join(module, "files", SEED));
+    const guardsPath = join(module, "files", GUARDS);
+    writeFileSync(
+      guardsPath,
+      readFileSync(guardsPath, "utf8")
+        .replace('import { APP_PUBLIC_PATHS } from "./public-paths";\n', "")
+        .replace("  ...APP_PUBLIC_PATHS,\n", ""),
+    );
+    const manifestPath = join(module, "module.manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { ownedGlobs: string[] };
+    manifest.ownedGlobs = manifest.ownedGlobs.filter((glob) => glob !== SEED);
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    return dir;
+  }
+
+  function oldApp(oldTemplates: string): string {
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: project });
+    addModule({ projectRoot: project, module: "admin-dashboard", modulesDir: join(oldTemplates, "modules") });
+    expect(existsSync(join(project, SEED))).toBe(false);
+    return project;
+  }
+
+  it("creates the owned file for an existing app and wires it into the guards", () => {
+    const oldTemplates = templatesWithoutPublicPaths();
+    const project = oldApp(oldTemplates);
+
+    const plan = planUpdate(project, REPO_TEMPLATES);
+    expect(plan.changes.find((change) => change.path === SEED)).toMatchObject({ action: "add", tier: "owned" });
+    applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+
+    expect(readFileSync(join(project, SEED), "utf8")).toContain("export const APP_PUBLIC_PATHS: readonly string[] = [];");
+    const guards = readFileSync(join(project, GUARDS), "utf8");
+    expect(guards).toContain('import { APP_PUBLIC_PATHS } from "./public-paths";');
+    expect(guards).toContain('  "/maintenance",\n  ...APP_PUBLIC_PATHS,\n');
+    expect(readFilesLock(project)?.files[SEED]?.tier).toBe("owned");
+
+    // The application owns the list from now on.
+    writeFileSync(join(project, SEED), 'export const APP_PUBLIC_PATHS: readonly string[] = ["/pricing"];\n');
+    expect(planUpdate(project, REPO_TEMPLATES).changes.find((change) => change.path === SEED)?.action).toBe("skip");
+    applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+    expect(readFileSync(join(project, SEED), "utf8")).toContain('"/pricing"');
+  });
+
+  it("keeps an app's own list and merges the same guards edit cleanly", () => {
+    const oldTemplates = templatesWithoutPublicPaths();
+    const project = oldApp(oldTemplates);
+    // An app that already made this change by hand before updating.
+    const own = 'export const APP_PUBLIC_PATHS: readonly string[] = ["/about"];\n';
+    writeFileSync(join(project, SEED), own);
+    writeFileSync(
+      join(project, GUARDS),
+      readFileSync(join(project, GUARDS), "utf8")
+        .replace('import { error } from "@sveltejs/kit";\n', 'import { error } from "@sveltejs/kit";\nimport { APP_PUBLIC_PATHS } from "./public-paths";\n')
+        .replace('  "/maintenance",\n', '  "/maintenance",\n  ...APP_PUBLIC_PATHS,\n'),
+    );
+
+    const result = applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+
+    expect(result.conflicts).toEqual([]);
+    expect(readFileSync(join(project, SEED), "utf8")).toBe(own);
+    const guards = readFileSync(join(project, GUARDS), "utf8");
+    expect(guards.match(/\.\.\.APP_PUBLIC_PATHS,/g)).toHaveLength(1);
+    expect(guards.match(/from "\.\/public-paths"/g)).toHaveLength(1);
+    expect(planUpdate(project, REPO_TEMPLATES).changes.find((change) => change.path === GUARDS)?.action)
+      .toBe("up-to-date");
   });
 });

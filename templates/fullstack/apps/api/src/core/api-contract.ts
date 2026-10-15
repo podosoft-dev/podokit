@@ -37,6 +37,7 @@ const MODULE_ROUTES: Record<string, string[]> = {
     "GET /profile-images/{fileName}",
     "GET /admin/sessions",
     "DELETE /admin/sessions/{id}",
+    "GET /admin/users",
   ],
   "api-key-auth": ["GET /machine/ping"],
   "audit-log": ["GET /audit-logs", "GET /audit-logs/actions"],

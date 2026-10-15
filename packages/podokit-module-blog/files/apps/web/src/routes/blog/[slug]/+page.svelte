@@ -115,7 +115,9 @@
       </div>
     {/if}
 
-    {#if data.comments.items.length === 0}
+    {#if data.comments.unavailable}
+      <p class="text-muted-foreground py-10" role="status">{i18n.t.blog.commentsUnavailable}</p>
+    {:else if data.comments.items.length === 0}
       <p class="text-muted-foreground py-10">{i18n.t.blog.noComments}</p>
     {:else}
       <ul class="mt-8 divide-y">

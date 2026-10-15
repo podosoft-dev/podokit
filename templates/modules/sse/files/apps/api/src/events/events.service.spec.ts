@@ -353,6 +353,41 @@ describe("per-connection safety", () => {
   });
 });
 
+describe("per-user stream limit", () => {
+  it("refuses a user's stream beyond the limit on this replica and frees slots on close", async () => {
+    const events = await service({ maxStreamsPerUser: 2 });
+    const first = await open(events, user("a"));
+    await open(events, user("a"));
+
+    const refused = await open(events, user("a")).catch((error: unknown) => error);
+    expect(refused).toBeInstanceOf(AppException);
+    expect((refused as AppException).code).toBe("EVENTS_STREAM_LIMIT");
+    expect((refused as AppException).statusCode).toBe(429);
+    expect(events.streamCount).toBe(2);
+
+    // Other users keep their own allowance.
+    await open(events, user("b"));
+    first.close();
+    await open(events, user("a"));
+    expect(events.streamCount).toBe(3);
+  });
+
+  it("counts only live streams after a client disconnects", async () => {
+    const events = await service({ maxStreamsPerUser: 1 });
+    const controller = new AbortController();
+    await events.open(user("a"), undefined, controller.signal);
+    controller.abort();
+    await open(events, user("a"));
+    expect(events.streamCount).toBe(1);
+  });
+
+  it("allows eight streams per user by default", async () => {
+    const events = await service();
+    for (let index = 0; index < 8; index += 1) await open(events, user("a"));
+    await expect(open(events, user("a"))).rejects.toThrow("Too many open event streams");
+  });
+});
+
 describe("SSE wire format", () => {
   it("encodes data events as default messages and control frames separately", () => {
     expect(encodeFrame({ kind: "event", id: "7", data: '{"topic":"t","data":1}' })).toBe(

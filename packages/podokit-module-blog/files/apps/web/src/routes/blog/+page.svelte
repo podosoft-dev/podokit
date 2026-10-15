@@ -22,7 +22,9 @@
     {/if}
   </header>
 
-  {#if data.posts.items.length === 0}
+  {#if data.posts.unavailable}
+    <p class="text-muted-foreground py-16" role="status">{i18n.t.blog.unavailable}</p>
+  {:else if data.posts.items.length === 0}
     <p class="text-muted-foreground py-16">{i18n.t.blog.empty}</p>
   {:else}
     <ul class="divide-y">

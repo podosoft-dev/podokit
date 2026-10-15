@@ -3,24 +3,14 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
-import {
-  caretRangeAccepts,
-  syncTemplateDependencyRanges,
-} from "./sync-template-dependency-ranges.mjs";
+import { syncTemplateDependencyRanges } from "./sync-template-dependency-ranges.mjs";
 
 function writeJson(path, value) {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-test("recognizes npm caret compatibility including zero-major versions", () => {
-  assert.equal(caretRangeAccepts("^0.2.0", "0.2.4"), true);
-  assert.equal(caretRangeAccepts("^0.2.0", "0.3.0"), false);
-  assert.equal(caretRangeAccepts("^1.2.0", "1.9.0"), true);
-  assert.equal(caretRangeAccepts("^1.2.0", "2.0.0"), false);
-});
-
-test("updates incompatible PodoKit ranges in generated app and module manifests", () => {
+test("raises PodoKit ranges in generated app and module manifests to the current versions", () => {
   const repoRoot = mkdtempSync(join(tmpdir(), "podokit-template-ranges-"));
   try {
     writeJson(join(repoRoot, "packages/contracts/package.json"), {
@@ -56,9 +46,11 @@ test("updates incompatible PodoKit ranges in generated app and module manifests"
       "templates/app/package.json",
       "templates/modules/auth/module.manifest.json",
     ]);
+    // A compatible but older minimum is raised too: an app keeping an older
+    // lockfile entry would otherwise miss APIs the current templates use.
     assert.deepEqual(readJson(join(repoRoot, "templates/app/package.json")).dependencies, {
       "@podosoft/podokit-contracts": "^0.3.0",
-      "@podosoft/podokit-api-client": "^0.6.0",
+      "@podosoft/podokit-api-client": "^0.6.1",
       external: "^4.0.0",
     });
     assert.deepEqual(readJson(moduleManifestPath).dependencies, {

@@ -1,5 +1,14 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { create } from "./create";
@@ -13,6 +22,7 @@ import {
   writeManifest,
 } from "./lockfile";
 import { applyProviderChange } from "./provider";
+import { planUpdate } from "./update";
 
 const REPO_TEMPLATES = resolve(process.cwd(), "..", "..", "templates");
 const MODULES = join(REPO_TEMPLATES, "modules");
@@ -986,6 +996,159 @@ describe("addModule (auth / better-auth)", () => {
     const empty = tmp(); // no apps/api/package.json
     expect(() => addModule({ projectRoot: empty, module: "auth", modulesDir: MODULES })).toThrow(
       /does not look like a PodoKit project/,
+    );
+  });
+});
+
+describe("provider ordering", () => {
+  // An earlier release in which no module declared requiresCapabilities.
+  function templatesWithoutCapabilityRequirements(): string {
+    const dir = join(tmp(), "old-templates");
+    cpSync(REPO_TEMPLATES, dir, { recursive: true });
+    const modulesDir = join(dir, "modules");
+    for (const name of readdirSync(modulesDir)) {
+      const manifestPath = join(modulesDir, name, "module.manifest.json");
+      const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+      delete manifest.requiresCapabilities;
+      writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    }
+    return dir;
+  }
+
+  function moduleLine(name: string): string {
+    const manifest = JSON.parse(
+      readFileSync(join(MODULES, name, "module.manifest.json"), "utf8"),
+    ) as { inject: { marker: string; text: string }[] };
+    return manifest.inject.find((entry) => entry.marker === "// podokit:end:modules")!.text;
+  }
+
+  function recordedModules(project: string): string[] {
+    return [...(readManifest(project)?.modules ?? [])]
+      .sort((a, b) => a.order - b.order)
+      .map((module) => module.name);
+  }
+
+  function expectBefore(project: string, first: string, second: string): void {
+    const order = recordedModules(project);
+    expect(order.indexOf(first)).toBeGreaterThan(-1);
+    expect(order.indexOf(first)).toBeLessThan(order.indexOf(second));
+    const app = readFileSync(join(project, "apps/api/src/app.ts"), "utf8");
+    expect(app.indexOf(moduleLine(first))).toBeGreaterThan(-1);
+    expect(app.indexOf(moduleLine(first))).toBeLessThan(app.indexOf(moduleLine(second)));
+  }
+
+  it.each([
+    { module: "sse", providers: ["events-redis"] },
+    { module: "file-upload", providers: ["object-storage-s3"] },
+    { module: "rate-limit", providers: ["redis"] },
+    { module: "job-progress", providers: ["bullmq", "events-redis"] },
+  ])("adds $providers.0 ahead of an installed $module that requires it", ({ module, providers }) => {
+    const oldTemplates = templatesWithoutCapabilityRequirements();
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: project });
+    addModule({ projectRoot: project, module, modulesDir: join(oldTemplates, "modules") });
+
+    for (const provider of providers) {
+      addModule({ projectRoot: project, module: provider, modulesDir: MODULES });
+      expectBefore(project, provider, module);
+    }
+    expect(readManifest(project)?.modules.map((entry) => entry.order).sort((a, b) => a - b))
+      .toEqual(recordedModules(project).map((_, index) => index));
+    // The written wiring matches what update assembles for the same module order.
+    const plan = planUpdate(project, REPO_TEMPLATES);
+    for (const path of ["apps/api/src/app.ts", ".env.example"]) {
+      expect(plan.changes.find((change) => change.path === path)?.action).toBe("up-to-date");
+    }
+  });
+
+  it("adds the missing provider first when a dependent module is added again", () => {
+    const oldTemplates = templatesWithoutCapabilityRequirements();
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: project });
+    addModule({ projectRoot: project, module: "sse", modulesDir: join(oldTemplates, "modules") });
+
+    const result = addModule({ projectRoot: project, module: "sse", modulesDir: MODULES });
+
+    expect(result.added).toEqual(["events-redis"]);
+    expect(recordedModules(project)).toEqual(["events-redis", "sse"]);
+    expectBefore(project, "events-redis", "sse");
+  });
+
+  it("orders a switched provider ahead of the modules that use it", () => {
+    const project = generate("fullstack");
+    addModule({ projectRoot: project, module: "sse", modulesDir: MODULES });
+    addModule({ projectRoot: project, module: "logging", modulesDir: MODULES });
+
+    applyProviderChange(project, "events", "memory", { modulesDir: MODULES });
+
+    expect(recordedModules(project)).toEqual(["events-redis", "events-memory", "sse", "logging"]);
+    expectBefore(project, "events-memory", "sse");
+  });
+
+  it("records nested requirements in the order they were applied", () => {
+    const project = generate("fullstack");
+    const result = addModule({ projectRoot: project, module: "rate-limit", modulesDir: MODULES });
+    expect(result.added).toEqual(["mailer", "auth", "api-key-auth", "redis"]);
+    expect(recordedModules(project)).toEqual([
+      "mailer",
+      "auth",
+      "api-key-auth",
+      "redis",
+      "rate-limit",
+    ]);
+  });
+});
+
+describe("admin bootstrap command", () => {
+  it.each(["postgres", "sqlite"] as const)(
+    "builds every runtime entry the script loads on %s",
+    (database) => {
+      const project = join(tmp(), "app");
+      create({ name: "app", template: "fullstack", templatesDir: REPO_TEMPLATES, targetDir: project, database });
+      addModule({ projectRoot: project, module: "admin-dashboard", modulesDir: MODULES });
+      const api = join(project, "apps/api");
+      const script = readFileSync(join(api, "scripts/bootstrap-admin.mjs"), "utf8");
+      const build = readFileSync(join(api, "scripts/build.mjs"), "utf8");
+
+      // Bun bundles only the build targets, so every compiled module the script
+      // imports must be a top-level target whose source the module ships.
+      const compiled = [...script.matchAll(/["']\.\.\/dist\/([^"']+)\.js["']/g)].map((match) => match[1]!);
+      expect(compiled.length).toBeGreaterThan(0);
+      for (const entry of compiled) {
+        const outdir = dirname(`dist/${entry}`);
+        expect(build).toContain(`{ entrypoint: "src/${entry}.ts", outdir: "${outdir}" }`);
+        expect(existsSync(join(api, `src/${entry}.ts`))).toBe(true);
+      }
+      for (const [, source] of script.matchAll(/["']\.\.\/(src\/[^"']+\.ts)["']/g)) {
+        expect(existsSync(join(api, source!))).toBe(true);
+      }
+
+      const used = /const \{([^}]+)\} = runtime;/.exec(script)?.[1]
+        ?.split(",")
+        .map((name) => name.trim())
+        .filter(Boolean) ?? [];
+      expect(used.length).toBeGreaterThan(0);
+      const runtimeSource = readFileSync(join(api, `src/${compiled[0]}.ts`), "utf8");
+      for (const name of used) {
+        expect(runtimeSource).toMatch(
+          new RegExp(`export (?:async function|function|const) ${name}\\b|export \\{[^}]*\\b${name}\\b[^}]*\\}`),
+        );
+      }
+    },
+  );
+});
+
+describe("app-owned public paths", () => {
+  it("seeds an owned public path list that the managed guards read", () => {
+    const project = generate("fullstack");
+    addModule({ projectRoot: project, module: "admin-dashboard", modulesDir: MODULES });
+    const seed = "apps/web/src/lib/server/public-paths.ts";
+    expect(readFileSync(join(project, seed), "utf8")).toContain(
+      "export const APP_PUBLIC_PATHS: readonly string[] = [];",
+    );
+    expect(readFilesLock(project)?.files[seed]?.tier).toBe("owned");
+    expect(readFileSync(join(project, "apps/web/src/lib/server/guards.ts"), "utf8")).toContain(
+      '  "/maintenance",\n  ...APP_PUBLIC_PATHS,\n',
     );
   });
 });

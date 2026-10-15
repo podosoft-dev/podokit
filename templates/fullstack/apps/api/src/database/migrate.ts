@@ -25,7 +25,7 @@ async function migrate(): Promise<void> {
   await dataSource.initialize();
   try {
     if (process.argv.includes("--revert")) await dataSource.undoLastMigration({ transaction: "all" });
-    else await dataSource.runMigrations({ transaction: "all" });
+    else await dataSource.runMigrations();
   } finally {
     await dataSource.destroy();
   }

@@ -7,7 +7,7 @@ import { templateListText } from "./templates";
 import { addModule, listModules } from "./add";
 import { removeModule } from "./remove";
 import { status, diff, doctor } from "./inspect";
-import { planUpdate, applyUpdate, summarize } from "./update";
+import { addedModuleReason, planUpdate, applyUpdate, summarize } from "./update";
 import { eject } from "./eject";
 import { runDevCommand } from "./dev";
 import {
@@ -772,6 +772,9 @@ async function main(argv: string[]): Promise<void> {
     try {
       if (args.apply) {
         const result = applyUpdate(process.cwd(), templatesDir, { oldTemplatesDir: args.from });
+        if (result.addedModules.length) {
+          process.stdout.write(`Added required module(s): ${result.addedModules.join(", ")}\n`);
+        }
         process.stdout.write(
           `Applied: ${result.written.length} written, ${result.moved.length} moved, ` +
             `${result.removed.length} removed, ` +
@@ -792,6 +795,13 @@ async function main(argv: string[]): Promise<void> {
       process.stdout.write(
         `podo update ${plan.fromVersion} -> ${plan.toVersion}  (template: ${plan.template}; modules: ${plan.modules.join(", ") || "none"})\n\n`,
       );
+      if (plan.addedModules.length) {
+        process.stdout.write(
+          "Modules to add:\n" +
+            plan.addedModules.map((module) => `  ${module.name}  (${addedModuleReason(module)})`).join("\n") +
+            "\n\n",
+        );
+      }
       if (!shown.length) {
         process.stdout.write("Everything is up to date.\n");
       } else {

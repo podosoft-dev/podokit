@@ -17,7 +17,9 @@
   "targetApp": "api",
   "env": [
     "# Maximum encoded Server-Sent Event payload",
-    "SSE_MAX_EVENT_BYTES=65536"
+    "SSE_MAX_EVENT_BYTES=65536",
+    "# Open event streams per user on each API replica",
+    "SSE_MAX_STREAMS_PER_USER=8"
   ],
   "inject": [
     { "file": "apps/api/src/app.ts", "marker": "// podokit:end:imports", "text": "import { eventsModule } from \"./events/events.module\";" },

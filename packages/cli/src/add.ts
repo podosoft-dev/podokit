@@ -14,6 +14,7 @@ import {
   isProviderCapability,
   isProviderName,
   type ProviderCapability,
+  type ProviderSelections,
 } from "@podosoft/podokit-runtime";
 import {
   manifestTemplateVars,
@@ -248,14 +249,14 @@ function assertManifestVersion(name: string, manifest: ModuleManifest): void {
   }
 }
 
-function providerModuleName(
-  projectRoot: string,
+/** Name of the module that implements the selected provider for a capability. */
+export function selectedProviderModule(
   modulesDir: string,
+  projectRoot: string,
+  providers: ProviderSelections,
   capability: ProviderCapability,
 ): string {
-  const project = readProjectManifest(projectRoot);
-  if (!project) throw new Error("Provider capabilities require a PodoKit project manifest.");
-  const selected = project.providers[capability];
+  const selected = providers[capability];
   for (const available of listModules(modulesDir, projectRoot)) {
     const resolved = resolveModule(available.name, modulesDir, projectRoot);
     if (!resolved) continue;
@@ -266,6 +267,16 @@ function providerModuleName(
     `No module provides the selected ${capability} provider "${selected}". ` +
       `Choose another provider with podo provider set ${capability} <provider> --apply.`,
   );
+}
+
+function providerModuleName(
+  projectRoot: string,
+  modulesDir: string,
+  capability: ProviderCapability,
+): string {
+  const project = readProjectManifest(projectRoot);
+  if (!project) throw new Error("Provider capabilities require a PodoKit project manifest.");
+  return selectedProviderModule(modulesDir, projectRoot, project.providers, capability);
 }
 
 function requiredModules(
@@ -411,12 +422,24 @@ function projectName(projectRoot: string): string {
   return typeof pkg.name === "string" ? pkg.name : "app";
 }
 
-function appendEnv(projectRoot: string, lines: string[]): void {
+function appendEnv(projectRoot: string, lines: string[], anchors: string[] = []): void {
   const file = join(projectRoot, ".env.example");
   if (!existsSync(file)) return;
   const current = readFileSync(file, "utf8");
-  const missing = lines.filter((line) => !current.split("\n").includes(line));
+  const existing = current.split("\n");
+  const missing = lines.filter((line) => !existing.includes(line));
   if (missing.length === 0) return;
+  // Each module appends its own blank-line separated block. Keep that shape
+  // when the block belongs in front of a displaced module's block.
+  const wanted = new Set(anchors);
+  const index = existing.findIndex(
+    (line, position) => position > 0 && existing[position - 1] === "" && wanted.has(line),
+  );
+  if (index !== -1) {
+    existing.splice(index, 0, ...missing, "");
+    writeFileSync(file, existing.join("\n"));
+    return;
+  }
   const separator = current.endsWith("\n") ? "" : "\n";
   writeFileSync(file, `${current}${separator}\n${missing.join("\n")}\n`);
 }
@@ -440,6 +463,121 @@ function isApplied(projectRoot: string, modulesDir: string, module: string): boo
 }
 
 /**
+ * Where a module being added lands relative to modules already installed.
+ * Modules configure in manifest order, so a provider must come before every
+ * installed module that requires it (or its capability). The anchors are the
+ * wiring lines of the installed modules from that point on, so new wiring is
+ * written exactly where `podo update` would assemble it.
+ */
+interface ModulePlacement {
+  /** Installed module the new modules are recorded in front of. */
+  before: string;
+  /** Wiring text of the displaced modules, keyed by file and marker. */
+  injections: Map<string, string[]>;
+  /** .env.example lines of the displaced modules. */
+  env: string[];
+}
+
+function injectionKey(file: string, marker: string): string {
+  return `${file}\n${marker}`;
+}
+
+/** Modules `applyModule` would newly apply, in application order. */
+function plannedModules(
+  projectRoot: string,
+  module: string,
+  modulesDir: string,
+  planned: Set<string> = new Set(),
+  order: string[] = [],
+): string[] {
+  planned.add(module);
+  const resolved = resolveModule(module, modulesDir, projectRoot);
+  if (!resolved) return order;
+  for (const required of requiredModules(projectRoot, modulesDir, readModuleManifest(resolved.dir))) {
+    if (planned.has(required) || isApplied(projectRoot, modulesDir, required)) continue;
+    plannedModules(projectRoot, required, modulesDir, planned, order);
+  }
+  order.push(module);
+  return order;
+}
+
+function modulePlacement(
+  projectRoot: string,
+  module: string,
+  modulesDir: string,
+): ModulePlacement | undefined {
+  const project = readProjectManifest(projectRoot);
+  if (!project) return undefined;
+  const installed = [...project.modules].sort((a, b) => a.order - b.order);
+  const installedNames = new Set(installed.map((entry) => entry.name));
+  const fresh = new Set(
+    plannedModules(projectRoot, module, modulesDir).filter((name) => !installedNames.has(name)),
+  );
+  if (!fresh.size) return undefined;
+
+  const provided = new Set<string>();
+  for (const name of fresh) {
+    const resolved = resolveModule(name, modulesDir, projectRoot);
+    if (!resolved) continue;
+    for (const capability of Object.keys(readModuleManifest(resolved.dir).provides ?? {})) {
+      provided.add(capability);
+    }
+  }
+  const vars: TemplateVars = {
+    projectName: projectName(projectRoot),
+    ...manifestTemplateVars(project),
+  };
+  const manifests = installed.map((entry) => {
+    const resolved = resolveModule(entry.packageName ?? entry.name, modulesDir, projectRoot);
+    return resolved ? readModuleManifest(resolved.dir, vars) : undefined;
+  });
+  const first = manifests.findIndex((manifest) =>
+    manifest !== undefined && (
+      (manifest.requires ?? []).some((name) => fresh.has(name))
+      || (manifest.requiresCapabilities ?? []).some((capability) => provided.has(capability))
+    )
+  );
+  if (first === -1) return undefined;
+
+  const injections = new Map<string, string[]>();
+  const env: string[] = [];
+  for (const manifest of manifests.slice(first)) {
+    if (!manifest) continue;
+    for (const injection of manifest.inject ?? []) {
+      const key = injectionKey(injection.file, injection.marker);
+      injections.set(key, [...(injections.get(key) ?? []), injection.text]);
+    }
+    env.push(...(manifest.env ?? []));
+  }
+  return { before: installed[first]!.name, injections, env };
+}
+
+/** Insert wiring at its marker, or in front of the first displaced module's wiring. */
+function injectAt(content: string, injection: Injection, anchors: string[] = []): string {
+  if (!anchors.length || content.includes(injection.text)) {
+    return insertAtMarker(content, injection.marker, injection.text);
+  }
+  const lines = content.split("\n");
+  const end = lines.findIndex((line) => line.includes(injection.marker));
+  if (end === -1) throw new Error(`Marker not found: ${injection.marker}`);
+  const beginMarker = injection.marker.replace("podokit:end:", "podokit:begin:");
+  const begin = beginMarker === injection.marker
+    ? -1
+    : lines.slice(0, end).findIndex((line) => line.includes(beginMarker));
+  const wanted = new Set(anchors.map((text) => text.split("\n")[0]!.trim()));
+  let index = end;
+  for (let line = begin + 1; line < end; line += 1) {
+    if (wanted.has(lines[line]!.trim())) {
+      index = line;
+      break;
+    }
+  }
+  const indent = lines[end]!.match(/^\s*/)?.[0] ?? "";
+  lines.splice(index, 0, `${indent}${injection.text}`);
+  return lines.join("\n");
+}
+
+/**
  * Apply a module to an existing generated project: overlay files, merge the
  * target app's package.json dependencies and scripts, append env example lines,
  * and inject wiring at markers. Missing required modules are added first.
@@ -459,12 +597,14 @@ export function addModule(options: AddOptions): AddResult {
         })
         .map(([path]) => path)
     : [];
+  const placement = modulePlacement(options.projectRoot, options.module, options.modulesDir);
   const result = applyModule(
     options.projectRoot,
     options.module,
     options.modulesDir,
     new Set(),
     options.adopt ?? false,
+    placement,
   );
   if (options.adopt && result.adopted.length) {
     releaseOwnedPaths(options.projectRoot, result.adopted);
@@ -489,6 +629,7 @@ export function addModule(options: AddOptions): AddResult {
         }
       : undefined,
     result.managedOverrides,
+    placement?.before,
   );
   return result;
 }
@@ -499,6 +640,7 @@ function applyModule(
   modulesDir: string,
   applied: Set<string>,
   adopt: boolean,
+  placement?: ModulePlacement,
 ): AddResult {
   const resolved = resolveModule(module, modulesDir, projectRoot);
   if (!resolved) {
@@ -544,8 +686,8 @@ function applyModule(
   const touched: string[] = [];
   for (const required of requiredModules(projectRoot, modulesDir, manifest)) {
     if (applied.has(required) || isApplied(projectRoot, modulesDir, required)) continue;
-    const result = applyModule(projectRoot, required, modulesDir, applied, adopt);
-    added.push(required, ...result.added);
+    const result = applyModule(projectRoot, required, modulesDir, applied, adopt, placement);
+    added.push(...result.added, required);
     ownedGlobs.push(...result.ownedGlobs);
     managedOverrides.push(...result.managedOverrides);
     preserved.push(...result.preserved);
@@ -582,7 +724,7 @@ function applyModule(
 
   // 3) append env example lines
   if (manifest.env?.length) {
-    appendEnv(projectRoot, manifest.env);
+    appendEnv(projectRoot, manifest.env, placement?.env);
     touched.push(".env.example");
   }
 
@@ -595,7 +737,8 @@ function applyModule(
     }
     const content = readFileSync(target, "utf8");
     if (injection.optional && !content.includes(injection.marker)) continue;
-    writeFileSync(target, insertAtMarker(content, injection.marker, injection.text));
+    const anchors = placement?.injections.get(injectionKey(injection.file, injection.marker));
+    writeFileSync(target, injectAt(content, injection, anchors));
     touched.push(injection.file);
   }
 
