@@ -278,6 +278,10 @@ migration Job before a rolling deployment.
 - **Bearer tokens (API/mobile clients)**: always on. Sign-in returns the session token in
   a `set-auth-token` response header; send it back as `Authorization: Bearer <token>` to
   authenticate without a cookie. Useful for native apps and server-to-server calls.
+  The value is signed (`<token>.<signature>`, the same value as the session cookie) and
+  must be sent unchanged: an unsigned session token, such as the `session.token` field
+  returned by `get-session`, is ignored. Other bearer credentials, such as API keys or OAuth
+  access tokens, therefore never trigger a session lookup.
 
   ```bash
   # grab the token from the sign-in response header, then call a protected route with it

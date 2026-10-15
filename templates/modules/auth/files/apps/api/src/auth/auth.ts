@@ -112,7 +112,9 @@ export function buildAuth(config: AuthConfig) {
     // Accept the session token via `Authorization: Bearer <token>` (returned in the
     // `set-auth-token` response header on sign-in) instead of a cookie — for API and
     // mobile clients. Infrastructure plugin (always on), like jwt(); no UI toggle.
-    bearer(),
+    // requireSignature ignores unsigned values, so API keys and OAuth access tokens
+    // sent as bearer credentials never cost a session lookup that cannot match.
+    bearer({ requireSignature: true }),
     // JWT/JWKS signing keys — required by the OAuth provider to sign id_tokens.
     // Without disableSettingJwtHeader, every session lookup (including server-side
     // getSession calls) signs an unused `set-auth-jwt` header. Clients that need a

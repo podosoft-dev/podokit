@@ -239,6 +239,10 @@ test("bearer token authenticates API requests without a cookie", async ({ playwr
   const authed = await api.get("/api/account/me", { headers: { Authorization: `Bearer ${token}` } });
   expect(authed.ok()).toBeTruthy();
   expect((await authed.json())?.email).toBe(email);
+  // Only the signed value authenticates; the bare token before the signature does not.
+  const unsigned = decodeURIComponent(token ?? "").split(".")[0];
+  const rejected = await api.get("/api/account/me", { headers: { Authorization: `Bearer ${unsigned}` } });
+  expect(rejected.status()).toBe(401);
   await api.dispose();
 });
 
