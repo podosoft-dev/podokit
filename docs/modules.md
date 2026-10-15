@@ -648,6 +648,15 @@ plain `CREATE INDEX`, which blocks writes to `audit_logs` while it builds. For a
 large PostgreSQL table, create the same indexes beforehand with
 `CREATE INDEX CONCURRENTLY` under the same names; the migration then skips them.
 
+Entries are kept forever by default. Set `AUDIT_LOG_RETENTION_DAYS` to a whole
+number of days to delete older entries: when the API starts, and then about once
+an hour, each API process deletes entries older than the cutoff in batches of
+1,000 rows per statement until none are left, and records an `audit.pruned`
+entry with the count and cutoff. Unset or `0` turns pruning off; a negative or
+non-integer value stops the API at startup. **Leave it unset unless a written
+retention policy requires deletion**: many compliance regimes require audit
+trails to be kept for a minimum period, and pruned entries cannot be recovered.
+
 ```bash
 npx @podosoft/podokit add audit-log   # also adds auth
 bun install

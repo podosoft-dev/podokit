@@ -5,7 +5,7 @@ import type { AuthSession } from "../auth/auth.service";
 import { InitAuditLogs1720300000000 } from "../migrations/1720300000000-InitAuditLogs";
 import { recordAudit, recordAuditLater } from "./audit-events";
 import { AppException } from "@podosoft/podokit-contracts";
-import { AuditService, type AuditLogger, type AuditLogQuery } from "./audit.service";
+import { AuditService, parseRetentionDays, type AuditLogger, type AuditLogQuery } from "./audit.service";
 
 const on = (): Promise<boolean> => Promise.resolve(true);
 const off = (): Promise<boolean> => Promise.resolve(false);
@@ -349,5 +349,91 @@ describe("listing", () => {
     }
     const postgres = new AuditService(sqlCapture().sql, { dialect: "postgres", enabled: on });
     await expect(postgres.list({ cursor: encode([at(1), "a1"]) })).rejects.toMatchObject({ code: "INVALID_CURSOR" });
+  });
+});
+
+describe("retention", () => {
+  const DAY = 24 * 60 * 60 * 1_000;
+  const now = Date.parse("2026-06-01T00:00:00.000Z");
+
+  async function aged(sql: SQL, ages: number[]): Promise<void> {
+    for (const [index, days] of ages.entries()) {
+      await sql`
+        INSERT INTO "audit_logs" ("id", "action", "createdAt")
+        VALUES (${`r${index}`}, ${"auth.login"}, ${new Date(now - days * DAY).toISOString()})
+      `;
+    }
+  }
+
+  // Counts DELETE statements while passing every call through to the database.
+  function counting(sql: SQL): { sql: SQL; deletes: () => number } {
+    let deletes = 0;
+    const call = sql as unknown as (...args: unknown[]) => unknown;
+    const wrapped = (first: unknown, ...rest: unknown[]): unknown => {
+      if (Array.isArray(first) && "raw" in first && first.join("").includes("DELETE")) deletes += 1;
+      return call(first, ...rest);
+    };
+    return { sql: wrapped as unknown as SQL, deletes: () => deletes };
+  }
+
+  test("reads AUDIT_LOG_RETENTION_DAYS, keeping entries forever by default", () => {
+    expect(parseRetentionDays(undefined)).toBe(0);
+    expect(parseRetentionDays(" ")).toBe(0);
+    expect(parseRetentionDays("0")).toBe(0);
+    expect(parseRetentionDays("90")).toBe(90);
+    for (const value of ["-1", "1.5", "ninety"]) expect(() => parseRetentionDays(value)).toThrow();
+  });
+
+  test("deletes old entries in bounded batches and records the prune", async () => {
+    const sql = await sqliteDatabase();
+    await aged(sql, [40, 39, 38, 35, 31, 29, 1]);
+    const { sql: wrapped, deletes } = counting(sql);
+    const service = new AuditService(wrapped, {
+      dialect: "sqlite",
+      enabled: on,
+      retention: { days: 30, batchSize: 2 },
+    });
+    expect(await service.prune(now)).toBe(5);
+    expect(deletes()).toBe(3);
+    const left = await sql<Array<{ id: string; action: string; metadata: string | null }>>`
+      SELECT "id", "action", "metadata" FROM "audit_logs" ORDER BY "id"
+    `;
+    expect(left.filter((row) => row.action === "auth.login").map((row) => row.id)).toEqual(["r5", "r6"]);
+    const pruned = left.find((row) => row.action === "audit.pruned");
+    expect(JSON.parse(pruned?.metadata ?? "{}")).toEqual({
+      count: 5,
+      before: new Date(now - 30 * DAY).toISOString(),
+    });
+  });
+
+  test("keeps every entry when no retention period is set", async () => {
+    const sql = await sqliteDatabase();
+    await aged(sql, [4_000]);
+    const { sql: wrapped, deletes } = counting(sql);
+    const service = new AuditService(wrapped, { dialect: "sqlite", enabled: on });
+    service.connect();
+    await service.close();
+    expect(await service.prune(now)).toBe(0);
+    expect(deletes()).toBe(0);
+    expect(await storedRows(sql)).toHaveLength(1);
+  });
+
+  test("prunes from connect() on a timer until close()", async () => {
+    const sql = await sqliteDatabase();
+    await aged(sql, [400, 400]);
+    const service = new AuditService(sql, {
+      dialect: "sqlite",
+      enabled: off,
+      retention: { days: 30, intervalMs: 20 },
+    });
+    service.connect();
+    const deadline = Date.now() + 1_000;
+    while ((await storedRows(sql)).length > 0 && Date.now() < deadline) await Bun.sleep(5);
+    expect(await storedRows(sql)).toHaveLength(0);
+
+    await service.close();
+    await aged(sql, [400]);
+    await Bun.sleep(60);
+    expect(await storedRows(sql)).toHaveLength(1);
   });
 });

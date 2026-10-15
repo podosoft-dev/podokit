@@ -89,12 +89,41 @@ export interface AuditLogger {
   warn(details: Record<string, unknown>, message: string): void;
 }
 
+export interface AuditRetentionOptions {
+  /** Entries older than this many days are deleted. 0 keeps them forever. */
+  days: number;
+  /** Rows per DELETE statement, so a backlog never becomes one long delete. */
+  batchSize: number;
+  /** Pause between prune runs. */
+  intervalMs: number;
+}
+
+export const DEFAULT_AUDIT_RETENTION: AuditRetentionOptions = {
+  days: 0,
+  batchSize: 1_000,
+  intervalMs: 60 * 60 * 1_000,
+};
+
+const DAY_MS = 24 * 60 * 60 * 1_000;
+
+/** Reads AUDIT_LOG_RETENTION_DAYS: unset, empty, or 0 keeps entries forever. */
+export function parseRetentionDays(value: string | undefined): number {
+  const text = value?.trim() ?? "";
+  if (text === "") return 0;
+  const days = Number(text);
+  if (!Number.isSafeInteger(days) || days < 0) {
+    throw new Error("AUDIT_LOG_RETENTION_DAYS must be a whole number of days; 0 keeps entries forever");
+  }
+  return days;
+}
+
 export interface AuditServiceOptions {
   dialect: DatabaseProviderName;
   /** The admin on/off toggle, read before every write. */
   enabled: () => Promise<boolean>;
   logger?: AuditLogger;
   queue?: Partial<AuditQueueOptions>;
+  retention?: Partial<AuditRetentionOptions>;
 }
 
 export interface RecordRequestOptions {
@@ -113,26 +142,84 @@ export class AuditService {
   private failing = false;
   private flushTimer?: ReturnType<typeof setTimeout>;
   private flushing?: Promise<void>;
+  private readonly retention: AuditRetentionOptions;
+  private pruneTimer?: ReturnType<typeof setTimeout>;
+  private pruning?: Promise<void>;
+  private closed = false;
 
   constructor(private readonly sql: SQL, options: AuditServiceOptions) {
     this.dialect = options.dialect;
     this.enabled = options.enabled;
     this.logger = options.logger;
     this.queueOptions = { ...DEFAULT_AUDIT_QUEUE, ...options.queue };
+    this.retention = { ...DEFAULT_AUDIT_RETENTION, ...options.retention };
   }
 
+  /** Registers the recorder and, when a retention period is set, starts pruning. */
   connect(): void {
+    this.closed = false;
     this.unregister ??= setAuditRecorder({
       record: (entry) => this.record(entry),
       recordLater: (entry) => this.recordLater(entry),
     });
+    if (this.retention.days > 0 && !this.pruneTimer && !this.pruning) this.schedulePrune(0);
   }
 
-  /** Stops accepting entries through the registry and writes the queue. */
+  /** Stops pruning and the registry, then writes the queue. */
   async close(): Promise<void> {
+    this.closed = true;
     this.unregister?.();
     this.unregister = undefined;
+    if (this.pruneTimer) clearTimeout(this.pruneTimer);
+    this.pruneTimer = undefined;
+    await this.pruning;
     await this.flush();
+  }
+
+  /**
+   * Deletes entries older than the retention period, at most `batchSize` rows per
+   * statement, until none are left. Returns the number deleted.
+   */
+  async prune(now: number = Date.now()): Promise<number> {
+    if (this.retention.days <= 0) return 0;
+    // An ISO string compares correctly with SQLite's text timestamps and casts
+    // to timestamptz on PostgreSQL, so one statement serves both.
+    const cutoff = new Date(now - this.retention.days * DAY_MS).toISOString();
+    let deleted = 0;
+    while (!this.closed) {
+      // Counted from RETURNING: Bun's SQLite adapter can report zero changes for
+      // a DELETE whose subquery starts on its own line.
+      const removed = await this.sql<Array<{ id: string }>>`
+        DELETE FROM "audit_logs" WHERE "id" IN (
+          SELECT "id" FROM "audit_logs"
+          WHERE "createdAt" < ${cutoff}
+          ORDER BY "createdAt"
+          LIMIT ${this.retention.batchSize}
+        )
+        RETURNING "id"
+      `;
+      deleted += removed.length;
+      if (removed.length < this.retention.batchSize) break;
+    }
+    if (deleted > 0) {
+      await this.record({ action: "audit.pruned", metadata: { count: deleted, before: cutoff } });
+    }
+    return deleted;
+  }
+
+  private schedulePrune(delayMs: number): void {
+    this.pruneTimer = setTimeout(() => {
+      this.pruneTimer = undefined;
+      this.pruning = this.prune()
+        .then(() => undefined, (error: unknown) => {
+          this.logger?.warn({ error: message(error) }, "Audit retention prune failed");
+        })
+        .finally(() => {
+          this.pruning = undefined;
+          if (!this.closed) this.schedulePrune(this.retention.intervalMs);
+        });
+    }, delayMs);
+    this.pruneTimer.unref?.();
   }
 
   /** Writes the entry before resolving. Use for security events. */

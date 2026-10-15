@@ -6,7 +6,10 @@
   "env": [
     "# audit-log: managed on the admin Settings page, stored in the DB,",
     "# and applied without restart. This environment value is the fallback.",
-    "AUDIT_LOG_ENABLED=true"
+    "AUDIT_LOG_ENABLED=true",
+    "# audit-log: delete entries older than this many days. Unset or 0 keeps them",
+    "# forever; set it only when your retention policy requires deleting them.",
+    "AUDIT_LOG_RETENTION_DAYS=0"
   ],
   "inject": [
     {

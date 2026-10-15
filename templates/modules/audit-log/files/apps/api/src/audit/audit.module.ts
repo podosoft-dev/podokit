@@ -8,7 +8,7 @@ import {
 } from "../core/services";
 import { auditEnabled } from "./audit-enabled";
 import { auditRoutes } from "./audit.routes";
-import { AuditService } from "./audit.service";
+import { AuditService, parseRetentionDays } from "./audit.service";
 
 export const AUDIT = Symbol("audit") as ServiceKey<AuditService>;
 
@@ -26,6 +26,7 @@ export const auditModule: PodokitModule = {
       enabled: auditEnabled,
       // Resolved on use: the logging module may replace the logger after this point.
       logger: { warn: (details, message) => services.resolve(LOGGER).warn(details, message) },
+      retention: { days: parseRetentionDays(process.env.AUDIT_LOG_RETENTION_DAYS) },
     });
     services.register(AUDIT, audit, () => audit.close());
     services.onStart(() => audit.connect());

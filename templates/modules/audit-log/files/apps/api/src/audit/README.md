@@ -69,6 +69,15 @@ entries; past that, new deferred entries are dropped with a warning, and an
 Keep `auth.*`, `user.*`, and other security events on the awaited path. The
 Better Auth hook always awaits.
 
+## Retention
+
+Entries are kept forever unless `AUDIT_LOG_RETENTION_DAYS` is set to a whole
+number of days. Then, on startup and about every hour, the API deletes older
+entries in batches of 1,000 rows and records an `audit.pruned` entry with the
+count and cutoff. Leave it unset or `0` unless a written retention policy
+requires deletion: many compliance regimes require a minimum retention period,
+and pruned entries cannot be recovered.
+
 ## Fields (`AuditEntry`)
 
 `action` (semantic code), `actorId/actorName/actorEmail` (denormalized so the log
