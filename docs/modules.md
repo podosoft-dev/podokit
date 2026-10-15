@@ -1013,6 +1013,13 @@ query and serves them from a 3-second in-process snapshot. A save clears the
 snapshot on the replica that handled it, so the next read there is current;
 other replicas show the change, including maintenance mode, within 3 seconds.
 
+`GET /site/favicon` streams the uploaded icon from object storage. Pages link it
+as `/api/site/favicon?v=<faviconVersion>`, and each upload changes the version.
+When `v` equals the current version from the settings snapshot, the response
+carries `cache-control: public, max-age=31536000, immutable`. Any other URL,
+including one without `v`, gets `no-cache` with an `ETag`, so the browser
+revalidates and receives `304` while the icon is unchanged.
+
 Admin, account, authentication, maintenance, and API routes send
 `X-Robots-Tag: noindex, nofollow` by default. This keeps generated applications'
 private and transitional screens out of search results without relying on

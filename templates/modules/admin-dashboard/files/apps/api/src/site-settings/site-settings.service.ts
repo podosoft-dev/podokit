@@ -30,6 +30,8 @@ export interface SiteFavicon {
   object: ObjectData;
   /** The type validated on upload. */
   contentType: string;
+  /** The `faviconUpdatedAt` setting that pages put in the favicon URL. */
+  version: string | null;
 }
 
 // Every page render reads the site settings, so one short-lived snapshot serves
@@ -96,10 +98,11 @@ export class SiteSettingsService {
 
   /** The favicon with its content unread, or null when none is set. */
   async getFavicon(): Promise<SiteFavicon | null> {
-    const contentType = await this.get("faviconContentType");
+    const settings = await this.getAll();
+    const contentType = settings.faviconContentType;
     if (!contentType) return null;
     const object = await this.storage.get(FAVICON_KEY);
-    return object ? { object, contentType } : null;
+    return object ? { object, contentType, version: settings.faviconUpdatedAt ?? null } : null;
   }
 
   faviconVersion(): Promise<string | null> {

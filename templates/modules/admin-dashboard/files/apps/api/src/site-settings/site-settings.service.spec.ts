@@ -138,12 +138,14 @@ describe("SiteSettingsService", () => {
     expect(harness.reads()).toBe(reads);
   });
 
-  test("returns the favicon unread with the type from the snapshot", async () => {
+  test("returns the favicon unread with its type and version from the snapshot", async () => {
     expect(await harness.service.getFavicon()).toBeNull();
     await harness.service.setFavicon(new Uint8Array([1]), "image/png");
     const reads = harness.reads();
+    const version = await harness.service.faviconVersion();
 
-    expect(await harness.service.getFavicon()).toEqual({ object: favicon, contentType: "image/png" });
+    expect(await harness.service.getFavicon()).toEqual({ object: favicon, contentType: "image/png", version });
+    expect(version).toMatch(/^\d+$/);
     expect(harness.reads()).toBe(reads);
   });
 
