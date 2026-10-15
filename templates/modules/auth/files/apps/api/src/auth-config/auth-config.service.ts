@@ -12,6 +12,7 @@ import {
 } from "@podosoft/podokit-auth";
 import type { DatabaseProviderName } from "@podosoft/podokit-runtime";
 import { refreshAuthNow } from "../auth/auth-provider";
+import { authConfigParam } from "./config-param";
 
 export type SocialProviderView = {
   id: string;
@@ -123,9 +124,7 @@ export class AuthConfigService {
   }
 
   private async upsert(row: AuthConfigRow): Promise<void> {
-    // PostgreSQL stores a jsonb object only when bound as an object (P-022), while
-    // SQLite keeps the column as text and rejects object parameters.
-    const config = this.provider === "sqlite" ? JSON.stringify(object(row.config)) : object(row.config);
+    const config = authConfigParam(this.provider, object(row.config));
     await this.sql`
       INSERT INTO "auth_config" ("key", "enabled", "config", "secret", "updatedAt")
       VALUES (${row.key}, ${row.enabled}, ${config}, ${row.secret}, CURRENT_TIMESTAMP)
