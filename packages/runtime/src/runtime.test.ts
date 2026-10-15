@@ -592,6 +592,28 @@ describe("objectResponse", () => {
     )).toBe(false);
   });
 
+  it("answers 304 and HEAD when the unsent body fails to cancel", async () => {
+    const requests: RequestInit[] = [{ headers: { "if-none-match": '"v1"' } }, { method: "HEAD" }];
+    for (const init of requests) {
+      const locked = fakeObject("hello").object;
+      locked.body.getReader();
+      const failing: ObjectData = {
+        ...locked,
+        body: new ReadableStream<Uint8Array>({
+          cancel(): void {
+            throw new Error("cancel failed");
+          },
+        }),
+      };
+      for (const object of [locked, failing]) {
+        const response = objectResponse(new Request("http://localhost/a", init), object);
+        expect(response.status).toBe(init.method === "HEAD" ? 200 : 304);
+      }
+    }
+    // A rejected cancel that escaped would fail the run as an unhandled rejection.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
   it("uses a replacement content type and answers HEAD without the body", async () => {
     const fake = fakeObject("hello");
     const response = objectResponse(new Request("http://localhost/a", { method: "HEAD" }), fake.object, {
