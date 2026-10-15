@@ -1085,10 +1085,13 @@ renders them with a circular center crop.
 
 The module stores image objects through the selected object-storage provider and keeps
 the resulting versioned path in better-auth's `user.image`. The bucket stays
-private; `GET /api/profile-images/:fileName` serves the UUID path with immutable
-cache headers. Replacing, removing, or self-deleting the account removes managed
-objects on a best-effort basis. Existing external/social avatar URLs are never
-deleted.
+private; `GET /api/profile-images/:fileName` streams the UUID path from storage
+with `content-length`, `etag`, `last-modified`, and immutable cache headers, and
+answers a matching `If-None-Match` with `304` without reading the object. A
+missing image returns 404; a storage failure is reported as a server error rather
+than a missing image. Replacing, removing, or self-deleting the account removes
+managed objects on a best-effort basis. Existing external/social avatar URLs are
+never deleted.
 
 The generated web container and Kubernetes config set
 `BODY_SIZE_LIMIT=3M`. This leaves room for multipart framing while the API
