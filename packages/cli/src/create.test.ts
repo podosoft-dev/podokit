@@ -18,6 +18,28 @@ afterEach(() => {
   for (const dir of created.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
+function composeServiceBlocks(compose: string): Map<string, string[]> {
+  const services = new Map<string, string[]>();
+  let inServices = false;
+  let current: string[] | undefined;
+  for (const line of compose.split("\n")) {
+    if (/^\S/.test(line)) {
+      inServices = line === "services:";
+      current = undefined;
+      continue;
+    }
+    if (!inServices) continue;
+    const service = /^ {2}([a-z0-9-]+):$/.exec(line);
+    if (service?.[1]) {
+      current = [];
+      services.set(service[1], current);
+    } else {
+      current?.push(line);
+    }
+  }
+  return services;
+}
+
 describe("assertValidName", () => {
   it("accepts sensible names", () => {
     expect(() => assertValidName("my-app")).not.toThrow();
@@ -473,6 +495,22 @@ describe("create (integration against templates)", () => {
     for (const path of ["compose.dev.yaml", "Dockerfile.dev", ".devcontainer/devcontainer.json"]) {
       const entry = new RegExp(`"${path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"[^}]*"tier"\\s*:\\s*"owned"`);
       expect(lock).toMatch(entry);
+    }
+  });
+
+  it("bounds memory and swap equally for every dev compose service", () => {
+    const target = join(tmp(), "app");
+    create({ name: "app", templatesDir: REPO_TEMPLATES, targetDir: target });
+
+    const services = composeServiceBlocks(readFileSync(join(target, "compose.dev.yaml"), "utf8"));
+    expect([...services.keys()]).toEqual(
+      expect.arrayContaining(["traefik", "web", "api", "worker", "postgres", "redis", "minio", "minio-init"]),
+    );
+    for (const [service, lines] of services) {
+      const memory = lines.find((line) => line.startsWith("    mem_limit: "));
+      const swap = lines.find((line) => line.startsWith("    memswap_limit: "));
+      expect(memory, service).toMatch(/^ {4}mem_limit: \$\{[A-Z_]+_MEM_LIMIT:-\d+[mg]\}$/);
+      expect(swap?.replace("memswap_limit", "mem_limit"), service).toBe(memory);
     }
   });
 

@@ -1,3 +1,6 @@
+# Container environment for compose.dev.yaml. Compose does not interpolate
+# from this file: set container memory limits such as API_MEM_LIMIT=3g in the
+# shell or the project's .env file instead.
 NODE_ENV=development
 PORT=5002
 POSTGRES_HOST=postgres
