@@ -4,6 +4,21 @@ import { resumeUpload, uploadFile, type UploadSession } from "./uploads";
 
 const PART = 10;
 
+// The default client in ./api, pointed at whichever fake server a test installs.
+const defaultClient = vi.hoisted(() => ({
+  fetch: (async () => {
+    throw new Error("No fake server installed");
+  }) as (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>,
+}));
+vi.mock("./api", async () => {
+  const { createApiClient } = await import("@podosoft/podokit-api-client");
+  const fetch: typeof globalThis.fetch = Object.assign(
+    (input: RequestInfo | URL, init?: RequestInit) => defaultClient.fetch(input, init),
+    { preconnect: globalThis.fetch.preconnect },
+  );
+  return { api: createApiClient({ fetch }) };
+});
+
 interface Session {
   id: string;
   size: number;
@@ -114,8 +129,100 @@ function setup(): { server: FakeUploads; client: ReturnType<typeof createApiClie
   return { server, client: createApiClient({ fetch }) };
 }
 
+/**
+ * A browser XMLHttpRequest backed by the fake server. Like a browser, it
+ * reports the body as sent, in two steps, before the server answers, so a
+ * failed attempt leaves bytes that were reported but never stored.
+ */
+class FakeXhr {
+  static server: FakeUploads;
+  static readonly requests: FakeXhr[] = [];
+  readonly upload: { onprogress: ((event: ProgressEvent) => void) | null } = { onprogress: null };
+  onload: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  onabort: (() => void) | null = null;
+  withCredentials = false;
+  status = 0;
+  statusText = "";
+  responseText = "";
+  method = "";
+  url = "";
+  aborted = false;
+  readonly headers = new Headers();
+  private responseHeaders = new Headers();
+  private readonly controller = new AbortController();
+
+  constructor() {
+    FakeXhr.requests.push(this);
+  }
+
+  open(method: string, url: string): void {
+    this.method = method;
+    this.url = url;
+  }
+
+  setRequestHeader(name: string, value: string): void {
+    this.headers.set(name, value);
+  }
+
+  getResponseHeader(name: string): string | null {
+    return this.responseHeaders.get(name);
+  }
+
+  abort(): void {
+    this.aborted = true;
+    this.controller.abort(new DOMException("Aborted", "AbortError"));
+    queueMicrotask(() => this.onabort?.());
+  }
+
+  send(body: Blob): void {
+    void this.exchange(body);
+  }
+
+  private progress(loaded: number, total: number): void {
+    this.upload.onprogress?.({ loaded, total, lengthComputable: true } as ProgressEvent);
+  }
+
+  private async exchange(body: Blob): Promise<void> {
+    for (const loaded of [Math.floor(body.size / 2), body.size]) {
+      await Promise.resolve();
+      if (this.aborted) return;
+      this.progress(loaded, body.size);
+    }
+    let response: Response;
+    try {
+      response = await FakeXhr.server.fetch(this.url, {
+        method: this.method,
+        headers: this.headers,
+        body,
+        signal: this.controller.signal,
+      });
+    } catch {
+      if (!this.aborted) this.onerror?.();
+      return;
+    }
+    if (this.aborted) return;
+    this.status = response.status;
+    this.statusText = response.statusText;
+    this.responseHeaders = response.headers;
+    this.responseText = await response.text();
+    this.onload?.();
+  }
+}
+
+/** A browser: XMLHttpRequest and the default client both reach a fresh fake server. */
+function browser(): FakeUploads {
+  const server = new FakeUploads();
+  FakeXhr.server = server;
+  FakeXhr.requests.length = 0;
+  defaultClient.fetch = server.fetch;
+  vi.stubGlobal("XMLHttpRequest", FakeXhr);
+  return server;
+}
+
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 describe("uploadFile", () => {
@@ -211,6 +318,103 @@ describe("uploadFile", () => {
     expect(result.status).toBe("completed");
     expect(server.log.filter((route) => route.endsWith("/parts/2"))).toHaveLength(2);
     expect(server.log.filter((route) => route.endsWith("/complete"))).toHaveLength(2);
+  });
+});
+
+describe("uploadFile in a browser", () => {
+  it("sends parts with XMLHttpRequest and reports bytes as they are sent", async () => {
+    const server = browser();
+    const progress: number[] = [];
+
+    const result = await uploadFile(file(25), {
+      concurrency: 1,
+      onProgress: (sent, total) => {
+        expect(total).toBe(25);
+        progress.push(sent);
+      },
+    });
+
+    expect(result).toMatchObject({ status: "completed", size: 25 });
+    expect(progress).toEqual([0, 5, 10, 15, 20, 22, 25]);
+    expect(FakeXhr.requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "PUT /api/files/uploads/u1/parts/1",
+      "PUT /api/files/uploads/u1/parts/2",
+      "PUT /api/files/uploads/u1/parts/3",
+    ]);
+    for (const request of FakeXhr.requests) {
+      expect(request.withCredentials).toBe(false);
+      expect(request.headers.get("content-type")).toBe("application/octet-stream");
+    }
+    expect(server.log.filter((route) => route.startsWith("POST"))).toEqual([
+      "POST /api/files/uploads",
+      "POST /api/files/uploads/u1/complete",
+    ]);
+  });
+
+  it("drops a failed part's bytes and retries it after Retry-After without going backwards", async () => {
+    vi.useFakeTimers();
+    const server = browser();
+    server.overrides.push({ match: "/parts/1", reply: () => json(429, error("RATE_LIMIT_EXCEEDED", 429), { "retry-after": "7" }) });
+    const progress: number[] = [];
+    const done = uploadFile(file(30), { concurrency: 2, onProgress: (sent) => progress.push(sent) });
+
+    await vi.advanceTimersByTimeAsync(6_999);
+    // Parts 2 and 3 are stored; the bytes part 1 reported before its 429 are no longer counted.
+    expect([...(server.sessions.get("u1")?.parts.keys() ?? [])].sort()).toEqual([2, 3]);
+    expect(progress.at(-1)).toBe(20);
+    await vi.advanceTimersByTimeAsync(1);
+    const result = await done;
+
+    expect(result.status).toBe("completed");
+    expect(server.log.filter((route) => route.endsWith("/parts/1"))).toHaveLength(2);
+    expect(progress.at(-1)).toBe(30);
+    expect(progress).toEqual([...new Set(progress)].sort((left, right) => left - right));
+  });
+
+  it("retries a network error and reads the error envelope of a rejected part", async () => {
+    const server = browser();
+    server.overrides.push({
+      match: "/parts/1",
+      reply: () => {
+        throw new TypeError("Failed to fetch");
+      },
+    });
+    expect((await uploadFile(file(10), { retryDelayMs: 0 })).status).toBe("completed");
+    expect(server.log.filter((route) => route.endsWith("/parts/1"))).toHaveLength(2);
+
+    server.overrides.push({ match: "/parts/1", reply: () => json(400, error("UPLOAD_PART_SIZE_MISMATCH", 400)) });
+    await expect(uploadFile(file(10))).rejects.toMatchObject({
+      name: "ApiError",
+      code: "UPLOAD_PART_SIZE_MISMATCH",
+      statusCode: 400,
+    });
+  });
+
+  it("aborts the request in flight and cancels the upload", async () => {
+    const server = browser();
+    const controller = new AbortController();
+    let release = (): void => undefined;
+    server.gate = new Promise((resolve) => { release = resolve; });
+    const done = uploadFile(file(50), { signal: controller.signal });
+    await vi.waitFor(() => expect(server.inFlight).toBe(3));
+    controller.abort();
+    release();
+
+    await expect(done).rejects.toMatchObject({ name: "AbortError" });
+    expect(FakeXhr.requests).toHaveLength(3);
+    expect(FakeXhr.requests.every((request) => request.aborted)).toBe(true);
+    expect(server.log).toContain("DELETE /api/files/uploads/u1");
+    expect(server.sessions.get("u1")?.status).toBe("aborted");
+    expect(server.log.some((route) => route.endsWith("/complete"))).toBe(false);
+  });
+
+  it("sends parts with fetch when a custom client is given", async () => {
+    const server = browser();
+    const { server: other, client } = setup();
+    expect((await uploadFile(file(20), { client })).status).toBe("completed");
+    expect(FakeXhr.requests).toHaveLength(0);
+    expect(server.log).toHaveLength(0);
+    expect(other.log.filter((route) => route.startsWith("PUT"))).toHaveLength(2);
   });
 });
 

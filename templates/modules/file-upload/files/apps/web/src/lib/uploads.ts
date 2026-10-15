@@ -34,7 +34,12 @@ export interface UploadedFile {
 }
 
 export interface UploadOptions {
-  /** Called with the bytes stored so far whenever a part finishes. */
+  /**
+   * Called with the bytes sent so far. With the default client in a browser it
+   * reports bytes as they leave; otherwise it reports when a part is stored.
+   * The value never decreases: when a part fails, its bytes stop counting and
+   * the value holds until the retry passes it.
+   */
   onProgress?: (sentBytes: number, totalBytes: number) => void;
   /** Aborting stops the transfer and cancels the upload on the server. */
   signal?: AbortSignal;
@@ -47,7 +52,10 @@ export interface UploadOptions {
   retries?: number;
   /** First retry delay in milliseconds, doubled per attempt up to 30 s. A Retry-After header wins. Defaults to 500. */
   retryDelayMs?: number;
-  /** Defaults to the app's same-origin client. */
+  /**
+   * Defaults to the app's same-origin client, which sends parts with
+   * XMLHttpRequest in a browser. A custom client sends parts with its fetch.
+   */
   client?: ApiClient;
 }
 
@@ -61,6 +69,8 @@ export interface NewUploadOptions extends UploadOptions {
 }
 
 const BASE = "/files/uploads";
+/** The REST prefix of the default same-origin client in ./api. */
+const API_PREFIX = "/api";
 const MAX_DELAY_MS = 30_000;
 const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 
@@ -90,9 +100,77 @@ function sleep(ms: number, signal: AbortSignal | undefined): Promise<void> {
   });
 }
 
-/** Network failures surface from fetch as a TypeError. */
+/** Network failures surface from fetch, and from sendPart, as a TypeError. */
 function transient(error: unknown): boolean {
   return error instanceof ApiError ? RETRYABLE_STATUS.has(error.statusCode) : error instanceof TypeError;
+}
+
+/** Reads Retry-After as delay seconds or an HTTP date, as the API client does. */
+function retryAfterSeconds(value: string | null): number | undefined {
+  const header = value?.trim();
+  if (!header) return undefined;
+  if (/^\d+$/.test(header)) return Number(header);
+  const date = Date.parse(header);
+  return Number.isNaN(date) ? undefined : Math.max(0, Math.ceil((date - Date.now()) / 1000));
+}
+
+/** The API client's error for a failed response: the standard envelope, or HTTP_ERROR for text bodies. */
+function responseError(request: XMLHttpRequest): ApiError {
+  const retryAfter = retryAfterSeconds(request.getResponseHeader("retry-after"));
+  let body: unknown;
+  try {
+    body = request.responseText ? JSON.parse(request.responseText) : undefined;
+  } catch {
+    body = undefined;
+  }
+  const error = body && typeof body === "object" && "error" in body ? body.error : undefined;
+  if (error && typeof error === "object") {
+    const record = error as Record<string, unknown>;
+    return new ApiError(
+      typeof record.code === "string" ? record.code : "HTTP_ERROR",
+      typeof record.message === "string" ? record.message : request.statusText,
+      typeof record.statusCode === "number" ? record.statusCode : request.status,
+      record.details,
+      retryAfter,
+    );
+  }
+  return new ApiError("HTTP_ERROR", request.statusText || "Request failed", request.status, undefined, retryAfter);
+}
+
+/**
+ * PUTs one part with XMLHttpRequest, whose upload progress events report bytes
+ * as the browser sends them; fetch has no upload progress.
+ */
+function sendPart(
+  url: string,
+  part: Blob,
+  signal: AbortSignal | undefined,
+  onBytes: (loaded: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortReason(signal));
+      return;
+    }
+    const request = new XMLHttpRequest();
+    const onAbort = (): void => request.abort();
+    const settle = (outcome: () => void): void => {
+      signal?.removeEventListener("abort", onAbort);
+      outcome();
+    };
+    request.open("PUT", url);
+    // Same-origin requests carry the session cookie without withCredentials.
+    request.withCredentials = false;
+    request.setRequestHeader("content-type", "application/octet-stream");
+    request.upload.onprogress = (event) => onBytes(Math.min(event.loaded, part.size));
+    request.onload = () =>
+      settle(() => (request.status >= 200 && request.status < 300 ? resolve() : reject(responseError(request))));
+    request.onerror = () => settle(() => reject(new TypeError("Network request failed")));
+    request.onabort = () =>
+      settle(() => reject(signal?.aborted ? abortReason(signal) : new DOMException("Aborted", "AbortError")));
+    signal?.addEventListener("abort", onAbort, { once: true });
+    request.send(part);
+  });
 }
 
 class Transfer {
@@ -101,9 +179,12 @@ class Transfer {
   private readonly retries: number;
   private readonly retryDelayMs: number;
   private readonly concurrency: number;
+  /** Parts go through XMLHttpRequest only for the default client, whose URLs this file knows. */
+  private readonly xhr: boolean;
 
   constructor(private readonly options: UploadOptions) {
     this.client = options.client ?? api;
+    this.xhr = options.client === undefined && typeof XMLHttpRequest !== "undefined";
     this.signal = options.signal;
     this.retries = Math.max(0, options.retries ?? 5);
     this.retryDelayMs = Math.max(0, options.retryDelayMs ?? 500);
@@ -147,6 +228,14 @@ class Transfer {
     }
   }
 
+  private putPart(sessionId: string, partNumber: number, part: Blob, onBytes: (loaded: number) => void): Promise<void> {
+    const path = `${BASE}/${sessionId}/parts/${partNumber}`;
+    if (this.xhr) return sendPart(`${API_PREFIX}${path}`, part, this.signal, onBytes);
+    return this.client
+      .put(path, part, { contentType: "application/octet-stream", signal: this.signal })
+      .then(() => undefined);
+  }
+
   /** Sends the parts not yet stored, then completes the upload. */
   async run(session: UploadSession, file: Blob, stored: Iterable<number>): Promise<UploadedFile> {
     const size = (partNumber: number): number =>
@@ -155,7 +244,18 @@ class Transfer {
     const received = new Set(stored);
     let sent = 0;
     for (const partNumber of received) sent += size(partNumber);
-    const report = (): void => this.options.onProgress?.(sent, file.size);
+    // Bytes of each part's current attempt. A failed attempt's entry is dropped,
+    // so its retry starts from zero instead of counting those bytes twice, and
+    // the reported value holds until the retry passes it.
+    const inFlight = new Map<number, number>();
+    let reported = -1;
+    const report = (): void => {
+      let bytes = sent;
+      for (const loaded of inFlight.values()) bytes += loaded;
+      if (bytes <= reported) return;
+      reported = bytes;
+      this.options.onProgress?.(bytes, file.size);
+    };
     report();
 
     const send = async (numbers: number[]): Promise<void> => {
@@ -167,12 +267,18 @@ class Transfer {
           const part = file.slice(start, start + size(partNumber));
           const number = partNumber;
           try {
-            await this.attempt(() =>
-              this.client.put(`${BASE}/${session.id}/parts/${number}`, part, {
-                contentType: "application/octet-stream",
-                signal: this.signal,
-              }),
-            );
+            await this.attempt(async () => {
+              try {
+                await this.putPart(session.id, number, part, (loaded) => {
+                  // A part sent again after completion reported it missing is already counted.
+                  if (received.has(number)) return;
+                  inFlight.set(number, loaded);
+                  report();
+                });
+              } finally {
+                inFlight.delete(number);
+              }
+            });
           } catch (error) {
             failure ??= { error };
             return;
@@ -180,8 +286,8 @@ class Transfer {
           if (!received.has(number)) {
             received.add(number);
             sent += part.size;
-            report();
           }
+          report();
         }
       };
       // Every worker settles before a failure is reported, so no part is still

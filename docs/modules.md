@@ -561,8 +561,14 @@ await resumeUpload(localStorage.getItem("upload") ?? "", file);
 `uploadFile` sends three parts at a time (`concurrency`), retries a part that
 fails with a network error, 408, 425, 429, or 5xx up to five times (`retries`)
 with exponential backoff from 500 ms (`retryDelayMs`), and waits for the
-server's `Retry-After` when there is one. Progress is reported as each part is
-stored. Aborting the signal stops the transfer and deletes the session.
+server's `Retry-After` when there is one. In a browser with the default client,
+parts go out with `XMLHttpRequest`, so `onProgress` reports bytes as they are
+sent. With a custom `client`, or where `XMLHttpRequest` does not exist (tests,
+server-side code), parts use the client's `fetch` and progress advances as each
+part is stored. The reported value never decreases: the bytes of a part that
+fails stop counting, and progress holds until its retry passes them. Aborting
+the signal stops the transfer, including the requests in flight, and deletes the
+session.
 
 The HTTP contract, as the API receives it (the browser calls the same paths
 under `/api`):

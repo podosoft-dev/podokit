@@ -106,8 +106,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `FILE_UPLOAD_SWEEP_INTERVAL`, and `FILE_UPLOAD_RATE_LIMIT_MAX` configure it.
   The module ships `$lib/uploads` for the browser: `uploadFile` and
   `resumeUpload` send parts three at a time, retry failures with backoff that
-  honors `Retry-After`, report progress, and cancel the upload when their
-  signal aborts. A 40 MiB upload to Silo through the API added about 47 MiB of
+  honors `Retry-After`, report progress in bytes as the browser sends them
+  (parts go out with `XMLHttpRequest`, and the value never decreases when a
+  part is retried), and cancel the upload when their signal aborts. A 40 MiB upload to Silo through the API added about 47 MiB of
   API memory. Parts exceed the web `BODY_SIZE_LIMIT`, so the module declares
   `/api/files/uploads/` as a direct API path.
 - Modules declare the direct API paths their routes need with `apiPaths` in
