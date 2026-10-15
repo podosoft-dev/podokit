@@ -26,7 +26,8 @@ const auditPlugin: AppPlugin = ({ services }) => {
 export const auditModule: PodokitModule = {
   name: "audit-log",
   configure: (_env, services): void => {
-    const audit = new AuditService(services.resolve(DATABASE).sql, { enabled: auditEnabled });
+    const database = services.resolve(DATABASE);
+    const audit = new AuditService(database.sql, { dialect: database.provider, enabled: auditEnabled });
     services.register(AUDIT, audit, () => audit.close());
     services.onStart(() => audit.connect());
   },
