@@ -3,12 +3,12 @@ import { describe, expect, it } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import type { AppEnv } from "../config/env.validation";
+import { validateEnv } from "../config/env.validation";
 import { PROVIDERS } from "../config/providers";
 import { Database, databaseUrl, sqliteDatabasePath } from "./database";
 import type { DatabaseProviderName } from "@podosoft/podokit-runtime";
 
-const env: AppEnv = {
+const env = validateEnv({
   NODE_ENV: "test",
   PORT: 5002,
   POSTGRES_HOST: "localhost",
@@ -16,7 +16,7 @@ const env: AppEnv = {
   POSTGRES_USER: "podokit",
   POSTGRES_PASSWORD: "podokit",
   POSTGRES_DB: "podokit",
-};
+});
 
 function databaseProvider(): DatabaseProviderName {
   return PROVIDERS.database;

@@ -6,7 +6,7 @@ import {
 } from "@podosoft/podokit-runtime";
 import type { AppEnv } from "../config/env.validation";
 import { Database } from "../database/database";
-import { ReadinessService } from "../health/readiness.service";
+import { DATABASE_READINESS_CHECK, ReadinessService } from "../health/readiness.service";
 
 export type { ServiceKey } from "@podosoft/podokit-runtime";
 
@@ -177,7 +177,14 @@ export interface PodokitModule {
 export function createCoreServices(env: AppEnv): ServiceRegistry {
   const services = new ServiceRegistry();
   const database = new Database(env);
-  const readiness = new ReadinessService();
+  const readiness = new ReadinessService({
+    timeoutMs: env.READINESS_CHECK_TIMEOUT_MS,
+    cacheMs: env.READINESS_CACHE_MS,
+    // Resolved on use: a module such as logging may replace the logger after this point.
+    onCheckFailure: (check, reason) => {
+      services.resolve(LOGGER).warn({ check, reason }, "Readiness check failed");
+    },
+  });
   const logger = pino({ level: process.env.LOG_LEVEL ?? "info" });
   const accessPolicy = new AccessPolicy();
   const requestGuards = new RequestGuardRegistry();
@@ -191,6 +198,7 @@ export function createCoreServices(env: AppEnv): ServiceRegistry {
   services.register(DATABASE, database, () => database.close());
   services.onStart(() => database.connect());
   services.register(READINESS, readiness);
+  readiness.register(DATABASE_READINESS_CHECK, () => services.resolve(DATABASE).ping());
   services.register(LOGGER, logger);
   services.register(ACCESS_POLICY, accessPolicy);
   services.register(REQUEST_GUARDS, requestGuards);

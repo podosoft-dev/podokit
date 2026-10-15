@@ -11,6 +11,8 @@ const schema = z.object({
   POSTGRES_USER: z.string().default("podokit"),
   POSTGRES_PASSWORD: z.string().default("podokit"),
   POSTGRES_DB: z.string().default("podokit"),
+  READINESS_CHECK_TIMEOUT_MS: z.coerce.number().int().positive().default(800),
+  READINESS_CACHE_MS: z.coerce.number().int().nonnegative().default(2000),
 });
 
 export type AppEnv = z.infer<typeof schema>;

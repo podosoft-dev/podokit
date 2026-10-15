@@ -390,6 +390,23 @@ the missing files 404, so nothing looks broken. Name those paths in the profile:
 The key is read only by `sync`. It is never rendered into the Compose project, so
 adding it changes what that one command copies and nothing about what is deployed.
 
+## Health probes
+
+The API serves two health endpoints. `GET /health` reports that the process is
+running. `GET /health/ready` runs `SELECT 1` against the database and every
+readiness check that installed modules register, such as Redis, the event bus, and
+the object storage bucket. It answers `503` with the `READINESS_FAILED` error code
+when any of them is down.
+
+| Setting | Default | Effect |
+| --- | --- | --- |
+| `READINESS_CHECK_TIMEOUT_MS` | `800` | The longest one check may run. A slower check is reported down, and the API logs `Readiness check failed` with the check name and the reason. |
+| `READINESS_CACHE_MS` | `2000` | How long a finished result is reused. Concurrent requests always share one evaluation. `0` checks on every request. |
+
+Set them in the profile's `runtimeConfig`. Keep the check timeout below the probe
+timeout, so a slow dependency is reported as down instead of making the probe
+itself time out.
+
 ## Status and verification
 
 ```bash
