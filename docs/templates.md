@@ -98,6 +98,31 @@ The backend always renders failures as:
 The browser calls only the SvelteKit `/api/*` proxy. Cookies and internal API
 origins stay server-side.
 
+### Proxy headers
+
+The managed `apps/web/src/lib/server/backend-proxy.ts` forwards an allowlist of
+request headers to the API (cookies, authorization, content negotiation,
+conditional and range requests, the user agent) and relays an allowlist of
+response headers back (content and caching headers, `location`, rate-limit
+headers, `x-next-cursor`, and `set-cookie`). Every other header is dropped.
+
+Add the headers your own API uses to the application-owned
+`apps/web/src/lib/server/proxy-headers.ts`:
+
+```ts
+export const APP_FORWARDED_REQUEST_HEADERS: readonly string[] = ["x-api-key", "mcp-session-id"];
+export const APP_RELAYED_RESPONSE_HEADERS: readonly string[] = ["x-checksum-sha256", "www-authenticate"];
+```
+
+The proxy merges these into its lists, lowercased and without duplicates. A name
+that is not a valid header token, or one the proxy handles itself, fails the web
+build and tests: hop-by-hop headers (`connection`, `transfer-encoding`,
+`upgrade`, and the like), `host`, `content-length`, the client address headers
+(`forwarded`, `x-forwarded-*`, `x-real-ip`), and on responses
+`content-encoding` and `set-cookie`, which the proxy already relays. New apps
+get the file empty; `podo update` creates it once in an existing app and never
+overwrites it.
+
 ## `todo`
 
 The Todo template adds:

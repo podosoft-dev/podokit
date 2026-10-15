@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { create, assertValidName } from "./create";
+import { readFilesLock } from "./lockfile";
 
 const REPO_TEMPLATES = resolve(process.cwd(), "..", "..", "templates");
 const DEV_WATCH = resolve(process.cwd(), "..", "..", "scripts", "dev-watch.mjs");
@@ -461,6 +462,14 @@ describe("create (integration against templates)", () => {
     expect(readFileSync(backendProxyTest, "utf8")).toContain(
       'from "./backend-proxy"',
     );
+    // App-specific proxy headers live in an owned file the managed proxy imports.
+    expect(backendProxy).toContain('from "./proxy-headers"');
+    const proxyHeaders = "apps/web/src/lib/server/proxy-headers.ts";
+    expect(readFileSync(join(target, proxyHeaders), "utf8")).toContain(
+      "export const APP_FORWARDED_REQUEST_HEADERS: readonly string[] = [];",
+    );
+    expect(readFilesLock(target)?.files[proxyHeaders]?.tier).toBe("owned");
+    expect(readFilesLock(target)?.files["apps/web/src/lib/server/backend-proxy.ts"]?.tier).toBe("managed");
     const serverApi = readFileSync(join(target, "apps", "web", "src", "lib", "server", "api.ts"), "utf8");
     expect(serverApi).toContain('headers.set("x-forwarded-for", clientIp)');
     expect(serverApi).toContain("resolveClientIp(event.getClientAddress)");

@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { gzipSync } from "node:zlib";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { proxyRequest, rawSubpath, resolveClientIp } from "./backend-proxy";
+import { proxyRequest, rawSubpath, resolveClientIp, withAppHeaders } from "./backend-proxy";
 
 describe("backend proxy client address handling", () => {
   afterEach(() => {
@@ -287,5 +287,94 @@ describe("backend proxy raw path", () => {
   it("strips only the given prefix", () => {
     expect(rawSubpath(new URL("http://localhost/api/auth/get-session"), "/api/auth/")).toBe("get-session");
     expect(rawSubpath(new URL("http://localhost/other"), "/api/")).toBe("/other");
+  });
+});
+
+describe("backend proxy application header lists", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.doUnmock("./proxy-headers");
+    vi.resetModules();
+  });
+
+  async function proxyWithAppHeaders(request: string[], response: string[]): Promise<typeof proxyRequest> {
+    vi.resetModules();
+    vi.doMock("./proxy-headers", () => ({
+      APP_FORWARDED_REQUEST_HEADERS: request,
+      APP_RELAYED_RESPONSE_HEADERS: response,
+    }));
+    return (await import("./backend-proxy")).proxyRequest;
+  }
+
+  it("forwards and relays the headers an application lists", async () => {
+    const proxy = await proxyWithAppHeaders(["X-API-Key", "mcp-session-id"], ["X-Checksum-SHA256", "www-authenticate"]);
+    let upstreamHeaders: Headers | undefined;
+    vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+      upstreamHeaders = new Headers(init?.headers);
+      return new Response(null, {
+        status: 401,
+        headers: {
+          "x-checksum-sha256": "abc123",
+          "www-authenticate": "Bearer",
+          "x-internal-trace": "hidden",
+        },
+      });
+    });
+
+    const response = await proxy(
+      new Request("http://app.localhost/api/documents/1", {
+        headers: { "x-api-key": "key", "mcp-session-id": "s1", "x-unlisted": "dropped" },
+      }),
+      "http://api:5002/documents/1",
+    );
+
+    expect(upstreamHeaders?.get("x-api-key")).toBe("key");
+    expect(upstreamHeaders?.get("mcp-session-id")).toBe("s1");
+    expect(upstreamHeaders?.get("x-unlisted")).toBeNull();
+    expect(response.headers.get("x-checksum-sha256")).toBe("abc123");
+    expect(response.headers.get("www-authenticate")).toBe("Bearer");
+    expect(response.headers.get("x-internal-trace")).toBeNull();
+  });
+
+  it("drops application headers that no list names", async () => {
+    const proxy = await proxyWithAppHeaders([], []);
+    let upstreamHeaders: Headers | undefined;
+    vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+      upstreamHeaders = new Headers(init?.headers);
+      return new Response(null, { status: 204, headers: { "x-checksum-sha256": "abc123" } });
+    });
+
+    const response = await proxy(
+      new Request("http://app.localhost/api/documents/1", { headers: { "x-api-key": "key" } }),
+      "http://api:5002/documents/1",
+    );
+
+    expect(upstreamHeaders?.get("x-api-key")).toBeNull();
+    expect(response.headers.get("x-checksum-sha256")).toBeNull();
+  });
+
+  it("refuses to load with a reserved or invalid application header", async () => {
+    await expect(proxyWithAppHeaders(["x-forwarded-for"], [])).rejects.toThrow(
+      'APP_FORWARDED_REQUEST_HEADERS cannot contain "x-forwarded-for"',
+    );
+    await expect(proxyWithAppHeaders([], ["Set-Cookie"])).rejects.toThrow(
+      'APP_RELAYED_RESPONSE_HEADERS cannot contain "set-cookie"',
+    );
+  });
+
+  it("lowercases, deduplicates, and validates application names", () => {
+    const reserved = new Set(["host", "transfer-encoding"]);
+    expect(withAppHeaders(["accept", "etag"], ["ETag", "X-Trace", "x-trace"], reserved, "LIST")).toEqual([
+      "accept",
+      "etag",
+      "x-trace",
+    ]);
+    expect(() => withAppHeaders([], ["Transfer-Encoding"], reserved, "LIST")).toThrow(
+      'LIST cannot contain "transfer-encoding"',
+    );
+    expect(() => withAppHeaders([], ["x trace"], reserved, "LIST")).toThrow(
+      'LIST contains an invalid header name: "x trace"',
+    );
+    expect(() => withAppHeaders([], [""], reserved, "LIST")).toThrow("invalid header name");
   });
 });

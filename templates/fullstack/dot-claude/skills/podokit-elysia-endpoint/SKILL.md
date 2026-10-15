@@ -21,6 +21,10 @@ description: Use when adding or changing an Elysia REST endpoint in apps/api. Co
    explicit `public`, `session`, `admin`, or `api-key` policy for every route.
 5. Add route detail and response schemas so the endpoint is present in the
    merged OpenAPI document at `/api-docs-json`.
+   Browsers reach the endpoint through the web `/api` proxy, which drops
+   headers it does not know. When the endpoint reads a custom request header or
+   returns one the browser needs, add its name to the app-owned
+   `apps/web/src/lib/server/proxy-headers.ts`.
 6. Add a `bun:test` unit or integration test beside the feature. Verify with
    `bun run lint`, `bun test`, `bun run build`, and
    `bun run --cwd apps/api contract` without starting a dev server. The contract

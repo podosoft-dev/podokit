@@ -17,7 +17,7 @@ import { addModule } from "./add";
 import { assembleProject } from "./assemble";
 import { eject } from "./eject";
 import { planUpdate, applyUpdate, summarize } from "./update";
-import { readFilesLock } from "./lockfile";
+import { readFilesLock, readManifest, writeManifest } from "./lockfile";
 
 const REPO_TEMPLATES = resolve(process.cwd(), "..", "..", "templates");
 const ADMIN_DASHBOARD_MANAGED_ROUTE_LOADERS = [
@@ -1090,6 +1090,103 @@ describe("app-owned public paths", () => {
     expect(guards.match(/\.\.\.APP_PUBLIC_PATHS,/g)).toHaveLength(1);
     expect(guards.match(/from "\.\/public-paths"/g)).toHaveLength(1);
     expect(planUpdate(project, REPO_TEMPLATES).changes.find((change) => change.path === GUARDS)?.action)
+      .toBe("up-to-date");
+  });
+});
+
+describe("app-owned proxy headers", () => {
+  const SEED = "apps/web/src/lib/server/proxy-headers.ts";
+  const PROXY = "apps/web/src/lib/server/backend-proxy.ts";
+  const IMPORT = 'import { APP_FORWARDED_REQUEST_HEADERS, APP_RELAYED_RESPONSE_HEADERS } from "./proxy-headers";\n\n';
+
+  // The fullstack layout before the proxy read app-owned header lists.
+  function templatesWithoutProxyHeaders(): string {
+    const dir = join(tmp(), "old-templates");
+    cpSync(REPO_TEMPLATES, dir, { recursive: true });
+    const server = join(dir, "fullstack/apps/web/src/lib/server");
+    rmSync(join(server, "proxy-headers.ts"));
+    const proxyPath = join(server, "backend-proxy.ts");
+    const current = readFileSync(proxyPath, "utf8");
+    const mergeStart = current.indexOf("// Hop-by-hop headers describe a single connection");
+    const mergeEnd = current.indexOf("\n", current.indexOf('"APP_RELAYED_RESPONSE_HEADERS",\n);')) + 1;
+    expect(current.startsWith(IMPORT)).toBe(true);
+    expect(mergeStart).toBeGreaterThan(0);
+    writeFileSync(
+      proxyPath,
+      (current.slice(0, mergeStart) + current.slice(mergeEnd + 1))
+        .replace(IMPORT, "")
+        .replace("// Applications add their own header names in the app-owned proxy-headers.ts.\n", "")
+        .replace("for (const name of forwardedHeaders)", "for (const name of FORWARDED_HEADERS)")
+        .replace("for (const name of relayedResponseHeaders)", "for (const name of RELAYED_RESPONSE_HEADERS)"),
+    );
+    return dir;
+  }
+
+  function oldApp(oldTemplates: string): string {
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: project });
+    const manifest = readManifest(project);
+    if (!manifest) throw new Error("expected manifest");
+    writeManifest(project, { ...manifest, ownedGlobs: manifest.ownedGlobs.filter((glob) => glob !== SEED) });
+    expect(existsSync(join(project, SEED))).toBe(false);
+    expect(readFileSync(join(project, PROXY), "utf8")).not.toContain("proxy-headers");
+    return project;
+  }
+
+  it("creates the owned file once for an existing app and wires it into the proxy", () => {
+    const oldTemplates = templatesWithoutProxyHeaders();
+    const project = oldApp(oldTemplates);
+
+    const plan = planUpdate(project, REPO_TEMPLATES);
+    expect(plan.changes.find((change) => change.path === SEED)).toMatchObject({ action: "add", tier: "owned" });
+    const result = applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+
+    expect(result.conflicts).toEqual([]);
+    expect(readFileSync(join(project, SEED), "utf8")).toContain(
+      "export const APP_RELAYED_RESPONSE_HEADERS: readonly string[] = [];",
+    );
+    expect(readFileSync(join(project, PROXY), "utf8")).toBe(
+      readFileSync(join(REPO_TEMPLATES, "fullstack", PROXY), "utf8"),
+    );
+    expect(readFilesLock(project)?.files[SEED]?.tier).toBe("owned");
+
+    const own =
+      'export const APP_FORWARDED_REQUEST_HEADERS: readonly string[] = ["x-api-key"];\n' +
+      'export const APP_RELAYED_RESPONSE_HEADERS: readonly string[] = ["x-checksum-sha256"];\n';
+    writeFileSync(join(project, SEED), own);
+    expect(planUpdate(project, REPO_TEMPLATES).changes.find((change) => change.path === SEED)?.action).toBe("skip");
+    applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+    expect(readFileSync(join(project, SEED), "utf8")).toBe(own);
+  });
+
+  it("merges an app's edits to the managed header lists so they can move to the owned file", () => {
+    const oldTemplates = templatesWithoutProxyHeaders();
+    const project = oldApp(oldTemplates);
+    // How apps added headers before the owned file existed.
+    writeFileSync(
+      join(project, PROXY),
+      readFileSync(join(project, PROXY), "utf8")
+        .replace('  "user-agent",\n', '  "user-agent",\n  "x-api-key",\n  "mcp-session-id",\n')
+        .replace('  "x-next-cursor",\n];', '  "x-next-cursor",\n  "mcp-session-id",\n  "x-checksum-sha256",\n];'),
+    );
+
+    const result = applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+
+    expect(result.conflicts).toEqual([]);
+    const merged = readFileSync(join(project, PROXY), "utf8");
+    expect(merged).toContain(IMPORT);
+    expect(merged).toContain('  "user-agent",\n  "x-api-key",\n  "mcp-session-id",\n');
+    expect(merged).toContain('  "x-checksum-sha256",\n];\n\n// Hop-by-hop headers');
+    expect(merged).toContain("for (const name of forwardedHeaders)");
+
+    // Moving the names into the owned file returns the proxy to the managed copy.
+    writeFileSync(
+      join(project, SEED),
+      'export const APP_FORWARDED_REQUEST_HEADERS: readonly string[] = ["x-api-key", "mcp-session-id"];\n' +
+        'export const APP_RELAYED_RESPONSE_HEADERS: readonly string[] = ["mcp-session-id", "x-checksum-sha256"];\n',
+    );
+    writeFileSync(join(project, PROXY), readFileSync(join(REPO_TEMPLATES, "fullstack", PROXY), "utf8"));
+    expect(planUpdate(project, REPO_TEMPLATES).changes.find((change) => change.path === PROXY)?.action)
       .toBe("up-to-date");
   });
 });

@@ -159,6 +159,17 @@ For a new route, create an Elysia plugin, validate inputs with `t`, throw
 `AppException` with a stable code, declare OpenAPI details, register its access
 policy, and add Bun tests plus an API contract entry.
 
+## Extending the web proxy
+
+The SvelteKit `/api` proxy, `apps/web/src/lib/server/backend-proxy.ts`, is
+managed. Instead of adding header names to its lists, put them in the
+application-owned `apps/web/src/lib/server/proxy-headers.ts`
+(`APP_FORWARDED_REQUEST_HEADERS` and `APP_RELAYED_RESPONSE_HEADERS`); see
+[proxy headers](templates.md#proxy-headers). An app that already added names to
+the managed lists keeps them through `podo update`, because the new version adds
+its merge below the lists; move the names to the owned file and restore the
+managed copy so the next update is clean.
+
 ## Compatibility ranges
 
 | Framework | Supported range |

@@ -19,6 +19,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   overlapping entries, and paths covering a WebSocket path are rejected; the
   plan names the direct paths. Apps that split uploads into 2 MiB chunks to fit
   through the web proxy can send larger parts on a direct path instead.
+- `apps/web/src/lib/server/proxy-headers.ts` is an application-owned pair of
+  lists, `APP_FORWARDED_REQUEST_HEADERS` and `APP_RELAYED_RESPONSE_HEADERS`,
+  that the managed `/api` proxy merges into its header allowlists, so an app's
+  own headers such as `x-api-key` or `x-checksum-sha256` pass through without
+  editing `backend-proxy.ts`. Hop-by-hop, framing, `host`, `set-cookie`, and
+  client address headers are rejected when the web server loads. `podo update`
+  creates the file once in existing apps and never overwrites it.
+
+### Upgrade notes
+
+- If you added header names to `FORWARDED_HEADERS` or `RELAYED_RESPONSE_HEADERS`
+  in `apps/web/src/lib/server/backend-proxy.ts`, `podo update` merges the new
+  proxy below your lists without a conflict and keeps your names working. Then
+  move them to `APP_FORWARDED_REQUEST_HEADERS` and `APP_RELAYED_RESPONSE_HEADERS`
+  in `apps/web/src/lib/server/proxy-headers.ts` and restore the managed lists, so
+  later updates stay clean.
 
 ### Fixed
 

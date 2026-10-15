@@ -42,6 +42,11 @@ Merge added module settings from `.env.example` into an existing `.env`.
 
 - **Ports: web = 5001, api = 5002.** The web app reaches the API only through its
   SvelteKit server proxy (`/api/*`), never with a direct browser `fetch`.
+- The proxy (`apps/web/src/lib/server/backend-proxy.ts`) is managed and passes only
+  allowlisted headers. List extra request and response header names in the
+  app-owned `apps/web/src/lib/server/proxy-headers.ts`
+  (`APP_FORWARDED_REQUEST_HEADERS`, `APP_RELAYED_RESPONSE_HEADERS`); never edit the
+  managed lists.
 - Build: `{{rootRun}} build`  ·  Type-check/lint: `{{rootRun}} lint`  ·  Unit tests: `{{rootRun}} test`
 - Per workspace: `{{apiRun}} build` / `{{webRun}} build`.
 - Application migrations (PostgreSQL or SQLite): `{{apiRun}} migration:run`.

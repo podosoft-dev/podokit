@@ -1,6 +1,9 @@
+import { APP_FORWARDED_REQUEST_HEADERS, APP_RELAYED_RESPONSE_HEADERS } from "./proxy-headers";
+
 // Server-side proxy boundary. The browser never talks to the API directly:
 // requests go through SvelteKit server routes, which forward an allowlist of
 // headers to BACKEND_INTERNAL_URL and relay the response (including Set-Cookie).
+// Applications add their own header names in the app-owned proxy-headers.ts.
 //
 // `user-agent` is on the list for the same reason the client IP is forwarded
 // below: better-auth records it on the session and the account page shows it as
@@ -39,6 +42,74 @@ const RELAYED_RESPONSE_HEADERS = [
   "x-next-cursor",
 ];
 
+// Hop-by-hop headers describe a single connection, and the proxy sets framing,
+// cookies, and the client address itself, so application lists cannot add these.
+const HOP_BY_HOP_HEADERS = [
+  "connection",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "proxy-connection",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+];
+const RESERVED_REQUEST_HEADERS = new Set([
+  ...HOP_BY_HOP_HEADERS,
+  "host",
+  "content-length",
+  "forwarded",
+  "x-forwarded-for",
+  "x-forwarded-host",
+  "x-forwarded-port",
+  "x-forwarded-proto",
+  "x-real-ip",
+]);
+const RESERVED_RESPONSE_HEADERS = new Set([
+  ...HOP_BY_HOP_HEADERS,
+  "content-length",
+  "content-encoding",
+  "set-cookie",
+]);
+const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9a-z-]+$/;
+
+/** Append an application's header names to a built-in list, lowercased and
+ *  without duplicates. Throws on an invalid or reserved name so a mistake fails
+ *  the build instead of silently dropping the header. */
+export function withAppHeaders(
+  builtIn: readonly string[],
+  app: readonly string[],
+  reserved: ReadonlySet<string>,
+  listName: string,
+): string[] {
+  const names = new Set(builtIn);
+  for (const entry of app) {
+    const name = entry.toLowerCase();
+    if (!HEADER_NAME.test(name)) {
+      throw new Error(`${listName} contains an invalid header name: ${JSON.stringify(entry)}`);
+    }
+    if (reserved.has(name)) {
+      throw new Error(`${listName} cannot contain "${name}": the proxy handles that header itself.`);
+    }
+    names.add(name);
+  }
+  return [...names];
+}
+
+const forwardedHeaders = withAppHeaders(
+  FORWARDED_HEADERS,
+  APP_FORWARDED_REQUEST_HEADERS,
+  RESERVED_REQUEST_HEADERS,
+  "APP_FORWARDED_REQUEST_HEADERS",
+);
+const relayedResponseHeaders = withAppHeaders(
+  RELAYED_RESPONSE_HEADERS,
+  APP_RELAYED_RESPONSE_HEADERS,
+  RESERVED_RESPONSE_HEADERS,
+  "APP_RELAYED_RESPONSE_HEADERS",
+);
+
 // SvelteKit decodes rest params, so an encoded "%2F" or "%3F" inside a path
 // segment would reach the API as "/" or "?". Forward the raw pathname instead.
 export function rawSubpath(url: URL, prefix: string): string {
@@ -75,7 +146,7 @@ export async function proxyRequest(
   clientAddress?: string,
 ): Promise<Response> {
   const headers = new Headers();
-  for (const name of FORWARDED_HEADERS) {
+  for (const name of forwardedHeaders) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
@@ -98,7 +169,7 @@ export async function proxyRequest(
   });
 
   const responseHeaders = new Headers();
-  for (const name of RELAYED_RESPONSE_HEADERS) {
+  for (const name of relayedResponseHeaders) {
     const value = upstream.headers.get(name);
     if (value) responseHeaders.set(name, value);
   }
