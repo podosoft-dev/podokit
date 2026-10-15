@@ -36,13 +36,19 @@ async function fixture(): Promise<Fixture> {
 }
 
 function caller(userId: string | undefined, admin = false): RequestIdentity {
-  return { userId: async () => userId, isAdmin: async () => admin };
+  return {
+    userId: async () => userId,
+    isAdmin: async () => admin,
+    roles: async () => (admin ? ["admin"] : []),
+    activeOrganizationId: async () => undefined,
+  };
 }
 
 interface Reply {
   status: number;
   text: string;
   contentType: string | null;
+  headers: Headers;
 }
 
 async function call(
@@ -51,6 +57,7 @@ async function call(
   method: "GET" | "PUT",
   path: string,
   content?: string,
+  headers: Record<string, string> = {},
 ): Promise<Reply> {
   const app = new Elysia()
     .onError(({ code, error, set }) => {
@@ -71,14 +78,14 @@ async function call(
     .use(localStorageRoutes(storage, signer, identity));
   const response = await app.handle(new Request(`http://localhost${path}`, {
     method,
-    ...(content === undefined
-      ? {}
-      : { headers: { "content-type": "application/json" }, body: JSON.stringify({ content }) }),
+    headers: { ...(content === undefined ? {} : { "content-type": "application/json" }), ...headers },
+    ...(content === undefined ? {} : { body: JSON.stringify({ content }) }),
   }));
   return {
     status: response.status,
     text: await response.text(),
     contentType: response.headers.get("content-type"),
+    headers: response.headers,
   };
 }
 
@@ -106,6 +113,12 @@ describe("local object storage provider", () => {
 
     const download = await call(local, anonymous, "GET", signed);
     expect(download).toMatchObject({ status: 200, text: "one", contentType: "text/plain" });
+    expect(download.headers.get("content-length")).toBe("3");
+    expect(download.headers.get("last-modified")).toBeTruthy();
+    const etag = download.headers.get("etag") ?? "";
+    expect(etag).toMatch(/^"[^"]+"$/);
+    const revalidated = await call(local, anonymous, "GET", signed, undefined, { "if-none-match": etag });
+    expect(revalidated).toMatchObject({ status: 304, text: "" });
 
     const unsigned = await call(local, anonymous, "GET", "/files/content/uploads/a/one.txt");
     expect(unsigned.status).toBe(403);
@@ -144,10 +157,10 @@ describe("local object storage provider", () => {
 
     expect((await call(local, admin, "PUT", "/storage/hello", "hi")).status).toBe(200);
     expect(existsSync(join(local.directory, "demo", "hello"))).toBe(true);
-    expect(JSON.parse((await call(local, admin, "GET", "/storage/hello")).text)).toEqual({
-      key: "hello",
-      content: "hi",
-    });
+    const read = await call(local, admin, "GET", "/storage/hello");
+    expect(read).toMatchObject({ status: 200, text: "hi", contentType: "text/plain" });
+    expect(read.headers.get("content-length")).toBe("2");
+    expect(read.headers.get("x-content-type-options")).toBe("nosniff");
     const presigned = JSON.parse((await call(local, admin, "GET", "/storage/hello/presigned")).text) as {
       url: string;
     };

@@ -630,9 +630,10 @@ describe("addModule (auth / better-auth)", () => {
       join(project, "apps/api/src/events/events.service.ts"),
       "utf8",
     );
-    expect(service).toContain("publishAsync(data: unknown)");
-    expect(service).toContain("publishLocal(data: unknown)");
+    expect(service).toContain("publishAsync(event: EventEnvelope)");
+    expect(service).toContain("publishLocal(event: EventEnvelope)");
     expect(service).toContain('this.readiness.register("events"');
+    expect(existsSync(join(project, "apps/web/src/lib/events.ts"))).toBe(true);
     const providerModule = readFileSync(
       join(project, "apps/api/src/events-provider-redis/events-redis.module.ts"),
       "utf8",
@@ -670,8 +671,13 @@ describe("addModule (auth / better-auth)", () => {
       join(project, "apps/api/src/progress/job-progress.module.ts"),
       "utf8",
     );
-    expect(module).toContain('queue.process("progress"');
     expect(module).toContain("events.publishAsync");
+    expect(module).toContain("{ steps: body.steps ?? 5, ownerId }");
+    const worker = readFileSync(
+      join(project, "apps/api/src/progress/progress.worker.ts"),
+      "utf8",
+    );
+    expect(worker).toContain("this.queue.process(PROGRESS_JOB");
   });
 
   it("adds structured pino logging with env and wiring", () => {

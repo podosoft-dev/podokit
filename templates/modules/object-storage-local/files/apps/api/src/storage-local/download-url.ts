@@ -3,8 +3,11 @@ import { link, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type {
   DownloadUrlOptions,
+  ListObjectsOptions,
   ObjectBody,
   ObjectData,
+  ObjectInfo,
+  ObjectPage,
   ObjectStore,
   PutObjectOptions,
   StoredObject,
@@ -121,8 +124,16 @@ export class SignedDownloadStore implements ObjectStore {
     return this.store.put(key, body, options);
   }
 
-  get(key: string): Promise<ObjectData> {
+  get(key: string): Promise<ObjectData | null> {
     return this.store.get(key);
+  }
+
+  stat(key: string): Promise<ObjectInfo | null> {
+    return this.store.stat(key);
+  }
+
+  list(prefix: string, options?: ListObjectsOptions): Promise<ObjectPage> {
+    return this.store.list(prefix, options);
   }
 
   exists(key: string): Promise<boolean> {

@@ -506,6 +506,8 @@
     "revoked": "Session revoked",
     "allRevoked": "All sessions revoked for user",
     "loadFailed": "Failed to load sessions",
+    "revokeFailed": "Failed to revoke the session",
+    "searchPlaceholder": "Email or name",
     "total": "{count} sessions"
   },
   "account": {

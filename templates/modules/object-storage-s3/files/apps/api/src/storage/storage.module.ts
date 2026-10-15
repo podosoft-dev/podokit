@@ -1,5 +1,5 @@
 import { Elysia, t } from "elysia";
-import { OBJECT_STORAGE } from "@podosoft/podokit-runtime";
+import { OBJECT_STORAGE, objectResponse } from "@podosoft/podokit-runtime";
 import { PROVIDERS } from "../config/providers";
 import {
   type AppPlugin,
@@ -21,7 +21,7 @@ import {
 
 export const STORAGE = Symbol("storage") as ServiceKey<StorageService>;
 
-export type DemoStorage = Pick<StorageService, "put" | "get" | "exists" | "presignedGetUrl">;
+export type DemoStorage = Pick<StorageService, "put" | "open" | "presignedGetUrl">;
 
 export function storageDemoRoutes(storage: DemoStorage, identity: RequestIdentity): ElysiaPlugin {
   return new Elysia({ name: "podokit.storage" })
@@ -43,9 +43,9 @@ export function storageDemoRoutes(storage: DemoStorage, identity: RequestIdentit
     })
     .get("/storage/:key", async ({ request, params }) => {
       await requireStorageAdmin(identity, request);
-      const key = demoObjectKey(params.key);
-      if (!(await storage.exists(key))) throw storageObjectNotFound();
-      return { key: params.key, content: (await storage.get(key)).toString("utf8") };
+      const object = await storage.open(demoObjectKey(params.key));
+      if (!object) throw storageObjectNotFound();
+      return objectResponse(request, object, { headers: { "x-content-type-options": "nosniff" } });
     }, {
       params: demoKeyParams,
       detail: { tags: ["storage"], summary: "Read a demo object (administrators only)" },

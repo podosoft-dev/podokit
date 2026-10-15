@@ -6,6 +6,14 @@
   "requiredProjectFiles": [
     "apps/api/src/health/readiness.service.ts"
   ],
+  "requiredProjectContents": {
+    "apps/api/src/core/services.ts": [
+      "isAdmin(request: Request): Promise<boolean>;",
+      "roles(request: Request): Promise<string[]>;",
+      "activeOrganizationId(request: Request): Promise<string | undefined>;",
+      "tryResolve<T>(key: ServiceKey<T>): T | undefined {"
+    ]
+  },
   "targetApp": "api",
   "env": [
     "# Maximum encoded Server-Sent Event payload",
@@ -16,9 +24,14 @@
     { "file": "apps/api/src/app.ts", "marker": "// podokit:end:modules", "text": "eventsModule," }
   ],
   "instructions": [
-    "Stream events:  curl -N localhost:5002/events/stream",
-    "Publish a message (in another terminal):  curl -XPOST localhost:5002/events -H 'content-type: application/json' -d '{\"message\":\"hello\"}'",
-    "Select events=redis for multiple replicas or events=memory for a single process.",
-    "Inject EventsService and call publishAsync for confirmed delivery, publish for best-effort delivery, or publishLocal for events already fanned out to every replica."
+    "Stream as a signed-in user:  curl -N -b cookies.txt 'localhost:5002/events/stream?topics=message'",
+    "Publish as an administrator (in another terminal):  curl -b admin-cookies.txt -XPOST localhost:5002/events -H 'content-type: application/json' -d '{\"message\":\"hello\"}'",
+    "Each data event is a default SSE message whose data is {\"topic\",\"data\"}. A resync event means events were dropped, so reload state.",
+    "Publish from a module with EventsService.publish({ topic, audience, data }). An audience of userIds, roles, or organizationId limits who receives it.",
+    "Use publishAsync for confirmed delivery, publish for best-effort delivery, or publishLocal for events already fanned out to every replica.",
+    "Restrict who may subscribe to a topic with events.topics.register(topic, authorizer).",
+    "Streams take the subscriber's roles and active organization from the request identity. Register EVENT_IDENTITY in app.extensions.ts to derive them differently.",
+    "In the browser, subscribe(topic, handler) from $lib/events shares one EventSource per tab.",
+    "Select events=redis for multiple replicas or events=memory for a single process."
   ]
 }

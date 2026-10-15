@@ -1,9 +1,19 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { SQL } from "bun";
-import type { ObjectStore } from "@podosoft/podokit-runtime";
+import type { ObjectData, ObjectStore } from "@podosoft/podokit-runtime";
 import { SiteSettingsService } from "./site-settings.service";
 
-const storage = { put: async (): Promise<void> => undefined } as unknown as ObjectStore;
+const favicon: ObjectData = {
+  key: "site/favicon",
+  size: 1,
+  etag: "\"icon\"",
+  lastModified: new Date(0),
+  body: new ReadableStream<Uint8Array>(),
+};
+const storage = {
+  put: async (): Promise<void> => undefined,
+  get: async (key: string): Promise<ObjectData | null> => (key === "site/favicon" ? favicon : null),
+} as unknown as ObjectStore;
 
 interface Harness {
   service: SiteSettingsService;
@@ -125,6 +135,17 @@ describe("SiteSettingsService", () => {
 
     expect(all.faviconContentType).toBe("image/png");
     expect(await harness.service.faviconVersion()).toBe(all.faviconUpdatedAt ?? "missing");
+    expect(harness.reads()).toBe(reads);
+  });
+
+  test("returns the favicon unread with its type and version from the snapshot", async () => {
+    expect(await harness.service.getFavicon()).toBeNull();
+    await harness.service.setFavicon(new Uint8Array([1]), "image/png");
+    const reads = harness.reads();
+    const version = await harness.service.faviconVersion();
+
+    expect(await harness.service.getFavicon()).toEqual({ object: favicon, contentType: "image/png", version });
+    expect(version).toMatch(/^\d+$/);
     expect(harness.reads()).toBe(reads);
   });
 

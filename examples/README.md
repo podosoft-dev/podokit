@@ -107,7 +107,7 @@ With this local selection, the CLI adds `jobs-local`, `events-memory`, and `sse`
 No Redis or separate worker is required. Once the API is running:
 
 ```bash
-curl -N -b cookies.txt localhost:5002/events/stream
+curl -N -b cookies.txt 'localhost:5002/events/stream?topics=job-progress'
 ```
 
 ```bash
@@ -116,9 +116,9 @@ curl -b cookies.txt -XPOST localhost:5002/progress \
   -H 'content-type: application/json' -d '{"steps":5}'
 ```
 
-Progress events are delivered inside the single API process. For multi-process
-delivery, use Redis events and BullMQ. See
-[Job progress](../docs/modules.md#job-progress).
+Progress events go only to the user who started the job, and are delivered
+inside the single API process. For multi-process delivery, use Redis events and
+BullMQ. See [Job progress](../docs/modules.md#job-progress).
 
 ## Admin dashboard on local providers
 

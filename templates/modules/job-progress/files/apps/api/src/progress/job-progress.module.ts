@@ -1,46 +1,40 @@
-import { JOBS, type JobQueue, type Unsubscribe } from "@podosoft/podokit-runtime";
+import { AppException } from "@podosoft/podokit-contracts";
+import { JOBS, type JobQueue } from "@podosoft/podokit-runtime";
 import { Elysia, t } from "elysia";
-import type { AppPlugin, PodokitModule, ServiceKey } from "../core/services";
+import {
+  REQUEST_IDENTITY,
+  type AppPlugin,
+  type ElysiaPlugin,
+  type PodokitModule,
+  type RequestIdentity,
+  type ServiceKey,
+} from "../core/services";
 import { SSE_EVENTS } from "../events/events.module";
-import { processProgress } from "./progress.processor";
-
-class ProgressWorker {
-  private unsubscribe?: Unsubscribe;
-
-  constructor(
-    private readonly queue: JobQueue,
-    private readonly publish: (event: unknown) => Promise<void>,
-  ) {}
-
-  async connect(): Promise<void> {
-    this.unsubscribe = await this.queue.process("progress", async (payload, job) => {
-      await processProgress(payload, (progress) => this.publish({
-        type: "job-progress",
-        jobId: job.id,
-        progress,
-      }));
-    });
-  }
-
-  async close(): Promise<void> {
-    await this.unsubscribe?.();
-  }
-}
+import { PROGRESS_JOB } from "./progress.processor";
+import { ProgressWorker } from "./progress.worker";
 
 const PROGRESS_WORKER = Symbol("progress-worker") as ServiceKey<ProgressWorker>;
 
-const progressPlugin: AppPlugin = ({ services }) => {
-  const queue = services.resolve(JOBS);
+export function progressRoutes(queue: JobQueue, identity: RequestIdentity): ElysiaPlugin {
   return new Elysia({ name: "podokit.job-progress" })
-    .post("/progress", async ({ body, set }) => {
-      const job = await queue.enqueue("progress", { steps: body.steps ?? 5 });
+    .post("/progress", async ({ request, body, set }) => {
+      const ownerId = await identity.userId(request);
+      if (!ownerId) throw new AppException("AUTH_REQUIRED", "Authentication is required", 401);
+      const job = await queue.enqueue(PROGRESS_JOB, { steps: body.steps ?? 5, ownerId });
       set.status = 201;
       return { jobId: job.id };
     }, {
       body: t.Object({ steps: t.Optional(t.Integer({ minimum: 1, maximum: 100 })) }),
-      detail: { tags: ["progress"], summary: "Start a progress job" },
+      detail: {
+        tags: ["progress"],
+        summary: "Start a progress job",
+        description: "Progress is published on the `job-progress` topic to the caller only.",
+      },
     });
-};
+}
+
+const progressPlugin: AppPlugin = ({ services }) =>
+  progressRoutes(services.resolve(JOBS), services.resolve(REQUEST_IDENTITY));
 
 export const jobProgressModule: PodokitModule = {
   name: "job-progress",

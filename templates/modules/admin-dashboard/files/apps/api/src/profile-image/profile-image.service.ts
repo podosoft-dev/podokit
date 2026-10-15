@@ -21,7 +21,7 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 export interface StoredProfileImage {
-  body: Buffer;
+  object: ObjectData;
   contentType: string;
 }
 
@@ -32,12 +32,6 @@ export type UpdateAuthUser = (
 
 const updateAuthUser: UpdateAuthUser = (image, headers) =>
   getAuth().api.updateUser({ body: { image }, headers });
-
-async function objectBuffer(object: ObjectData): Promise<Buffer> {
-  const chunks: Uint8Array[] = [];
-  for await (const chunk of object.body) chunks.push(chunk);
-  return Buffer.concat(chunks);
-}
 
 export class ProfileImageService {
   private unregisterUserDeleted?: () => void;
@@ -86,18 +80,13 @@ export class ProfileImageService {
     return { image: null };
   }
 
+  /** The image with its content unread. */
   async get(fileName: string): Promise<StoredProfileImage> {
     const key = this.keyFromFileName(fileName);
-    if (!key) throw new AppException(PROFILE_IMAGE_NOT_FOUND, "Profile image not found.", 404);
-    try {
-      const extension = fileName.slice(fileName.lastIndexOf(".") + 1);
-      return {
-        body: await objectBuffer(await this.storage.get(key)),
-        contentType: CONTENT_TYPES[extension] ?? "application/octet-stream",
-      };
-    } catch {
-      throw new AppException(PROFILE_IMAGE_NOT_FOUND, "Profile image not found.", 404);
-    }
+    const object = key ? await this.storage.get(key) : null;
+    if (!object) throw new AppException(PROFILE_IMAGE_NOT_FOUND, "Profile image not found.", 404);
+    const extension = fileName.slice(fileName.lastIndexOf(".") + 1);
+    return { object, contentType: CONTENT_TYPES[extension] ?? "application/octet-stream" };
   }
 
   private keyFromFileName(fileName: string): string | null {

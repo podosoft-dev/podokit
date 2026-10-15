@@ -56,8 +56,12 @@ describe("RateLimiter", () => {
     await limiter.enforce(context("/api/auth/sign-in", "POST").value);
     await limiter.enforce(context("/api/auth/get-session").value);
     await limiter.enforce(context("/site/settings").value);
+    await limiter.enforce(context("/api/auth/admin/list-users").value);
+    await limiter.enforce(context("/api/auth/admin/ban-user", "POST").value);
 
     expect(increment.mock.calls.map((call) => call.slice(1))).toEqual([
+      [60],
+      [60],
       [60],
       [60],
       [60],
@@ -68,6 +72,8 @@ describe("RateLimiter", () => {
       "podokit:test:rate-limit:auth:session:test",
       "podokit:test:rate-limit:runtime:session:test",
       "podokit:test:rate-limit:runtime:session:test",
+      "podokit:test:rate-limit:general:session:test",
+      "podokit:test:rate-limit:auth:session:test",
     ]);
   });
 

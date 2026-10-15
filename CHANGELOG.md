@@ -26,6 +26,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   check and share one result between concurrent probes.
 - Every service in the container dev stack has a memory limit equal to its swap
   limit, adjustable with `*_MEM_LIMIT` in the shell or `.env`.
+- `$lib/events` (with the `sse` module) shares one `EventSource` per tab:
+  `subscribe(topic, handler)` reconnects with backoff and tells subscribers to
+  reload with `{ resync: true, topic }` after a server resync or a reconnect.
+- Event streams take `?topics=a,b`, and modules restrict a topic or prefix with
+  `events.topics.register()`. Events carry an optional audience of `userIds`,
+  `roles`, and `organizationId`.
+- `RequestIdentity` has `roles()` and `activeOrganizationId()`. The auth module
+  answers them from the session it already loaded for the request.
+- `GET /admin/sessions` (admin-only) lists active sessions with keyset paging and
+  an email-or-name search, without tokens. `DELETE /admin/sessions/{id}` revokes
+  one through Better Auth, so the permission check and the audit hook still run.
+- `@podosoft/podokit-runtime`: `ObjectStore.stat()`, paged
+  `ObjectStore.list(prefix, { cursor, limit })`, and `objectResponse()`, which
+  serves an object with `content-length`, `ETag`, and `Last-Modified` and answers
+  a matching `If-None-Match` with 304 without reading the object.
 
 ### Changed
 
@@ -56,6 +71,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   presigned by administrators only.
 - Local-storage downloads require a signed URL. Only script-free types render
   inline; everything else downloads, with `nosniff` and a sandbox policy.
+- `ObjectStore.get()` returns the object's size, content type, entity tag, and
+  modification time with a `ReadableStream` body that opens on the first read,
+  or `null`. Custom object stores must implement `stat()` and `list()`. The S3
+  store downloads through a presigned `GET` pinned with `If-Match`, so a slow
+  client no longer makes the API buffer the object.
+- Favicon and profile-image routes stream from storage with validators instead
+  of copying each object into memory. A favicon requested with the current
+  `?v=` is cached as immutable for a year; other requests revalidate. A storage
+  failure is reported as an error instead of a missing image.
+- The admin-only demo `GET /storage/:key` returns the object's bytes with its
+  validators instead of `{ key, content }`.
+- The admin users page reads one page per page, sort, or search from Better Auth
+  instead of loading up to 500 users, and the admin sessions page reads
+  `GET /admin/sessions` instead of one request per user. Better Auth accepts one
+  filter, so the Role and Status filters replace each other. Apps created
+  earlier own `routes/(admin)/admin/users/+page.svelte` and
+  `routes/(admin)/admin/sessions/+page.svelte`; take the new pages from a freshly
+  generated app to get server paging. See [Modules](docs/modules.md).
+- The `rate-limit` module counts admin reads (`GET /api/auth/admin/*`) against
+  the general budget. Admin writes and other authentication routes keep the
+  strict budget.
+- The 2FA QR code library loads only when enrolment starts. Apps created
+  earlier own `routes/setup-2fa/+page.svelte` and can import `qrcode` inside the
+  effect that renders it in the same way.
+- Session idle-timeout tracking keeps activity in plain variables, writes
+  `localStorage` at most every five seconds, and schedules one deadline timer
+  instead of reacting to every scroll and keypress.
+- Each SSE data event's `data` is `{ topic, data }`, heartbeats are SSE comments,
+  and a stream ends after 30 minutes so the client re-authenticates.
+  `EventsService.publish()` takes `{ topic, audience?, data, id? }`, and
+  `EventsService.subscribe()` was removed. See "Upgrading from the open broadcast
+  stream" in [Modules](docs/modules.md).
 
 ### Fixed
 
@@ -84,10 +131,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The proxy relays `etag`, `last-modified`, `content-disposition`, `vary`, and
   range headers, and relays `content-length` only for uncompressed responses.
 - Kubernetes API probes allow two seconds instead of the one-second default.
-
 - Skip Better Auth's startup schema check in the generated migration runner, so
   `migrate:all` no longer logs a schema mismatch for the schema it is about to
   migrate. API servers keep validating the schema at startup.
+- Any signed-in user could call `POST /events` and push a message to every open
+  stream. It now requires an administrator; publish from server code with
+  `EventsService`.
+- Every stream received every event, including other users' and organizations'
+  identifiers. Streams require a signed-in user and receive only the topics and
+  audiences they may read.
+- Job progress was broadcast to every stream. `POST /progress` records the caller
+  as the job owner and progress reaches only that user. Jobs enqueued before the
+  update have no owner and publish nothing.
+- SSE connections buffer at most 256 events; a client that falls further behind
+  gets one `resync` event instead of growing the queue without limit. A closed
+  stream releases its subscription and timer at once.
+- The admin sessions page spent one strict authentication request per user, so
+  above about 19 users it hit 429 and sessions silently disappeared, and session
+  tokens reached the browser.
+- A local object store that was never used could crash the process with an
+  unhandled rejection when its directory went away. The root is now prepared on
+  first use, and a failed attempt is retried.
 
 ## Released package history
 

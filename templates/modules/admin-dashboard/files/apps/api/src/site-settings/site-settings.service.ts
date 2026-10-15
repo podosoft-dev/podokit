@@ -27,14 +27,11 @@ interface SiteSettingRow {
 }
 
 export interface SiteFavicon {
-  body: Buffer;
+  object: ObjectData;
+  /** The type validated on upload. */
   contentType: string;
-}
-
-async function objectBuffer(object: ObjectData): Promise<Buffer> {
-  const chunks: Uint8Array[] = [];
-  for await (const chunk of object.body) chunks.push(chunk);
-  return Buffer.concat(chunks);
+  /** The `faviconUpdatedAt` setting that pages put in the favicon URL. */
+  version: string | null;
 }
 
 // Every page render reads the site settings, so one short-lived snapshot serves
@@ -99,14 +96,13 @@ export class SiteSettingsService {
     });
   }
 
+  /** The favicon with its content unread, or null when none is set. */
   async getFavicon(): Promise<SiteFavicon | null> {
-    const contentType = await this.get("faviconContentType");
+    const settings = await this.getAll();
+    const contentType = settings.faviconContentType;
     if (!contentType) return null;
-    try {
-      return { body: await objectBuffer(await this.storage.get(FAVICON_KEY)), contentType };
-    } catch {
-      return null;
-    }
+    const object = await this.storage.get(FAVICON_KEY);
+    return object ? { object, contentType, version: settings.faviconUpdatedAt ?? null } : null;
   }
 
   faviconVersion(): Promise<string | null> {

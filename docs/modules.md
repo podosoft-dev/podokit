@@ -178,8 +178,14 @@ Adding it installs a **global Elysia request guard**, so the API is **secure by 
 every route requires a session except `/health` and `/api/auth/*`. Opt routes out
 by registering a public access policy; read the current user through `AuthService`.
 Modules that must also work without `auth` read the caller through the core
-`REQUEST_IDENTITY` service instead: `userId(request)` and `isAdmin(request)`
-return `undefined` and `false` when no identity provider is installed.
+`REQUEST_IDENTITY` service instead. It answers four questions about a request:
+`userId(request)`, `isAdmin(request)`, `roles(request)`, and
+`activeOrganizationId(request)`. Without an identity provider every request is
+anonymous: `undefined`, `false`, `[]`, and `undefined`. With `auth`, `roles`
+returns the user's roles as an array (the admin plugin's comma-separated value is
+split for you) and `activeOrganizationId` returns the session's active
+organization when the organization plugin has set one. All four share the one
+session lookup memoized per request, so asking several costs a single read.
 
 ```bash
 bunx @podosoft/podokit add auth
@@ -380,7 +386,10 @@ command `bun dist/main-worker.js`).
 S3-compatible object storage that works with **AWS S3 and MinIO-compatible servers**,
 selected by the `STORAGE_PROVIDER` env var (`minio` or `aws`). Local development
 uses a pinned [Silo](https://github.com/pgsty/silo) image. Provides a `StorageService`
-(put/get/delete + presigned URLs) and demo `/storage` endpoints.
+(put, buffered `get`, streamed `open`, `stat`, paged `list`, delete, and presigned URLs) and demo
+`/storage` endpoints. `open(key)` reads the object's metadata first and starts
+the download only when the body is read; prefer it to `get` for anything that can
+be large.
 The Compose service and file keep their `minio` names for existing endpoints.
 
 **Security note:** the demo endpoints require the `auth` module and an
@@ -403,7 +412,7 @@ bun run dev
 curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-in/email \
   -H 'content-type: application/json' -d '{"email":"admin@example.com","password":"<password>"}'
 curl -b cookies.txt -XPUT localhost:5002/storage/hello -H 'content-type: application/json' -d '{"content":"hi"}'
-curl -b cookies.txt localhost:5002/storage/hello            # { key, content }
+curl -b cookies.txt localhost:5002/storage/hello            # hi (streamed, with ETag)
 curl -b cookies.txt localhost:5002/storage/hello/presigned  # { url } for demo/hello
 ```
 
@@ -444,6 +453,10 @@ The module serves the same administrator-only demo routes as `object-storage-s3`
 (`PUT /storage/:key`, `GET /storage/:key`, `GET /storage/:key/presigned`),
 confined to `demo/`.
 
+Downloads and demo reads stream the file from disk in 64 KiB chunks. Each
+response carries `content-length`, `etag`, and `last-modified`, and a matching
+`If-None-Match` receives `304` without reading the file.
+
 ### `file-upload`
 
 A multipart upload endpoint that stores files through the `OBJECT_STORAGE`
@@ -483,18 +496,23 @@ application already records.
 
 ### `sse`
 
-Server-Sent Events for real-time updates: a `/events/stream` endpoint (heartbeat
-plus published messages) and a `POST /events` publisher. `EventsService` is
-global, so any module (for example a queue processor) can broadcast updates.
+Server-Sent Events scoped by topic and audience. The module provides:
+
+- `GET /events/stream?topics=a,b` for signed-in users.
+- `POST /events`, a broadcast tool for administrators.
+- `EventsService`, which any module (a queue processor, for example) uses to
+  publish.
+- A browser helper in `$lib/events` that shares one `EventSource` per tab.
 
 ```bash
 npx @podosoft/podokit add sse
 bun run dev
 
-# terminal 1 — stream
-curl -N localhost:5002/events/stream
-# terminal 2 — publish
-curl -XPOST localhost:5002/events -H 'content-type: application/json' -d '{"message":"hello"}'
+# terminal 1 — stream as a signed-in user
+curl -N -b cookies.txt 'localhost:5002/events/stream?topics=message'
+# terminal 2 — publish as an administrator
+curl -b admin-cookies.txt -XPOST localhost:5002/events \
+  -H 'content-type: application/json' -d '{"message":"hello"}'
 ```
 
 The selected `events` provider supplies the transport. `events-memory` is bounded
@@ -502,6 +520,166 @@ to one API process. `events-redis` uses the shared `REDIS_URL` or individual Red
 settings, creates dedicated publish/subscribe connections, and delivers across
 API replicas. A Redis-configured application fails readiness instead of silently
 falling back to process-local delivery.
+
+#### Publishing
+
+Modules publish an envelope with a topic, an optional audience, and JSON data:
+
+```ts
+const events = services.resolve(SSE_EVENTS);
+events.publish({
+  topic: "orders",
+  audience: { userIds: [order.ownerId] },
+  data: { orderId: order.id, status: "shipped" },
+});
+```
+
+- `topic` and the optional `id` use letters, digits, `.`, `_`, `:`, and `-`,
+  start with a letter or digit, and have at most 128 characters.
+- `audience` limits who receives the event:
+  - `userIds` matches the listed users.
+  - `roles` matches users who hold any listed role.
+  - `organizationId` matches users whose active organization is that one.
+- When an audience sets several fields, a user must match every one of them.
+  `{ organizationId: "o1", roles: ["admin"] }` reaches only the administrators of
+  `o1`.
+- An empty list such as `userIds: []` reaches nobody. An audience with no fields
+  is rejected, because it is usually a recipient list that failed to resolve.
+- Without an audience, every stream subscribed to the topic receives the event.
+
+`publish()` is best-effort for domain operations that already committed their
+state. Use `publishAsync()` when the caller must know that delivery failed, and
+`publishLocal()` only for an event that another channel has already fanned out
+to every API replica. For an invalid envelope, `publish()` and `publishLocal()`
+throw `InvalidEventError` and `publishAsync()` rejects with it. Events are
+at-most-once invalidation hints, so clients must reload authoritative state after
+a resync or reconnect.
+
+#### Subscribing
+
+A stream needs a signed-in user. Each stream lists its topics in `topics`, up to
+32 comma-separated names. Without `topics`, the stream carries every topic that
+has no authorizer. The stream answers:
+
+- 401 `AUTH_REQUIRED` without a user.
+- 400 `EVENTS_TOPICS_INVALID` for a malformed list.
+- 403 `EVENTS_TOPIC_FORBIDDEN` when an authorizer refuses a topic.
+
+Any signed-in user may subscribe to a topic by default. Register an authorizer to
+restrict a topic, or a pattern ending in `*` to restrict every topic with that
+prefix. Every authorizer that matches a topic must allow the subscriber, and a
+guarded topic must be requested by name:
+
+```ts
+const events = services.resolve(SSE_EVENTS);
+events.topics.register("admin-alerts", (subscriber) => subscriber.roles.includes("admin"));
+events.topics.register("project:*", async (subscriber, topic) =>
+  projects.isMember(topic.slice("project:".length), subscriber.userId)
+);
+```
+
+The stream resolves the subscriber's user id, roles, and active organization
+once, when it connects, from the request identity (`roles(request)` and
+`activeOrganizationId(request)`; the `auth` module implements both from the
+session). Register an `EVENT_IDENTITY` in `app.extensions.ts` only to replace
+that mapping, for example with application-specific roles:
+
+```ts
+import type { ServiceRegistry } from "./core/services";
+import { EVENT_IDENTITY } from "./events/events.module";
+
+export function configureServices(services: ServiceRegistry): void {
+  services.register(EVENT_IDENTITY, {
+    subscriber: async (request) => {
+      const user = await currentAppUser(request); // your own lookup
+      return user ? { userId: user.id, roles: user.roles, organizationId: user.teamId } : undefined;
+    },
+  });
+}
+```
+
+Because the identity is fixed at connect, a stream ends after 30 minutes. The
+client reconnects and is authorized again, so a revoked session or a removed role
+stops receiving events within that time.
+
+#### Wire format
+
+The stream starts with `retry: 3000`. Each data event is a default `message`
+event, so `EventSource.onmessage` receives it. Its data is `{ topic, data }` as
+JSON, and its `id:` is the publisher's `id` or a sequence number for the
+connection:
+
+```text
+retry: 3000
+
+id: 1
+data: {"topic":"orders","data":{"orderId":"o-1","status":"shipped"}}
+
+event: resync
+data: {}
+
+: heartbeat
+```
+
+The stream also sends two control frames, and neither reaches `onmessage`:
+
+- A named `resync` event tells the client that events were dropped and its state
+  must be reloaded.
+- A `: heartbeat` comment every five seconds keeps proxies and Bun's idle timeout
+  from closing a quiet stream.
+
+Event ids are not replayed. The stream ignores `Last-Event-ID`, so reload state
+after every reconnect.
+
+Each connection buffers at most 256 events. A client that falls further behind
+loses the backlog and receives one `resync` instead of letting the queue grow
+without bound. A connection uses one heartbeat timer. When the client disconnects,
+the connection's subscription and timer are released at once.
+
+#### Browser helper
+
+`$lib/events` keeps one `EventSource` per tab and reference-counts subscribers.
+It reconnects with exponential backoff (one to thirty seconds, with jitter) and
+closes when the last subscriber leaves. A subscriber receives
+`{ resync: true, topic }` after a server `resync` and after the stream
+reconnects. Subscribe from `$effect` or `onMount`, so the stream opens only in
+the browser:
+
+```svelte
+<script lang="ts">
+  import { subscribe } from "$lib/events";
+
+  let progress = $state(0);
+
+  $effect(() =>
+    subscribe("job-progress", (message) => {
+      if (message.resync) void reload();
+      else progress = (message.data as { progress: number }).progress;
+    })
+  );
+</script>
+```
+
+#### Upgrading from the open broadcast stream
+
+Earlier versions let any signed-in user broadcast to every stream, and every
+stream received every event. Apps that relied on that behavior must change in
+these ways:
+
+- `POST /events` now requires an administrator. Other signed-in users receive
+  403 `ADMIN_REQUIRED`. Publish from server code with `EventsService` instead.
+- `EventsService.publish()`, `publishAsync()`, and `publishLocal()` take
+  `{ topic, audience?, data, id? }` instead of a bare payload, and
+  `EventsService.subscribe()` was removed. Choose a topic for each event, and set
+  an audience for anything that belongs to particular users.
+- Each data event's `data` is now `{ topic, data }`. `POST /events` publishes
+  `{ topic: "message", data: { message } }` instead of
+  `{ type: "message", message }`. Read the payload from `data`.
+- Heartbeats are SSE comments and no longer reach `onmessage` as
+  `{ type: "heartbeat" }` messages.
+- The stream requires a signed-in user even when the route is public in your
+  access policy, so add the `auth` module or another request identity provider.
+- During a rolling deploy, replicas discard transport messages in the old format.
 
 ### `events-memory` and `events-redis`
 
@@ -514,11 +692,11 @@ podo provider set events memory --apply
 podo provider set events redis --apply
 ```
 
-`EventsService.publish()` remains best-effort for domain operations that already
-committed their state. Use `publishAsync()` when the caller must know delivery
-failed, and `publishLocal()` only for an event that another Redis channel has
-already fanned out to every API replica. Events are at-most-once invalidation
-hints; clients must reload authoritative state after reconnecting.
+Every replica subscribes to one transport topic. The SSE envelope travels whole,
+including its topic and audience, and each replica filters for its own streams.
+`SSE_MAX_EVENT_BYTES` limits the encoded envelope, audience included, on publish
+and on receipt. Delivery is at-most-once. See [`sse`](#sse) for the publishing
+API.
 
 ### `redis`
 
@@ -572,10 +750,20 @@ docker compose -f infra/docker/docker-compose.yml up -d   # postgres + redis
 bun run dev                          # terminal 1 — API
 bun run --cwd apps/api dev:worker    # terminal 2 — worker
 
-curl -N localhost:5002/events/stream                                             # terminal 3 — watch
-curl -XPOST localhost:5002/progress -H 'content-type: application/json' -d '{"steps":5}'
+curl -N -b cookies.txt 'localhost:5002/events/stream?topics=job-progress'   # terminal 3 — watch
+curl -b cookies.txt -XPOST localhost:5002/progress -H 'content-type: application/json' -d '{"steps":5}'
 # the stream shows job-progress events: 20 -> 40 -> 60 -> 80 -> 100
 ```
+
+`POST /progress` requires a signed-in user and records that user as the job's
+owner in the job payload. Progress is published on the `job-progress` topic as
+`{ jobId, progress }` with the audience `{ userIds: [ownerId] }`, so only the
+user who started the job receives it. Other users' streams never carry it.
+
+**Upgrade note:** earlier versions broadcast `{ type: "job-progress", jobId,
+progress }` to every stream. Clients now read `{ jobId, progress }` from the
+`data` of a `job-progress` message. Jobs enqueued before the upgrade have no
+owner, so they run without publishing progress.
 
 ### `logging`
 
@@ -812,7 +1000,7 @@ OAuth, SMTP, and sign-up approval configuration.
 
 - **/admin** — overview.
 - **/admin/users** (admin only) — list, filter & search users, approve pending registrations, ban/unban, set role, revoke sessions, create/delete.
-- **/admin/sessions** (admin only) — active sessions across all users (revoke).
+- **/admin/sessions** (admin only) — active sessions across all users, newest first, searchable by user email or name (revoke one session or all of a user's sessions).
 - **/admin/organizations** (admin only) — organizations, members, and invitations.
 - **/admin/audit** (admin only) — the audit log of security-relevant actions.
 - **/admin/settings** (admin only) — enable/disable sign-in methods and configure OAuth providers, SMTP, sign-up approval, automatic logout, and other server toggles at runtime (see below), plus the **Appearance** tab for the runtime theme (see "Appearance").
@@ -824,6 +1012,13 @@ Every page render loads the public site settings and the session in parallel.
 query and serves them from a 3-second in-process snapshot. A save clears the
 snapshot on the replica that handled it, so the next read there is current;
 other replicas show the change, including maintenance mode, within 3 seconds.
+
+`GET /site/favicon` streams the uploaded icon from object storage. Pages link it
+as `/api/site/favicon?v=<faviconVersion>`, and each upload changes the version.
+When `v` equals the current version from the settings snapshot, the response
+carries `cache-control: public, max-age=31536000, immutable`. Any other URL,
+including one without `v`, gets `no-cache` with an `ETag`, so the browser
+revalidates and receives `304` while the icon is unchanged.
 
 Admin, account, authentication, maintenance, and API routes send
 `X-Robots-Tag: noindex, nofollow` by default. This keeps generated applications'
@@ -846,6 +1041,47 @@ The sign-in link carries the current same-site page as a validated return target
 successful login and public-page logout return there instead of forcing `/admin`.
 Direct login and admin-sidebar logout fall back to `/`.
 
+#### Users and sessions lists
+
+Both admin lists page on the server, so their cost does not grow with the number
+of accounts.
+
+- **Users** read one page at a time from Better Auth `admin.listUsers`
+  (`limit`/`offset`, `sortBy`/`sortDirection`, and a `contains` search on email
+  or name). Searches by email are lower-cased because Better Auth stores emails in
+  lower case; searches by name are case-sensitive on PostgreSQL. The endpoint
+  accepts one filter, so the Role and Status filters are mutually exclusive:
+  choosing one resets the other. Status offers *Pending approval* and *Banned*.
+  Every page, sort, or search is one `/api/auth/admin/list-users` request. The
+  `rate-limit` module counts admin reads (`GET /api/auth/admin/*`) against the
+  general budget; admin writes and other authentication routes keep the stricter
+  authentication budget.
+- **Sessions** come from `GET /admin/sessions`, an admin-only endpoint that
+  joins sessions to their users and returns only active sessions, newest first:
+
+  ```text
+  GET /admin/sessions?limit=20&search=ada&cursor=<nextCursor>&userId=<id>
+  -> { "items": [{ "id", "userId", "userEmail", "userName", "ipAddress",
+                   "userAgent", "impersonatedBy", "createdAt", "expiresAt" }],
+       "nextCursor": "<opaque>" | null, "total": 42 }
+  ```
+
+  `limit` defaults to 20 (at most 100). `search` matches the user's email or name
+  case-insensitively. Paging is keyset-based on (`createdAt`, `id`), so pass
+  `nextCursor` back to read the next page; a cursor the server did not issue
+  returns `400 ADMIN_SESSION_CURSOR_INVALID`. Session tokens are never returned.
+  `DELETE /admin/sessions/{id}` looks up the token on the server and revokes it
+  through Better Auth `revokeUserSession`, so the admin permission check and the
+  audit hook (`user.session_revoke`) still apply. It returns `204`, or
+  `404 ADMIN_SESSION_NOT_FOUND`. Both endpoints use the general request budget.
+  The manage dialog on `/admin/users` uses the same endpoint with `userId`.
+
+The `+page.svelte` files of `/admin/users` and `/admin/sessions` are
+application-owned, so `podo update` does not replace them in an existing app.
+Their logic lives in the managed `#lib/admin/users.ts` and
+`#lib/admin/sessions.ts`; compare your pages with the template to adopt server
+paging.
+
 #### Profile images
 
 Signed-in users can upload, replace, or remove their own image from `/account` or
@@ -856,10 +1092,13 @@ renders them with a circular center crop.
 
 The module stores image objects through the selected object-storage provider and keeps
 the resulting versioned path in better-auth's `user.image`. The bucket stays
-private; `GET /api/profile-images/:fileName` serves the UUID path with immutable
-cache headers. Replacing, removing, or self-deleting the account removes managed
-objects on a best-effort basis. Existing external/social avatar URLs are never
-deleted.
+private; `GET /api/profile-images/:fileName` streams the UUID path from storage
+with `content-length`, `etag`, `last-modified`, and immutable cache headers, and
+answers a matching `If-None-Match` with `304` without reading the object. A
+missing image returns 404; a storage failure is reported as a server error rather
+than a missing image. Replacing, removing, or self-deleting the account removes
+managed objects on a best-effort basis. Existing external/social avatar URLs are
+never deleted.
 
 The generated web container and Kubernetes config set
 `BODY_SIZE_LIMIT=3M`. This leaves room for multipart framing while the API
@@ -1067,7 +1306,7 @@ hand-written list. Inspect the complete result at `/api-docs` or
 | Core | `GET /health`<br>`GET /health/ready` |
 | `todo` template | `GET /todos`<br>`GET /todos/{id}`<br>`POST /todos`<br>`PATCH /todos/{id}`<br>`DELETE /todos/{id}` |
 | `auth` application routes | `GET /account/me`<br>`GET /account/require-2fa`<br>`GET /account/capabilities`<br>`PUT /account/settings`<br>`GET /account/auth-config`<br>`PUT /account/auth-config`<br>`POST /account/org-member`<br>`GET /api/auth/get-session`<br>`POST /api/auth/sign-in/email` |
-| `admin-dashboard` | `GET /site/settings`<br>`PUT /site/settings`<br>`POST /site/favicon`<br>`GET /site/favicon`<br>`POST /account/profile-image`<br>`DELETE /account/profile-image`<br>`GET /profile-images/{fileName}` |
+| `admin-dashboard` | `GET /site/settings`<br>`PUT /site/settings`<br>`POST /site/favicon`<br>`GET /site/favicon`<br>`POST /account/profile-image`<br>`DELETE /account/profile-image`<br>`GET /profile-images/{fileName}`<br>`GET /admin/sessions`<br>`DELETE /admin/sessions/{id}` |
 | `api-key-auth` | `GET /machine/ping` |
 | `audit-log` | `GET /audit-logs`<br>`GET /audit-logs/actions` |
 | `analytics` | `GET /analytics/config`<br>`GET /admin/analytics/config`<br>`PUT /admin/analytics/config`<br>`DELETE /admin/analytics/config/credentials`<br>`POST /admin/analytics/config/test`<br>`GET /admin/analytics/report`<br>`GET /admin/analytics/realtime` |

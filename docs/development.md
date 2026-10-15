@@ -288,10 +288,14 @@ Two modes:
 
 - **Client (default)** — pass all `rows`; sorting and paging happen in the
   component. For nested/derived sort keys, give the column a `value` accessor
-  (e.g. `value: (s) => s.user.email`). Used by the users and sessions lists (each loads a bounded set).
+  (e.g. `value: (s) => s.user.email`). Used by bounded lists such as the
+  account page's sessions, passkeys, and API keys.
 - **Manual / server** — set `manualSort` + `manualPagination`, pass the server
   `total`, and refetch in `onChange` using the emitted `sort` (`sortBy` /
-  `sortDirection`) and `page`. Use for very large server-side lists.
+  `sortDirection`) and `page`. Use for lists that grow with your user base. The
+  admin users page (offset paging through Better Auth `listUsers`) and sessions
+  page (keyset paging through `GET /admin/sessions`, where the pager offers the
+  pages visited so far plus the next one) are the reference implementations.
   A cursor-paged list such as the audit log has no total: its `total` grows as
   pages load (`#lib/audit-log.ts` keeps the cursor for each page), and only the
   column the cursor follows (time) can sort.
@@ -328,10 +332,9 @@ Search | [Email v] [input]  [ Search ]
   `onSearch` (the applied state is what the table reads).
 
 Apply the results client-side (filter the rows you pass to `DataTable`) for
-bounded lists — the users and sessions pages load a bounded set and
-filter/search/sort/paginate in the browser. For very large server-side lists,
-drive `onSearch`/`onFilter` to refetch and use the DataTable's manual mode, as
-the audit-log page does.
+bounded lists. For lists that grow with your user base, refetch the first page
+in `onSearch` and use the DataTable's manual mode, as the users, sessions, and
+audit-log pages do.
 
 ## Releasing
 

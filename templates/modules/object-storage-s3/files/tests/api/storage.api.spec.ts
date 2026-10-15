@@ -52,7 +52,15 @@ test("object storage: put, get, and presign @smoke", async ({ playwright }) => {
 
     const read = await ctx.get(`/api/storage/${key}`);
     expect(read.ok()).toBeTruthy();
-    expect(await read.json()).toMatchObject({ key, content: "hello world" });
+    expect(read.headers()["content-type"]).toContain("text/plain");
+    expect(read.headers()["content-length"]).toBe("11");
+    expect(read.headers()["last-modified"]).toBeTruthy();
+    const etag = read.headers()["etag"];
+    expect(etag).toMatch(/^"[^"]+"$/);
+    expect(await read.text()).toBe("hello world");
+
+    const revalidated = await ctx.get(`/api/storage/${key}`, { headers: { "if-none-match": etag ?? "" } });
+    expect(revalidated.status()).toBe(304);
 
     const presigned = await ctx.get(`/api/storage/${key}/presigned`);
     expect(presigned.ok()).toBeTruthy();

@@ -122,17 +122,46 @@ export interface StoredObject {
   contentType?: string;
 }
 
-export interface ObjectData extends StoredObject {
-  body: AsyncIterable<Uint8Array>;
+export interface ObjectInfo extends StoredObject {
+  /** An HTTP entity tag, quotes included, that changes whenever the content changes. */
+  etag: string;
+  lastModified: Date;
+}
+
+export interface ObjectData extends ObjectInfo {
+  /**
+   * The content, fetched only once it is read. Read it to the end or cancel it,
+   * as with a fetch response body.
+   */
+  body: ReadableStream<Uint8Array>;
 }
 
 export interface DownloadUrlOptions {
   expiresInSeconds?: number;
 }
 
+export interface ListObjectsOptions {
+  /** The `nextCursor` of the previous page. */
+  cursor?: string;
+  /** Keys per page, from 1 to 1000. Defaults to 1000. */
+  limit?: number;
+}
+
+export interface ObjectPage {
+  /** Keys in ascending order. */
+  keys: string[];
+  /** Present only when more keys follow. */
+  nextCursor?: string;
+}
+
 export interface ObjectStore {
   put(key: string, body: ObjectBody, options?: PutObjectOptions): Promise<StoredObject>;
-  get(key: string): Promise<ObjectData>;
+  /** Metadata and a lazily opened body, or null when the object does not exist. */
+  get(key: string): Promise<ObjectData | null>;
+  /** Metadata only, or null when the object does not exist. */
+  stat(key: string): Promise<ObjectInfo | null>;
+  /** One page of the keys that start with `prefix`. */
+  list(prefix: string, options?: ListObjectsOptions): Promise<ObjectPage>;
   exists(key: string): Promise<boolean>;
   delete(key: string): Promise<void>;
   getDownloadUrl(key: string, options?: DownloadUrlOptions): Promise<string>;
