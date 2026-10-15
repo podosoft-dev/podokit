@@ -486,7 +486,7 @@ application already records.
 Server-Sent Events scoped by topic and audience. The module provides:
 
 - `GET /events/stream?topics=a,b` for signed-in users.
-- `POST /events`, a broadcast tool.
+- `POST /events`, a broadcast tool for administrators.
 - `EventsService`, which any module (a queue processor, for example) uses to
   publish.
 
@@ -496,8 +496,8 @@ bun run dev
 
 # terminal 1 — stream as a signed-in user
 curl -N -b cookies.txt 'localhost:5002/events/stream?topics=message'
-# terminal 2 — publish
-curl -b cookies.txt -XPOST localhost:5002/events \
+# terminal 2 — publish as an administrator
+curl -b admin-cookies.txt -XPOST localhost:5002/events \
   -H 'content-type: application/json' -d '{"message":"hello"}'
 ```
 
@@ -633,9 +633,12 @@ the connection's subscription and timer are released at once.
 
 #### Upgrading from the open broadcast stream
 
-Earlier versions delivered every event to every stream. Apps that relied on that
-behavior must change in these ways:
+Earlier versions let any signed-in user broadcast to every stream, and every
+stream received every event. Apps that relied on that behavior must change in
+these ways:
 
+- `POST /events` now requires an administrator. Other signed-in users receive
+  403 `ADMIN_REQUIRED`. Publish from server code with `EventsService` instead.
 - `EventsService.publish()`, `publishAsync()`, and `publishLocal()` take
   `{ topic, audience?, data, id? }` instead of a bare payload, and
   `EventsService.subscribe()` was removed. Choose a topic for each event, and set

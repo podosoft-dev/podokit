@@ -119,6 +119,18 @@ test("sse: streams require a session and a valid topic list", async ({ playwrigh
   }
 });
 
+test("sse: only administrators may publish", async ({ playwright }) => {
+  const member = await newContext(playwright);
+  try {
+    test.skip(!(await signUp(member)), "requires the auth module");
+    const published = await member.post("/api/events", { data: { message: "hello" } });
+    expect(published.status()).toBe(403);
+    expect((await published.json()).error.code).toBe("ADMIN_REQUIRED");
+  } finally {
+    await member.dispose();
+  }
+});
+
 test("sse: an admin publish reaches only the addressed user @smoke", async ({ playwright }) => {
   const adminCtx = await newContext(playwright);
   const aliceCtx = await newContext(playwright);

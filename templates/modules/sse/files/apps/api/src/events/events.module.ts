@@ -51,6 +51,15 @@ const audienceSchema = t.Object(
   { additionalProperties: false, minProperties: 1 },
 );
 
+async function requireAdmin(identity: RequestIdentity, request: Request): Promise<void> {
+  if (!(await identity.userId(request))) {
+    throw new AppException("AUTH_REQUIRED", "Authentication is required", 401);
+  }
+  if (!(await identity.isAdmin(request))) {
+    throw new AppException("ADMIN_REQUIRED", "Administrator access is required", 403);
+  }
+}
+
 export function eventsRoutes(
   events: EventsService,
   identity: RequestIdentity,
@@ -74,7 +83,8 @@ export function eventsRoutes(
           "dropped and the client should reload its state.",
       },
     })
-    .post("/events", async ({ body, set }) => {
+    .post("/events", async ({ request, body, set }) => {
+      await requireAdmin(identity, request);
       const event: EventEnvelope = {
         topic: body.topic ?? "message",
         data: { message: body.message },
@@ -103,7 +113,7 @@ export function eventsRoutes(
       detail: {
         tags: ["events"],
         summary: "Publish an event",
-        description: "Publishes `{ message }` to `topic` (default `message`).",
+        description: "Administrators only. Publishes `{ message }` to `topic` (default `message`).",
       },
     });
 }

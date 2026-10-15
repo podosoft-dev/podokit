@@ -23,7 +23,7 @@
   ],
   "instructions": [
     "Stream as a signed-in user:  curl -N -b cookies.txt 'localhost:5002/events/stream?topics=message'",
-    "Publish (in another terminal):  curl -b cookies.txt -XPOST localhost:5002/events -H 'content-type: application/json' -d '{\"message\":\"hello\"}'",
+    "Publish as an administrator (in another terminal):  curl -b admin-cookies.txt -XPOST localhost:5002/events -H 'content-type: application/json' -d '{\"message\":\"hello\"}'",
     "Each data event is a default SSE message whose data is {\"topic\",\"data\"}. A resync event means events were dropped, so reload state.",
     "Publish from a module with EventsService.publish({ topic, audience, data }). An audience of userIds, roles, or organizationId limits who receives it.",
     "Use publishAsync for confirmed delivery, publish for best-effort delivery, or publishLocal for events already fanned out to every replica.",

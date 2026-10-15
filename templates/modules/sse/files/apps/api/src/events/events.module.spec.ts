@@ -120,6 +120,18 @@ describe("events routes", () => {
     expect(allowed.headers.get("content-type")).toContain("text/event-stream");
   });
 
+  it("lets only administrators publish", async () => {
+    const { send } = await setup();
+    const anonymous = await publish(send, {}, { message: "hi" });
+    expect(anonymous.status).toBe(401);
+    const member = await publish(send, { "x-user": "alice" }, { message: "hi" });
+    expect(member.status).toBe(403);
+    expect(await member.json()).toEqual({ code: "ADMIN_REQUIRED" });
+    const admin = await publish(send, { "x-user": "root", "x-admin": "true" }, { message: "hi" });
+    expect(admin.status).toBe(201);
+    expect(await admin.json()).toEqual({ ok: true });
+  });
+
   it("rejects an empty or unknown audience field", async () => {
     const { send } = await setup();
     const admin = { "x-user": "root", "x-admin": "true" };
