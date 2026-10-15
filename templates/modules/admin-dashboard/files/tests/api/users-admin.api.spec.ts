@@ -78,6 +78,35 @@ test("admin can list and revoke a user's sessions", async ({ playwright, disposa
   await admin.dispose();
 });
 
+test("admin lists users one server page at a time", async ({ playwright, disposableUsers }) => {
+  const admin = await signedIn(playwright, ADMIN);
+  const prefix = `api-page-${Date.now()}`;
+  for (let i = 0; i < 3; i += 1) {
+    await disposableUsers.create({ email: `${prefix}-${i}@example.com`, name: `Page ${i}` });
+  }
+  const pendingId = await disposableUsers.create({ email: `${prefix}-pending@example.com`, name: "Page pending" });
+  expect((await admin.post("/api/auth/admin/update-user", {
+    data: { userId: pendingId, data: { signupApproved: false } },
+  })).ok()).toBeTruthy();
+
+  type UserPage = { users: Array<{ email: string }>; total: number };
+  const list = async (query: Record<string, string>): Promise<UserPage> => {
+    const params = new URLSearchParams({ searchValue: prefix, searchField: "email", searchOperator: "contains", ...query });
+    const response = await admin.get(`/api/auth/admin/list-users?${params.toString()}`);
+    expect(response.ok()).toBeTruthy();
+    return (await response.json()) as UserPage;
+  };
+
+  const first = await list({ limit: "2", offset: "0", sortBy: "email", sortDirection: "asc" });
+  expect(first.total).toBe(4);
+  expect(first.users.map((u) => u.email)).toEqual([`${prefix}-0@example.com`, `${prefix}-1@example.com`]);
+  const second = await list({ limit: "2", offset: "2", sortBy: "email", sortDirection: "asc" });
+  expect(second.users.map((u) => u.email)).toEqual([`${prefix}-2@example.com`, `${prefix}-pending@example.com`]);
+  const pending = await list({ filterField: "signupApproved", filterValue: "false", filterOperator: "eq" });
+  expect(pending.users.map((u) => u.email)).toEqual([`${prefix}-pending@example.com`]);
+  await admin.dispose();
+});
+
 test("revokeOtherSessions keeps the current session valid", async ({ playwright, disposableUsers }) => {
   // Use a throwaway account so we don't revoke the shared USER's ui storageState.
   const admin = await signedIn(playwright, ADMIN);

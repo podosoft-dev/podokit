@@ -1032,9 +1032,17 @@ Direct login and admin-sidebar logout fall back to `/`.
 
 #### Users and sessions lists
 
-The sessions list pages on the server, so its cost does not grow with the number
+Both admin lists page on the server, so their cost does not grow with the number
 of accounts.
 
+- **Users** read one page at a time from Better Auth `admin.listUsers`
+  (`limit`/`offset`, `sortBy`/`sortDirection`, and a `contains` search on email
+  or name). Searches by email are lower-cased because Better Auth stores emails in
+  lower case; searches by name are case-sensitive on PostgreSQL. The endpoint
+  accepts one filter, so the Role and Status filters are mutually exclusive:
+  choosing one resets the other. Status offers *Pending approval* and *Banned*.
+  Every page, sort, or search is one `/api/auth/admin/list-users` request, which
+  the `rate-limit` module counts against the stricter authentication budget.
 - **Sessions** come from `GET /admin/sessions`, an admin-only endpoint that
   joins sessions to their users and returns only active sessions, newest first:
 
@@ -1055,10 +1063,11 @@ of accounts.
   `404 ADMIN_SESSION_NOT_FOUND`. Both endpoints use the general request budget.
   The manage dialog on `/admin/users` uses the same endpoint with `userId`.
 
-The `+page.svelte` file of `/admin/sessions` is application-owned, so
-`podo update` does not replace it in an existing app. Its logic lives in the
-managed `#lib/admin/sessions.ts`; compare your page with the template to adopt
-server paging.
+The `+page.svelte` files of `/admin/users` and `/admin/sessions` are
+application-owned, so `podo update` does not replace them in an existing app.
+Their logic lives in the managed `#lib/admin/users.ts` and
+`#lib/admin/sessions.ts`; compare your pages with the template to adopt server
+paging.
 
 #### Profile images
 

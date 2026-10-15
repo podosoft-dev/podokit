@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { goto } from "$app/navigation";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -16,6 +17,7 @@
   import { toast } from "svelte-sonner";
   import { api } from "#lib/api.js";
   import { listAdminSessions, revokeAdminSession, type AdminSession } from "#lib/admin/sessions.js";
+  import { DEFAULT_USER_SORT, keepLatestFilter, listUsersQuery } from "#lib/admin/users.js";
   import { getI18n, fmt, formatDateTime } from "#lib/i18n/index.js";
   import { cn } from "#lib/utils.js";
   import { deviceLabel } from "#lib/device-label.js";
@@ -43,13 +45,16 @@
   };
 
   const PAGE_SIZE = DEFAULT_PAGE_SIZE;
-  const LOAD_LIMIT = 500; // bounded client-side list; add server-side filtering for larger deployments
   // Sessions shown in the manage dialog: the newest page for one user.
   const MANAGED_SESSIONS_LIMIT = 100;
   let users = $state<Row[]>([]);
+  let total = $state(0);
   let page = $state(1);
-  let sort = $state<SortState | null>(null);
+  let sort = $state<SortState | null>({ ...DEFAULT_USER_SORT });
+  let loading = $state(false);
   let busy = $state(false);
+  let latestRequest = 0;
+  let loadedSortKey = `${DEFAULT_USER_SORT.key}:${DEFAULT_USER_SORT.dir}`;
 
   // Toolbar: filters + search both commit on the Search button (nothing applies
   // until then), so multiple filter/search conditions apply together.
@@ -59,6 +64,19 @@
   let appliedSearchField = $state("email");
   let filterValues = $state<Record<string, string>>({ role: "", status: "" });
   let appliedFilters = $state<Record<string, string>>({ role: "", status: "" });
+  let stagedFilters = { role: "", status: "" };
+
+  // The list endpoint takes a single filter, so picking a role clears the status
+  // and vice versa (see keepLatestFilter).
+  $effect(() => {
+    const next = keepLatestFilter(stagedFilters, {
+      role: filterValues.role ?? "",
+      status: filterValues.status ?? "",
+    });
+    stagedFilters = next;
+    if (filterValues.role !== next.role) filterValues.role = next.role;
+    if (filterValues.status !== next.status) filterValues.status = next.status;
+  });
 
   const columns = $derived<DataTableColumn<Row>[]>([
     { key: "name", label: i18n.t.users.name, sortable: true },
@@ -85,7 +103,6 @@
       label: i18n.t.users.status,
       options: [
         { value: "", label: i18n.t.toolbar.all },
-        { value: "active", label: i18n.t.users.active },
         { value: "pending", label: i18n.t.users.pendingApproval },
         { value: "banned", label: i18n.t.users.banned },
       ],
@@ -96,32 +113,44 @@
     { value: "name", label: i18n.t.users.name },
   ]);
 
-  const filtered = $derived(
-    users.filter((u) => {
-      if (appliedSearch) {
-        const hay = (appliedSearchField === "name" ? u.name : u.email).toLowerCase();
-        if (!hay.includes(appliedSearch.toLowerCase())) return false;
-      }
-      if (appliedFilters.role && (u.role ?? "user") !== appliedFilters.role) return false;
-      if (appliedFilters.status === "banned" && !u.banned) return false;
-      if (appliedFilters.status === "pending" && u.signupApproved !== false) return false;
-      if (appliedFilters.status === "active" && (u.banned || u.signupApproved === false)) return false;
-      return true;
-    }),
-  );
-
+  // Loads only the current page; a newer request supersedes one still in flight.
   async function load(): Promise<void> {
-    const { data: res, error } = await api.auth.admin.listUsers({ query: { limit: LOAD_LIMIT } });
-    if (error) return void toast.error(error.message ?? i18n.t.users.loadFailed);
-    users = (res?.users ?? []) as Row[];
+    const request = ++latestRequest;
+    const sortKey = sort ? `${sort.key}:${sort.dir}` : "";
+    if (sortKey !== loadedSortKey) page = 1;
+    const query = listUsersQuery({
+      page,
+      perPage: PAGE_SIZE,
+      sort,
+      search: appliedSearch,
+      searchField: appliedSearchField,
+      role: appliedFilters.role ?? "",
+      status: appliedFilters.status ?? "",
+    });
+    loading = true;
+    const { data: res, error } = await api.auth.admin.listUsers({ query });
+    if (request !== latestRequest) return;
+    loading = false;
+    if (error) return void toast.error(i18n.t.users.loadFailed);
+    const rows = (res?.users ?? []) as Row[];
+    const count = res?.total ?? rows.length;
+    // An action can empty the last page; show the one before it instead.
+    const lastPage = Math.max(Math.ceil(count / PAGE_SIZE), 1);
+    if (rows.length === 0 && page > lastPage) {
+      page = lastPage;
+      return load();
+    }
+    loadedSortKey = sortKey;
+    users = rows;
+    total = count;
   }
 
-  async function applySearch(): Promise<void> {
-    await load(); // refresh from the server on explicit search, then filter client-side
+  function applySearch(): void {
     appliedSearch = search;
     appliedSearchField = searchField;
     appliedFilters = { ...filterValues };
     page = 1;
+    void load();
   }
 
   // Impersonate — become the user, then continue on the signed-in account page
@@ -375,7 +404,7 @@
   }
 
   $effect(() => {
-    void load();
+    untrack(() => void load());
   });
 </script>
 
@@ -398,14 +427,18 @@
 
   <DataTable
     {columns}
-    rows={filtered}
+    rows={users}
     getKey={(u) => u.id}
-    empty={i18n.t.users.empty}
+    empty={loading ? "…" : i18n.t.users.empty}
     bind:sort
     bind:page
+    manualSort
+    manualPagination
     perPage={PAGE_SIZE}
+    {total}
     ariaLabel={i18n.t.users.title}
-    label={fmt(i18n.t.users.total, { count: filtered.length })}
+    label={fmt(i18n.t.users.total, { count: total })}
+    onChange={() => void load()}
   >
     {#snippet row(user, { cellClass })}
       <Table.Cell class={cn(cellClass("name"), "font-medium")}>{user.name}</Table.Cell>

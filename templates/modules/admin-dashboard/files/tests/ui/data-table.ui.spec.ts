@@ -1,28 +1,36 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Response } from "@playwright/test";
 import { ready } from "../helpers/hydration";
 
-// Sorting via the shared DataTable. Users sorts its loaded rows; the audit log
-// asks the server for the other time order — both drive the same clickable
-// headers + aria-sort.
+// Sorting via the shared DataTable. Users sorts on the server (manual mode
+// refetches through Better Auth listUsers), and the audit log asks the server
+// for the other time order — both drive the same clickable headers + aria-sort.
 test("users table sorts by a column header (server)", async ({ page }) => {
   await ready(page, "/admin/users");
   const header = page.getByRole("columnheader", { name: /Name/ });
   // Click the sort button *inside* the header — a bare name match collides with
   // the sidebar user button (a "Renamed" account contains "name").
   const sortByName = header.getByRole("button");
-  const firstName = () => page.getByRole("row").nth(1).getByRole("cell").first().innerText();
+  const firstName = (): Promise<string> => page.getByRole("row").nth(1).getByRole("cell").first().innerText();
+  const sortedBy = (direction: string): Promise<Response> => page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === "/api/auth/admin/list-users" &&
+      url.searchParams.get("sortBy") === "name" &&
+      url.searchParams.get("sortDirection") === direction;
+  });
 
+  const ascending = sortedBy("asc");
   await sortByName.click();
   await expect(header).toHaveAttribute("aria-sort", "ascending");
-  await page.waitForTimeout(400); // server refetch
+  await (await ascending).finished();
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
   const asc = await firstName();
 
+  const descending = sortedBy("desc");
   await sortByName.click();
   await expect(header).toHaveAttribute("aria-sort", "descending");
-  await page.waitForTimeout(400);
-  const desc = await firstName();
-
-  expect(asc).not.toBe(desc); // order flipped
+  await (await descending).finished();
+  // order flipped
+  await expect(page.getByRole("row").nth(1).getByRole("cell").first()).not.toHaveText(asc);
 });
 
 test("audit table sorts by time on the server", async ({ page }) => {
