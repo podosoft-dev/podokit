@@ -260,13 +260,19 @@ export class AccessPolicy {
     this.rules.push({ method: method.toUpperCase(), matcher: routeMatcher(pattern), level });
   }
 
+  /**
+   * The level of the most recently registered matching rule. A HEAD request
+   * also matches GET rules, because Elysia answers it with the GET handler.
+   */
   resolve(request: Request): AccessLevel {
     const path = new URL(request.url).pathname;
     const method = request.method.toUpperCase();
     const rule = [...this.rules]
       .reverse()
       .find((candidate) =>
-        (candidate.method === "*" || candidate.method === method) && candidate.matcher.test(path)
+        (candidate.method === "*" || candidate.method === method ||
+          (method === "HEAD" && candidate.method === "GET")) &&
+        candidate.matcher.test(path)
       );
     return rule?.level ?? "session";
   }

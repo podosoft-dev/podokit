@@ -244,6 +244,24 @@ describe("AccessPolicy", () => {
     expect(policy.resolve(new Request("http://localhost/api/auth/sign-in/email"))).toBe("public");
   });
 
+  test("applies GET rules to HEAD requests and leaves other methods alone", () => {
+    const policy = new AccessPolicy();
+    policy.register("GET", "/profile-images/:fileName", "public");
+    policy.register("POST", "/uploads", "public");
+    policy.register("GET", "/reports/:id", "api-key");
+
+    const head = (path: string): Request => new Request(`http://localhost${path}`, { method: "HEAD" });
+    expect(policy.resolve(head("/profile-images/a.png"))).toBe("public");
+    expect(policy.resolve(head("/reports/1"))).toBe("api-key");
+    expect(policy.resolve(head("/uploads"))).toBe("session");
+    expect(policy.resolve(head("/todos"))).toBe("session");
+    expect(policy.resolve(new Request("http://localhost/profile-images/a.png", { method: "DELETE" }))).toBe("session");
+
+    policy.register("HEAD", "/profile-images/:fileName", "session");
+    expect(policy.resolve(head("/profile-images/a.png"))).toBe("session");
+    expect(policy.resolve(new Request("http://localhost/profile-images/a.png"))).toBe("public");
+  });
+
   test("uses the most recently registered matching rule", () => {
     const policy = new AccessPolicy();
     policy.register("*", "/content/*", "public");

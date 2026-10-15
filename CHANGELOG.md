@@ -193,6 +193,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- `HEAD` requests to routes registered as public for `GET`, such as
+  `/profile-images/:fileName` and `/site/favicon`, answered `401`, because the
+  access policy matched rules by exact method. A `HEAD` request now matches `GET`
+  rules too, unless a `HEAD` rule was registered after them, and Elysia answers
+  it with the GET handler, so it gets the GET response's headers, including
+  `content-length` and `etag`, without the body, and `304` for a matching
+  `If-None-Match`. Other methods are unchanged.
+
 - Responses relayed by the web app's `/api` proxy lost their `Content-Length`
   above a few KiB, because Bun sends a streamed body, a `fetch()` response body
   included, with chunked encoding. The proxy now reads an uncompressed body of up

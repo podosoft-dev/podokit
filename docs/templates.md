@@ -80,6 +80,9 @@ regenerates it, and a failed generation is retried on the next request.
 
 Routes are session-protected by default when `auth` is installed. Modules use
 the startup service registry and explicitly register public or API-key access.
+A rule registered for `GET` also covers `HEAD`, which Elysia answers with the
+GET handler and Bun sends without the body; register a `HEAD` rule to treat it
+differently.
 
 The registry starts work in two ways. `services.onStart(start)` runs before the
 server listens, in registration order, and a rejection stops startup, so use it

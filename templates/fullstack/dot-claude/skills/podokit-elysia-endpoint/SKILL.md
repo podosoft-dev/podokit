@@ -19,6 +19,7 @@ description: Use when adding or changing an Elysia REST endpoint in apps/api. Co
    `{ success: false, error: { code, message, statusCode, path, timestamp } }`.
 4. APIs are authenticated by default when auth is installed. Register an
    explicit `public`, `session`, `admin`, or `api-key` policy for every route.
+   A `GET` policy also covers `HEAD`, which Elysia answers with the GET handler.
 5. Add route detail and response schemas so the endpoint is present in the
    merged OpenAPI document at `/api-docs-json`.
    Browsers reach the endpoint through the web `/api` proxy, which drops
