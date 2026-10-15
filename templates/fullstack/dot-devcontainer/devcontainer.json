@@ -1,6 +1,7 @@
 {
   "name": "{{projectName}} (containerized dev)",
   "dockerComposeFile": ["../compose.dev.yaml"],
+  "initializeCommand": "{{packageExecutor}} @podosoft/podokit dev env",
   "service": "api",
   "workspaceFolder": "/app",
   "runServices": ["traefik", "web", "api", "worker", "postgres", "redis", "minio", "minio-init"],

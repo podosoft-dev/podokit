@@ -5,6 +5,7 @@ build/
 .env
 .env.*
 !.env.example
+!.env.docker.example
 .DS_Store
 *.log
 

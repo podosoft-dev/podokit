@@ -69,6 +69,11 @@ bodies larger than the web server's `BODY_SIZE_LIMIT`, such as file uploads, go 
 sends them to the API without the web proxy. Add `publicUrl` to the same file when
 an HTTPS tunnel preserves its public `Host` header.
 
+The containers read `.env.docker`, which Git ignores. `dev` commands create it from
+the committed `.env.docker.example` when it is missing, as in a fresh clone, and fill
+each empty `*_SECRET` value with a random one; `dev env` does only that. Keep shared
+defaults in the example and credentials only in `.env.docker`.
+
 Run lifecycle and container commands from a second terminal:
 
 ```bash

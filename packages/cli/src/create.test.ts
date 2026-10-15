@@ -394,7 +394,11 @@ describe("create (integration against templates)", () => {
     expect(existsSync(join(target, "compose.dev.yaml"))).toBe(true);
     expect(existsSync(join(target, "Dockerfile.dev"))).toBe(true);
     expect(existsSync(join(target, ".dockerignore"))).toBe(true);
-    expect(existsSync(join(target, ".env.docker"))).toBe(true);
+    // The committed example holds no secret; podo dev creates the ignored
+    // .env.docker from it, so a fresh clone gets a container environment.
+    expect(existsSync(join(target, ".env.docker.example"))).toBe(true);
+    expect(existsSync(join(target, ".env.docker"))).toBe(false);
+    expect(readFileSync(join(target, ".env.docker.example"), "utf8")).toMatch(/^BETTER_AUTH_SECRET=$/m);
     expect(existsSync(join(target, ".devcontainer", "devcontainer.json"))).toBe(true);
     expect(existsSync(join(target, "infra", "traefik", "dynamic.yml"))).toBe(true);
 
@@ -431,8 +435,8 @@ describe("create (integration against templates)", () => {
     expect(devDockerfile).toContain('bun install --frozen-lockfile --registry "$PODOKIT_NPM_REGISTRY"');
 
     // web proxies /api to the api container by service name (Traefik only routes web)
-    expect(readFileSync(join(target, ".env.docker"), "utf8")).toContain("BACKEND_INTERNAL_URL=http://api:5002");
-    expect(readFileSync(join(target, ".env.docker"), "utf8")).toContain("BETTER_AUTH_URL=http://app.localhost");
+    expect(readFileSync(join(target, ".env.docker.example"), "utf8")).toContain("BACKEND_INTERNAL_URL=http://api:5002");
+    expect(readFileSync(join(target, ".env.docker.example"), "utf8")).toContain("BETTER_AUTH_URL=http://app.localhost");
     expect(readFileSync(join(target, ".podokit", "dev.json"), "utf8")).toContain('"hostname": "app.localhost"');
     expect(readFileSync(join(target, ".podokit", "dev.json"), "utf8")).toContain(
       '"webSocketPaths": []',
@@ -441,6 +445,7 @@ describe("create (integration against templates)", () => {
       '"apiPaths": []',
     );
     expect(readFileSync(join(target, ".gitignore"), "utf8")).toContain(".podokit/runtime/");
+    expect(readFileSync(join(target, ".gitignore"), "utf8")).toContain("!.env.docker.example\n");
     const backendProxy = readFileSync(
       join(target, "apps", "web", "src", "lib", "server", "backend-proxy.ts"),
       "utf8",

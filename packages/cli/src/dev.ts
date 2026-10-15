@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -22,6 +22,9 @@ const GATEWAY_VERSION_LABEL = "io.podosoft.podokit.dev-gateway.version";
 const GATEWAY_NETWORK = "podokit-dev-gateway";
 const RUNTIME_COMPOSE = ".podokit/runtime/dev.compose.yaml";
 const DEV_CONFIG = ".podokit/dev.json";
+const CONTAINER_ENV = ".env.docker";
+const CONTAINER_ENV_EXAMPLE = ".env.docker.example";
+const GENERATED_SECRET = /^([A-Z][A-Z0-9_]*_SECRET)=[ \t]*(\r?)$/gm;
 const DEV_PROFILE_BY_MODULE = new Map([
   ["redis", "cache"],
   ["object-storage-s3", "storage"],
@@ -273,6 +276,34 @@ function activeEntries(): RegistryEntry[] {
   return entries;
 }
 
+/**
+ * Create the untracked `.env.docker` from the committed `.env.docker.example`
+ * when it is missing, filling every empty `*_SECRET` value with a random one.
+ * An existing file is never changed. Returns true when the file was created.
+ */
+export function ensureContainerEnv(projectRoot: string): boolean {
+  const target = join(projectRoot, CONTAINER_ENV);
+  if (existsSync(target)) return false;
+  const example = join(projectRoot, CONTAINER_ENV_EXAMPLE);
+  if (!existsSync(example)) {
+    const compose = join(projectRoot, "compose.dev.yaml");
+    if (existsSync(compose) && readFileSync(compose, "utf8").includes(CONTAINER_ENV)) {
+      throw new Error(
+        `${CONTAINER_ENV} is missing and there is no ${CONTAINER_ENV_EXAMPLE} to create it from. Run podo update --apply to add the example, or create ${CONTAINER_ENV} by hand.`,
+      );
+    }
+    return false;
+  }
+  const content = readFileSync(example, "utf8").replace(
+    GENERATED_SECRET,
+    (_line, name: string, carriageReturn: string) =>
+      `${name}=${randomBytes(32).toString("base64url")}${carriageReturn}`,
+  );
+  writeFileSync(target, content, { mode: 0o600 });
+  process.stdout.write(`Created ${CONTAINER_ENV} from ${CONTAINER_ENV_EXAMPLE} with generated secrets.\n`);
+  return true;
+}
+
 function writeRuntimeFiles(runtime: DevRuntime): void {
   mkdirSync(join(runtime.projectRoot, ".podokit", "runtime"), { recursive: true });
   writeFileSync(runtime.runtimeComposePath, renderRuntimeCompose(runtime));
@@ -457,6 +488,8 @@ function stopGatewayWhenUnused(runner: CommandRunner): void {
   runner("docker", ["network", "rm", GATEWAY_NETWORK], { capture: true });
 }
 
+const DOCKER_ACTIONS = new Set(["watch", "up", "exec", "logs", "ps", "down"]);
+
 export function runDevCommand(
   projectRoot: string,
   action: string | undefined,
@@ -470,6 +503,16 @@ export function runDevCommand(
   if (action === "url") {
     process.stdout.write(`http://${runtime.config.hostname}\n`);
     if (runtime.config.publicUrl) process.stdout.write(`${runtime.config.publicUrl}\n`);
+    return;
+  }
+
+  if (!DOCKER_ACTIONS.has(action ?? "") && action !== "env") {
+    throw new Error("Usage: podo dev <watch|up|exec|logs|ps|down|url|env> [docker compose options]");
+  }
+  // Git ignores .env.docker, so a fresh clone gets it from the committed example.
+  const createdEnv = ensureContainerEnv(projectRoot);
+  if (action === "env") {
+    if (!createdEnv) process.stdout.write(`${CONTAINER_ENV} already exists; left unchanged.\n`);
     return;
   }
 
@@ -515,8 +558,5 @@ export function runDevCommand(
 
   if (action === "exec" || action === "logs" || action === "ps") {
     runCompose(runtime, composeCommand(action, args, profiles), runner);
-    return;
   }
-
-  throw new Error("Usage: podo dev <watch|up|exec|logs|ps|down|url> [docker compose options]");
 }

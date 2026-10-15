@@ -439,6 +439,53 @@ describe("PodoKit development gateway", () => {
     expect(upArgs()?.filter((value) => value === "--build")).toHaveLength(1);
   });
 
+  it("creates the container environment from the committed example with local secrets", () => {
+    const root = project();
+    process.env.PODOKIT_DEV_HOME = temporaryDirectory("podokit-dev-home-");
+    writeFileSync(join(root, "compose.dev.yaml"), "services:\n  api:\n    env_file: .env.docker\n");
+    writeFileSync(
+      join(root, ".env.docker.example"),
+      "# Container environment\nPORT=5002\nBETTER_AUTH_SECRET=\nJOB_SIGNING_SECRET=\nAPI_KEYS=dev-key-please-change\n",
+    );
+    const calls: string[][] = [];
+    const runner: CommandRunner = (_command, args) => {
+      calls.push(args);
+      if (args[0] === "inspect") return { status: 0, stdout: "1 true 2\n", stderr: "" };
+      return { status: 0, stdout: "27.0.0\n", stderr: "" };
+    };
+
+    // A fresh clone has no .env.docker because Git ignores it.
+    runDevCommand(root, "env", [], runner);
+    expect(calls).toEqual([]);
+    const env = readFileSync(join(root, ".env.docker"), "utf8");
+    expect(env).toContain("PORT=5002\n");
+    expect(env).toContain("API_KEYS=dev-key-please-change\n");
+    const authSecret = env.match(/^BETTER_AUTH_SECRET=(.+)$/m)?.[1] ?? "";
+    const jobSecret = env.match(/^JOB_SIGNING_SECRET=(.+)$/m)?.[1] ?? "";
+    expect(authSecret.length).toBeGreaterThanOrEqual(32);
+    expect(jobSecret.length).toBeGreaterThanOrEqual(32);
+    expect(authSecret).not.toBe(jobSecret);
+
+    // An existing file holds the developer's own values and is never replaced.
+    writeFileSync(join(root, ".env.docker"), "BETTER_AUTH_SECRET=kept-local-value-with-32-characters\n");
+    runDevCommand(root, "down", [], runner);
+    expect(readFileSync(join(root, ".env.docker"), "utf8")).toBe(
+      "BETTER_AUTH_SECRET=kept-local-value-with-32-characters\n",
+    );
+
+    rmSync(join(root, ".env.docker"));
+    runDevCommand(root, "up", ["-d"], runner);
+    expect(existsSync(join(root, ".env.docker"))).toBe(true);
+  });
+
+  it("explains how to restore a missing container environment", () => {
+    const root = project();
+    writeFileSync(join(root, "compose.dev.yaml"), "services:\n  api:\n    env_file: .env.docker\n");
+    const runner: CommandRunner = () => ({ status: 0, stdout: "", stderr: "" });
+
+    expect(() => runDevCommand(root, "up", ["-d"], runner)).toThrow("podo update --apply");
+  });
+
   it("rejects a public host already registered by another project", () => {
     const first = project("first-app");
     const second = project("second-app");

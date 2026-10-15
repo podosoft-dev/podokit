@@ -41,6 +41,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   anonymous `locals.user`. A page under the prefix still gets both, so it keeps
   its sign-in and maintenance checks. `podo update` creates the file once and
   never overwrites it.
+- `podo dev env` creates `.env.docker` from `.env.docker.example` without
+  starting the stack. The generated devcontainer runs it as its
+  `initializeCommand`.
+
+### Changed
+
+- Generated apps commit `.env.docker.example`, with development defaults and an
+  empty `BETTER_AUTH_SECRET`, instead of generating an ignored `.env.docker`.
+  Every `podo dev` command except `url` creates the untracked `.env.docker` from
+  the example when it is missing and fills each empty `*_SECRET` value with a
+  random one. An existing `.env.docker` is never changed. `podo update --apply`
+  adds the example and its `.gitignore` exception to existing apps; copy shared,
+  non-secret values from your `.env.docker` into it.
 
 ### Upgrade notes
 
@@ -68,6 +81,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   container that `up` recreated, for example after a memory limit or
   `.env.docker` change while `podo dev watch` was running, started from the
   last built image and lost every synced edit.
+- A fresh clone of a generated app can start its containers. Git ignored the
+  generated `.env.docker`, so `podo dev` failed with "env file .env.docker not
+  found" until someone recreated it by hand.
 
 
 ## [1.3.0] - 2026-10-15

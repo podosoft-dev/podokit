@@ -1278,3 +1278,39 @@ describe("app-owned asset paths", () => {
     expect(readFileSync(join(project, SEED), "utf8")).toContain('"/docs"');
   });
 });
+
+describe("committed container environment example", () => {
+  // The fullstack layout before .env.docker became a local copy of a committed example.
+  function templatesWithIgnoredContainerEnv(): string {
+    const dir = join(tmp(), "old-templates");
+    cpSync(REPO_TEMPLATES, dir, { recursive: true });
+    const fullstack = join(dir, "fullstack");
+    const example = readFileSync(join(fullstack, "dot-env.docker.example"), "utf8");
+    rmSync(join(fullstack, "dot-env.docker.example"));
+    writeFileSync(
+      join(fullstack, "dot-env.docker"),
+      example.replace(/^BETTER_AUTH_SECRET=$/m, "BETTER_AUTH_SECRET=change-me-in-container-min-32-characters"),
+    );
+    const gitignore = join(fullstack, "dot-gitignore");
+    writeFileSync(gitignore, readFileSync(gitignore, "utf8").replace("!.env.docker.example\n", ""));
+    return dir;
+  }
+
+  it("adds the example and its Git exception while keeping the app's .env.docker", () => {
+    const oldTemplates = templatesWithIgnoredContainerEnv();
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: project });
+    const localEnv = `${readFileSync(join(project, ".env.docker"), "utf8")}GOOGLE_CLIENT_SECRET=local-only\n`;
+    writeFileSync(join(project, ".env.docker"), localEnv);
+    expect(existsSync(join(project, ".env.docker.example"))).toBe(false);
+
+    const plan = planUpdate(project, REPO_TEMPLATES);
+    expect(plan.changes.find((change) => change.path === ".env.docker.example")?.action).toBe("add");
+    const result = applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+
+    expect(result.conflicts).toEqual([]);
+    expect(readFileSync(join(project, ".env.docker.example"), "utf8")).toMatch(/^BETTER_AUTH_SECRET=$/m);
+    expect(readFileSync(join(project, ".gitignore"), "utf8")).toContain(".env.*\n!.env.example\n!.env.docker.example\n");
+    expect(readFileSync(join(project, ".env.docker"), "utf8")).toBe(localEnv);
+  });
+});

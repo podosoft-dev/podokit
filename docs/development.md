@@ -96,6 +96,20 @@ podo dev exec api bun run --cwd apps/api migrate:all
 ```
 
 Use `npx @podosoft/podokit dev ...` when `podo` is not installed globally.
+
+The containers read their environment from `.env.docker`, which Git ignores
+because it holds local secrets. The committed `.env.docker.example` carries the
+development defaults. When `.env.docker` is missing, as in a fresh clone, every
+`podo dev` command except `url` creates it from the example and fills each empty
+`*_SECRET` value, such as `BETTER_AUTH_SECRET`, with a random value. An existing
+`.env.docker` is never changed. `podo dev env` creates the file without starting
+anything; the devcontainer runs it as its `initializeCommand`. Keep shared,
+non-secret settings in `.env.docker.example` and put credentials such as OAuth
+client secrets only in `.env.docker`. A project generated before the example
+existed gets it, with its `.gitignore` exception, from `podo update --apply`;
+copy any shared values you added to `.env.docker` into the example and commit
+it.
+
 The shared loopback Traefik gateway routes each committed
 `.podokit/dev.json` hostname to its web container. SvelteKit proxies
 `/api/*` internally to Elysia, so browsers use one origin.
