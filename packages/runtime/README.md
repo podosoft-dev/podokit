@@ -3,7 +3,8 @@
 Provider-neutral runtime contracts and local providers for PodoKit applications.
 
 The package defines stable service keys and contracts for database, cache, object
-storage, events, and jobs. It also includes bounded in-process cache and event
+storage, events, and jobs, plus `RATE_LIMIT_ROUTES`, which the rate-limit module
+registers so other modules can give their routes a request budget of their own. It also includes bounded in-process cache and event
 providers plus an atomic, path-confined local object store. Distributed providers
 implement the same contracts in PodoKit modules.
 

@@ -950,6 +950,52 @@ owned `app.extensions.ts` file. Register application services in
 Keep the managed `rateLimitModule` registered once. Application-specific identity
 code must validate the credential before producing a stable internal identifier.
 
+#### Route profiles
+
+Routes can have a budget of their own, or be exempt, through the
+`RATE_LIMIT_ROUTES` registry (from `@podosoft/podokit-runtime`, also re-exported
+by `rate-limit.module.ts`). A chunked upload, for example, sends many small
+requests that should not use up the general budget:
+
+```ts
+import { RATE_LIMIT_ROUTES } from "@podosoft/podokit-runtime";
+
+// In a module's plugin factory, or in configureServices() in app.extensions.ts:
+services.tryResolve(RATE_LIMIT_ROUTES)?.register({
+  method: "PUT", // optional; every method when omitted
+  pathPrefix: "/uploads",
+  profile: { name: "uploads", limit: 3000, ttlSeconds: 60 }, // or "exempt"
+});
+```
+
+- `pathPrefix` matches that path and the paths below it by whole segments
+  (`/uploads` covers `/uploads/1/parts/2`, not `/uploads-old`). Use the path the
+  API receives: `/uploads`, not the `/api/uploads` the browser calls through the
+  web proxy. Better Auth routes keep `/api/auth`.
+- The most specific route wins: the longest prefix, then a route with a method
+  over one without, then the latest registration.
+- `name` (1-64 letters, digits, `_`, or `-`) names the counter. Routes that
+  share a name share one budget and must give the same `limit` and
+  `ttlSeconds`; `ttlSeconds` defaults to `RATE_LIMIT_TTL`. Counters are per
+  caller, keyed by API key, session, or client address like the general budget.
+- `"exempt"` skips request limiting for the route. Prefer a generous budget,
+  because an exempt route has no protection against a runaway client.
+- Resolve the registry with `tryResolve`, so the module still works without
+  `rate-limit`. Register from the module's `plugin` factory, or later: a
+  module's `configure` can run before the rate-limit module registers the
+  registry. Applications register from `configureServices()`, which runs after
+  every module is configured.
+
+The built-in budgets are registered the same way: general at `/`, auth at
+`/api/auth`, and the runtime budget for `GET /api/auth/get-session` and
+`GET /site/settings`, with `GET /api/auth/admin` on the general budget. A
+module's longer prefix inside `/api/auth` therefore takes precedence over the
+auth budget, and registering `/api/auth` itself replaces it. The names
+`general`, `auth`, and `runtime` keep their configured limits. `GET /health`,
+`GET /health/ready`, and the API documentation are never counted, whatever is
+registered. Applications that waited out `Retry-After` between upload chunks
+can give the upload routes their own budget instead.
+
 ### `api-key-auth`
 
 API-key authentication for **machine/service clients** (`X-API-Key`), separate

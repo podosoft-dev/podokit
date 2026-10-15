@@ -79,6 +79,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   bodies behave as before. `ApiError.retryAfterSeconds` holds the
   `Retry-After` delay of a `429` or `503`. Applications that used a raw
   `fetch` to send binary upload chunks can use the client.
+- Rate-limit route profiles. The `RATE_LIMIT_ROUTES` service (a runtime
+  service key, re-exported by the rate-limit module) lets a module or the
+  application give a path prefix, optionally for one method, its own request
+  budget or exempt it. The most specific prefix wins, and the built-in general,
+  authentication, and runtime budgets are registered the same way, so a longer
+  prefix inside `/api/auth` takes precedence over the authentication budget.
+  Upload chunks no longer have to fit the general budget, and applications
+  that waited out `Retry-After` between chunks can register an upload budget
+  instead.
 
 ### Changed
 
@@ -88,8 +97,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   session token (`S3_SESSION_TOKEN` or `AWS_SESSION_TOKEN`) as Bun's S3 client
   does. `StorageService.put` accepts any object body and resolves with the
   number of bytes written.
-
-### Changed
 
 - Generated apps commit `.env.docker.example`, with development defaults and an
   empty `BETTER_AUTH_SECRET`, instead of generating an ignored `.env.docker`.
@@ -137,7 +144,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `components.json` lacked the `hooks` and `lib` aliases, so the CLI stopped
   with an invalid alias error, and its `utils` alias ended in `.js`, so
   vendored files imported `#lib/utils.js.js`.
-
 
 ## [1.3.0] - 2026-10-15
 

@@ -19,6 +19,7 @@ import {
   type ObjectData,
   PROVIDER_CAPABILITIES,
   PROVIDER_NAMES,
+  RATE_LIMIT_ROUTES,
   readObjectBytes,
   resolveProviderSelections,
   SERVER_PROVIDER_SELECTIONS,
@@ -95,6 +96,7 @@ describe("provider contracts", () => {
     expect(SERVER_PROVIDER_SELECTIONS.database).toBe("postgres");
     expect(LOCAL_PROVIDER_SELECTIONS["object-storage"]).toBe("local");
     expect(DATABASE).toBe(Symbol.for("@podosoft/podokit/database"));
+    expect(RATE_LIMIT_ROUTES).toBe(Symbol.for("@podosoft/podokit/rate-limit-routes"));
     expect(resolveProviderSelections({ cache: "memory" })).toEqual({
       ...SERVER_PROVIDER_SELECTIONS,
       cache: "memory",

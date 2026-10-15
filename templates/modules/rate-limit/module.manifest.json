@@ -35,6 +35,12 @@
       "file": "apps/api/src/app.ts",
       "marker": "// podokit:end:modules",
       "text": "rateLimitModule,"
+    },
+    {
+      "file": "AGENTS.md",
+      "marker": "<!-- podokit:end:agents-modules -->",
+      "optional": true,
+      "text": "### rate-limit\n- Every request counts against a per-caller budget (general, `/api/auth`, or runtime reads); exceeded limits return 429 `RATE_LIMIT_EXCEEDED` with `Retry-After`.\n- Give routes that legitimately send many requests, such as upload chunks, their own budget instead of raising `RATE_LIMIT_MAX`: `services.tryResolve(RATE_LIMIT_ROUTES)?.register({ method: \"PUT\", pathPrefix: \"/uploads\", profile: { name: \"uploads\", limit: 3000 } })` (`RATE_LIMIT_ROUTES` from `@podosoft/podokit-runtime`). Register from a module's `plugin` factory or `configureServices()` in `app.extensions.ts`; the most specific prefix wins, and `profile: \"exempt\"` skips limiting.\n- Prefixes are API paths (`/uploads`, not the web proxy's `/api/uploads`); Better Auth routes keep `/api/auth`.\n"
     }
   ],
   "instructions": [
@@ -47,6 +53,7 @@
     "Exceeded limits return RATE_LIMIT_EXCEEDED with HTTP 429 and Retry-After. Cache failures return RATE_LIMIT_UNAVAILABLE with HTTP 503.",
     "Register a RateLimitIdentityExtension under RATE_LIMIT_IDENTITY_EXTENSION in app.extensions.ts for another validated machine-key source.",
     "GET /health and GET /health/ready bypass request quotas so orchestrator probes remain reliable.",
+    "Give a route its own budget or exempt it with services.tryResolve(RATE_LIMIT_ROUTES)?.register({ method, pathPrefix, profile }) from a module's plugin factory or configureServices() in app.extensions.ts; the most specific prefix wins.",
     "Redis counters are shared across replicas; memory counters require one API replica."
   ]
 }

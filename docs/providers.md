@@ -168,6 +168,8 @@ provider data.
 - `OBJECT_STORAGE` / `ObjectStore`
 - `EVENTS` / `EventBus`
 - `JOBS` / `JobQueue`
+- `RATE_LIMIT_ROUTES` / `RateLimitRouteRegistry`, registered by the `rate-limit`
+  module (see [Route profiles](modules.md#route-profiles))
 
 Feature modules resolve these keys from the generated service registry. Provider
 modules are the only layer that should import Redis, S3, BullMQ, or local storage

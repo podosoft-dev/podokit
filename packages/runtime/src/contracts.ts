@@ -257,8 +257,49 @@ export interface JobQueue {
   close(): void | Promise<void>;
 }
 
+/** A request budget of its own, counted per caller like the general budget. */
+export interface RateLimitProfile {
+  /**
+   * Names the counter: 1 to 64 letters, digits, `_`, or `-`. Routes registered
+   * with the same name share one budget and must give the same limits.
+   */
+  name: string;
+  /** Requests allowed per window. */
+  limit: number;
+  /** Window length in seconds. Defaults to the general window (RATE_LIMIT_TTL). */
+  ttlSeconds?: number;
+}
+
+export interface RateLimitRoute {
+  /** Matches one HTTP method; omitted, every method. */
+  method?: string;
+  /**
+   * Matches this path and the paths below it, by whole segments: `/uploads`
+   * covers `/uploads` and `/uploads/1`, not `/uploads-old`. Use the path the
+   * API receives, such as `/uploads`, not `/api/uploads` as called through the
+   * web proxy; Better Auth routes keep their `/api/auth` prefix.
+   */
+  pathPrefix: string;
+  /** A budget of its own, or "exempt" to skip request limiting. */
+  profile: RateLimitProfile | "exempt";
+}
+
+/**
+ * Gives routes their own request budget or exempts them. The most specific
+ * matching route wins: the longest prefix, then a route with a method over
+ * one without, then the latest registration.
+ */
+export interface RateLimitRouteRegistry {
+  register(route: RateLimitRoute): void;
+}
+
 export const DATABASE = Symbol.for("@podosoft/podokit/database") as ServiceKey<DatabaseProvider>;
 export const CACHE = Symbol.for("@podosoft/podokit/cache") as ServiceKey<CacheStore>;
 export const OBJECT_STORAGE = Symbol.for("@podosoft/podokit/object-storage") as ServiceKey<ObjectStore>;
 export const EVENTS = Symbol.for("@podosoft/podokit/events") as ServiceKey<EventBus>;
 export const JOBS = Symbol.for("@podosoft/podokit/jobs") as ServiceKey<JobQueue>;
+/**
+ * Registered by the rate-limit module. Resolve it with `tryResolve` so a module
+ * keeps working when rate limiting is not installed.
+ */
+export const RATE_LIMIT_ROUTES = Symbol.for("@podosoft/podokit/rate-limit-routes") as ServiceKey<RateLimitRouteRegistry>;

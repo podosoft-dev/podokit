@@ -731,9 +731,11 @@ describe("addModule (auth / better-auth)", () => {
     const rateLimitModule = readFileSync(join(project, "apps/api/src/rate-limit/rate-limit.module.ts"), "utf8");
     expect(rateLimitModule).toContain("CacheRateLimitStorage");
     expect(rateLimitModule).toContain('["/health", "/health/ready", "/api-docs"');
-    expect(rateLimitModule).toContain('path.startsWith("/api/auth/")');
-    expect(rateLimitModule).toContain('path === "/api/auth/get-session"');
-    expect(rateLimitModule).toContain('path === "/site/settings"');
+    expect(rateLimitModule).toContain("services.register(RATE_LIMIT_ROUTES, limiter.routes)");
+    const routes = readFileSync(join(project, "apps/api/src/rate-limit/rate-limit.routes.ts"), "utf8");
+    expect(routes).toContain('pathPrefix: "/api/auth",');
+    expect(routes).toContain('method: "GET", pathPrefix: "/api/auth/get-session"');
+    expect(routes).toContain('method: "GET", pathPrefix: "/site/settings"');
     expect(rateLimitModule).toContain("RATE_LIMIT_EXCEEDED");
     expect(rateLimitModule).toContain("RATE_LIMIT_UNAVAILABLE");
     expect(rateLimitModule).toContain("REQUEST_GUARDS");
