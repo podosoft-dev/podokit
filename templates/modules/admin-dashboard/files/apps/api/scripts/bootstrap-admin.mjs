@@ -163,10 +163,20 @@ async function main() {
   }
 }
 
+// A refused PostgreSQL connection is an AggregateError with an empty message.
+export function errorMessage(error) {
+  if (!(error instanceof Error)) return String(error);
+  if (error.message) return error.message;
+  if (error instanceof AggregateError && error.errors.length > 0) {
+    return error.errors.map(errorMessage).join("; ");
+  }
+  return error.name;
+}
+
 const invokedPath = process.argv[1] ? pathToFileURL(process.argv[1]).href : "";
 if (invokedPath === import.meta.url) {
   main().catch((error) => {
-    console.error(error instanceof Error ? error.message : String(error));
+    console.error(errorMessage(error));
     process.exitCode = 1;
   });
 }

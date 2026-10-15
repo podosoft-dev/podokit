@@ -23,7 +23,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   lockfile entry failed `svelte-check`.
 - `admin:bootstrap` imported modules the API build never emitted. It now loads
   the bundled `dist/bootstrap-admin-runtime.js` under `NODE_ENV=production` and
-  the source otherwise, on PostgreSQL and SQLite.
+  the source otherwise, on PostgreSQL and SQLite. When it cannot reach the
+  database it prints each cause instead of an empty line.
 - The `IndexAuditLogFilters` migration builds and drops its PostgreSQL indexes
   with `CONCURRENTLY` outside a transaction, so audit writes continue while it
   runs, and rebuilds an index left invalid by an interrupted build. TypeORM

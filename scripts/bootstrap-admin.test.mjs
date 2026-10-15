@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   bootstrapAdmin,
+  errorMessage,
   resolveBootstrapInput,
 } from "../templates/modules/admin-dashboard/files/apps/api/scripts/bootstrap-admin.mjs";
 
@@ -127,5 +128,21 @@ describe("initial administrator bootstrap", () => {
       ),
       /does not exist; no changes were made/,
     );
+  });
+
+  it("reports every cause of an unreachable database", () => {
+    const refused = new AggregateError(
+      [
+        new Error("connect ECONNREFUSED ::1:5432"),
+        new Error("connect ECONNREFUSED 127.0.0.1:5432"),
+      ],
+      "",
+    );
+    assert.equal(
+      errorMessage(refused),
+      "connect ECONNREFUSED ::1:5432; connect ECONNREFUSED 127.0.0.1:5432",
+    );
+    assert.equal(errorMessage(new Error("no such table: user")), "no such table: user");
+    assert.equal(errorMessage("plain"), "plain");
   });
 });
