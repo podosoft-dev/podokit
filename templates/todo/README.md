@@ -63,8 +63,11 @@ the same topology, with one route and no project-specific host port.
 
 When the API exposes WebSocket endpoints, add their exact paths to
 `.podokit/dev.json` under `webSocketPaths`. The shared gateway sends only those paths
-directly to the API and leaves every other path on the web app. Add `publicUrl` to the
-same file when an HTTPS tunnel preserves its public `Host` header.
+directly to the API and leaves every other path on the web app. Routes that accept
+bodies larger than the web server's `BODY_SIZE_LIMIT`, such as file uploads, go under
+`apiPaths` as prefixes like `/api/files/uploads/`; the gateway removes `/api` and
+sends them to the API without the web proxy. Add `publicUrl` to the same file when
+an HTTPS tunnel preserves its public `Host` header.
 
 In a second terminal, apply the included Todo migration and use the lifecycle helpers:
 
@@ -149,5 +152,6 @@ PodoKit [deployment guide](https://github.com/podosoft-dev/podokit/blob/main/doc
 
 For a Docker Compose deployment with API WebSockets, list their exact paths under
 `exposure.webSocketPaths`. The driver keeps one published port, routes those paths
-to API, and sends every other request to web. If an external reverse proxy supplies
+to API, and sends every other request to web. Large-upload routes listed under
+`exposure.apiPaths` reach the API the same way, with `/api` removed. If an external reverse proxy supplies
 forwarding headers, list only its direct CIDR blocks in `exposure.trustedProxyCidrs`.

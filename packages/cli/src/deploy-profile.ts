@@ -23,6 +23,7 @@ import {
   validateImageRepository,
   STABLE_SEMVER_TAG_PATTERN,
 } from "./deploy-schema";
+import { parseApiPaths } from "./api-paths";
 import { parseExactWebSocketPaths } from "./websocket-paths";
 
 export { profileDirectory, profilePath } from "./deploy-schema";
@@ -84,6 +85,8 @@ export interface DeployProfileV1 {
     ingressClassName: string;
     tlsSecretName: string | null;
     webSocketPaths: string[];
+    /** Path prefixes under /api/ that the Ingress sends to the API with /api removed. */
+    apiPaths: string[];
   };
   workloads: {
     api: WorkloadProfile;
@@ -255,7 +258,7 @@ function parseProfile(value: unknown): DeployProfileV1 {
   );
   assertOnlyKeys(
     exposure,
-    ["mode", "host", "ingressClassName", "tlsSecretName", "webSocketPaths"],
+    ["mode", "host", "ingressClassName", "tlsSecretName", "webSocketPaths", "apiPaths"],
     "exposure",
   );
   assertOnlyKeys(workloads, ["api", "web", "worker"], "workloads");
@@ -312,6 +315,10 @@ function parseProfile(value: unknown): DeployProfileV1 {
   );
   if (exposureMode === "nodePort" && webSocketPaths.length > 0) {
     throw new Error("Deployment exposure.webSocketPaths requires exposure.mode ingress.");
+  }
+  const apiPaths = parseApiPaths(exposure.apiPaths ?? [], "exposure.apiPaths", webSocketPaths);
+  if (exposureMode === "nodePort" && apiPaths.length > 0) {
+    throw new Error("Deployment exposure.apiPaths requires exposure.mode ingress.");
   }
 
   const postgres = parseStatefulDependency(
@@ -372,6 +379,7 @@ function parseProfile(value: unknown): DeployProfileV1 {
       ingressClassName,
       tlsSecretName,
       webSocketPaths,
+      apiPaths,
     },
     workloads: {
       api: parseWorkload(requiredRecord(workloads, "api"), "workloads.api"),
@@ -489,6 +497,7 @@ export function initializeDeploymentProfile(
       ingressClassName: "traefik",
       tlsSecretName: null,
       webSocketPaths: [],
+      apiPaths: [],
     },
     workloads: {
       api: {

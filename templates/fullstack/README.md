@@ -63,8 +63,11 @@ the same topology, with one route and no project-specific host port.
 
 When the API exposes WebSocket endpoints, add their exact paths to
 `.podokit/dev.json` under `webSocketPaths`. The shared gateway sends only those paths
-directly to the API and leaves every other path on the web app. Add `publicUrl` to the
-same file when an HTTPS tunnel preserves its public `Host` header.
+directly to the API and leaves every other path on the web app. Routes that accept
+bodies larger than the web server's `BODY_SIZE_LIMIT`, such as file uploads, go under
+`apiPaths` as prefixes like `/api/files/uploads/`; the gateway removes `/api` and
+sends them to the API without the web proxy. Add `publicUrl` to the same file when
+an HTTPS tunnel preserves its public `Host` header.
 
 Run lifecycle and container commands from a second terminal:
 
@@ -183,4 +186,6 @@ If the production API exposes WebSocket endpoints, list their exact paths under
 `exposure.webSocketPaths` in the deployment profile. The Compose driver then keeps a
 single published port, sends only those paths to API, and sends all other traffic to
 web. The external TLS proxy continues to use the same single upstream. Keep
-`trustedProxyCidrs` empty unless that upstream is a known reverse proxy.
+`trustedProxyCidrs` empty unless that upstream is a known reverse proxy. Large-upload
+routes listed under `exposure.apiPaths` reach the API the same way, with `/api`
+removed; the API then enforces their body limit and origin checks itself.

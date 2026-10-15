@@ -87,7 +87,37 @@ describe("docker-compose profile", () => {
     if (profile.driver !== "docker-compose") return;
     expect(profile.exposure.bindAddress).toBe("127.0.0.1");
     expect(profile.exposure.webSocketPaths).toEqual([]);
+    expect(profile.exposure.apiPaths).toEqual([]);
     expect(profile.exposure.trustedProxyCidrs).toEqual([]);
+  });
+
+  it.each<[unknown, string]>([
+    [["/api/"], "static path prefixes under /api/"],
+    [["/api/files/*"], "static path prefixes under /api/"],
+    [["/api/auth/"], "authentication routes"],
+    [["/api/files/", "/api/files/uploads/"], "overlapping paths"],
+  ])("rejects unsafe API path configuration %#", (apiPaths, message) => {
+    const root = initialized();
+    const file = profilePath(root, "production");
+    const value = JSON.parse(readFileSync(file, "utf8")) as {
+      exposure: { apiPaths: unknown };
+    };
+    value.exposure.apiPaths = apiPaths;
+    writeFileSync(file, JSON.stringify(value));
+    expect(() => loadAnyDeploymentProfile(root, "production")).toThrow(message);
+  });
+
+  it("accepts trusted proxy CIDRs when only API paths enable the gateway", () => {
+    const root = initialized();
+    const file = profilePath(root, "production");
+    const value = JSON.parse(readFileSync(file, "utf8")) as {
+      exposure: { apiPaths: string[]; trustedProxyCidrs: string[] };
+    };
+    value.exposure.apiPaths = ["/api/files/uploads/"];
+    value.exposure.trustedProxyCidrs = ["127.0.0.1/32"];
+    writeFileSync(file, JSON.stringify(value));
+    const profile = loadAnyDeploymentProfile(root, "production");
+    expect(profile.exposure.apiPaths).toEqual(["/api/files/uploads/"]);
   });
 
   it.each<[string[], string]>([
@@ -131,7 +161,7 @@ describe("docker-compose profile", () => {
     value.exposure.trustedProxyCidrs = ["127.0.0.1/32"];
     writeFileSync(file, JSON.stringify(value));
     expect(() => loadAnyDeploymentProfile(root, "production")).toThrow(
-      "requires at least one exposure.webSocketPaths entry",
+      "requires at least one exposure.webSocketPaths or exposure.apiPaths entry",
     );
   });
 
@@ -252,6 +282,48 @@ describe("compose rendering", () => {
     expect(gateway).not.toContain("header_up X-Forwarded");
     expect(gateway).toContain('"127.0.0.1:8080:3000"');
     expect(document.match(/ports:/g)).toHaveLength(1);
+  });
+
+  it("routes API paths to API without /api through the published gateway", () => {
+    const profile = composeProfileOf(initialized());
+    profile.exposure.apiPaths = ["/api/files/uploads/", "/api/imports"];
+    const images = {
+      ...defaultComposeImages(profile, "v1.2.3"),
+      gateway: `caddy:2.10-alpine@${GATEWAY_DIGEST}`,
+    };
+    const document = renderComposeDocument(profile, "v1.2.3", images, "sha256:0");
+    const web = document.split("example-app-web:")[1]?.split("example-app-gateway:")[0] ?? "";
+    const gateway = document.split("example-app-gateway:")[1] ?? "";
+
+    expect(web).not.toContain("ports:");
+    expect(gateway).toContain(
+      "  @api_paths path /api/files/uploads /api/files/uploads/* /api/imports /api/imports/*\\n" +
+        "  handle @api_paths {\\n" +
+        "    uri strip_prefix /api\\n" +
+        "    reverse_proxy example-app-api:3000\\n" +
+        "  }\\n" +
+        "  handle {\\n" +
+        "    reverse_proxy example-app-web:3000\\n",
+    );
+    expect(gateway).not.toContain("@api_websockets");
+    expect(gateway).toContain('"127.0.0.1:8080:3000"');
+    expect(document.match(/ports:/g)).toHaveLength(1);
+  });
+
+  it("keeps WebSocket paths unprefixed next to API paths", () => {
+    const profile = composeProfileOf(initialized());
+    profile.exposure.webSocketPaths = ["/events/ws"];
+    profile.exposure.apiPaths = ["/api/files/uploads/"];
+    const images = {
+      ...defaultComposeImages(profile, "v1.2.3"),
+      gateway: `caddy:2.10-alpine@${GATEWAY_DIGEST}`,
+    };
+    const gateway =
+      renderComposeDocument(profile, "v1.2.3", images, "sha256:0").split("example-app-gateway:")[1] ?? "";
+
+    expect(gateway).toContain(
+      "  @api_websockets path /events/ws\\n  handle @api_websockets {\\n    reverse_proxy example-app-api:3000\\n  }\\n  @api_paths",
+    );
   });
 
   it("runs workers with Bun", () => {
@@ -418,6 +490,26 @@ describe("compose plan", () => {
     const plan = planComposeDeployment(root, "production", "v1.2.3", scriptedRunner());
 
     expect(plan.images.gateway).toBe(`caddy:2.10-alpine@${GATEWAY_DIGEST}`);
+  });
+
+  it("pins the gateway image and names the direct routes for API paths", () => {
+    const root = initialized();
+    const file = profilePath(root, "production");
+    const value = JSON.parse(readFileSync(file, "utf8")) as {
+      exposure: { apiPaths: string[] };
+    };
+    const first = planComposeDeployment(root, "production", "v1.2.3", scriptedRunner());
+    value.exposure.apiPaths = ["/api/files/uploads/"];
+    writeFileSync(file, JSON.stringify(value));
+
+    const plan = planComposeDeployment(root, "production", "v1.2.3", scriptedRunner());
+
+    expect(first.images.gateway).toBeNull();
+    expect(plan.images.gateway).toBe(`caddy:2.10-alpine@${GATEWAY_DIGEST}`);
+    expect(plan.actions.find((action) => action.kind === "application")?.description).toBe(
+      "Roll out api, web, gateway and wait for health. Route /api/files/uploads/ directly to the API without /api.",
+    );
+    expect(plan.planHash).not.toBe(first.planHash);
   });
 
   it("rejects a release tag that is not a stable SemVer tag", () => {

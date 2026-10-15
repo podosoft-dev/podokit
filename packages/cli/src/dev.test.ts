@@ -49,6 +49,7 @@ describe("PodoKit development gateway", () => {
       schemaVersion: 1,
       hostname: "example-app.localhost",
       webSocketPaths: [],
+      apiPaths: [],
     });
     writeFileSync(
       join(root, ".podokit", "dev.json"),
@@ -59,6 +60,7 @@ describe("PodoKit development gateway", () => {
       hostname: "app.localhost",
       publicUrl: "https://dev.example.com",
       webSocketPaths: [],
+      apiPaths: [],
     });
     const publicRoute = renderRoute(resolveDevRuntime(root));
     expect(publicRoute).toContain(
@@ -110,13 +112,95 @@ describe("PodoKit development gateway", () => {
     const route = renderRoute(runtime);
     const compose = renderRuntimeCompose(runtime);
 
+    // Traefik v3 matchers take a single value, so each path is its own matcher.
     expect(route).toContain(
-      "(Host(`example-app.localhost`) || Host(`ws.example.com`)) && Path(`/events/ws`, `/notifications/socket`)",
+      "(Host(`example-app.localhost`) || Host(`ws.example.com`)) && (Path(`/events/ws`) || Path(`/notifications/socket`))",
     );
     expect(route).toContain("priority: 100");
     expect(route).toContain(`url: http://${runtime.alias}-api:5002`);
     expect(route).not.toContain("PathPrefix");
     expect(compose).toContain(`aliases: [${runtime.alias}-api]`);
+  });
+
+  it("routes configured API paths to the API without the /api prefix", () => {
+    const root = project();
+    writeFileSync(
+      join(root, ".podokit", "dev.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        hostname: "example-app.localhost",
+        webSocketPaths: ["/events/ws"],
+        apiPaths: ["/api/files/uploads/", "/api/imports"],
+      }),
+    );
+    const runtime = resolveDevRuntime(root);
+    const route = renderRoute(runtime);
+    const compose = renderRuntimeCompose(runtime);
+
+    expect(runtime.config.apiPaths).toEqual(["/api/files/uploads/", "/api/imports"]);
+    expect(route).toContain(
+      `    ${runtime.routeId}-api-paths:\n      entryPoints: [web]\n      rule: Host(\`example-app.localhost\`) && (Path(\`/api/files/uploads\`) || PathPrefix(\`/api/files/uploads/\`) || Path(\`/api/imports\`) || PathPrefix(\`/api/imports/\`))\n      priority: 100\n      middlewares: [${runtime.routeId}-api-prefix]\n      service: ${runtime.routeId}-api\n`,
+    );
+    expect(route).toContain(
+      `    ${runtime.routeId}-api-prefix:\n      stripPrefix:\n        prefixes: ["/api"]\n`,
+    );
+    expect(route).toContain("Path(`/events/ws`)");
+    expect(route.match(new RegExp(`${runtime.routeId}-api:\n`, "g"))).toHaveLength(1);
+    expect(route).toContain(`url: http://${runtime.alias}-api:5002`);
+    // Everything else still reaches the web service, which proxies /api itself.
+    expect(route).toContain(`url: http://${runtime.alias}:5001`);
+    expect(compose).toContain(`aliases: [${runtime.alias}-api]`);
+  });
+
+  it("joins the API network for API paths without WebSocket paths", () => {
+    const root = project();
+    writeFileSync(
+      join(root, ".podokit", "dev.json"),
+      JSON.stringify({ schemaVersion: 1, hostname: "app.localhost", apiPaths: ["/api/files/uploads/"] }),
+    );
+    const runtime = resolveDevRuntime(root);
+
+    expect(renderRuntimeCompose(runtime)).toContain(`aliases: [${runtime.alias}-api]`);
+    expect(renderRoute(runtime)).not.toContain("-websocket:");
+  });
+
+  it.each([
+    ["a string", "must be an array"],
+    [["/api/"], "static path prefixes under /api/"],
+    [["/files/uploads/"], "static path prefixes under /api/"],
+    [["/api/files/*"], "static path prefixes under /api/"],
+    [["/api/files/uploads?x=1"], "static path prefixes under /api/"],
+    [["/api/files/%2e%2e/admin"], "static path prefixes under /api/"],
+    [["/api/files//uploads/"], "static path prefixes under /api/"],
+    [["/api/files/../admin/"], "static path prefixes under /api/"],
+    [["/api/auth/"], "authentication routes always go through the web proxy"],
+    [["/api/auth/sign-in"], "authentication routes always go through the web proxy"],
+    [["/api/files/", "/api/files/"], "duplicate path"],
+    [["/api/files/", "/api/files/uploads/"], "overlapping paths"],
+    [["/api/files", "/api/files/"], "overlapping paths"],
+  ])("rejects unsafe API path configuration %#", (apiPaths, message) => {
+    const root = project();
+    writeFileSync(
+      join(root, ".podokit", "dev.json"),
+      JSON.stringify({ schemaVersion: 1, hostname: "app.localhost", apiPaths }),
+    );
+
+    expect(() => readDevConfig(root)).toThrow(message);
+  });
+
+  it("rejects an API path that covers a WebSocket path", () => {
+    const root = project();
+    writeFileSync(
+      join(root, ".podokit", "dev.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        hostname: "app.localhost",
+        webSocketPaths: ["/api/live/ws"],
+        apiPaths: ["/api/live/"],
+      }),
+    );
+
+    expect(() => readDevConfig(root)).toThrow('covers WebSocket path "/api/live/ws"');
   });
 
   it.each([

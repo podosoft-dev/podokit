@@ -115,6 +115,24 @@ web service. The gateway forwards cookies and proxy headers, but the API must
 authenticate the upgrade request. Add `publicUrl` when a stable HTTPS tunnel sends
 its public `Host` header to the loopback gateway.
 
+Routes that accept bodies larger than the web server's `BODY_SIZE_LIMIT` (3 MiB by
+default), such as file uploads, go in `apiPaths`:
+
+```json
+{
+  "schemaVersion": 1,
+  "hostname": "myapp.localhost",
+  "apiPaths": ["/api/files/uploads/"]
+}
+```
+
+Each entry covers its own path and every path below it. The gateway removes `/api`
+and sends the request straight to the API container, so
+`/api/files/uploads/u1/parts/2` reaches the API as `/files/uploads/u1/parts/2`
+without passing through SvelteKit. The rules and their security implications are
+the same as for `exposure.apiPaths` in a
+[deployment profile](deployment.md#direct-api-paths); list the same paths in both.
+
 `podo dev watch` delegates to Compose Watch. Vite handles web HMR and Bun's
 watch process reloads the Elysia API. Use `podo dev ps`, `logs`, `exec`, and
 `down` for lifecycle operations. Install native dependencies inside the target

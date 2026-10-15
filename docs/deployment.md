@@ -16,7 +16,8 @@ responsibilities.
 
 PodoKit manages:
 
-- API and web workloads, their service wiring, and exact WebSocket routing when configured
+- API and web workloads, their service wiring, and exact WebSocket and direct API
+  routing when configured
 - optional PodoKit-run PostgreSQL, Redis, and S3-compatible object storage
 - an exact-image migration step before an application rollout
 - deployment planning, status, public verification, and application rollback
@@ -327,6 +328,70 @@ plain-HTTP image can instead set its origin while building:
 ```bash
 docker build --build-arg PODOKIT_BUILD_ORIGIN=https://example.com -f apps/web/Dockerfile -t example-web .
 ```
+
+## Direct API paths
+
+By default every `/api/*` request goes through the web server, which proxies it
+to the API. The web server holds the whole body in memory, and adapter-bun rejects any
+body larger than `BODY_SIZE_LIMIT` (3 MiB in the generated configuration) on every
+web route. To accept larger uploads, list the API routes that receive them under
+`exposure.apiPaths`. The gateway then sends those requests straight to the API, so
+their bodies never pass through the web process:
+
+```json
+{
+  "exposure": {
+    "mode": "ingress",
+    "apiPaths": ["/api/files/uploads/"]
+  }
+}
+```
+
+Each entry is a static prefix under `/api/`. It covers its own path and every path
+below it, so `/api/files/uploads/` covers `/api/files/uploads` and
+`/api/files/uploads/u1/parts/2`; the trailing slash is optional. The gateway
+removes `/api`, so `/api/files/uploads/u1/parts/2` reaches the API as
+`/files/uploads/u1/parts/2`, the same path the web proxy forwards. The list is
+empty by default.
+
+The profile is rejected if an entry is `/api/` itself, contains a wildcard, query,
+fragment, percent-encoded character, empty segment, or traversal segment, overlaps
+another entry, or covers a `webSocketPaths` entry. `/api/auth` and the paths below
+it are rejected as well: the API serves Better Auth with the `/api/auth` prefix
+still in place, so authentication requests always go through the web proxy.
+
+| Driver | Routing |
+| --- | --- |
+| `kubernetes-helm` | Requires `exposure.mode: "ingress"` and an IngressClass served by Traefik. The application chart adds a second Ingress, `<release>-api-paths`, with an `Exact` rule for each path and an `ImplementationSpecific` rule for the path with a trailing slash, plus a Traefik `Middleware`, `<release>-strip-api-prefix`, that removes `/api`. `podo deploy doctor` checks that the `middlewares.traefik.io` CRD exists. |
+| `docker-compose` | Listed paths start the same internal Caddy gateway as WebSocket paths. It removes `/api` with `uri strip_prefix` before proxying to the API, and `trustedProxyCidrs` applies to these requests too. |
+
+The plan's rollout step names the direct paths, and the confirmation hash covers
+them through the profile digest and the rendered Ingress or Caddy configuration.
+For local development, list the same paths in `.podokit/dev.json`; see the
+[development guide](development.md#containerized-development).
+
+What changes for requests on these paths:
+
+- They stay on the public origin, so the browser sends the session cookie and
+  applies same-origin rules exactly as it does for the rest of `/api`. The API
+  authenticates them itself, as it already does for proxied requests.
+- They skip everything the web server does for `/api`: the forwarded header
+  allowlist (the API receives every request header), SvelteKit's cross-site form
+  check, and any `+server.ts` routes the app added under the prefix. For cookie-authenticated writes, have the API compare the
+  `Origin` header with the public origin; the session cookie's `SameSite=Lax`
+  already keeps it off most cross-site POSTs.
+- The API's CORS headers reach the browser. Keep `CORS_ORIGIN` set to the public
+  origin, as generated profiles do; without it the API reflects any origin and
+  allows credentials.
+- The API server's own body limit applies instead of `BODY_SIZE_LIMIT`: Bun's
+  `maxRequestBodySize`, 128 MiB unless the API sets another value. Enforce each
+  route's size limit in its API handler.
+- The API reads the client address from the gateway's `X-Forwarded-For` header
+  instead of from the web server. Behind an external reverse proxy, check that
+  `RATE_LIMIT_TRUSTED_PROXY_HOPS` picks the client on these paths.
+- Gateway timeouts still apply. Traefik v3 entry points close a request whose body
+  takes longer than `respondingTimeouts.readTimeout`, 60 seconds by default; raise
+  it on the ingress controller for slow uploads.
 
 ## Fast development sync (`docker-compose` only)
 

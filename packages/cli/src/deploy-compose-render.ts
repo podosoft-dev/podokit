@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type {
-  ComposeDependencyProfile,
-  ComposeWorkloadProfile,
-  DockerComposeProfileV1,
+import { API_PATH_PREFIX, apiPathBase } from "./api-paths";
+import {
+  composeHasGateway,
+  type ComposeDependencyProfile,
+  type ComposeWorkloadProfile,
+  type DockerComposeProfileV1,
 } from "./deploy-compose-profile";
 import { profilePath } from "./deploy-schema";
 import { readManifest } from "./lockfile";
@@ -343,13 +345,27 @@ function gatewayService(
 }
 `
     : "";
+  const api = `${serviceName(profile, "api")}:${CONTAINER_PORT}`;
+  const webSocketRoutes = profile.exposure.webSocketPaths.length
+    ? `  @api_websockets path ${profile.exposure.webSocketPaths.join(" ")}\n` +
+      `  handle @api_websockets {\n` +
+      `    reverse_proxy ${api}\n` +
+      `  }\n`
+    : "";
+  const apiPathRoutes = profile.exposure.apiPaths.length
+    ? `  @api_paths path ${profile.exposure.apiPaths
+        .map((path) => `${apiPathBase(path)} ${apiPathBase(path)}/*`)
+        .join(" ")}\n` +
+      `  handle @api_paths {\n` +
+      `    uri strip_prefix ${API_PATH_PREFIX}\n` +
+      `    reverse_proxy ${api}\n` +
+      `  }\n`
+    : "";
   const caddyfile =
     globalOptions +
     `:3000 {\n` +
-    `  @api_websockets path ${profile.exposure.webSocketPaths.join(" ")}\n` +
-    `  handle @api_websockets {\n` +
-    `    reverse_proxy ${serviceName(profile, "api")}:${CONTAINER_PORT}\n` +
-    `  }\n` +
+    webSocketRoutes +
+    apiPathRoutes +
     `  handle {\n` +
     `    reverse_proxy ${serviceName(profile, "web")}:${CONTAINER_PORT}\n` +
     `  }\n` +
@@ -385,7 +401,7 @@ export function renderComposeDocument(
   workerCommand: string[] = ["bun", "dist/main-worker.js"],
 ): string {
   const services: string[] = [];
-  const hasGateway = profile.exposure.webSocketPaths.length > 0;
+  const hasGateway = composeHasGateway(profile);
   if (profile.dependencies.postgres.mode === "managed" && images.postgres) {
     services.push(postgresService(profile, images.postgres));
   }
@@ -411,7 +427,7 @@ export function renderComposeDocument(
   );
   if (hasGateway) {
     if (!images.gateway) {
-      throw new Error("A resolved gateway image is required when WebSocket paths are configured.");
+      throw new Error("A resolved gateway image is required when WebSocket or API paths are configured.");
     }
     services.push(gatewayService(profile, images.gateway, release, stateDigest));
   }
@@ -479,8 +495,7 @@ export function defaultComposeImages(
   return {
     api: `${profile.release.apiRepository}:${release}`,
     web: `${profile.release.webRepository}:${release}`,
-    gateway:
-      profile.exposure.webSocketPaths.length > 0 ? profile.exposure.gatewayImage : null,
+    gateway: composeHasGateway(profile) ? profile.exposure.gatewayImage : null,
     postgres:
       profile.dependencies.postgres.mode === "managed"
         ? profile.dependencies.postgres.image

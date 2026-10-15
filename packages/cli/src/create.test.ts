@@ -436,6 +436,9 @@ describe("create (integration against templates)", () => {
     expect(readFileSync(join(target, ".podokit", "dev.json"), "utf8")).toContain(
       '"webSocketPaths": []',
     );
+    expect(readFileSync(join(target, ".podokit", "dev.json"), "utf8")).toContain(
+      '"apiPaths": []',
+    );
     expect(readFileSync(join(target, ".gitignore"), "utf8")).toContain(".podokit/runtime/");
     const backendProxy = readFileSync(
       join(target, "apps", "web", "src", "lib", "server", "backend-proxy.ts"),

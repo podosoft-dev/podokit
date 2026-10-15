@@ -24,6 +24,7 @@ import {
   validateImage,
   STABLE_SEMVER_TAG_PATTERN,
 } from "./deploy-schema";
+import { parseApiPaths } from "./api-paths";
 import { parseExactWebSocketPaths } from "./websocket-paths";
 
 /**
@@ -104,6 +105,8 @@ export interface DockerComposeProfileV1 {
     bindAddress: string;
     port: number;
     webSocketPaths: string[];
+    /** Path prefixes under /api/ that the gateway sends to the API with /api removed. */
+    apiPaths: string[];
     trustedProxyCidrs: string[];
     gatewayImage: string;
   };
@@ -330,6 +333,7 @@ export function parseComposeProfile(value: unknown): DockerComposeProfileV1 {
       "bindAddress",
       "port",
       "webSocketPaths",
+      "apiPaths",
       "trustedProxyCidrs",
       "gatewayImage",
     ],
@@ -367,13 +371,14 @@ export function parseComposeProfile(value: unknown): DockerComposeProfileV1 {
     exposure.webSocketPaths ?? [],
     "exposure.webSocketPaths",
   );
+  const apiPaths = parseApiPaths(exposure.apiPaths ?? [], "exposure.apiPaths", webSocketPaths);
   const trustedProxyCidrs = parseTrustedProxyCidrs(
     exposure.trustedProxyCidrs ?? [],
     "exposure.trustedProxyCidrs",
   );
-  if (trustedProxyCidrs.length > 0 && webSocketPaths.length === 0) {
+  if (trustedProxyCidrs.length > 0 && webSocketPaths.length === 0 && apiPaths.length === 0) {
     throw new Error(
-      "Deployment exposure.trustedProxyCidrs requires at least one exposure.webSocketPaths entry.",
+      "Deployment exposure.trustedProxyCidrs requires at least one exposure.webSocketPaths or exposure.apiPaths entry.",
     );
   }
   const gatewayImage =
@@ -420,6 +425,7 @@ export function parseComposeProfile(value: unknown): DockerComposeProfileV1 {
       bindAddress,
       port,
       webSocketPaths,
+      apiPaths,
       trustedProxyCidrs,
       gatewayImage,
     },
@@ -500,6 +506,7 @@ export function buildDefaultComposeProfile(
       bindAddress: "127.0.0.1",
       port: 8080,
       webSocketPaths: [],
+      apiPaths: [],
       trustedProxyCidrs: [],
       gatewayImage: "caddy:2.10-alpine",
     },
@@ -631,6 +638,11 @@ export function initializeComposeProfile(
   mkdirSync(profileDirectory(projectRoot), { recursive: true });
   writeFileSync(path, `${JSON.stringify(validated, null, 2)}\n`, { flag: "wx" });
   return { name, path, profile: validated };
+}
+
+/** The gateway runs only when some path must bypass the web service. */
+export function composeHasGateway(profile: DockerComposeProfileV1): boolean {
+  return profile.exposure.webSocketPaths.length > 0 || profile.exposure.apiPaths.length > 0;
 }
 
 export function composeProfileDigest(profile: DockerComposeProfileV1): string {

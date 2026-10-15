@@ -180,6 +180,51 @@ describe("deployment ingress routing", () => {
       /path: \/\n\s+pathType: Prefix\n\s+backend:\n\s+service:\n\s+name: example-app-web/,
     );
     expect(manifest.indexOf('path: "/events/ws"')).toBeLessThan(manifest.lastIndexOf("path: /"));
+    expect(manifest).not.toContain("kind: Middleware");
+  });
+
+  it("routes API paths to the API service through a prefix-stripping Ingress", () => {
+    const { root, profile } = initializedProfile();
+    profile.exposure.tlsSecretName = "app-tls";
+    profile.exposure.apiPaths = ["/api/files/uploads/", "/api/imports"];
+
+    const manifest = renderDeployment(root, "production", profile, "v1.2.3")
+      .applicationManifest;
+    const documents = manifest.split(/\n---\n/);
+    const middleware = documents.find((document) => document.includes("kind: Middleware"));
+    const apiIngress = documents.find((document) =>
+      document.includes("name: example-app-api-paths"),
+    );
+    const webIngress = documents.find((document) =>
+      /kind: Ingress\nmetadata:\n  name: example-app\n/.test(document),
+    );
+
+    expect(middleware).toBe(`apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: example-app-strip-api-prefix
+spec:
+  stripPrefix:
+    prefixes: ["/api"]`);
+    expect(apiIngress).toContain(
+      'traefik.ingress.kubernetes.io/router.middlewares: "example-app-example-app-strip-api-prefix@kubernetescrd"',
+    );
+    expect(apiIngress).toContain('ingressClassName: "traefik"');
+    expect(apiIngress).toContain('secretName: "app-tls"');
+    expect(apiIngress).toContain('host: "app.example.com"');
+    for (const base of ["/api/files/uploads", "/api/imports"]) {
+      expect(apiIngress).toMatch(
+        new RegExp(`path: "${base}"\\n\\s+pathType: Exact\\n\\s+backend:\\n\\s+service:\\n\\s+name: example-app-api\\n`),
+      );
+      expect(apiIngress).toMatch(
+        new RegExp(`path: "${base}/"\\n\\s+pathType: ImplementationSpecific\\n\\s+backend:\\n\\s+service:\\n\\s+name: example-app-api\\n`),
+      );
+    }
+    expect(apiIngress).not.toContain("example-app-web");
+    // The main Ingress keeps every other request, including the rest of /api, on web.
+    expect(webIngress).not.toContain("/api/");
+    expect(webIngress).not.toContain("router.middlewares");
+    expect(webIngress).toMatch(/path: \/\n\s+pathType: Prefix\n\s+backend:\n\s+service:\n\s+name: example-app-web/);
   });
 });
 

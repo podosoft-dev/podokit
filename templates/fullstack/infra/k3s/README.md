@@ -20,4 +20,6 @@ branch tags, and empty tags, and so should you.
 For a hand-managed API WebSocket endpoint, add a `pathType: Exact` Ingress path to
 the API service before the existing `/` web path. Do not route a prefix or the root
 to API. Deployment profiles express the same rule with
-`exposure.webSocketPaths` and validate it before rendering.
+`exposure.webSocketPaths` and validate it before rendering. A large-upload route
+under `/api/` needs `/api` removed on the way to the API; `exposure.apiPaths`
+renders a separate Ingress with a Traefik `stripPrefix` Middleware for that.

@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `exposure.apiPaths` in deployment profiles and `apiPaths` in
+  `.podokit/dev.json` list static prefixes under `/api/`, such as
+  `/api/files/uploads/`, that the gateway sends straight to the API with `/api`
+  removed, so large upload bodies never pass through the web server or its
+  `BODY_SIZE_LIMIT`. The Kubernetes driver renders a second Ingress with a
+  Traefik `stripPrefix` Middleware (and `podo deploy doctor` checks the
+  Middleware CRD), the Compose driver routes them through its Caddy gateway,
+  and `podo dev` through the shared Traefik gateway. `/api/auth`, wildcards,
+  overlapping entries, and paths covering a WebSocket path are rejected; the
+  plan names the direct paths. Apps that split uploads into 2 MiB chunks to fit
+  through the web proxy can send larger parts on a direct path instead.
+
+### Fixed
+
+- `podo dev` with more than one `webSocketPaths` entry rendered a Traefik
+  `Path` matcher with several values, which Traefik v3 rejects, so none of the
+  WebSocket paths reached the API. Each path now has its own matcher.
+
 ## [1.3.0] - 2026-10-15
 
 ### Added

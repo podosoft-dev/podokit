@@ -136,3 +136,72 @@ describe("deployment profile WebSocket exposure", () => {
     );
   });
 });
+
+describe("deployment profile direct API paths", () => {
+  function withExposure(exposure: Record<string, unknown>): string {
+    const root = initializedProfile();
+    const path = profilePath(root, "production");
+    const value = JSON.parse(readFileSync(path, "utf8")) as {
+      exposure: Record<string, unknown>;
+    };
+    value.exposure = { ...value.exposure, ...exposure };
+    writeFileSync(path, JSON.stringify(value));
+    return root;
+  }
+
+  it("defaults to routing every API request through the web proxy", () => {
+    const root = initializedProfile();
+    const value = JSON.parse(readFileSync(profilePath(root, "production"), "utf8")) as {
+      exposure: Record<string, unknown>;
+    };
+
+    expect(value.exposure.apiPaths).toEqual([]);
+    expect(loadDeploymentProfile(root, "production").exposure.apiPaths).toEqual([]);
+  });
+
+  it("loads profiles written before API paths existed", () => {
+    const root = initializedProfile();
+    const path = profilePath(root, "production");
+    const value = JSON.parse(readFileSync(path, "utf8")) as {
+      exposure: Record<string, unknown>;
+    };
+    delete value.exposure.apiPaths;
+    writeFileSync(path, JSON.stringify(value));
+
+    expect(loadDeploymentProfile(root, "production").exposure.apiPaths).toEqual([]);
+  });
+
+  it("accepts static prefixes under /api/", () => {
+    const root = withExposure({ apiPaths: ["/api/files/uploads/", "/api/imports"] });
+
+    expect(loadDeploymentProfile(root, "production").exposure.apiPaths).toEqual([
+      "/api/files/uploads/",
+      "/api/imports",
+    ]);
+  });
+
+  it.each<[unknown, string]>([
+    [["/api/"], "static path prefixes under /api/"],
+    [["/api/files/*"], "static path prefixes under /api/"],
+    [["/api/auth/"], "authentication routes"],
+    [["/api/files/", "/api/files/uploads/"], "overlapping paths"],
+  ])("rejects unsafe API paths %#", (apiPaths, message) => {
+    const root = withExposure({ apiPaths });
+
+    expect(() => loadDeploymentProfile(root, "production")).toThrow(message);
+  });
+
+  it("rejects an API path that covers a WebSocket path", () => {
+    const root = withExposure({ webSocketPaths: ["/api/live/ws"], apiPaths: ["/api/live/"] });
+
+    expect(() => loadDeploymentProfile(root, "production")).toThrow("covers WebSocket path");
+  });
+
+  it("rejects API paths without an ingress gateway", () => {
+    const root = withExposure({ mode: "nodePort", apiPaths: ["/api/files/uploads/"] });
+
+    expect(() => loadDeploymentProfile(root, "production")).toThrow(
+      "exposure.apiPaths requires exposure.mode ingress",
+    );
+  });
+});
