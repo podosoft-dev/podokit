@@ -31,6 +31,7 @@ const RELAYED_RESPONSE_HEADERS = [
   "last-modified",
   "vary",
   "x-content-type-options",
+  "content-security-policy",
   "retry-after",
   "ratelimit-limit",
   "ratelimit-remaining",

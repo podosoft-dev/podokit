@@ -8,7 +8,7 @@ import { LocalObjectStore } from "@podosoft/podokit-runtime";
 import { Elysia } from "elysia";
 import type { RequestIdentity } from "../core/services";
 import { DownloadUrlSigner, SignedDownloadStore } from "./download-url";
-import { DOWNLOAD_BASE_URL, localStorageRoutes } from "./storage-local.module";
+import { DOWNLOAD_BASE_URL, downloadSafetyHeaders, localStorageRoutes } from "./storage-local.module";
 
 let root: string | undefined;
 
@@ -160,5 +160,21 @@ describe("local object storage provider", () => {
     }
     expect(existsSync(join(local.directory, "site"))).toBe(false);
     expect((await call(local, admin, "GET", "/storage/missing")).status).toBe(404);
+  });
+});
+
+describe("local download safety headers", () => {
+  it("renders only script-free types inline", () => {
+    expect(downloadSafetyHeaders("image/png")["content-disposition"]).toBe("inline");
+    expect(downloadSafetyHeaders("text/plain; charset=utf-8")["content-disposition"]).toBe("inline");
+    for (const type of ["text/html", "image/svg+xml", "application/xml", "application/javascript", undefined]) {
+      expect(downloadSafetyHeaders(type)["content-disposition"]).toBe("attachment");
+    }
+  });
+
+  it("always forbids sniffing and script execution", () => {
+    const headers = downloadSafetyHeaders("image/png");
+    expect(headers["x-content-type-options"]).toBe("nosniff");
+    expect(headers["content-security-policy"]).toBe("default-src 'none'; sandbox");
   });
 });

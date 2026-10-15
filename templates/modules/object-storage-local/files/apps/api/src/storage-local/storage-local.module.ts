@@ -59,6 +59,27 @@ async function readObject(storage: ObjectStore, key: string): Promise<ObjectData
   }
 }
 
+// Local objects are served from the app's own origin with the type the uploader
+// declared. Only render types that cannot run script; everything else downloads,
+// and the sandbox policy blocks script even if a browser renders it anyway.
+const INLINE_CONTENT_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "image/avif",
+  "text/plain",
+]);
+
+export function downloadSafetyHeaders(contentType: string | undefined): Record<string, string> {
+  const mediaType = contentType?.split(";")[0]?.trim().toLowerCase() ?? "";
+  return {
+    "x-content-type-options": "nosniff",
+    "content-security-policy": "default-src 'none'; sandbox",
+    "content-disposition": INLINE_CONTENT_TYPES.has(mediaType) ? "inline" : "attachment",
+  };
+}
+
 export function localStorageRoutes(
   storage: ObjectStore,
   signer: DownloadUrlSigner,
@@ -77,6 +98,7 @@ export function localStorageRoutes(
       const object = await readObject(storage, key);
       if (object.contentType) set.headers["content-type"] = object.contentType;
       set.headers["content-length"] = String(object.size);
+      Object.assign(set.headers, downloadSafetyHeaders(object.contentType));
       return new Response(responseBody(object));
     }, {
       query: t.Object({
