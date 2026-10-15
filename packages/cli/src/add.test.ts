@@ -861,7 +861,8 @@ describe("addModule (auth / better-auth)", () => {
     expect(hooks).toContain("event.locals.authUnavailable = false");
     expect(hooks).toContain("error.status !== 401");
     expect(hooks).toContain("event.locals.siteUnavailable = false");
-    expect(hooks).toContain("isTemporaryServiceFailure(cause)");
+    expect(hooks).toContain("Promise.allSettled");
+    expect(hooks).toContain("isTemporaryServiceFailure(siteResult.reason)");
     expect(hooks).toContain("cause.statusCode === 408 || cause.statusCode === 429 || cause.statusCode >= 500");
     expect(hooks).toContain('error(503, "Service temporarily unavailable")');
     expect(hooks.indexOf('error(503, "Service temporarily unavailable")')).toBeLessThan(
