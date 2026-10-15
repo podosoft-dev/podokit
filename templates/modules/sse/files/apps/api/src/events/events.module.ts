@@ -1,11 +1,12 @@
 import { AppException } from "@podosoft/podokit-contracts";
 import { EVENTS } from "@podosoft/podokit-runtime";
-import { Elysia, sse, t } from "elysia";
+import { Elysia, t } from "elysia";
 import {
   type AppPlugin,
   type PodokitModule,
   READINESS,
 } from "../core/services";
+import { eventStreamResponse } from "./event-stream";
 import { EventsService } from "./events.service";
 
 export const SSE_EVENTS = Symbol("sse-events") as import("../core/services").ServiceKey<EventsService>;
@@ -13,9 +14,8 @@ export const SSE_EVENTS = Symbol("sse-events") as import("../core/services").Ser
 const eventsPlugin: AppPlugin = ({ services }) => {
   const events = services.resolve(SSE_EVENTS);
   return new Elysia({ name: "podokit.events" })
-    .get("/events/stream", async function* ({ request }) {
-      for await (const data of events.stream(request.signal)) yield sse({ data });
-    }, {
+    .get("/events/stream", ({ request }) =>
+      eventStreamResponse(events.open(request.signal), events.retryMs), {
       detail: { tags: ["events"], summary: "Stream server-sent events" },
     })
     .post("/events", async ({ body, set }) => {

@@ -1,17 +1,47 @@
-import { ReadinessService } from "../health/readiness.service";
 import type { EventBus, Unsubscribe } from "@podosoft/podokit-runtime";
+import { ReadinessService } from "../health/readiness.service";
+import {
+  EventStream,
+  timerScheduler,
+  type EventStreamOptions,
+  type Scheduler,
+} from "./event-stream";
 
 type LocalHandler = (data: unknown) => void;
 
+export interface EventsServiceOptions {
+  /** Events buffered for one slow client before it is told to resync. */
+  queueLimit?: number;
+  heartbeatMs?: number;
+  /** Reconnect delay the stream advertises to EventSource clients. */
+  retryMs?: number;
+  scheduler?: Scheduler;
+}
+
 export class EventsService {
+  readonly retryMs: number;
+  private readonly streamOptions: EventStreamOptions;
   private readonly handlers = new Set<LocalHandler>();
+  private readonly streams = new Set<EventStream>();
   private unregisterReadiness?: () => void;
   private unsubscribe?: Unsubscribe;
 
   constructor(
     private readonly transport: EventBus,
     private readonly readiness: ReadinessService,
-  ) {}
+    options: EventsServiceOptions = {},
+  ) {
+    this.retryMs = options.retryMs ?? 3_000;
+    this.streamOptions = {
+      queueLimit: options.queueLimit ?? 256,
+      heartbeatMs: options.heartbeatMs ?? 5_000,
+      scheduler: options.scheduler ?? timerScheduler,
+    };
+  }
+
+  get streamCount(): number {
+    return this.streams.size;
+  }
 
   async connect(): Promise<void> {
     this.unsubscribe = await this.transport.subscribe("sse", (data) => this.publishLocal(data));
@@ -31,6 +61,9 @@ export class EventsService {
 
   publishLocal(data: unknown): void {
     for (const handler of this.handlers) handler(data);
+    if (this.streams.size === 0) return;
+    const payload = JSON.stringify(data) ?? "null";
+    for (const stream of this.streams) stream.offer(payload, undefined);
   }
 
   subscribe(handler: LocalHandler): () => void {
@@ -38,36 +71,17 @@ export class EventsService {
     return () => this.handlers.delete(handler);
   }
 
-  async *stream(signal: AbortSignal): AsyncGenerator<unknown> {
-    const queue: unknown[] = [];
-    let wake: (() => void) | undefined;
-    const unsubscribe = this.subscribe((data) => {
-      queue.push(data);
-      wake?.();
-      wake = undefined;
-    });
-    let heartbeat = 0;
-    try {
-      while (!signal.aborted) {
-        if (queue.length === 0) {
-          const delivered = await Promise.race([
-            new Promise<"event">((resolve) => {
-              wake = () => resolve("event");
-            }),
-            Bun.sleep(5_000).then(() => "heartbeat" as const),
-          ]);
-          if (delivered === "heartbeat") yield { type: "heartbeat", n: heartbeat++ };
-        }
-        while (queue.length > 0) yield queue.shift();
-      }
-    } finally {
-      unsubscribe();
-    }
+  open(signal: AbortSignal): EventStream {
+    const stream = new EventStream(this.streamOptions, (closed) => this.streams.delete(closed));
+    this.streams.add(stream);
+    stream.start(signal);
+    return stream;
   }
 
   async close(): Promise<void> {
     this.unregisterReadiness?.();
     await this.unsubscribe?.();
     this.handlers.clear();
+    for (const stream of [...this.streams]) stream.close();
   }
 }

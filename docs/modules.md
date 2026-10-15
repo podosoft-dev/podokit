@@ -483,9 +483,9 @@ application already records.
 
 ### `sse`
 
-Server-Sent Events for real-time updates: a `/events/stream` endpoint (heartbeat
-plus published messages) and a `POST /events` publisher. `EventsService` is
-global, so any module (for example a queue processor) can broadcast updates.
+Server-Sent Events for real-time updates: a `/events/stream` endpoint and a
+`POST /events` publisher. `EventsService` is global, so any module (for example a
+queue processor) can broadcast updates.
 
 ```bash
 npx @podosoft/podokit add sse
@@ -502,6 +502,14 @@ to one API process. `events-redis` uses the shared `REDIS_URL` or individual Red
 settings, creates dedicated publish/subscribe connections, and delivers across
 API replicas. A Redis-configured application fails readiness instead of silently
 falling back to process-local delivery.
+
+The stream starts with a `retry:` hint. Every five seconds it sends a
+`: heartbeat` comment, which keeps proxies and Bun's idle timeout from closing a
+quiet stream and never reaches `EventSource.onmessage`. Each connection buffers
+at most 256 events. A client that falls further behind loses the backlog and
+receives one named `resync` event, which tells it to reload its state. A
+connection uses one heartbeat timer, and a client disconnect releases its
+subscription and timer at once.
 
 ### `events-memory` and `events-redis`
 
