@@ -1058,16 +1058,28 @@ Direct login and admin-sidebar logout fall back to `/`.
 Both admin lists page on the server, so their cost does not grow with the number
 of accounts.
 
-- **Users** read one page at a time from Better Auth `admin.listUsers`
-  (`limit`/`offset`, `sortBy`/`sortDirection`, and a `contains` search on email
-  or name). Searches by email are lower-cased because Better Auth stores emails in
-  lower case; searches by name are case-sensitive on PostgreSQL. The endpoint
-  accepts one filter, so the Role and Status filters are mutually exclusive:
-  choosing one resets the other. Status offers *Pending approval* and *Banned*.
-  Every page, sort, or search is one `/api/auth/admin/list-users` request. The
-  `rate-limit` module counts admin reads (`GET /api/auth/admin/*`) against the
-  general budget; admin writes and other authentication routes keep the stricter
-  authentication budget.
+- **Users** come from `GET /admin/users`, an admin-only endpoint that applies
+  every filter in one query:
+
+  ```text
+  GET /admin/users?limit=15&offset=0&sortBy=createdAt&sortDirection=desc
+                  &search=ada&searchField=email&role=admin&status=active
+  -> { "items": [{ "id", "name", "email", "role", "emailVerified",
+                   "signupApproved", "banned", "banReason", "banExpires",
+                   "createdAt" }],
+       "total": 42 }
+  ```
+
+  `limit` defaults to 15 (at most 100) and `offset` pages through the result.
+  `sortBy` is `createdAt` (default, newest first), `name`, `email`, or `role`,
+  with the id as a tiebreaker. `search` matches `searchField` (`email` by
+  default, or `name`) case-insensitively. `role` matches one role of a user's
+  comma-separated role list. `status` is `active` (approved and not banned),
+  `pending` (awaiting sign-up approval), or `banned`. The Role and Status filters
+  combine. Better Auth `listUsers` accepts only one filter, which is why the list
+  no longer uses it. Creating, updating, banning, removing, and impersonating
+  users still go through the Better Auth admin endpoints, so its permission
+  checks and the audit hooks apply.
 - **Sessions** come from `GET /admin/sessions`, an admin-only endpoint that
   joins sessions to their users and returns only active sessions, newest first:
 
@@ -1087,14 +1099,24 @@ of accounts.
   `DELETE /admin/sessions/{id}` looks up the token on the server and revokes it
   through Better Auth `revokeUserSession`, so the admin permission check and the
   audit hook (`user.session_revoke`) still apply. It returns `204`, or
-  `404 ADMIN_SESSION_NOT_FOUND`. Both endpoints use the general request budget.
+  `404 ADMIN_SESSION_NOT_FOUND`.
   The manage dialog on `/admin/users` uses the same endpoint with `userId`.
+
+Every page, sort, or search of either list is one request to an `/admin/*`
+endpoint, and the `rate-limit` module counts those against the general budget.
+It also counts Better Auth admin reads (`GET /api/auth/admin/*`, which the
+dashboard overview and the organizations page use) against the general budget;
+admin writes and other authentication routes keep the stricter authentication
+budget.
 
 The `+page.svelte` files of `/admin/users` and `/admin/sessions` are
 application-owned, so `podo update` does not replace them in an existing app.
 Their logic lives in the managed `#lib/admin/users.ts` and
 `#lib/admin/sessions.ts`; compare your pages with the template to adopt server
-paging.
+paging. A users page from 1.2 keeps working: it still calls Better Auth
+`listUsers` through the deprecated `listUsersQuery` and `keepLatestFilter`
+helpers. Switch it to `adminUsersQuery` and `listAdminUsers` to combine the
+filters and get the *Active* status.
 
 #### Profile images
 
