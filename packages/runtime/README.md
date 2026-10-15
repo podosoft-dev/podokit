@@ -36,10 +36,12 @@ object's metadata and a `ReadableStream` body:
 | `etag` | An HTTP entity tag, quotes included, that changes with the content |
 | `lastModified` | When the content was last written |
 
-Read the body to the end or cancel it. A provider may open it on the first read,
-as `LocalObjectStore` does, or have the download under way when `get()`
-resolves, so an abandoned body can hold a file handle or connection.
-`stat(key)` returns the metadata alone, without reading the content.
+Read the body to the end or cancel it. A provider may open it on the first read
+or have the download under way when `get()` resolves, so an abandoned body can
+hold a file handle or connection. `LocalObjectStore` reads objects up to
+`IN_MEMORY_READ_BYTES` (2 MiB) whole before `get()` resolves and opens larger
+ones on the first read. `stat(key)` returns the metadata alone, without reading
+the content.
 
 `objectResponse()` turns an object into an HTTP response without buffering it.
 It sets `content-type`, `content-length`, `etag`, and `last-modified`, and it
@@ -47,9 +49,10 @@ answers a matching `If-None-Match` (or, without one, `If-Modified-Since`) with
 `304` and cancels the body unread. Bun keeps the `content-length` only for a
 body held in memory or read from a file, such as `new Blob([bytes]).stream()` or
 `Bun.file().stream()`. It sends any other `ReadableStream`, including a `fetch()`
-response body and the file stream of `LocalObjectStore`, with
-`Transfer-Encoding: chunked` and drops the length, except sometimes for a few
-KiB or less ([oven-sh/bun#10507](https://github.com/oven-sh/bun/issues/10507)):
+response body and the stream of a `LocalObjectStore` object larger than
+`IN_MEMORY_READ_BYTES`, with `Transfer-Encoding: chunked` and drops the length,
+except sometimes for a few KiB or less
+([oven-sh/bun#10507](https://github.com/oven-sh/bun/issues/10507)):
 
 ```ts
 import { objectResponse } from "@podosoft/podokit-runtime";

@@ -1,11 +1,16 @@
 import { afterAll, describe, expect, it, spyOn } from "bun:test";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { MIN_MULTIPART_PART_BYTES, MultipartUploadError, objectResponse } from "@podosoft/podokit-runtime";
+import {
+  IN_MEMORY_READ_BYTES,
+  MIN_MULTIPART_PART_BYTES,
+  MultipartUploadError,
+  objectResponse,
+} from "@podosoft/podokit-runtime";
 import { ReadinessService } from "../health/readiness.service";
 import { S3ObjectStore } from "./s3-object.store";
 import { EMPTY_PAYLOAD_HASH, signS3Request } from "./s3-signer";
 import { storageSettings } from "./storage.config";
-import { IN_MEMORY_READ_BYTES, STREAM_PART_BYTES, StorageService } from "./storage.service";
+import { STREAM_PART_BYTES, StorageService } from "./storage.service";
 
 async function* chunks(content: Uint8Array, size = 256 * 1024): AsyncGenerator<Uint8Array> {
   for (let offset = 0; offset < content.byteLength; offset += size) yield content.subarray(offset, offset + size);

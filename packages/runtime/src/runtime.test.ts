@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   assertPartNumber,
   DATABASE,
+  IN_MEMORY_READ_BYTES,
   LOCAL_PROVIDER_SELECTIONS,
   LocalObjectStore,
   MAX_MULTIPART_PARTS,
@@ -218,10 +219,25 @@ describe("LocalObjectStore", () => {
     expect(second?.etag).not.toBe(first.etag);
   });
 
+  it("reads an object up to IN_MEMORY_READ_BYTES whole before get() resolves", async () => {
+    const root = await temporaryDirectory();
+    const store = new LocalObjectStore({ rootDirectory: root });
+    for (const size of [0, 100 * 1024, IN_MEMORY_READ_BYTES]) {
+      const content = Buffer.alloc(size, 5);
+      await store.put("whole.bin", content);
+      const object = await store.get("whole.bin");
+      if (!object) throw new Error("expected the stored object");
+      expect(object.size).toBe(size);
+      // The content was read already, so a later write cannot reach this body.
+      await store.put("whole.bin", "replaced");
+      expect(Buffer.from(await new Response(object.body).arrayBuffer()).equals(content)).toBe(true);
+    }
+  });
+
   it("streams in bounded chunks and refuses a file replaced after the read began", async () => {
     const root = await temporaryDirectory();
     const store = new LocalObjectStore({ rootDirectory: root });
-    const content = Buffer.alloc(200 * 1024, 7);
+    const content = Buffer.alloc(IN_MEMORY_READ_BYTES + 200 * 1024, 7);
     await store.put("large.bin", content);
     const object = await store.get("large.bin");
     if (!object) throw new Error("expected the stored object");

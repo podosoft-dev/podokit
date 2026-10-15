@@ -1,12 +1,12 @@
 import { expect } from "@playwright/test";
-import { PROVIDERS } from "../../apps/api/src/config/providers";
 
-// Bun sends the local storage provider's file streams chunked, without a
-// Content-Length; the S3 provider and the web proxy keep the length of objects
-// up to 2 MiB. A response without a length passes only with the local provider.
+// IN_MEMORY_READ_BYTES of @podosoft/podokit-runtime. Both object storage
+// providers and the web proxy keep the Content-Length of objects up to this
+// size; Bun may send larger ones chunked.
+const IN_MEMORY_READ_BYTES = 2 * 1024 * 1024;
+
 export function expectObjectLength(headers: Record<string, string>, size: number): void {
-  const provider: string = PROVIDERS["object-storage"];
   const length = headers["content-length"];
-  if (length === undefined && provider === "local") return;
+  if (length === undefined && size > IN_MEMORY_READ_BYTES) return;
   expect(length).toBe(String(size));
 }

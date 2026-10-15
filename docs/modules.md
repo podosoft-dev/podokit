@@ -420,8 +420,9 @@ selected by the `STORAGE_PROVIDER` env var (`minio` or `aws`). Local development
 uses a pinned [Silo](https://github.com/pgsty/silo) image. Provides a `StorageService`
 (put, buffered `get`, streamed `open`, `stat`, paged `list`, delete, and presigned URLs) and demo
 `/storage` endpoints. `open(key)` sends one GET and takes the object's metadata
-from its response, reading objects up to 2 MiB into memory so responses built
-from them keep their `content-length`; larger objects stream, chunked. Read or
+from its response, reading objects up to 2 MiB (`IN_MEMORY_READ_BYTES`) into
+memory so responses built from them keep their `content-length`; larger objects
+stream, chunked. Read or
 cancel the body it returns. Prefer it to `get` for anything that can be large.
 The Compose service and file keep their `minio` names for existing endpoints.
 
@@ -502,12 +503,13 @@ The module serves the same administrator-only demo routes as `object-storage-s3`
 (`PUT /storage/:key`, `GET /storage/:key`, `GET /storage/:key/presigned`),
 confined to `demo/`.
 
-Downloads and demo reads stream the file from disk in 64 KiB chunks. Each
-response carries `etag` and `last-modified`, and a matching `If-None-Match`
-receives `304` without reading the file. The chunks come from a JavaScript
-`ReadableStream`, which Bun sends with `Transfer-Encoding: chunked`, dropping
-the `Content-Length` that `objectResponse` sets; only very small objects
-sometimes keep it.
+Downloads and demo reads carry `etag` and `last-modified`, and a matching
+`If-None-Match` receives `304`. Objects up to 2 MiB (`IN_MEMORY_READ_BYTES` from
+`@podosoft/podokit-runtime`) are read whole before the response is built, so it
+carries `content-length`. Larger objects stream from disk in 64 KiB chunks
+through a JavaScript `ReadableStream`, which Bun sends with
+`Transfer-Encoding: chunked` and without the length; a `304` for them opens no
+file.
 
 Streamed `put` bodies are written to a temporary file and renamed into place.
 Multipart uploads keep their parts under
@@ -1437,10 +1439,9 @@ The module stores image objects through the selected object-storage provider and
 the resulting versioned path in better-auth's `user.image`. The bucket stays
 private; `GET /api/profile-images/:fileName` streams the UUID path from storage
 with `etag`, `last-modified`, and immutable cache headers, and answers a
-matching `If-None-Match` with `304` without reading the object. With the S3
-provider the response carries `content-length`, because the store and the web
-proxy read images of at most 2 MiB into memory first; the local provider's
-responses are chunked, without it (see `object-storage-local`). A
+matching `If-None-Match` with `304`. The response carries `content-length`,
+because both storage providers and the web proxy read images of at most 2 MiB
+into memory first. A
 missing image returns 404; a storage failure is reported as a server error rather
 than a missing image. Replacing, removing, or self-deleting the account removes
 managed objects on a best-effort basis. Existing external/social avatar URLs are

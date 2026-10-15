@@ -219,7 +219,7 @@ bucket; its `stat()` uses a HEAD request, whose 404 cannot tell the two apart.
 The S3 provider sends one presigned GET from `get()` and takes the metadata from
 its response headers, so the metadata always describes the content that follows
 and a missing key resolves `null` before a response has started. Objects up to
-2 MiB (`IN_MEMORY_READ_BYTES` in `storage.service.ts`) are read into memory
+2 MiB (`IN_MEMORY_READ_BYTES` from the runtime package) are read into memory
 before `get()` resolves, so `objectResponse` keeps their `content-length`.
 Larger objects stream from the GET's body, paced by the reader, because Bun's
 `S3File.stream()` reads ahead without backpressure and would hold the rest of the
@@ -229,10 +229,14 @@ overwrites of that key meanwhile: Silo waited about 30 seconds and then dropped
 the GET. An overwrite during a read never switches the stream to the new content;
 at worst the stream fails.
 
-The local provider opens the file on the first read and streams it in 64 KiB
-chunks, so its responses are chunked too. It derives the entity tag from the
-file's inode, size, and modification time, and fails the stream rather than send
-a file that was replaced after its metadata was read.
+The local provider derives the entity tag from the file's inode, size, and
+modification time, and opens files with `O_NOFOLLOW`, checking that the path
+still holds the described file. It reads objects up to `IN_MEMORY_READ_BYTES`
+whole before `get()` resolves, describing the object again if the file was
+replaced meanwhile, so their responses keep `content-length` too. Larger objects
+open on the first read and stream in 64 KiB chunks, chunked on the wire; such a
+stream fails rather than send a file that was replaced after its metadata was
+read.
 
 Serve objects with `objectResponse(request, object, options)` from the runtime
 package. It sets `content-type`, `content-length`, `etag`, and `last-modified`,
@@ -240,8 +244,8 @@ answers a matching `If-None-Match` with `304` without reading the content, and
 accepts a `cacheControl` value and extra headers. Bun keeps that
 `content-length` only for a body held in memory or read from a file, such as
 `new Blob([bytes]).stream()` or `Bun.file().stream()`. It sends any other
-`ReadableStream`, including a `fetch()` response body and the local provider's
-file stream, with `Transfer-Encoding: chunked` and drops the length, except
+`ReadableStream`, including a `fetch()` response body and the stream of a large
+local object, with `Transfer-Encoding: chunked` and drops the length, except
 sometimes for a few KiB or less
 ([oven-sh/bun#10507](https://github.com/oven-sh/bun/issues/10507)). Use
 `readObjectBytes(store, key, { maxBytes })` only for small objects you must hold

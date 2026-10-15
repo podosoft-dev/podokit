@@ -209,11 +209,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   read or cancelled. A missing bucket now throws instead of being reported as a
   missing object.
 
-- The object storage documentation no longer says that local storage responses
-  carry `Content-Length`. `LocalObjectStore` streams files through a JavaScript
-  `ReadableStream`, which Bun sends with `Transfer-Encoding: chunked`, dropping
-  the length that `objectResponse` sets; only very small objects sometimes keep
-  it.
+- Objects served from the local storage provider lost their `Content-Length`
+  for the same reason: `LocalObjectStore` streamed every file through a
+  JavaScript `ReadableStream`. `get()` now reads objects up to 2 MiB whole, with
+  the same checks that the path still holds the described file, before it
+  resolves, and returns them as an in-memory body; a file replaced during that
+  read is described again. Larger objects still stream in 64 KiB chunks from the
+  first read and go out chunked. The runtime exports the 2 MiB limit as
+  `IN_MEMORY_READ_BYTES`, which the S3 provider uses too.
 
 - Requests that enqueue a BullMQ job no longer hang while Redis is down. The
   API's queues shared the workers' connection settings, whose

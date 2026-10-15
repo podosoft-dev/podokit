@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AppException } from "@podosoft/podokit-contracts";
-import { LocalObjectStore } from "@podosoft/podokit-runtime";
+import { IN_MEMORY_READ_BYTES, LocalObjectStore } from "@podosoft/podokit-runtime";
 import { Elysia } from "elysia";
 import type { RequestIdentity } from "../core/services";
 import { DownloadUrlSigner, SignedDownloadStore } from "./download-url";
@@ -56,15 +57,12 @@ interface Reply {
   headers: Headers;
 }
 
-async function call(
-  { storage, signer }: Fixture,
-  identity: RequestIdentity,
-  method: "GET" | "PUT",
-  path: string,
-  content?: string,
-  headers: Record<string, string> = {},
-): Promise<Reply> {
-  const app = new Elysia()
+interface Handler {
+  handle(request: Request): Promise<Response>;
+}
+
+function routes({ storage, signer }: Fixture, identity: RequestIdentity): Handler {
+  return new Elysia()
     .onError(({ code, error, set }) => {
       if (error instanceof AppException) {
         set.status = error.statusCode;
@@ -81,7 +79,17 @@ async function call(
       return undefined;
     })
     .use(localStorageRoutes(storage, signer, identity));
-  const response = await app.handle(new Request(`http://localhost${path}`, {
+}
+
+async function call(
+  local: Fixture,
+  identity: RequestIdentity,
+  method: "GET" | "PUT",
+  path: string,
+  content?: string,
+  headers: Record<string, string> = {},
+): Promise<Reply> {
+  const response = await routes(local, identity).handle(new Request(`http://localhost${path}`, {
     method,
     headers: { ...(content === undefined ? {} : { "content-type": "application/json" }), ...headers },
     ...(content === undefined ? {} : { body: JSON.stringify({ content }) }),
@@ -136,6 +144,31 @@ describe("local object storage provider", () => {
     const missing = await call(local, anonymous, "GET", signed);
     expect(missing.status).toBe(404);
     expect(code(missing)).toBe("STORAGE_OBJECT_NOT_FOUND");
+  });
+
+  it("serves objects through Bun with the Content-Length of those read into memory", async () => {
+    const local = await fixture();
+    const app = routes(local, caller(undefined));
+    const server = Bun.serve({ port: 0, fetch: (request) => app.handle(request) });
+    try {
+      for (const size of [68, 100 * 1024, IN_MEMORY_READ_BYTES, IN_MEMORY_READ_BYTES + 1]) {
+        const content = randomBytes(size);
+        const key = `uploads/served-${size}.bin`;
+        await local.storage.put(key, content, { contentType: "image/png" });
+        const response = await fetch(new URL(await local.storage.getDownloadUrl(key), server.url));
+        expect(response.status).toBe(200);
+        if (size <= IN_MEMORY_READ_BYTES) {
+          expect(response.headers.get("content-length")).toBe(String(size));
+          expect(response.headers.get("transfer-encoding")).toBeNull();
+        } else {
+          // Streamed from the file, which Bun may send chunked; a length must still be right.
+          expect(response.headers.get("content-length") ?? String(size)).toBe(String(size));
+        }
+        expect(Buffer.from(await response.arrayBuffer()).equals(content)).toBe(true);
+      }
+    } finally {
+      server.stop(true);
+    }
   });
 
   it("limits the demo routes to administrators", async () => {

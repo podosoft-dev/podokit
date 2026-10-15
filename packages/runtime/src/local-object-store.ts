@@ -31,6 +31,7 @@ import type {
 } from "./contracts";
 import {
   assertPartNumber,
+  IN_MEMORY_READ_BYTES,
   MIN_MULTIPART_PART_BYTES,
   MultipartUploadError,
   normalizeCompletedParts,
@@ -163,6 +164,32 @@ function fileBody(path: string, expected: Stats): ReadableStream<Uint8Array> {
   }, { highWaterMark: 0 });
 }
 
+/**
+ * Reads a whole file with the guards of `fileBody`, or resolves null when the
+ * path no longer holds the file that was described.
+ */
+async function readWholeFile(path: string, expected: Stats): Promise<Uint8Array | null> {
+  let handle: FileHandle;
+  try {
+    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch (error) {
+    if (isMissing(error) || errorCode(error) === "ELOOP") return null;
+    throw error;
+  }
+  try {
+    if (!sameFile(await handle.stat(), expected)) return null;
+    const bytes = new Uint8Array(expected.size);
+    for (let filled = 0; filled < bytes.byteLength;) {
+      const { bytesRead } = await handle.read(bytes, filled, bytes.byteLength - filled, filled);
+      if (bytesRead === 0) return null;
+      filled += bytesRead;
+    }
+    return sameFile(await handle.stat(), expected) ? bytes : null;
+  } finally {
+    await handle.close();
+  }
+}
+
 function encodeCursor(key: string): string {
   return Buffer.from(key, "utf8").toString("base64url");
 }
@@ -234,10 +261,23 @@ export class LocalObjectStore implements ObjectStore {
     return { key: normalized, size, ...options };
   }
 
+  /**
+   * Objects up to `IN_MEMORY_READ_BYTES` are read before this resolves, so a
+   * response built from them keeps its Content-Length; a file replaced during
+   * that read is described again. Larger objects stream from the file on the
+   * first read, and fail the stream if it is replaced.
+   */
   async get(key: string): Promise<ObjectData | null> {
-    const found = await this.find(key);
-    if (!found) return null;
-    return { ...found.info, body: fileBody(found.path, found.details) };
+    for (let attempt = 1; ; attempt++) {
+      const found = await this.find(key);
+      if (!found) return null;
+      if (found.details.size > IN_MEMORY_READ_BYTES) {
+        return { ...found.info, body: fileBody(found.path, found.details) };
+      }
+      const bytes = await readWholeFile(found.path, found.details);
+      if (bytes) return { ...found.info, body: new Blob([bytes]).stream() };
+      if (attempt === 3) throw new Error(`Object ${found.info.key} changed while it was being read`);
+    }
   }
 
   async stat(key: string): Promise<ObjectInfo | null> {

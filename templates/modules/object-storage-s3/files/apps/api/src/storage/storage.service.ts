@@ -1,5 +1,6 @@
 import { S3Client, type S3Stats } from "bun";
 import {
+  IN_MEMORY_READ_BYTES,
   objectBodyChunks,
   objectListLimit,
   type CompletedPart,
@@ -18,13 +19,6 @@ import { storageSettings, type StorageSettings } from "./storage.config";
 export const STREAM_PART_BYTES = 8 * 1024 * 1024;
 /** Parts of one streamed write that may be in flight at once. */
 const STREAM_QUEUE_SIZE = 2;
-/**
- * Objects up to this size are read into memory by `open()`. Bun sends any
- * streamed response body with chunked encoding and drops its Content-Length
- * unless the body is in memory or a file, so this keeps the length of images
- * and other small objects.
- */
-export const IN_MEMORY_READ_BYTES = 2 * 1024 * 1024;
 
 function isMissingObject(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "NoSuchKey";
@@ -229,10 +223,11 @@ export class StorageService {
    * Metadata plus a streamed body, or null when the key does not exist. One
    * GET describes and streams the same version, so the metadata always matches
    * the content. Objects up to `IN_MEMORY_READ_BYTES` are read before this
-   * resolves. Larger ones stream from the GET, paced by the socket; Bun's
-   * `S3File.stream()` reads ahead without backpressure and would hold the rest
-   * of the object for a slow client. That download is already open, so read the
-   * body to the end or cancel it.
+   * resolves, so a response built from them keeps its Content-Length. Larger
+   * ones stream from the GET, paced by the socket; Bun's `S3File.stream()` reads
+   * ahead without backpressure and would hold the rest of the object for a slow
+   * client. That download is already open, so read the body to the end or
+   * cancel it.
    */
   async open(key: string): Promise<ObjectData | null> {
     const response = await fetch(this.client.presign(key, { expiresIn: 60 }), { decompress: false });

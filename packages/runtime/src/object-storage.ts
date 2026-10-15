@@ -13,6 +13,14 @@ export const DEFAULT_MAX_OBJECT_BYTES = 16 * 1024 * 1024;
 export const MIN_MULTIPART_PART_BYTES = 5 * 1024 * 1024;
 /** The most parts one multipart upload may have. */
 export const MAX_MULTIPART_PARTS = 10_000;
+/**
+ * PodoKit's providers read objects up to this size into memory in `get()`. Bun
+ * sends a streamed response body with chunked encoding and drops its
+ * Content-Length unless the body is in memory or a file
+ * (https://github.com/oven-sh/bun/issues/10507), so `objectResponse` keeps the
+ * length of these objects only.
+ */
+export const IN_MEMORY_READ_BYTES = 2 * 1024 * 1024;
 
 export type MultipartUploadErrorCode =
   /** The upload id is unknown, belongs to another key, or was completed, aborted, or expired. */
