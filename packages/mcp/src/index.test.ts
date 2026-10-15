@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -119,6 +119,42 @@ describe("podokit-mcp server", () => {
     })) as TextResult;
     expect(listed.content[0].text).toContain("context=production");
     expect(listed.content[0].text).toContain("namespace=app");
+  });
+
+  it("reports the direct API paths a module adds and an update still owes", async () => {
+    const target = mkdtempSync(join(tmpdir(), "mcp-api-paths-")) + "/app";
+    tmpDirs.push(target);
+    await client.callTool({
+      name: "create_project",
+      arguments: { name: "app", template: "fullstack", targetDir: target },
+    });
+    const added = (await client.callTool({
+      name: "add_module",
+      arguments: { module: "file-upload", projectDir: target },
+    })) as TextResult;
+    expect(added.isError ?? false).toBe(false);
+    expect(added.content[0].text).toContain("Direct API paths:");
+    expect(added.content[0].text).toContain("+ /api/files/uploads/  .podokit/dev.json  (file-upload)");
+
+    // Forget that the path was applied and remove it, as an app created before the
+    // module declared it would look.
+    const manifestPath = join(target, ".podokit", "manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+      modules: Array<{ name: string; appliedApiPaths?: string[] }>;
+    };
+    for (const module of manifest.modules) delete module.appliedApiPaths;
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    const devPath = join(target, ".podokit", "dev.json");
+    const dev = JSON.parse(readFileSync(devPath, "utf8")) as { apiPaths: string[] };
+    writeFileSync(devPath, `${JSON.stringify({ ...dev, apiPaths: [] }, null, 2)}\n`);
+
+    const preview = (await client.callTool({
+      name: "preview_update",
+      arguments: { projectDir: target },
+    })) as TextResult;
+    expect(preview.isError ?? false).toBe(false);
+    expect(preview.content[0].text).toContain("Direct API paths to add:");
+    expect(preview.content[0].text).toContain("/api/files/uploads/");
   });
 
   it("list_modules returns the available modules", async () => {

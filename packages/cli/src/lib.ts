@@ -29,6 +29,7 @@ export type {
   ApiPathSkip,
   ModuleApiPath,
 } from "./module-api-paths";
+export { describeApiPaths } from "./module-api-paths";
 export { status, diff, doctor, SUPPORTED_FRAMEWORKS } from "./inspect";
 export type { StatusReport, DoctorFinding } from "./inspect";
 export { addedModuleReason, planUpdate, summarize } from "./update";

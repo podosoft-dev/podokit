@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- The MCP server's `add_module` tool lists the direct API paths it merged into
+  `.podokit/dev.json` and the deployment profiles, and `preview_update` lists the
+  ones an update would add, with the reason for any it would skip.
+
 - `exposure.apiPaths` in deployment profiles and `apiPaths` in
   `.podokit/dev.json` list static prefixes under `/api/`, such as
   `/api/files/uploads/`, that the gateway sends straight to the API with `/api`
