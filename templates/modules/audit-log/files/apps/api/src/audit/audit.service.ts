@@ -1,6 +1,5 @@
 import type { SQL } from "bun";
 import type { AuthSession } from "../auth/auth.service";
-import { auditEnabled } from "./audit-enabled";
 import { setAuditRecorder, type AuditEntry } from "./audit-events";
 
 export interface AuditLogView extends AuditEntry {
@@ -20,10 +19,18 @@ export interface AuditTarget {
   metadata?: Record<string, unknown>;
 }
 
+export interface AuditServiceOptions {
+  /** The admin on/off toggle. `record()` reads it before every write. */
+  enabled: () => Promise<boolean>;
+}
+
 export class AuditService {
   private unregister?: () => void;
+  private readonly enabled: () => Promise<boolean>;
 
-  constructor(private readonly sql: SQL) {}
+  constructor(private readonly sql: SQL, options: AuditServiceOptions) {
+    this.enabled = options.enabled;
+  }
 
   connect(): void {
     this.unregister ??= setAuditRecorder((entry) => this.record(entry));
@@ -36,6 +43,7 @@ export class AuditService {
 
   async record(entry: AuditEntry): Promise<void> {
     try {
+      if (!(await this.enabled())) return;
       const metadata = entry.metadata === undefined || entry.metadata === null
         ? null
         : JSON.stringify(entry.metadata);
@@ -80,7 +88,6 @@ export class AuditService {
     session: AuthSession,
     target: AuditTarget = {},
   ): Promise<void> {
-    if (!(await auditEnabled())) return;
     await this.record({
       action,
       actorId: session.user.id,

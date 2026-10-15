@@ -597,12 +597,19 @@ request, and module logs use the same pino instance.
 
 ### `audit-log`
 
-Audit logging built on `auth` (added automatically). A **global Elysia hook**
-records every mutating request (POST/PUT/PATCH/DELETE) to an `audit_logs` table
-with the **acting user**, method, path, and status. Read recent entries at
-`/audit-logs`. On/off is an **admin toggle on the Settings page** (stored in the
-DB, applied live — no restart); `AUDIT_LOG_ENABLED` is only the fallback default
-until an admin sets it (leave it `true` so the trail is on out of the box).
+Audit logging built on `auth` (added automatically). Entries follow an
+actor / action / target model and are stored in the `audit_logs` table. A Better
+Auth hook records sign-in, sign-up, password, session, two-factor, and admin user
+actions (`auth.login`, `user.ban`, `user.role_change`, ...). Nothing else is
+recorded automatically: application code records its own semantic events with
+`AuditService.recordRequest()` or `recordAudit()`. Admins read entries at
+`/audit-logs`.
+
+On/off is an **admin toggle on the Settings page** (stored in the DB, applied
+live — no restart); `AUDIT_LOG_ENABLED` is only the fallback default until an
+admin sets it (leave it `true` so the trail is on out of the box). Every write
+path checks the toggle in `AuditService.record()`, so turning it off stops Better
+Auth entries and application entries alike.
 
 ```bash
 npx @podosoft/podokit add audit-log   # also adds auth
@@ -611,11 +618,10 @@ docker compose -f infra/docker/docker-compose.yml up -d
 bun run --cwd apps/api migrate:all   # creates auth and audit tables
 bun run dev
 
-# sign in, make a change, then see who did it
-curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-up/email \
-  -H 'content-type: application/json' -d '{"email":"a@example.com","password":"password123","name":"A"}'
-curl -b cookies.txt -XPOST localhost:5002/todos -H 'content-type: application/json' -d '{"title":"hi"}'
-curl -b cookies.txt localhost:5002/audit-logs   # [{ userId, method:"POST", path:"/todos", statusCode:201, ... }]
+# sign in as an admin (ADMIN_EMAILS), then read the trail
+curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-in/email \
+  -H 'content-type: application/json' -d '{"email":"admin@example.com","password":"<password>"}'
+curl -b cookies.txt localhost:5002/audit-logs   # [{ action:"auth.login", actorEmail:"admin@example.com", ... }]
 ```
 
 ### `rate-limit`

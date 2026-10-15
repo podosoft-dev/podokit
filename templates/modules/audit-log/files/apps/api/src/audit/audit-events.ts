@@ -28,7 +28,7 @@ export function setAuditRecorder(fn: Recorder): () => void {
 }
 
 // Record a custom audit event from anywhere. Awaits the write; a no-op until the
-// AuditService has started. Example:
+// AuditService has started or while the admin toggle is off. Example:
 //   await recordAudit({ action: "invoice.paid", actorId, targetLabel: invoice.number,
 //                       metadata: { amount } });
 export async function recordAudit(entry: AuditEntry): Promise<void> {

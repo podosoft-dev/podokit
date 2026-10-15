@@ -80,8 +80,9 @@ test("audit logging honours the DB on/off toggle @smoke", async ({ playwright, d
   };
 
   try {
-    // OFF → the action is not recorded. Wait past the config-store cache TTL so the
-    // audit gate sees the new value (its cache is independent of the capabilities one).
+    // OFF → the action is not recorded. The write refreshes this process's config
+    // store, but other API replicas keep their snapshot for the store's cache TTL,
+    // so wait it out before relying on the new value.
     await admin.put("/api/account/auth-config", { data: { server: { auditLog: false } } });
     await expect.poll(auditLog, { timeout: 8000 }).toBe(false);
     await new Promise((r) => setTimeout(r, 4000));

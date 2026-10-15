@@ -6,6 +6,7 @@ import {
   type PodokitModule,
   type ServiceKey,
 } from "../core/services";
+import { auditEnabled } from "./audit-enabled";
 import { AuditService } from "./audit.service";
 
 export const AUDIT = Symbol("audit") as ServiceKey<AuditService>;
@@ -25,7 +26,7 @@ const auditPlugin: AppPlugin = ({ services }) => {
 export const auditModule: PodokitModule = {
   name: "audit-log",
   configure: (_env, services): void => {
-    const audit = new AuditService(services.resolve(DATABASE).sql);
+    const audit = new AuditService(services.resolve(DATABASE).sql, { enabled: auditEnabled });
     services.register(AUDIT, audit, () => audit.close());
     services.onStart(() => audit.connect());
   },
