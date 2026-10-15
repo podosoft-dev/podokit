@@ -116,7 +116,7 @@ describe("events routes", () => {
     expect(denied.status).toBe(403);
     expect(await denied.json()).toEqual({ code: "EVENTS_TOPIC_FORBIDDEN" });
     const allowed = await send("/events/stream?topics=ops", {
-      headers: { "x-user": "root", "x-admin": "true" },
+      headers: { "x-user": "root", "x-admin": "true", "x-roles": "admin" },
     });
     expect(allowed.status).toBe(200);
     expect(allowed.headers.get("content-type")).toContain("text/event-stream");
