@@ -7,7 +7,11 @@ import {
   type RequestGuardContext,
   type ServiceKey,
 } from "../core/services";
-import { rateLimitConfig, type RateLimitConfig } from "./rate-limit.config";
+import {
+  rateLimitConfig,
+  sessionSigningSecret,
+  type RateLimitConfig,
+} from "./rate-limit.config";
 import { RateLimitIdentity } from "./rate-limit.identity";
 
 export interface RateLimitIncrement {
@@ -132,7 +136,11 @@ export const rateLimitModule: PodokitModule = {
   configure: (_env, services): void => {
     const limiter = new RateLimiter(
       rateLimitConfig(),
-      new RateLimitIdentity(services.resolve(API_KEY_VERIFIER), services),
+      new RateLimitIdentity(
+        services.resolve(API_KEY_VERIFIER),
+        services,
+        sessionSigningSecret(),
+      ),
       new CacheRateLimitStorage(services.resolve(CACHE)),
     );
     services.register(RATE_LIMITER, limiter);

@@ -1,7 +1,7 @@
 {
   "name": "rate-limit",
   "manifestVersion": 3,
-  "description": "Provider-neutral Elysia request limiting by authenticated user, validated API key, or trusted-proxy client address.",
+  "description": "Provider-neutral Elysia request limiting by validated API key, signed-in session, or trusted-proxy client address.",
   "requires": ["api-key-auth"],
   "requiresCapabilities": ["cache"],
   "targetApp": "api",
@@ -42,7 +42,8 @@
     "Tune the general, authentication, and runtime limits in .env.",
     "Give each deployment that shares Redis a distinct RATE_LIMIT_KEY_PREFIX.",
     "Set RATE_LIMIT_TRUSTED_PROXY_HOPS to the exact number of trusted reverse proxies; keep 0 for direct API access.",
-    "Authenticated users and validated X-API-Key clients receive independent opaque counters; other traffic uses the trusted client address.",
+    "Validated X-API-Key clients and signed-in sessions receive independent opaque counters; other traffic uses the trusted client address.",
+    "Sessions are recognized by verifying the Better Auth cookie or bearer signature with BETTER_AUTH_SECRET, without a database read, so limits apply per session rather than per user.",
     "Exceeded limits return RATE_LIMIT_EXCEEDED with HTTP 429 and Retry-After. Cache failures return RATE_LIMIT_UNAVAILABLE with HTTP 503.",
     "Register a RateLimitIdentityExtension under RATE_LIMIT_IDENTITY_EXTENSION in app.extensions.ts for another validated machine-key source.",
     "GET /health and GET /health/ready bypass request quotas so orchestrator probes remain reliable.",

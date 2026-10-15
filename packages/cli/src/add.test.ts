@@ -726,8 +726,10 @@ describe("addModule (auth / better-auth)", () => {
       join(project, "apps/api/src/rate-limit/rate-limit.identity.ts"),
       "utf8",
     );
-    expect(identity).toContain("REQUEST_IDENTITY");
+    expect(identity).not.toContain("REQUEST_IDENTITY");
     expect(identity).toContain('request.headers.get("x-api-key")');
+    expect(identity).toContain("better-auth.session_token");
+    expect(identity).toContain("timingSafeEqual");
     expect(identity).toContain("RateLimitIdentityExtension");
     expect(identity).toContain("RATE_LIMIT_IDENTITY_EXTENSION");
   });

@@ -614,10 +614,28 @@ curl -b cookies.txt localhost:5002/audit-logs   # [{ userId, method:"POST", path
 
 Rate limiting with a native Elysia request guard backed by the selected `CACHE`
 provider, with `auth` and `api-key-auth` added automatically. Counters
-are selected by authenticated user first, then a validated `X-API-Key`, then the
+are selected by a validated `X-API-Key` first, then a signed-in session, then the
 trusted-proxy client address. Every identity is domain-separated and SHA-256
 hashed before it becomes a provider key. The limit holds across API replicas
 with Redis; memory counters require one API process.
+
+A session is recognized from the Better Auth session cookie (including its
+`__Secure-` form) or a signed `Authorization: Bearer` value by verifying its HMAC
+signature with `BETTER_AUTH_SECRET`. The limiter does not read the session from the
+database, so choosing a counter adds no query to the request. As a result:
+
+- Limits apply **per session, not per user**. Each sign-in starts its own counter,
+  so a user signed in on two devices has two counters.
+- A cookie or bearer value without a valid signature is counted with the client
+  address, so forged values never receive a fresh counter.
+- Signing out or revoking a session still takes effect on the next request, because
+  authentication itself still checks the session in the database. A revoked token
+  that still carries a valid signature keeps its single counter.
+- Without `BETTER_AUTH_SECRET` (for example, an app without `auth`), every request
+  without a validated API key is counted by client address.
+
+Better Auth's own per-address limits on sign-in, sign-up, and password endpoints
+still apply in production, so creating new sessions remains limited by address.
 The liveness and readiness endpoints (`GET /health` and `GET /health/ready`) are
 excluded so orchestrator probes cannot consume the application request quota.
 

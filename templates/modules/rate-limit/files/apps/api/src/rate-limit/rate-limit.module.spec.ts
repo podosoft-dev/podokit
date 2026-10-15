@@ -49,7 +49,7 @@ describe("RateLimiter", () => {
     }));
     const limiter = new RateLimiter(
       config,
-      { resolve: async () => "user:test" } as unknown as RateLimitIdentity,
+      { resolve: async () => "session:test" } as unknown as RateLimitIdentity,
       { increment } as RateLimitStorage,
     );
     await limiter.enforce(context("/ordinary").value);
@@ -64,10 +64,10 @@ describe("RateLimiter", () => {
       [60],
     ]);
     expect(increment.mock.calls.map((call) => call[0])).toEqual([
-      "podokit:test:rate-limit:general:user:test",
-      "podokit:test:rate-limit:auth:user:test",
-      "podokit:test:rate-limit:runtime:user:test",
-      "podokit:test:rate-limit:runtime:user:test",
+      "podokit:test:rate-limit:general:session:test",
+      "podokit:test:rate-limit:auth:session:test",
+      "podokit:test:rate-limit:runtime:session:test",
+      "podokit:test:rate-limit:runtime:session:test",
     ]);
   });
 
@@ -131,7 +131,7 @@ describe("RateLimiter", () => {
     }));
     const limiter = new RateLimiter(
       config,
-      { resolve: async () => "user:test" } as unknown as RateLimitIdentity,
+      { resolve: async () => "session:test" } as unknown as RateLimitIdentity,
       { increment },
     );
     const headers: Record<string, string> = {};
