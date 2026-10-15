@@ -16,9 +16,12 @@ POSTGRES_DB=podokit
 # queries, plus DB_AUTH_POOL_MAX for the auth module when it is installed. Keep
 # replicas x (DB_POOL_MAX + DB_AUTH_POOL_MAX), plus a few for migrations, below
 # the server's max_connections (100 by default). The timeouts are milliseconds.
+# DB_QUERY_TIMEOUT_MS bounds how long a query waits for a server that stopped
+# answering; migrations and maintenance commands are not bounded.
 # DB_POOL_MAX=20
 # DB_CONNECT_TIMEOUT_MS=10000
 # DB_IDLE_TIMEOUT_MS=30000
+# DB_QUERY_TIMEOUT_MS=10000
 # DB_AUTH_POOL_MAX=10
 
 # Largest API request body in bytes (Bun's default is 128 MiB). Requests through

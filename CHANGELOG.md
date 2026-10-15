@@ -218,6 +218,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   commands that `RedisService` does not wrap through `redis.command(...)` to
   bound them too.
 
+- Queries on the API's Bun SQL pool no longer hang while PostgreSQL keeps its
+  connections open without answering, as a paused container, a frozen VM, or a
+  network partition does. Bun SQL has no query timeout, `query.cancel()` does
+  not stop a running query, and a single pool connection cannot be closed, so
+  such a query waited until the server answered again and kept its connection.
+  The pool now watches every query and transaction: one still pending after
+  `DB_QUERY_TIMEOUT_MS` (default `10000`) makes the API check whether
+  PostgreSQL answers `SELECT 1` on a new connection within
+  `READINESS_CHECK_TIMEOUT_MS`. When it does not, the API opens a new pool and
+  closes the stalled one, so the waiting requests answer `503`
+  `DATABASE_UNAVAILABLE`, the supervisor logs the outage, and queries succeed
+  again once the server answers. Slow queries on a server that answers keep
+  running, and migrations are not affected.
+
 - Better Auth endpoints answer `503` with `DATABASE_UNAVAILABLE` while
   PostgreSQL is unreachable. `POST /api/auth/sign-in/email`,
   `GET /api/auth/get-session` with a session, and every route that needs a

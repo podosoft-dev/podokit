@@ -96,6 +96,7 @@ second, `pg` pool for Better Auth. Both read these settings:
 | `DB_AUTH_POOL_MAX` | `10` | Maximum connections in the auth module's pool. |
 | `DB_CONNECT_TIMEOUT_MS` | `10000` | How long opening a connection may take. For the auth pool it also bounds the wait for a free connection when the pool is full. |
 | `DB_IDLE_TIMEOUT_MS` | `30000` | How long an unused connection stays open. `0` keeps it open. |
+| `DB_QUERY_TIMEOUT_MS` | `10000` | How long a query on the Bun SQL pool may stay pending before the API checks whether PostgreSQL still answers. See below. |
 
 Each API replica can hold `DB_POOL_MAX + DB_AUTH_POOL_MAX` connections, 30 with
 the defaults. Multiply that by the API replica count, add a few connections for
@@ -116,9 +117,25 @@ fails with a server error, the auth module runs `SELECT 1` on its pool and
 answers `DATABASE_UNAVAILABLE` when that does not succeed within
 `READINESS_CHECK_TIMEOUT_MS`. Other `500` errors stay `500`.
 
-These settings bound connections only and set no statement timeout, so a long
-migration is not cut short. Application migrations open their own TypeORM
-connection and ignore them.
+A server that keeps its connections open but stops answering, such as a paused
+container, a frozen VM, or a network partition, leaves queries waiting without an
+error. Bun SQL has no query timeout and cannot close a single pool connection, so
+the API watches every query and transaction on the Bun SQL pool. When one is
+still pending after `DB_QUERY_TIMEOUT_MS`, the API checks whether PostgreSQL
+answers `SELECT 1` on a new connection within `READINESS_CHECK_TIMEOUT_MS`. If it
+does not, the API opens a new pool and closes the old one, which fails every query
+still waiting on it. Those requests answer `503` with `DATABASE_UNAVAILABLE`
+about `DB_QUERY_TIMEOUT_MS` plus `READINESS_CHECK_TIMEOUT_MS` after they started,
+and the API logs `Dependency connection failed; retrying in the background`.
+While the server stays silent, a query on the new pool waits at most
+`DB_CONNECT_TIMEOUT_MS` for its connection. Once PostgreSQL answers again,
+queries succeed without a restart and the API logs `Dependency connection
+restored`. A query that is only slow, on a server that still answers, keeps
+running. A write that was waiting when its pool closed may still be applied if
+the server resumes.
+
+None of these settings is a statement timeout, so a long migration is not cut
+short. Application migrations open their own TypeORM connection and ignore them.
 
 ### S3-compatible storage
 

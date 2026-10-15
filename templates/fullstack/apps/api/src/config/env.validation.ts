@@ -16,6 +16,7 @@ const schema = z.object({
   DB_POOL_MAX: z.coerce.number().int().positive().default(20),
   DB_CONNECT_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
   DB_IDLE_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(30000),
+  DB_QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
   DB_AUTH_POOL_MAX: z.coerce.number().int().positive().default(10),
   READINESS_CHECK_TIMEOUT_MS: z.coerce.number().int().positive().default(800),
   READINESS_CACHE_MS: z.coerce.number().int().nonnegative().default(2000),

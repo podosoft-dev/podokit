@@ -153,6 +153,12 @@ describe("PostgreSQL pool settings", () => {
     expect(() => validateEnv({ DB_POOL_MAX: "0" })).toThrow("DB_POOL_MAX");
     expect(() => validateEnv({ DB_AUTH_POOL_MAX: "-1" })).toThrow("DB_AUTH_POOL_MAX");
     expect(() => validateEnv({ DB_CONNECT_TIMEOUT_MS: "0" })).toThrow("DB_CONNECT_TIMEOUT_MS");
+    expect(() => validateEnv({ DB_QUERY_TIMEOUT_MS: "0" })).toThrow("DB_QUERY_TIMEOUT_MS");
+  });
+
+  it("bounds a query on a server that stopped answering after ten seconds by default", () => {
+    expect(env.DB_QUERY_TIMEOUT_MS).toBe(10_000);
+    expect(validateEnv({ DB_QUERY_TIMEOUT_MS: "2500" }).DB_QUERY_TIMEOUT_MS).toBe(2_500);
   });
 });
 

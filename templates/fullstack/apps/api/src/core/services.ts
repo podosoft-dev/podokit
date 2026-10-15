@@ -369,7 +369,10 @@ export function createCoreServices(env: AppEnv): ServiceRegistry {
   accessPolicy.register("*", "/api-docs-json", "public");
   accessPolicy.register("*", "/api-docs-elysia-json", "public");
   services.register(DATABASE, database, () => database.close());
-  services.supervise(DATABASE_READINESS_CHECK, { connect: () => services.resolve(DATABASE).connect() });
+  services.supervise(DATABASE_READINESS_CHECK, {
+    connect: () => services.resolve(DATABASE).connect(),
+    onLost: (listener) => database.onLost(listener),
+  });
   services.register(READINESS, readiness);
   readiness.register(DATABASE_READINESS_CHECK, () => services.resolve(DATABASE).ping());
   services.register(LOGGER, logger);
