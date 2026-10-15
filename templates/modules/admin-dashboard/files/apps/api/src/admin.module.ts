@@ -5,7 +5,11 @@ import {
 } from "@podosoft/podokit-contracts";
 import { OBJECT_STORAGE } from "@podosoft/podokit-runtime";
 import { Elysia, t } from "elysia";
+import { adminSessionRoutes } from "./admin-sessions/admin-sessions.routes";
+import { createSessionRevoker, type RevokeUserSessionApi } from "./admin-sessions/admin-sessions.revoker";
+import { AdminSessionsService } from "./admin-sessions/admin-sessions.service";
 import { AUTH } from "./auth/auth.module";
+import { getAuth } from "./auth/auth-provider";
 import {
   ACCESS_POLICY,
   DATABASE,
@@ -24,6 +28,7 @@ import { validateSiteSetting } from "./site-settings/site-settings.validation";
 
 export const SITE_SETTINGS = Symbol("site-settings") as ServiceKey<SiteSettingsService>;
 export const PROFILE_IMAGES = Symbol("profile-images") as ServiceKey<ProfileImageService>;
+export const ADMIN_SESSIONS = Symbol("admin-sessions") as ServiceKey<AdminSessionsService>;
 
 const ICON_TYPES = new Set([
   "image/svg+xml",
@@ -50,6 +55,11 @@ const adminPlugin: AppPlugin = ({ services }) => {
   const profileImages = services.resolve(PROFILE_IMAGES);
 
   return new Elysia({ name: "podokit.admin" })
+    .use(adminSessionRoutes({
+      auth,
+      sessions: services.resolve(ADMIN_SESSIONS),
+      revoke: createSessionRevoker(() => getAuth().api as unknown as RevokeUserSessionApi),
+    }))
     .get("/site/settings", async () => {
       // The favicon fields are site.* rows too, so one read serves the response.
       const all = await site.getAll();
@@ -139,6 +149,8 @@ const adminPlugin: AppPlugin = ({ services }) => {
 export const adminModule: PodokitModule = {
   name: "admin-dashboard",
   configure: (_env, services): void => {
+    const database = services.resolve(DATABASE);
+    services.register(ADMIN_SESSIONS, new AdminSessionsService(database.sql, database.provider));
     const storage = services.resolve(OBJECT_STORAGE);
     const site = new SiteSettingsService(services.resolve(DATABASE).sql, storage);
     const profileImages = new ProfileImageService(storage, services.resolve(LOGGER));

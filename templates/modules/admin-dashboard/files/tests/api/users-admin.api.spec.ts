@@ -63,9 +63,13 @@ test("admin can list and revoke a user's sessions", async ({ playwright, disposa
   expect((await theirs.post("/api/auth/sign-in/email", { data: { email, password: "Podokit3e-Str0ng!pw" } })).ok()).toBeTruthy();
   await theirs.dispose();
 
-  const listed = await admin.post("/api/auth/admin/list-user-sessions", { data: { userId } });
+  // The admin console lists sessions through the app API, which never returns tokens.
+  const listed = await admin.get(`/api/admin/sessions?userId=${encodeURIComponent(userId)}`);
   expect(listed.ok()).toBeTruthy();
-  expect(((await listed.json())?.sessions ?? []).length).toBeGreaterThan(0);
+  const { items } = (await listed.json()) as { items: Array<Record<string, unknown>> };
+  expect(items.length).toBeGreaterThan(0);
+  expect(items[0]).toMatchObject({ userId, userEmail: email });
+  expect(items[0]).not.toHaveProperty("token");
 
   const revoked = await admin.post("/api/auth/admin/revoke-user-sessions", { data: { userId } });
   expect(revoked.ok()).toBeTruthy();

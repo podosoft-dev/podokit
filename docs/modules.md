@@ -996,7 +996,7 @@ OAuth, SMTP, and sign-up approval configuration.
 
 - **/admin** — overview.
 - **/admin/users** (admin only) — list, filter & search users, approve pending registrations, ban/unban, set role, revoke sessions, create/delete.
-- **/admin/sessions** (admin only) — active sessions across all users (revoke).
+- **/admin/sessions** (admin only) — active sessions across all users, newest first, searchable by user email or name (revoke one session or all of a user's sessions).
 - **/admin/organizations** (admin only) — organizations, members, and invitations.
 - **/admin/audit** (admin only) — the audit log of security-relevant actions.
 - **/admin/settings** (admin only) — enable/disable sign-in methods and configure OAuth providers, SMTP, sign-up approval, automatic logout, and other server toggles at runtime (see below), plus the **Appearance** tab for the runtime theme (see "Appearance").
@@ -1029,6 +1029,36 @@ available outside the admin shell.
 The sign-in link carries the current same-site page as a validated return target;
 successful login and public-page logout return there instead of forcing `/admin`.
 Direct login and admin-sidebar logout fall back to `/`.
+
+#### Users and sessions lists
+
+The sessions list pages on the server, so its cost does not grow with the number
+of accounts.
+
+- **Sessions** come from `GET /admin/sessions`, an admin-only endpoint that
+  joins sessions to their users and returns only active sessions, newest first:
+
+  ```text
+  GET /admin/sessions?limit=20&search=ada&cursor=<nextCursor>&userId=<id>
+  -> { "items": [{ "id", "userId", "userEmail", "userName", "ipAddress",
+                   "userAgent", "impersonatedBy", "createdAt", "expiresAt" }],
+       "nextCursor": "<opaque>" | null, "total": 42 }
+  ```
+
+  `limit` defaults to 20 (at most 100). `search` matches the user's email or name
+  case-insensitively. Paging is keyset-based on (`createdAt`, `id`), so pass
+  `nextCursor` back to read the next page; a cursor the server did not issue
+  returns `400 ADMIN_SESSION_CURSOR_INVALID`. Session tokens are never returned.
+  `DELETE /admin/sessions/{id}` looks up the token on the server and revokes it
+  through Better Auth `revokeUserSession`, so the admin permission check and the
+  audit hook (`user.session_revoke`) still apply. It returns `204`, or
+  `404 ADMIN_SESSION_NOT_FOUND`. Both endpoints use the general request budget.
+  The manage dialog on `/admin/users` uses the same endpoint with `userId`.
+
+The `+page.svelte` file of `/admin/sessions` is application-owned, so
+`podo update` does not replace it in an existing app. Its logic lives in the
+managed `#lib/admin/sessions.ts`; compare your page with the template to adopt
+server paging.
 
 #### Profile images
 
@@ -1251,7 +1281,7 @@ hand-written list. Inspect the complete result at `/api-docs` or
 | Core | `GET /health`<br>`GET /health/ready` |
 | `todo` template | `GET /todos`<br>`GET /todos/{id}`<br>`POST /todos`<br>`PATCH /todos/{id}`<br>`DELETE /todos/{id}` |
 | `auth` application routes | `GET /account/me`<br>`GET /account/require-2fa`<br>`GET /account/capabilities`<br>`PUT /account/settings`<br>`GET /account/auth-config`<br>`PUT /account/auth-config`<br>`POST /account/org-member`<br>`GET /api/auth/get-session`<br>`POST /api/auth/sign-in/email` |
-| `admin-dashboard` | `GET /site/settings`<br>`PUT /site/settings`<br>`POST /site/favicon`<br>`GET /site/favicon`<br>`POST /account/profile-image`<br>`DELETE /account/profile-image`<br>`GET /profile-images/{fileName}` |
+| `admin-dashboard` | `GET /site/settings`<br>`PUT /site/settings`<br>`POST /site/favicon`<br>`GET /site/favicon`<br>`POST /account/profile-image`<br>`DELETE /account/profile-image`<br>`GET /profile-images/{fileName}`<br>`GET /admin/sessions`<br>`DELETE /admin/sessions/{id}` |
 | `api-key-auth` | `GET /machine/ping` |
 | `audit-log` | `GET /audit-logs`<br>`GET /audit-logs/actions` |
 | `analytics` | `GET /analytics/config`<br>`GET /admin/analytics/config`<br>`PUT /admin/analytics/config`<br>`DELETE /admin/analytics/config/credentials`<br>`POST /admin/analytics/config/test`<br>`GET /admin/analytics/report`<br>`GET /admin/analytics/realtime` |

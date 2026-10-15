@@ -15,6 +15,7 @@
   import PlusIcon from "@lucide/svelte/icons/plus";
   import { toast } from "svelte-sonner";
   import { api } from "#lib/api.js";
+  import { listAdminSessions, revokeAdminSession, type AdminSession } from "#lib/admin/sessions.js";
   import { getI18n, fmt, formatDateTime } from "#lib/i18n/index.js";
   import { cn } from "#lib/utils.js";
   import { deviceLabel } from "#lib/device-label.js";
@@ -43,6 +44,8 @@
 
   const PAGE_SIZE = DEFAULT_PAGE_SIZE;
   const LOAD_LIMIT = 500; // bounded client-side list; add server-side filtering for larger deployments
+  // Sessions shown in the manage dialog: the newest page for one user.
+  const MANAGED_SESSIONS_LIMIT = 100;
   let users = $state<Row[]>([]);
   let page = $state(1);
   let sort = $state<SortState | null>(null);
@@ -176,7 +179,6 @@
 
   // Manage user — a two-pane modal mirroring the account settings, admin-scoped.
   type ManageSection = "profile" | "security" | "sessions" | "danger";
-  type Session = { id: string; token: string; userAgent?: string | null; ipAddress?: string | null; createdAt: string | Date };
   let manageOpen = $state(false);
   let mUser = $state<Row | null>(null);
   let mSection = $state<ManageSection>("profile");
@@ -192,10 +194,11 @@
   let mBanReason = $state("");
   let mBanDays = $state("");
   // sessions
-  let mSessions = $state<Session[]>([]);
+  let mSessions = $state<AdminSession[]>([]);
+  let mSessionsTotal = $state(0);
   let mSessionsPage = $state(1);
   let mSessionsSort = $state<SortState | null>(null);
-  const mSessionsColumns: DataTableColumn<Session>[] = [
+  const mSessionsColumns: DataTableColumn<AdminSession>[] = [
     { key: "userAgent", label: i18n.t.adminSessions.device, sortable: true, value: (s) => deviceLabel(s.userAgent) ?? s.userAgent ?? "" },
     { key: "ipAddress", label: i18n.t.adminSessions.ip, sortable: true },
     { key: "createdAt", label: i18n.t.adminSessions.since, sortable: true, value: (s) => new Date(s.createdAt).getTime() },
@@ -217,6 +220,7 @@
     mBanDays = "";
     mDeleteArmed = false;
     mSessions = [];
+    mSessionsTotal = 0;
     mSessionsPage = 1;
     manageOpen = true;
     await loadManagedSessions();
@@ -224,8 +228,15 @@
 
   async function loadManagedSessions(): Promise<void> {
     if (!mUser) return;
-    const { data: res } = await api.auth.admin.listUserSessions({ userId: mUser.id });
-    mSessions = (res?.sessions ?? []) as Session[];
+    const userId = mUser.id;
+    try {
+      const result = await listAdminSessions(api, { limit: MANAGED_SESSIONS_LIMIT, userId });
+      if (mUser?.id !== userId) return;
+      mSessions = result.items;
+      mSessionsTotal = result.total;
+    } catch {
+      toast.error(i18n.t.adminSessions.loadFailed);
+    }
   }
 
   async function saveProfile(event: Event): Promise<void> {
@@ -329,11 +340,15 @@
     await load();
   }
 
-  async function revokeSession(token: string): Promise<void> {
+  async function revokeSession(id: string): Promise<void> {
     busy = true;
-    const { error } = await api.auth.admin.revokeUserSession({ sessionToken: token });
-    busy = false;
-    if (error) return void toast.error(error.message ?? i18n.t.adminSessions.loadFailed);
+    try {
+      await revokeAdminSession(api, id);
+    } catch {
+      return void toast.error(i18n.t.adminSessions.revokeFailed);
+    } finally {
+      busy = false;
+    }
     toast.success(i18n.t.adminSessions.revoked);
     await loadManagedSessions();
   }
@@ -343,7 +358,7 @@
     busy = true;
     const { error } = await api.auth.admin.revokeUserSessions({ userId: mUser.id });
     busy = false;
-    if (error) return void toast.error(error.message ?? i18n.t.adminSessions.loadFailed);
+    if (error) return void toast.error(error.message ?? i18n.t.adminSessions.revokeFailed);
     toast.success(i18n.t.adminSessions.allRevoked);
     await loadManagedSessions();
   }
@@ -555,14 +570,14 @@
               bind:sort={mSessionsSort}
               bind:page={mSessionsPage}
               perPage={PAGE_SIZE}
-              label={fmt(i18n.t.adminSessions.total, { count: mSessions.length })}
+              label={fmt(i18n.t.adminSessions.total, { count: mSessionsTotal })}
               empty={i18n.t.adminSessions.empty}
             >
               {#snippet row(s)}
                 <Table.Cell class="max-w-40 truncate" title={s.userAgent ?? ""}>{deviceLabel(s.userAgent) ?? s.userAgent ?? i18n.t.adminSessions.unknown}</Table.Cell>
                 <Table.Cell class="text-muted-foreground">{s.ipAddress ?? "—"}</Table.Cell>
                 <Table.Cell class="text-muted-foreground">{formatDateTime(s.createdAt)}</Table.Cell>
-                <Table.Cell><Button variant="ghost" size="sm" disabled={busy} onclick={() => revokeSession(s.token)}>{i18n.t.users.revokeSession}</Button></Table.Cell>
+                <Table.Cell><Button variant="ghost" size="sm" disabled={busy} onclick={() => revokeSession(s.id)}>{i18n.t.users.revokeSession}</Button></Table.Cell>
               {/snippet}
             </DataTable>
           </div>
