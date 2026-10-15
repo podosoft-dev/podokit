@@ -75,6 +75,8 @@ these instead.
 | `credentials` | `include` | Send cookies with requests. |
 
 Errors are thrown as `ApiError` (`code`, `message`, `statusCode`, `details`).
+A response without the JSON error envelope, such as a gateway's HTML error page,
+becomes an `ApiError` with code `HTTP_ERROR` and the response status.
 `PUBLIC_SIGNUP_DISABLED` and `SIGNUP_APPROVAL_REQUIRED` are re-exported for
 provider-independent registration-policy handling.
 The profile-image policy, response type, and stable validation error codes are

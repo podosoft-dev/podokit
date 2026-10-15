@@ -77,6 +77,15 @@ function retryAfterSeconds(response: Response): number | undefined {
   return Number.isNaN(date) ? undefined : Math.max(0, Math.ceil((date - Date.now()) / 1000));
 }
 
+/** An error body as JSON, or undefined when a proxy or server answered with text or HTML. */
+function errorBody(text: string): unknown {
+  try {
+    return text ? JSON.parse(text) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function toApiError(data: unknown, response: Response): ApiError {
   const retryAfter = retryAfterSeconds(response);
   if (data && typeof data === "object" && "error" in data) {
@@ -217,11 +226,10 @@ export function createApiClient(options: ApiClientOptions = {}) {
       requestInit(method, credentials, body, options),
     );
     const text = await response.text();
-    const data: unknown = text ? JSON.parse(text) : undefined;
     if (!response.ok) {
-      throw toApiError(data, response);
+      throw toApiError(errorBody(text), response);
     }
-    return data as T;
+    return (text ? JSON.parse(text) : undefined) as T;
   }
 
   return {

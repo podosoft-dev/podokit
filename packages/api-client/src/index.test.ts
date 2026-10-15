@@ -170,6 +170,22 @@ describe("createApiClient", () => {
     expect((error as ApiError).code).toBe("HTTP_ERROR");
   });
 
+  it("reports a non-JSON error body, such as a proxy's page, as ApiError", async () => {
+    const fetch = vi.fn(async () =>
+      new Response("<html>Bad Gateway</html>", {
+        status: 502,
+        statusText: "Bad Gateway",
+        headers: { "content-type": "text/html", "retry-after": "3" },
+      }),
+    );
+    const error = await createApiClient({ fetch }).put("/files/uploads/u1/parts/1", new Blob(["x"])).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ code: "HTTP_ERROR", statusCode: 502, message: "Bad Gateway", retryAfterSeconds: 3 });
+
+    const tooLarge = vi.fn(async () => new Response("Payload Too Large", { status: 413 }));
+    await expect(createApiClient({ fetch: tooLarge }).post("/x", {})).rejects.toMatchObject({ statusCode: 413 });
+  });
+
   it("exposes the better-auth client with the admin plugin", () => {
     const client = createApiClient({ baseUrl: "http://api.test" });
     expect(typeof client.auth.signIn.email).toBe("function");

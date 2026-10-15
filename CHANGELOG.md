@@ -121,6 +121,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   own request context in UI tests, holding a copy of the browser's admin cookies
   taken when the test starts. A UI test that signed its page in as another user
   used to turn cleanup into that user's requests, which failed with 403.
+- `@podosoft/podokit-api-client` reports an error response whose body is not
+  JSON, such as a gateway's 502 page or a web server's plain-text 413, as an
+  `ApiError` with `HTTP_ERROR`, its status, and `retryAfterSeconds`. It threw a
+  `SyntaxError` from parsing the body, so callers could not tell the status or
+  retry.
 
 - `podo dev` with more than one `webSocketPaths` entry rendered a Traefik
   `Path` matcher with several values, which Traefik v3 rejects, so none of the
