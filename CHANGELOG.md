@@ -185,6 +185,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   move them to `APP_FORWARDED_REQUEST_HEADERS` and `APP_RELAYED_RESPONSE_HEADERS`
   in `apps/web/src/lib/server/proxy-headers.ts` and restore the managed lists, so
   later updates stay clean.
+- The auth module's `./auth/skip-schema-validation` and `./auth/schema-validation`
+  are now `./auth/maintenance-command` and `./auth/maintenance`. A script of your
+  own that imported the first one to run against the auth database imports
+  `./auth/maintenance-command` instead, which also lifts `DB_QUERY_TIMEOUT_MS`
+  for its process.
 
 ### Fixed
 
@@ -231,6 +236,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `DATABASE_UNAVAILABLE`, the supervisor logs the outage, and queries succeed
   again once the server answers. Slow queries on a server that answers keep
   running, and migrations are not affected.
+
+- Better Auth endpoints no longer hang while PostgreSQL keeps its connections
+  open without answering. The auth module's `pg` pool had no query timeout, so
+  `POST /api/auth/sign-in/email` and `GET /api/auth/get-session` waited for
+  the server, and pg's own `query_timeout` alone would not help: Kysely, which
+  Better Auth runs on, returns a timed-out connection to the pool, where every
+  later query queues behind the missing reply. The pool now fails a query after
+  `DB_QUERY_TIMEOUT_MS` and discards a connection that is released while it
+  still waits for a reply, so the endpoint answers `503` `DATABASE_UNAVAILABLE`
+  and the next query opens a new connection. The migration runner and
+  `admin:bootstrap` run without the timeout: `./auth/maintenance-command`,
+  which replaces `./auth/skip-schema-validation`, marks their process.
 
 - Better Auth endpoints answer `503` with `DATABASE_UNAVAILABLE` while
   PostgreSQL is unreachable. `POST /api/auth/sign-in/email`,

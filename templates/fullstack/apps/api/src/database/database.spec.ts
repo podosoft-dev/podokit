@@ -174,11 +174,12 @@ describe("isDatabaseUnavailable", () => {
     }
   });
 
-  it("recognizes pg pool and connection timeouts, also when wrapped", () => {
+  it("recognizes pg pool, connection, and query timeouts, also when wrapped", () => {
     const acquire = new Error("timeout exceeded when trying to connect");
     const connect = new Error("Connection terminated due to connection timeout");
     expect(isDatabaseUnavailable(acquire)).toBe(true);
     expect(isDatabaseUnavailable(connect)).toBe(true);
+    expect(isDatabaseUnavailable(new Error("Query read timeout"))).toBe(true);
     expect(isDatabaseUnavailable(new Error("Failed to get session", { cause: acquire }))).toBe(true);
   });
 

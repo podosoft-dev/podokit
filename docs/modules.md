@@ -297,7 +297,11 @@ migration Job before a rolling deployment.
   Auth reports a failed query as a bare `500`, and its session lookup drops the cause, so after a
   server error the module runs `SELECT 1` on its pool, bounded by `READINESS_CHECK_TIMEOUT_MS`,
   and answers `503` only when that fails too. Client errors such as `401` and other `500` errors
-  are passed on unchanged.
+  are passed on unchanged. A query that PostgreSQL leaves unanswered, for example while the
+  server is paused, fails after `DB_QUERY_TIMEOUT_MS` (default `10000`), and the pool closes
+  that connection and opens a new one instead of reusing it. The migration runner and
+  `admin:bootstrap` run without that timeout: they import `./auth/maintenance-command` first,
+  which also skips Better Auth's startup schema check for their process.
 - **Bearer tokens (API/mobile clients)**: always on. Sign-in returns the session token in
   a `set-auth-token` response header; send it back as `Authorization: Bearer <token>` to
   authenticate without a cookie. Useful for native apps and server-to-server calls.

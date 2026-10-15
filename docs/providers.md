@@ -96,7 +96,7 @@ second, `pg` pool for Better Auth. Both read these settings:
 | `DB_AUTH_POOL_MAX` | `10` | Maximum connections in the auth module's pool. |
 | `DB_CONNECT_TIMEOUT_MS` | `10000` | How long opening a connection may take. For the auth pool it also bounds the wait for a free connection when the pool is full. |
 | `DB_IDLE_TIMEOUT_MS` | `30000` | How long an unused connection stays open. `0` keeps it open. |
-| `DB_QUERY_TIMEOUT_MS` | `10000` | How long a query on the Bun SQL pool may stay pending before the API checks whether PostgreSQL still answers. See below. |
+| `DB_QUERY_TIMEOUT_MS` | `10000` | How long a query may wait for PostgreSQL to answer. The auth pool fails a slower query, and the Bun SQL pool checks the server, as described below. |
 
 Each API replica can hold `DB_POOL_MAX + DB_AUTH_POOL_MAX` connections, 30 with
 the defaults. Multiply that by the API replica count, add a few connections for
@@ -119,8 +119,15 @@ answers `DATABASE_UNAVAILABLE` when that does not succeed within
 
 A server that keeps its connections open but stops answering, such as a paused
 container, a frozen VM, or a network partition, leaves queries waiting without an
-error. Bun SQL has no query timeout and cannot close a single pool connection, so
-the API watches every query and transaction on the Bun SQL pool. When one is
+error. `DB_QUERY_TIMEOUT_MS` bounds that wait for both pools.
+
+The auth pool fails any query that gets no answer within `DB_QUERY_TIMEOUT_MS`,
+closes that connection instead of returning it to the pool, and opens a new one
+for the next query. The auth endpoint then answers `503` with
+`DATABASE_UNAVAILABLE` after its `SELECT 1` check.
+
+Bun SQL has no query timeout and cannot close a single pool connection, so the
+API watches every query and transaction on the Bun SQL pool instead. When one is
 still pending after `DB_QUERY_TIMEOUT_MS`, the API checks whether PostgreSQL
 answers `SELECT 1` on a new connection within `READINESS_CHECK_TIMEOUT_MS`. If it
 does not, the API opens a new pool and closes the old one, which fails every query
@@ -130,12 +137,13 @@ and the API logs `Dependency connection failed; retrying in the background`.
 While the server stays silent, a query on the new pool waits at most
 `DB_CONNECT_TIMEOUT_MS` for its connection. Once PostgreSQL answers again,
 queries succeed without a restart and the API logs `Dependency connection
-restored`. A query that is only slow, on a server that still answers, keeps
-running. A write that was waiting when its pool closed may still be applied if
-the server resumes.
+restored`. A query on the Bun SQL pool that is only slow, on a server that still
+answers, keeps running. A write that was waiting when its query failed may still
+be applied if the server resumes.
 
-None of these settings is a statement timeout, so a long migration is not cut
-short. Application migrations open their own TypeORM connection and ignore them.
+Migrations and maintenance commands such as `admin:bootstrap` run without the
+query timeout, so a long migration is not cut short. Application migrations open
+their own TypeORM connection and ignore these settings.
 
 ### S3-compatible storage
 

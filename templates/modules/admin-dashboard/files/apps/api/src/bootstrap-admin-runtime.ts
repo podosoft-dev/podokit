@@ -3,7 +3,7 @@
 // The command runs against a migrated schema and reports a missing table from its
 // own query. Better Auth's asynchronous startup check would only race the
 // connection the command closes when it finishes.
-import "./auth/skip-schema-validation";
+import "./auth/maintenance-command";
 import { verifyPassword } from "better-auth/crypto";
 import { auth } from "./auth/auth";
 import { closeAuthDatabase, postgresPool, sqliteDatabase } from "./auth/db";

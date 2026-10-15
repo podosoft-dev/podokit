@@ -462,15 +462,19 @@ describe("addModule (auth / better-auth)", () => {
       migrationSource.indexOf("getMigrations(auth.options)"),
     );
     // Creating the Better Auth instance runs its startup schema check, which would
-    // report the schema these migrations are about to change.
+    // report the schema these migrations are about to change, and the auth pool
+    // would bound migration statements with its query timeout.
     const imports = migrationSource.split("\n").filter((line) => line.startsWith("import "));
-    expect(imports[0]).toBe('import "./auth/skip-schema-validation";');
+    expect(imports[0]).toBe('import "./auth/maintenance-command";');
     expect(imports).toContain('import { auth } from "./auth/auth";');
     expect(
-      readFileSync(join(project, "apps/api/src/auth/skip-schema-validation.ts"), "utf8"),
-    ).toContain("\nskipAuthSchemaValidation();");
+      readFileSync(join(project, "apps/api/src/auth/maintenance-command.ts"), "utf8"),
+    ).toContain("\nstartMaintenanceCommand();");
     expect(readFileSync(join(project, "apps/api/src/auth/auth.ts"), "utf8")).toContain(
-      "...(authSchemaValidation() ? {} : { database: { validateSchema: false } }),",
+      "...(isMaintenanceCommand() ? { database: { validateSchema: false } } : {}),",
+    );
+    expect(readFileSync(join(project, "apps/api/src/auth/db.ts"), "utf8")).toContain(
+      "...(isMaintenanceCommand() ? {} : { query_timeout: env.DB_QUERY_TIMEOUT_MS }),",
     );
     const rootLayout = readFileSync(
       join(project, "apps/web/src/routes/+layout.svelte"),
