@@ -47,35 +47,49 @@ export function sqliteDatabasePath(url: string): string {
   return path;
 }
 
+function createSql(provider: DatabaseProviderName, env: AppEnv): SQL {
+  const url = databaseUrl(env);
+  return provider === "sqlite"
+    ? new SQL(url, { adapter: "sqlite", create: true, readwrite: true, strict: true })
+    : new SQL(url, { max: 20 });
+}
+
 export class Database {
   readonly provider: DatabaseProviderName = selectedDatabaseProvider();
   readonly sql: SQL;
   private ready?: Promise<void>;
 
-  constructor(env: AppEnv) {
-    const url = databaseUrl(env);
-    this.sql = this.provider === "sqlite"
-      ? new SQL(url, { adapter: "sqlite", create: true, readwrite: true, strict: true })
-      : new SQL(url, { max: 20 });
+  constructor(env: AppEnv, sql?: SQL) {
+    this.sql = sql ?? createSql(this.provider, env);
   }
 
   connect(): Promise<void> {
-    this.ready ??= (async () => {
-      if (this.provider === "sqlite") {
-        await this.sql`PRAGMA journal_mode = WAL`;
-        await this.sql`PRAGMA foreign_keys = ON`;
-        await this.sql`PRAGMA busy_timeout = 5000`;
-      }
-      await this.sql`SELECT 1`;
-    })();
+    if (!this.ready) {
+      const attempt = this.initialize();
+      this.ready = attempt;
+      // Forget a failed start so the next call retries instead of replaying the failure.
+      void attempt.catch(() => {
+        if (this.ready === attempt) this.ready = undefined;
+      });
+    }
     return this.ready;
   }
 
   async ping(): Promise<void> {
     await this.connect();
+    await this.sql`SELECT 1`;
   }
 
   async close(): Promise<void> {
     await this.sql.close();
+  }
+
+  private async initialize(): Promise<void> {
+    if (this.provider === "sqlite") {
+      await this.sql`PRAGMA journal_mode = WAL`;
+      await this.sql`PRAGMA foreign_keys = ON`;
+      await this.sql`PRAGMA busy_timeout = 5000`;
+    }
+    await this.sql`SELECT 1`;
   }
 }
