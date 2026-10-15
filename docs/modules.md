@@ -621,6 +621,25 @@ entries; past that, new deferred entries are dropped with a warning and an
 `audit.dropped` entry records how many were lost. The Better Auth hook and
 `auth.*` / `user.*` actions always use the awaited path.
 
+`GET /audit-logs` (admin only) returns one page as a JSON array, newest first.
+It pages with a keyset cursor on `("createdAt", "id")`, so a deep page costs the
+same as the first:
+
+| Query | Meaning |
+| --- | --- |
+| `limit` | Entries per page, 1 to 100 (default 50) |
+| `cursor` | The `X-Next-Cursor` value from the previous page |
+| `order` | `desc` (default) or `asc` |
+| `action` | Exact action code |
+| `actor` | Exact actor email |
+| `target` | Exact target label (the email or title the list shows) |
+
+When more entries follow, the response carries the next page's cursor in the
+`X-Next-Cursor` header (opaque base64url), and the last page has none. The
+SvelteKit proxy relays the header to browser code. A cursor the API did not
+issue returns `400 INVALID_CURSOR`. `GET /audit-logs/actions` lists the recorded
+action codes for filter menus. The admin **Audit log** page uses both.
+
 ```bash
 npx @podosoft/podokit add audit-log   # also adds auth
 bun install
@@ -1033,7 +1052,7 @@ hand-written list. Inspect the complete result at `/api-docs` or
 | `auth` application routes | `GET /account/me`<br>`GET /account/require-2fa`<br>`GET /account/capabilities`<br>`PUT /account/settings`<br>`GET /account/auth-config`<br>`PUT /account/auth-config`<br>`POST /account/org-member`<br>`GET /api/auth/get-session`<br>`POST /api/auth/sign-in/email` |
 | `admin-dashboard` | `GET /site/settings`<br>`PUT /site/settings`<br>`POST /site/favicon`<br>`GET /site/favicon`<br>`POST /account/profile-image`<br>`DELETE /account/profile-image`<br>`GET /profile-images/{fileName}` |
 | `api-key-auth` | `GET /machine/ping` |
-| `audit-log` | `GET /audit-logs` |
+| `audit-log` | `GET /audit-logs`<br>`GET /audit-logs/actions` |
 | `analytics` | `GET /analytics/config`<br>`GET /admin/analytics/config`<br>`PUT /admin/analytics/config`<br>`DELETE /admin/analytics/config/credentials`<br>`POST /admin/analytics/config/test`<br>`GET /admin/analytics/report`<br>`GET /admin/analytics/realtime` |
 | `blog` | `GET /blog`<br>`POST /blog/images`<br>`GET /blog/images/{id}`<br>`GET /blog/mine`<br>`GET /blog/manage/{slug}`<br>`GET /blog/{postRef}/comments`<br>`GET /blog/{postRef}`<br>`POST /blog`<br>`PATCH /blog/{postRef}`<br>`DELETE /blog/{postRef}`<br>`POST /blog/{postRef}/comments`<br>`PATCH /blog/comments/{id}`<br>`DELETE /blog/comments/{id}`<br>`GET /admin/blog`<br>`GET /admin/blog/{id}`<br>`POST /admin/blog`<br>`PATCH /admin/blog/{id}`<br>`DELETE /admin/blog/{id}` |
 | `bullmq` | `POST /jobs`<br>`GET /jobs/{id}` |

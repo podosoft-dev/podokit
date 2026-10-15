@@ -1,4 +1,5 @@
 import type { SQL } from "bun";
+import { AppException } from "@podosoft/podokit-contracts";
 import type { DatabaseProviderName } from "@podosoft/podokit-runtime";
 import type { AuthSession } from "../auth/auth.service";
 import { setAuditRecorder, type AuditEntry } from "./audit-events";
@@ -32,6 +33,36 @@ const COLUMNS = [
   "id", "action", "actorId", "actorName", "actorEmail",
   "targetType", "targetId", "targetLabel", "ip", "metadata", "createdAt",
 ] as const satisfies readonly (keyof AuditRow)[];
+
+export const DEFAULT_AUDIT_PAGE_SIZE = 50;
+export const MAX_AUDIT_PAGE_SIZE = 100;
+const MAX_LISTED_ACTIONS = 500;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export interface AuditLogQuery {
+  /** Opaque position from a previous page's `nextCursor`. */
+  cursor?: string;
+  limit?: number;
+  /** Newest first by default. */
+  order?: "asc" | "desc";
+  /** Exact action code. */
+  action?: string;
+  /** Exact actor email. */
+  actor?: string;
+  /** Exact target label (the email or title the list shows). */
+  target?: string;
+}
+
+export interface AuditLogPage {
+  entries: AuditLogView[];
+  /** Cursor for the following page; null on the last page. */
+  nextCursor: string | null;
+}
+
+interface AuditPosition {
+  createdAt: string;
+  id: string;
+}
 
 export interface AuditTarget {
   type?: string;
@@ -207,23 +238,75 @@ export class AuditService {
     };
   }
 
-  async recent(limit = 50): Promise<AuditLogView[]> {
-    const rows = await this.sql<AuditLogRow[]>`
+  /**
+   * One page of entries in ("createdAt", "id") order. Keyset paging keeps every
+   * page as cheap as the first, however deep the caller reads.
+   */
+  async list(query: AuditLogQuery = {}): Promise<AuditLogPage> {
+    const sql = this.sql;
+    const requested = Number.isFinite(query.limit) ? Math.trunc(query.limit ?? 0) : DEFAULT_AUDIT_PAGE_SIZE;
+    const limit = Math.min(Math.max(requested, 1), MAX_AUDIT_PAGE_SIZE);
+    const after = query.cursor ? this.decodeCursor(query.cursor) : null;
+    const descending = query.order !== "asc";
+    const rows = await sql<AuditLogRow[]>`
       SELECT "id", "action", "actorId", "actorName", "actorEmail",
              "targetType", "targetId", "targetLabel", "ip", "metadata", "createdAt"
       FROM "audit_logs"
-      ORDER BY "createdAt" DESC
-      LIMIT ${limit}
+      WHERE 1 = 1
+        ${query.action ? sql`AND "action" = ${query.action}` : sql``}
+        ${query.actor ? sql`AND "actorEmail" = ${query.actor}` : sql``}
+        ${query.target ? sql`AND "targetLabel" = ${query.target}` : sql``}
+        ${after
+          ? descending
+            ? sql`AND ("createdAt", "id") < (${after.createdAt}, ${after.id})`
+            : sql`AND ("createdAt", "id") > (${after.createdAt}, ${after.id})`
+          : sql``}
+      ${descending
+        ? sql`ORDER BY "createdAt" DESC, "id" DESC`
+        : sql`ORDER BY "createdAt" ASC, "id" ASC`}
+      LIMIT ${limit + 1}
     `;
-    return rows.map((row) => ({
-      ...row,
-      metadata: typeof row.metadata === "string"
-        ? JSON.parse(row.metadata) as Record<string, unknown>
-        : row.metadata as Record<string, unknown> | null,
-      createdAt: row.createdAt instanceof Date
-        ? row.createdAt.toISOString()
-        : new Date(row.createdAt).toISOString(),
-    }));
+    const page = rows.slice(0, limit);
+    const last = page.at(-1);
+    return {
+      entries: page.map(view),
+      nextCursor: rows.length > limit && last ? encodeCursor(last) : null,
+    };
+  }
+
+  /** Distinct action codes, for filter menus. */
+  async actions(): Promise<string[]> {
+    // A loose index scan: each step seeks the next larger code in the action
+    // index, so the cost follows the number of codes rather than rows.
+    const rows = await this.sql<Array<{ action: string | null }>>`
+      WITH RECURSIVE "codes"("action") AS (
+        SELECT MIN("action") FROM "audit_logs"
+        UNION ALL
+        SELECT (SELECT MIN("action") FROM "audit_logs" WHERE "action" > "codes"."action")
+        FROM "codes"
+        WHERE "codes"."action" IS NOT NULL
+      )
+      SELECT "action" FROM "codes" WHERE "action" IS NOT NULL LIMIT ${MAX_LISTED_ACTIONS}
+    `;
+    return rows.flatMap((row) => row.action === null ? [] : [row.action]);
+  }
+
+  private decodeCursor(cursor: string): AuditPosition {
+    try {
+      const value: unknown = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+      if (Array.isArray(value) && value.length === 2) {
+        const [createdAt, id] = value as unknown[];
+        if (
+          typeof createdAt === "string" && !Number.isNaN(Date.parse(createdAt)) &&
+          typeof id === "string" && id.length > 0 && (this.dialect !== "postgres" || UUID.test(id))
+        ) {
+          return { createdAt, id };
+        }
+      }
+    } catch {
+      // Malformed base64 or JSON is reported below like any other bad cursor.
+    }
+    throw new AppException("INVALID_CURSOR", "The audit log cursor is invalid", 400);
   }
 
   async recordRequest(
@@ -247,6 +330,25 @@ export class AuditService {
     if (options.defer) this.recordLater(entry);
     else await this.record(entry);
   }
+}
+
+function view(row: AuditLogRow): AuditLogView {
+  return {
+    ...row,
+    metadata: typeof row.metadata === "string"
+      ? JSON.parse(row.metadata) as Record<string, unknown>
+      : row.metadata as Record<string, unknown> | null,
+    createdAt: row.createdAt instanceof Date
+      ? row.createdAt.toISOString()
+      : new Date(row.createdAt).toISOString(),
+  };
+}
+
+// Keeps the stored timestamp text as is: SQLite compares it as a string, so a
+// reformatted value could skip or repeat rows.
+function encodeCursor(row: AuditLogRow): string {
+  const createdAt = row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt;
+  return Buffer.from(JSON.stringify([createdAt, row.id])).toString("base64url");
 }
 
 function message(error: unknown): string {

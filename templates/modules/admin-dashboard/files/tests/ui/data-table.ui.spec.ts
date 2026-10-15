@@ -1,8 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { ready } from "../helpers/hydration";
 
-// Sorting via the shared DataTable. Users is server-sorted (manual), audit is
-// client-sorted — both drive the same clickable headers + aria-sort.
+// Sorting via the shared DataTable. Users sorts its loaded rows; the audit log
+// asks the server for the other time order — both drive the same clickable
+// headers + aria-sort.
 test("users table sorts by a column header (server)", async ({ page }) => {
   await ready(page, "/admin/users");
   const header = page.getByRole("columnheader", { name: /Name/ });
@@ -24,11 +25,21 @@ test("users table sorts by a column header (server)", async ({ page }) => {
   expect(asc).not.toBe(desc); // order flipped
 });
 
-test("audit table sorts client-side", async ({ page }) => {
+test("audit table sorts by time on the server", async ({ page }) => {
   await ready(page, "/admin/audit");
-  test.skip((await page.getByRole("row").count()) < 3, "not enough audit entries");
-  await page.getByRole("button", { name: "When" }).click(); // default desc -> asc
-  await expect(page.getByRole("columnheader", { name: /When/ })).toHaveAttribute("aria-sort", "ascending");
+  const table = page.getByRole("table", { name: "Audit log" });
+  await expect(table.getByRole("row").nth(1)).toBeVisible();
+  test.skip((await table.getByRole("row").count()) < 4, "not enough audit entries");
+  const ascending = page.waitForResponse((response) =>
+    response.url().includes("/api/audit-logs?") && response.url().includes("order=asc"),
+  );
+  await table.getByRole("button", { name: "When" }).click(); // default desc -> asc
+  await expect(table.getByRole("columnheader", { name: /When/ })).toHaveAttribute("aria-sort", "ascending");
+  const entries = (await (await ascending).json()) as Array<{ createdAt: string }>;
+  const times = entries.map((entry) => Date.parse(entry.createdAt));
+  expect(times).toEqual([...times].sort((left, right) => left - right));
+  // Only time can be sorted: the other headers are plain labels.
+  await expect(table.getByRole("columnheader", { name: "Action" }).getByRole("button")).toHaveCount(0);
 });
 
 test("users table keeps responsive headers and cells aligned", async ({ page }) => {

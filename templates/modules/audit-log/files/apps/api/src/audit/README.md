@@ -82,5 +82,9 @@ survives renames/deletes), `targetType/targetId/targetLabel`, `ip`, `metadata`
   pass `{ defer: true }` only for high-volume, non-security events.
 - **Schema:** add columns with a migration, and keep the
   `AuditEntry` type in `audit-events.ts` in sync.
-- **Reading:** `GET /audit-logs` returns the latest 50 (admin only); extend the
-  Elysia plugin in `audit.module.ts` for filtering or pagination.
+- **Reading:** `GET /audit-logs` (admin only) returns a page as an array, newest
+  first, filtered by exact `action`, `actor` (email), and `target` (label). Pass
+  the `X-Next-Cursor` response header back as `cursor` for the next page; `limit`
+  is 1 to 100 (default 50) and `order=asc` reverses the order.
+  `GET /audit-logs/actions` lists the recorded action codes. Routes live in
+  `audit.routes.ts`.

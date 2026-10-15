@@ -4,7 +4,8 @@ import type { QueryRunner } from "typeorm";
 import type { AuthSession } from "../auth/auth.service";
 import { InitAuditLogs1720300000000 } from "../migrations/1720300000000-InitAuditLogs";
 import { recordAudit, recordAuditLater } from "./audit-events";
-import { AuditService, type AuditLogger } from "./audit.service";
+import { AppException } from "@podosoft/podokit-contracts";
+import { AuditService, type AuditLogger, type AuditLogQuery } from "./audit.service";
 
 const on = (): Promise<boolean> => Promise.resolve(true);
 const off = (): Promise<boolean> => Promise.resolve(false);
@@ -25,6 +26,47 @@ async function sqliteDatabase(): Promise<SQL> {
   } as unknown as QueryRunner;
   await new InitAuditLogs1720300000000().up(runner);
   return sql;
+}
+
+interface SeedRow {
+  id: string;
+  action: string;
+  createdAt: string;
+  actorEmail?: string;
+  targetLabel?: string;
+}
+
+const at = (second: number): string => `2026-01-01T00:00:0${second}.000Z`;
+
+// Newest first: a5, a4, then a3 and a2 sharing one timestamp, then a1.
+const SEED: SeedRow[] = [
+  { id: "a1", action: "auth.login", createdAt: at(1), actorEmail: "admin@example.com" },
+  { id: "a2", action: "user.ban", createdAt: at(2), actorEmail: "admin@example.com", targetLabel: "bob@example.com" },
+  { id: "a3", action: "auth.login", createdAt: at(2), actorEmail: "bob@example.com" },
+  { id: "a4", action: "user.ban", createdAt: at(3), actorEmail: "admin@example.com", targetLabel: "carol@example.com" },
+  { id: "a5", action: "auth.login", createdAt: at(4), actorEmail: "admin@example.com" },
+];
+
+async function seededService(): Promise<AuditService> {
+  const sql = await sqliteDatabase();
+  for (const row of SEED) {
+    await sql`
+      INSERT INTO "audit_logs" ("id", "action", "actorEmail", "targetLabel", "createdAt")
+      VALUES (${row.id}, ${row.action}, ${row.actorEmail ?? null}, ${row.targetLabel ?? null}, ${row.createdAt})
+    `;
+  }
+  return new AuditService(sql, { dialect: "sqlite", enabled: on });
+}
+
+async function walk(service: AuditService, query: AuditLogQuery): Promise<string[][]> {
+  const pages: string[][] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await service.list({ ...query, cursor });
+    pages.push(page.entries.map((entry) => entry.id));
+    cursor = page.nextCursor ?? undefined;
+  } while (cursor && pages.length < 10);
+  return pages;
 }
 
 async function storedRows(sql: SQL): Promise<Array<{ action: string; metadata: unknown }>> {
@@ -91,11 +133,11 @@ describe("AuditService", () => {
     expect(capture.batches[0]?.[0]).toMatchObject({ action: "invoice.paid", metadata: { amount: 42 } });
   });
 
-  test("returns recent entries with serialized timestamps and parsed metadata", async () => {
+  test("lists entries with serialized timestamps and parsed metadata", async () => {
     const sql = await sqliteDatabase();
     const service = new AuditService(sql, { dialect: "sqlite", enabled: on });
     await service.record({ action: "auth.login", metadata: { method: "password" } });
-    const [entry] = await service.recent();
+    const [entry] = (await service.list()).entries;
     expect(entry?.metadata).toEqual({ method: "password" });
     expect(entry?.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
   });
@@ -252,5 +294,60 @@ describe("deferred recording", () => {
     expect(capture.batches).toHaveLength(0);
     await service.close();
     expect(capture.batches[0]?.[0]).toMatchObject({ action: "comment.create", actorEmail: "a@example.com" });
+  });
+});
+
+describe("listing", () => {
+  test("walks every entry once, newest first, across a timestamp tie", async () => {
+    const service = await seededService();
+    expect(await walk(service, { limit: 2 })).toEqual([["a5", "a4"], ["a3", "a2"], ["a1"]]);
+    expect(await walk(service, { limit: 3 })).toEqual([["a5", "a4", "a3"], ["a2", "a1"]]);
+  });
+
+  test("gives no cursor when the last page is exactly full", async () => {
+    const service = await seededService();
+    const page = await service.list({ limit: 5 });
+    expect(page.entries).toHaveLength(5);
+    expect(page.nextCursor).toBeNull();
+  });
+
+  test("walks oldest first when asked", async () => {
+    const service = await seededService();
+    expect(await walk(service, { limit: 2, order: "asc" })).toEqual([["a1", "a2"], ["a3", "a4"], ["a5"]]);
+  });
+
+  test("keeps the page size between 1 and 100", async () => {
+    const service = await seededService();
+    expect((await service.list({ limit: 0 })).entries).toHaveLength(1);
+    expect((await service.list({ limit: 1_000 })).entries).toHaveLength(5);
+  });
+
+  test("filters by exact action, actor email, and target label", async () => {
+    const service = await seededService();
+    const ids = async (query: AuditLogQuery): Promise<string[]> =>
+      (await service.list(query)).entries.map((entry) => entry.id);
+    expect(await ids({ action: "user.ban" })).toEqual(["a4", "a2"]);
+    expect(await ids({ actor: "admin@example.com" })).toEqual(["a5", "a4", "a2", "a1"]);
+    expect(await ids({ target: "bob@example.com" })).toEqual(["a2"]);
+    expect(await ids({ actor: "admin" })).toEqual([]);
+    expect(await walk(service, { action: "auth.login", actor: "admin@example.com", limit: 1 }))
+      .toEqual([["a5"], ["a1"]]);
+  });
+
+  test("lists each recorded action code once", async () => {
+    const service = await seededService();
+    expect(await service.actions()).toEqual(["auth.login", "user.ban"]);
+  });
+
+  test("rejects a cursor it did not issue", async () => {
+    const service = await seededService();
+    const encode = (value: unknown): string => Buffer.from(JSON.stringify(value)).toString("base64url");
+    for (const cursor of ["%%%", encode({ id: "a1" }), encode(["yesterday", "a1"]), encode([at(1), 7])]) {
+      const error = await service.list({ cursor }).catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(AppException);
+      expect(error).toMatchObject({ code: "INVALID_CURSOR", statusCode: 400 });
+    }
+    const postgres = new AuditService(sqlCapture().sql, { dialect: "postgres", enabled: on });
+    await expect(postgres.list({ cursor: encode([at(1), "a1"]) })).rejects.toMatchObject({ code: "INVALID_CURSOR" });
   });
 });
