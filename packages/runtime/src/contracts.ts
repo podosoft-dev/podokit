@@ -110,7 +110,16 @@ export interface CacheStore {
   close(): void | Promise<void>;
 }
 
-export type ObjectBody = string | Uint8Array | AsyncIterable<Uint8Array>;
+/**
+ * Content to store. Streams and async iterables are read once, in order, and
+ * never collected into one buffer by `put`.
+ */
+export type ObjectBody =
+  | Uint8Array
+  | string
+  | Blob
+  | ReadableStream<Uint8Array>
+  | AsyncIterable<Uint8Array>;
 
 export interface PutObjectOptions {
   contentType?: string;
@@ -154,7 +163,28 @@ export interface ObjectPage {
   nextCursor?: string;
 }
 
+export interface CreateMultipartUploadOptions {
+  contentType?: string;
+}
+
+export interface MultipartUpload {
+  /** Opaque and provider-specific. */
+  uploadId: string;
+}
+
+export interface UploadedPart {
+  /** Pass it back to `completeMultipartUpload` with the part number. */
+  etag: string;
+  size: number;
+}
+
+export interface CompletedPart {
+  partNumber: number;
+  etag: string;
+}
+
 export interface ObjectStore {
+  /** Writes the whole object; streamed bodies are written as they are read. */
   put(key: string, body: ObjectBody, options?: PutObjectOptions): Promise<StoredObject>;
   /** Metadata and a lazily opened body, or null when the object does not exist. */
   get(key: string): Promise<ObjectData | null>;
@@ -165,6 +195,24 @@ export interface ObjectStore {
   exists(key: string): Promise<boolean>;
   delete(key: string): Promise<void>;
   getDownloadUrl(key: string, options?: DownloadUrlOptions): Promise<string>;
+  /**
+   * Starts an object that is uploaded in numbered parts. Nothing is visible
+   * under `key` until the upload completes.
+   */
+  createMultipartUpload(key: string, options?: CreateMultipartUploadOptions): Promise<MultipartUpload>;
+  /**
+   * Stores part `partNumber` (1 to `MAX_MULTIPART_PARTS`). Parts may arrive in
+   * any order, and uploading a number again replaces that part. Every part
+   * except the last must hold at least `MIN_MULTIPART_PART_BYTES`.
+   */
+  uploadPart(key: string, uploadId: string, partNumber: number, body: ObjectBody): Promise<UploadedPart>;
+  /**
+   * Joins the listed parts in part-number order into the object and ends the
+   * upload. Parts that are not listed are discarded.
+   */
+  completeMultipartUpload(key: string, uploadId: string, parts: readonly CompletedPart[]): Promise<ObjectInfo>;
+  /** Discards the upload and its parts; resolves when the upload no longer exists. */
+  abortMultipartUpload(key: string, uploadId: string): Promise<void>;
   close(): void | Promise<void>;
 }
 

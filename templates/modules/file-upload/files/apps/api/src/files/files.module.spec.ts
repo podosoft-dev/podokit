@@ -1,16 +1,18 @@
 import { describe, expect, it } from "bun:test";
 import { AppException } from "@podosoft/podokit-contracts";
-import type { ObjectBody, ObjectInfo, ObjectStore } from "@podosoft/podokit-runtime";
+import { objectBodyChunks, type ObjectBody, type ObjectInfo, type ObjectStore } from "@podosoft/podokit-runtime";
 import { Elysia } from "elysia";
 import type { RequestIdentity } from "../core/services";
 import { filesRoutes } from "./files.module";
 
 async function bytes(body: ObjectBody): Promise<Uint8Array> {
-  if (typeof body === "string") return Buffer.from(body);
-  if (body instanceof Uint8Array) return body;
   const chunks: Uint8Array[] = [];
-  for await (const chunk of body) chunks.push(chunk);
+  for await (const chunk of objectBodyChunks(body)) chunks.push(chunk);
   return Buffer.concat(chunks);
+}
+
+async function unused(): Promise<never> {
+  throw new Error("The files routes do not use multipart uploads");
 }
 
 function streamOf(value: Uint8Array): ReadableStream<Uint8Array> {
@@ -48,6 +50,10 @@ function memoryStore(): ObjectStore {
       objects.delete(key);
     },
     getDownloadUrl: async (key) => `https://storage.example.com/${key}`,
+    createMultipartUpload: unused,
+    uploadPart: unused,
+    completeMultipartUpload: unused,
+    abortMultipartUpload: unused,
     close: () => undefined,
   };
 }

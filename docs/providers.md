@@ -208,6 +208,60 @@ S3 pages with continuation tokens, and the local provider reads one directory at
 a time, skipping directories that sort before the cursor. Treat cursors as
 opaque and provider-specific.
 
+### Object storage writes
+
+`ObjectStore.put(key, body)` accepts bytes, a string, a `Blob` (including a
+Bun file), a `ReadableStream<Uint8Array>` such as a request body, or an
+`AsyncIterable<Uint8Array>`, and neither provider collects a streamed body into
+one buffer:
+
+- The local provider writes chunks to a temporary file next to the target and
+  renames it into place.
+- The S3 provider sends bytes, strings, and blobs up to 8 MiB in one request.
+  Anything larger or streamed goes out as a multipart upload in 8 MiB parts,
+  two in flight at a time, reusing the part buffers. Against Silo, streaming a
+  200 MB body and a 1 GiB body each added about 70 MiB to the process's
+  resident memory. A file-backed `Blob` is read in slices, because both Bun's
+  S3 write and `Blob.stream()` would read a file into memory ahead of the
+  upload.
+
+A body that fails part way abandons the write: the temporary file is removed,
+or the multipart upload is aborted, so no partial object appears.
+
+For uploads that span several HTTP requests, such as resumable or chunked
+uploads, use the multipart API on the same contract:
+`createMultipartUpload(key, { contentType })`, `uploadPart(key, uploadId,
+partNumber, body)`, `completeMultipartUpload(key, uploadId, parts)`, and
+`abortMultipartUpload(key, uploadId)`. Parts are numbered from 1 to
+`MAX_MULTIPART_PARTS` (10,000), and every part except the last needs at least
+`MIN_MULTIPART_PART_BYTES` (5 MiB), the S3 rule that the local provider
+enforces too, so code tested against local storage behaves the same on S3.
+Failures a caller can act on throw `MultipartUploadError` with the code
+`UPLOAD_NOT_FOUND`, `INVALID_PART`, or `PART_TOO_SMALL`. See the
+[runtime package README](../packages/runtime/README.md#multipart-uploads) for
+the full rules.
+
+Provider details:
+
+- **S3**: Bun's `S3Client` has no multipart calls, so the module signs these
+  requests itself with AWS Signature Version 4, using the same `S3_*` (or
+  `AWS_*`) credentials and endpoint settings. It works with AWS S3 and
+  Silo/MinIO-compatible services. S3 needs each part's length before sending
+  it, so a part passed as a stream is collected in memory first; pass a
+  `Blob` or bytes when you have them, and keep parts to tens of MiB. Unfinished
+  uploads keep their parts, and storage charges, until they are aborted: add a
+  bucket lifecycle rule with `AbortIncompleteMultipartUpload` (for example
+  after one day) on AWS. MinIO-compatible services such as Silo also expire
+  stale uploads on their own schedule.
+- **Local**: parts live under `LOCAL_STORAGE_PATH/.podokit/multipart/<uploadId>/`.
+  Uploads idle longer than `LOCAL_STORAGE_MULTIPART_MAX_AGE` seconds (default
+  86400) are removed when a later upload starts.
+
+Bun's own request body limit still applies to each HTTP request. Raise
+`API_MAX_REQUEST_BODY_SIZE` or set `apiServerOptions` (see
+[API server options](templates.md#api-server-options)) when a single request must
+carry more than 128 MiB, or keep requests small with multipart parts.
+
 ## Local persistence and backup
 
 SQLite defaults to `./data/podokit.sqlite`; local object storage defaults to

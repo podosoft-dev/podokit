@@ -8,7 +8,12 @@ import { LocalObjectStore } from "@podosoft/podokit-runtime";
 import { Elysia } from "elysia";
 import type { RequestIdentity } from "../core/services";
 import { DownloadUrlSigner, SignedDownloadStore } from "./download-url";
-import { DOWNLOAD_BASE_URL, downloadSafetyHeaders, localStorageRoutes } from "./storage-local.module";
+import {
+  DOWNLOAD_BASE_URL,
+  downloadSafetyHeaders,
+  localStorageRoutes,
+  multipartMaxAgeMs,
+} from "./storage-local.module";
 
 let root: string | undefined;
 
@@ -173,6 +178,35 @@ describe("local object storage provider", () => {
     }
     expect(existsSync(join(local.directory, "site"))).toBe(false);
     expect((await call(local, admin, "GET", "/storage/missing")).status).toBe(404);
+  });
+});
+
+describe("local multipart uploads", () => {
+  it("assembles an object from parts through the signed store", async () => {
+    const local = await fixture();
+    const { uploadId } = await local.storage.createMultipartUpload("uploads/big.txt", { contentType: "text/plain" });
+    const second = await local.storage.uploadPart("uploads/big.txt", uploadId, 2, "world");
+    const first = await local.storage.uploadPart("uploads/big.txt", uploadId, 1, new Blob(["x".repeat(5 * 1024 * 1024)]));
+    const info = await local.storage.completeMultipartUpload("uploads/big.txt", uploadId, [
+      { partNumber: 1, etag: first.etag },
+      { partNumber: 2, etag: second.etag },
+    ]);
+    expect(info).toMatchObject({ size: 5 * 1024 * 1024 + 5, contentType: "text/plain" });
+    const object = await local.storage.get("uploads/big.txt");
+    expect((await new Response(object?.body).text()).endsWith("xworld")).toBe(true);
+
+    const aborted = await local.storage.createMultipartUpload("uploads/aborted.txt");
+    await local.storage.abortMultipartUpload("uploads/aborted.txt", aborted.uploadId);
+    expect(existsSync(join(local.directory, ".podokit", "multipart", aborted.uploadId))).toBe(false);
+  });
+
+  it("reads the idle multipart lifetime in seconds", () => {
+    expect(multipartMaxAgeMs(undefined)).toBe(24 * 60 * 60 * 1000);
+    expect(multipartMaxAgeMs("")).toBe(24 * 60 * 60 * 1000);
+    expect(multipartMaxAgeMs("3600")).toBe(3_600_000);
+    for (const value of ["0", "-1", "1.5", "a day"]) {
+      expect(() => multipartMaxAgeMs(value)).toThrow("LOCAL_STORAGE_MULTIPART_MAX_AGE");
+    }
   });
 });
 

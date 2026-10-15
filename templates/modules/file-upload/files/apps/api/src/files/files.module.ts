@@ -14,11 +14,7 @@ export function filesRoutes(storage: ObjectStore, identity: RequestIdentity): El
   return new Elysia({ name: "podokit.files" })
     .post("/files", async ({ request, body, set }) => {
       const key = uploadKey(await identity.userId(request), body.file.name);
-      await storage.put(
-        key,
-        new Uint8Array(await body.file.arrayBuffer()),
-        { contentType: body.file.type },
-      );
+      await storage.put(key, body.file, { contentType: body.file.type });
       set.status = 201;
       return { key, url: await storage.getDownloadUrl(key) };
     }, {

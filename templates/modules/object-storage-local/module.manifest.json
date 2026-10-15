@@ -16,7 +16,9 @@
   "targetApp": "api",
   "env": [
     "# Local object storage root. Use an absolute path in production and desktop packaging.",
-    "LOCAL_STORAGE_PATH=./data/files"
+    "LOCAL_STORAGE_PATH=./data/files",
+    "# Seconds an unfinished multipart upload may sit idle before its parts are removed.",
+    "LOCAL_STORAGE_MULTIPART_MAX_AGE=86400"
   ],
   "inject": [
     {
@@ -28,12 +30,19 @@
       "file": "apps/api/src/app.ts",
       "marker": "// podokit:end:modules",
       "text": "storageLocalModule,"
+    },
+    {
+      "file": "AGENTS.md",
+      "marker": "<!-- podokit:end:agents-modules -->",
+      "optional": true,
+      "text": "### object-storage-local\n- Store files through `OBJECT_STORAGE` from `@podosoft/podokit-runtime` (`services.resolve(OBJECT_STORAGE)`), not the provider directly. `put(key, body, { contentType })` streams a `ReadableStream` such as `request.body`, a `Blob` or file, an async iterable, bytes, or a string without buffering it; a failed body leaves no partial object.\n- For uploads split across requests (resumable or chunked), use `createMultipartUpload`, `uploadPart` (parts numbered 1 to 10,000, each but the last at least `MIN_MULTIPART_PART_BYTES` = 5 MiB), `completeMultipartUpload`, and `abortMultipartUpload`. Branch on `MultipartUploadError.code` (`UPLOAD_NOT_FOUND`, `INVALID_PART`, `PART_TOO_SMALL`).\n- Unfinished multipart uploads live under `LOCAL_STORAGE_PATH/.podokit/multipart/` and are removed after `LOCAL_STORAGE_MULTIPART_MAX_AGE` seconds without activity.\n"
     }
   ],
   "instructions": [
     "Local object storage is single-host. Back up LOCAL_STORAGE_PATH together with the database.",
     "Keep the API at one replica or select the S3 provider.",
     "Download URLs are signed and expire after one hour by default. The signing key lives in LOCAL_STORAGE_PATH/.podokit/download-url.key; deleting it invalidates every issued URL.",
-    "The /storage demo routes need the auth module and an administrator session, and only reach keys under demo/."
+    "The /storage demo routes need the auth module and an administrator session, and only reach keys under demo/.",
+    "Multipart upload parts live under LOCAL_STORAGE_PATH/.podokit/multipart until the upload completes or is aborted; uploads idle longer than LOCAL_STORAGE_MULTIPART_MAX_AGE seconds are removed."
   ]
 }

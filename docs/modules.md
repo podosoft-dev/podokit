@@ -425,6 +425,22 @@ The same native `Bun.S3Client` code path serves both — only configuration diff
 The module registers a bucket probe with `/health/ready`, so an unavailable or
 unauthorized bucket removes the API pod from service without failing liveness.
 
+`OBJECT_STORAGE.put` streams large and streamed bodies as a multipart upload
+with bounded memory, and the store implements the runtime multipart API
+(`createMultipartUpload`, `uploadPart`, `completeMultipartUpload`,
+`abortMultipartUpload`) for uploads split across requests. Bun's `S3Client`
+has no multipart calls, so these requests are signed with AWS Signature
+Version 4 from the same `S3_*` settings; set `S3_ACCESS_KEY_ID` and
+`S3_SECRET_ACCESS_KEY` (or `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, and
+`S3_SESSION_TOKEN` or `AWS_SESSION_TOKEN` for temporary credentials). Keys
+with `.` or `..` segments are rejected for writes because a request URL would
+resolve them to another key. On AWS, add an `AbortIncompleteMultipartUpload`
+lifecycle rule so abandoned uploads stop accruing storage. See
+[Object storage writes](providers.md#object-storage-writes).
+
+Applications that wrote their own S3 multipart writer to store large files
+can call `put` with the stream, or the multipart API, instead.
+
 ### `object-storage-local`
 
 Atomic, path-confined object storage rooted at `LOCAL_STORAGE_PATH`. It rejects
@@ -456,6 +472,13 @@ confined to `demo/`.
 Downloads and demo reads stream the file from disk in 64 KiB chunks. Each
 response carries `content-length`, `etag`, and `last-modified`, and a matching
 `If-None-Match` receives `304` without reading the file.
+
+Streamed `put` bodies are written to a temporary file and renamed into place.
+Multipart uploads keep their parts under
+`LOCAL_STORAGE_PATH/.podokit/multipart/<uploadId>/` and follow the same rules
+as S3, including the 5 MiB minimum for every part but the last. Uploads idle
+for longer than `LOCAL_STORAGE_MULTIPART_MAX_AGE` seconds (default 86400) are
+removed when a later upload starts.
 
 ### `file-upload`
 

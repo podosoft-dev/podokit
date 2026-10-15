@@ -23,7 +23,13 @@
   ],
   "inject": [
     { "file": "apps/api/src/app.ts", "marker": "// podokit:end:imports", "text": "import { storageModule } from \"./storage/storage.module\";" },
-    { "file": "apps/api/src/app.ts", "marker": "// podokit:end:modules", "text": "storageModule," }
+    { "file": "apps/api/src/app.ts", "marker": "// podokit:end:modules", "text": "storageModule," },
+    {
+      "file": "AGENTS.md",
+      "marker": "<!-- podokit:end:agents-modules -->",
+      "optional": true,
+      "text": "### object-storage-s3\n- Store files through `OBJECT_STORAGE` from `@podosoft/podokit-runtime` (`services.resolve(OBJECT_STORAGE)`), not the provider directly. `put(key, body, { contentType })` streams a `ReadableStream` such as `request.body`, a `Blob` or file, an async iterable, bytes, or a string without buffering it; a failed body leaves no partial object.\n- For uploads split across requests (resumable or chunked), use `createMultipartUpload`, `uploadPart` (parts numbered 1 to 10,000, each but the last at least `MIN_MULTIPART_PART_BYTES` = 5 MiB), `completeMultipartUpload`, and `abortMultipartUpload`. Branch on `MultipartUploadError.code` (`UPLOAD_NOT_FOUND`, `INVALID_PART`, `PART_TOO_SMALL`).\n- Multipart requests are signed with the `S3_*` (or `AWS_*`) credentials. A part passed as a stream is held in memory while it is sent, so keep parts to tens of MiB. On AWS, add an `AbortIncompleteMultipartUpload` bucket lifecycle rule.\n"
+    }
   ],
   "instructions": [
     "Start Silo for local dev:  docker compose -f infra/docker/docker-compose.yml -f infra/docker/minio.compose.yml up -d",
@@ -32,6 +38,8 @@
     "Store an object:  curl -b cookies.txt -XPUT localhost:5002/storage/hello -H 'content-type: application/json' -d '{\"content\":\"hi\"}'",
     "Read it back:     curl -b cookies.txt localhost:5002/storage/hello",
     "Presigned URL:    curl -b cookies.txt localhost:5002/storage/hello/presigned",
-    "For AWS S3: set STORAGE_PROVIDER=aws, remove S3_ENDPOINT, set S3_FORCE_PATH_STYLE=false and real credentials/bucket."
+    "For AWS S3: set STORAGE_PROVIDER=aws, remove S3_ENDPOINT, set S3_FORCE_PATH_STYLE=false and real credentials/bucket.",
+    "OBJECT_STORAGE.put streams large or streamed bodies as a multipart upload; uploads split across requests use createMultipartUpload, uploadPart, completeMultipartUpload, and abortMultipartUpload.",
+    "On AWS, add a bucket lifecycle rule with AbortIncompleteMultipartUpload so abandoned multipart uploads are removed."
   ]
 }
