@@ -164,7 +164,7 @@ interface ListEntry {
 export class LocalObjectStore implements ObjectStore {
   private readonly rootDirectory: string;
   private readonly publicBaseUrl: string;
-  private readonly ready: Promise<string>;
+  private ready: Promise<string> | undefined;
 
   constructor(options: LocalObjectStoreOptions) {
     if (!isAbsolute(options.rootDirectory)) {
@@ -172,7 +172,6 @@ export class LocalObjectStore implements ObjectStore {
     }
     this.rootDirectory = resolve(options.rootDirectory);
     this.publicBaseUrl = (options.publicBaseUrl ?? "/files/content").replace(/\/$/, "");
-    this.ready = this.initialize();
   }
 
   async put(key: string, body: ObjectBody, options: PutObjectOptions = {}): Promise<StoredObject> {
@@ -276,7 +275,7 @@ export class LocalObjectStore implements ObjectStore {
    * directory sorts as its name plus "/", which keeps the order of whole keys.
    */
   private async *walk(directory: string, name: string, after: string | undefined): AsyncGenerator<string> {
-    const root = await this.ready;
+    const root = await this.root();
     const segments = directory === "" ? [] : directory.slice(0, -1).split("/");
     if (segments[0] === ".podokit") return;
     let path = root;
@@ -315,13 +314,26 @@ export class LocalObjectStore implements ObjectStore {
     }
   }
 
+  /**
+   * Prepares the root on first use rather than in the constructor, so a store
+   * that is never used cannot leave an unhandled rejection, and a failed
+   * attempt is retried by the next call.
+   */
+  private root(): Promise<string> {
+    this.ready ??= this.initialize().catch((error: unknown) => {
+      this.ready = undefined;
+      throw error;
+    });
+    return this.ready;
+  }
+
   private async initialize(): Promise<string> {
     await mkdir(this.rootDirectory, { recursive: true, mode: 0o700 });
     return realpath(this.rootDirectory);
   }
 
   private async safePath(key: string, createParents: boolean): Promise<string> {
-    const root = await this.ready;
+    const root = await this.root();
     const candidate = resolve(root, ...key.split("/"));
     const fromRoot = relative(root, candidate);
     if (fromRoot.startsWith(`..${sep}`) || fromRoot === ".." || isAbsolute(fromRoot)) {
@@ -357,7 +369,7 @@ export class LocalObjectStore implements ObjectStore {
   }
 
   private async metadataPath(key: string): Promise<string> {
-    const root = await this.ready;
+    const root = await this.root();
     const directory = join(root, ".podokit", "metadata");
     await mkdir(directory, { recursive: true, mode: 0o700 });
     return join(directory, this.metadataName(key));

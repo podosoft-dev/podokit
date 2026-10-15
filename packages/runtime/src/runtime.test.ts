@@ -166,6 +166,21 @@ describe("LocalObjectStore", () => {
     expect(await store.exists("avatars/user one.txt")).toBe(false);
   });
 
+  it("prepares the root on first use and retries a failed attempt", async () => {
+    const parent = await temporaryDirectory();
+    const root = join(parent, "objects");
+    await writeFile(root, "not a directory");
+    const store = new LocalObjectStore({ rootDirectory: root });
+    await expect(store.put("a.txt", "a")).rejects.toThrow();
+    await rm(root);
+    await expect(store.put("a.txt", "a")).resolves.toMatchObject({ key: "a.txt", size: 1 });
+
+    const unused = join(parent, "unused");
+    new LocalObjectStore({ rootDirectory: unused });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await expect(readFile(unused)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("reports missing objects, directories, and symbolic links as null", async () => {
     const root = await temporaryDirectory();
     const store = new LocalObjectStore({ rootDirectory: root });
