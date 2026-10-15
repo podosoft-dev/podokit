@@ -37,6 +37,8 @@ export interface Capabilities {
   organization: boolean;
   /** Act as an OIDC identity provider (issue tokens to registered clients). */
   oidcProvider: boolean;
+  /** Every signed-in user must enrol in two-factor authentication before using the app. */
+  require2fa: boolean;
   /** Assignable role names (access-control). */
   roles: string[];
   /** Automatic logout after this many inactive minutes; null/absent means disabled. */

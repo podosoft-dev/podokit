@@ -726,8 +726,10 @@ describe("addModule (auth / better-auth)", () => {
       join(project, "apps/api/src/rate-limit/rate-limit.identity.ts"),
       "utf8",
     );
-    expect(identity).toContain("REQUEST_IDENTITY");
+    expect(identity).not.toContain("REQUEST_IDENTITY");
     expect(identity).toContain('request.headers.get("x-api-key")');
+    expect(identity).toContain("better-auth.session_token");
+    expect(identity).toContain("timingSafeEqual");
     expect(identity).toContain("RateLimitIdentityExtension");
     expect(identity).toContain("RATE_LIMIT_IDENTITY_EXTENSION");
   });
@@ -859,7 +861,8 @@ describe("addModule (auth / better-auth)", () => {
     expect(hooks).toContain("event.locals.authUnavailable = false");
     expect(hooks).toContain("error.status !== 401");
     expect(hooks).toContain("event.locals.siteUnavailable = false");
-    expect(hooks).toContain("isTemporaryServiceFailure(cause)");
+    expect(hooks).toContain("Promise.allSettled");
+    expect(hooks).toContain("isTemporaryServiceFailure(siteResult.reason)");
     expect(hooks).toContain("cause.statusCode === 408 || cause.statusCode === 429 || cause.statusCode >= 500");
     expect(hooks).toContain('error(503, "Service temporarily unavailable")');
     expect(hooks.indexOf('error(503, "Service temporarily unavailable")')).toBeLessThan(
@@ -868,10 +871,17 @@ describe("addModule (auth / better-auth)", () => {
     const appTypes = readFileSync(join(project, "apps/web/src/app.d.ts"), "utf8");
     expect(appTypes).toContain("authUnavailable: boolean");
     expect(appTypes).toContain("siteUnavailable: boolean");
+    expect(appTypes).toContain("capabilities?: Promise<Capabilities>");
+    const protectedLayout = readFileSync(join(project, "apps/web/src/lib/server/protected-layout.ts"), "utf8");
+    expect(protectedLayout).toContain("await getCapabilities(event)");
+    expect(protectedLayout).not.toContain("/api/account/require-2fa");
     const rootLayout = readFileSync(join(project, "apps/web/src/routes/+layout.server.ts"), "utf8");
     expect(rootLayout.indexOf("requireBackendAvailable(locals)")).toBeLessThan(
       rootLayout.indexOf("redirect(303, `/login?redirect="),
     );
+    expect(rootLayout).not.toContain("loadMessages");
+    const rootUniversalLayout = readFileSync(join(project, "apps/web/src/routes/+layout.ts"), "utf8");
+    expect(rootUniversalLayout).toContain("messages: await loadMessages(data.locale, data.site?.locale)");
     const guards = readFileSync(join(project, "apps/web/src/lib/server/guards.ts"), "utf8");
     expect(guards).toContain('error(503, "Service temporarily unavailable")');
     expect(guards).toContain("export function isPublicPath");

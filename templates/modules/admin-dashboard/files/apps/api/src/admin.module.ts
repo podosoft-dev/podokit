@@ -51,11 +51,12 @@ const adminPlugin: AppPlugin = ({ services }) => {
 
   return new Elysia({ name: "podokit.admin" })
     .get("/site/settings", async () => {
+      // The favicon fields are site.* rows too, so one read serves the response.
       const all = await site.getAll();
       const response: Record<string, string | boolean | null> = {};
       for (const key of PUBLIC_SITE_KEYS) response[key] = all[key] ?? null;
-      response.hasFavicon = (await site.get("faviconContentType")) !== null;
-      response.faviconVersion = await site.faviconVersion();
+      response.hasFavicon = all.faviconContentType !== undefined;
+      response.faviconVersion = all.faviconUpdatedAt ?? null;
       return response;
     }, {
       detail: { tags: ["site"], summary: "Get public site settings" },

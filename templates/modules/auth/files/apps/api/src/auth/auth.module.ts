@@ -17,7 +17,7 @@ import {
 import { FEATURE_FLAGS, SettingsService, type FeatureFlag } from "../settings/settings.service";
 import { authConfigStore } from "./auth-config-store";
 import { getAuth, authRuntime, primeAuth } from "./auth-provider";
-import { generateAuthOpenApiDocument } from "./auth.openapi";
+import { cachedAuthOpenApiDocuments } from "./auth.openapi";
 import { ROLE_NAMES } from "./permissions";
 import { AuthService, rolesOf } from "./auth.service";
 import { configureAuthQueryDatabase } from "./db";
@@ -86,6 +86,7 @@ const accountPlugin: AppPlugin = ({ services }) => {
         passkey: flags.passkey,
         organization: flags.organization,
         oidcProvider: flags.oidcProvider,
+        require2fa: flags.require2fa,
         providers: snapshot.providers,
         deleteAccount: snapshot.allowDelete,
         emailVerification: snapshot.requireEmailVerification,
@@ -170,11 +171,11 @@ export const authModule: PodokitModule = {
     accessPolicy.register("*", "/api/auth", "public");
     accessPolicy.register("*", "/api/auth/*", "public");
     accessPolicy.register("GET", "/account/capabilities", "public");
+    const authOpenApiDocument = cachedAuthOpenApiDocuments();
     services.resolve(OPENAPI).register("better-auth", async () => {
       await primeAuth();
-      const document = await generateAuthOpenApiDocument(getAuth().api);
       return {
-        document,
+        document: await authOpenApiDocument(getAuth()),
         pathPrefix: "/api/auth",
       };
     });

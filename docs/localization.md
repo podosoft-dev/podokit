@@ -77,11 +77,26 @@ This message fallback is independent from localized application records. Content
 such as articles, FAQs, or collection entries needs locale-aware persistence,
 draft/publication state, and an application-owned record fallback policy.
 
+## Loading Messages
+
+The root `+layout.ts` resolves messages with `loadMessages()` from
+`#lib/i18n/messages.js`. It runs on the server for the first render and in the
+browser afterwards, so the catalogs are not serialized into the page or resent
+in `__data.json` on client navigation. The root `+layout.server.ts` returns only
+`locale` and `site`, which `+layout.ts` uses to pick the catalogs. The language
+switch re-runs both loads.
+
+A production build merges each locale pair once and returns the same object to
+every caller, so treat the messages as read-only. Applications created before
+this layout may still return `messages` from `+layout.server.ts`; remove it there
+once `+layout.ts` exists to stop resending the catalogs.
+
 ## Development Reloading
 
 Vite tracks existing JSON catalogs as module dependencies. Saving an existing
 catalog in development updates the UI through HMR without restarting the web
-container. Adding a new definition or catalog changes the glob membership and
+container. Development merges the catalogs on every load, so an edit is never
+hidden behind the production cache. Adding a new definition or catalog changes the glob membership and
 may cause an automatic full-page reload. Keep the whole `apps/web/src` directory
 mounted or synchronized in the development compose configuration.
 

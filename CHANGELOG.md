@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- `Capabilities.require2fa` reports the two-factor policy, so the protected
+  layout no longer calls `/account/require-2fa`. The endpoint stays.
 - `DB_POOL_MAX`, `DB_AUTH_POOL_MAX`, `DB_CONNECT_TIMEOUT_MS`, and
   `DB_IDLE_TIMEOUT_MS` configure the API's PostgreSQL pools. A request that
   cannot get a connection in time answers 503 `DATABASE_UNAVAILABLE` instead of
@@ -19,6 +21,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Session reads no longer set the `set-auth-jwt` header. Clients that need a
+  JWT call `GET /api/auth/token`.
+- Bearer authentication accepts only signed session values (the
+  `set-auth-token` header or the cookie value). An unsigned token answers 401.
+- Rate limiting counts per signed session instead of per user, in the order API
+  key, verified session cookie or bearer, then client IP. It no longer reads the
+  session from the database.
+- Client navigation no longer carries the message catalog in `__data.json`.
+  New apps load messages in a universal root `+layout.ts`. Apps created earlier
+  own `routes/+layout.server.ts`: stop returning `messages` from it after the
+  update adds `+layout.ts`, and use `getCapabilities(event)` for capabilities.
 - Demo storage routes (`PUT`/`GET /storage/:key`) require an administrator and
   only address keys under `demo/`.
 - Uploads are stored as `uploads/<userId>/…` and only their uploader or an
@@ -29,6 +42,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- OAuth consent sends the signed authorization query, so allowing consent no
+  longer fails with `missing oauth query`. Apps created earlier own
+  `routes/oauth2/consent/+page.svelte`; send
+  `oauth_query: signedOAuthQuery(page.url.search)` from `$lib/oauth-query`.
+- `/site/settings` answers from one query shared for three seconds instead of
+  three sequential queries, and site settings writes are visible on the next
+  read.
+- The merged OpenAPI document is generated once per auth configuration, and the
+  rate-limit script runs by SHA.
 - Readiness re-checks the database on every probe again. Since 1.1.2 it checked
   once at startup, so an outage after boot stayed `ready`.
 - The web proxy aborts the upstream API request when the client disconnects, so

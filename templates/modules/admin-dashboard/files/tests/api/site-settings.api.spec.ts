@@ -54,3 +54,29 @@ test("theme settings: invalid values are rejected (no CSS injection)", async ({ 
     expect((await admin.put("/api/site/settings", { data })).status(), JSON.stringify(data)).toBe(400);
   }
 });
+
+test("site settings: one response shape and immediate reads after each write", async ({ playwright }) => {
+  const admin = await adminCtx(playwright);
+  const anon = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  const before = await (await anon.get("/api/site/settings")).json() as Record<string, unknown>;
+  expect(Object.keys(before)).toEqual([
+    "name", "description", "supportEmail", "footerText", "brandColor", "themePreset", "themeRadius",
+    "themeOverrides", "termsUrl", "privacyUrl", "locale", "timezone", "maintenanceMode", "allowSignup",
+    "hasFavicon", "faviconVersion",
+  ]);
+  expect(typeof before.hasFavicon).toBe("boolean");
+  expect(before.faviconVersion === null || typeof before.faviconVersion === "string").toBe(true);
+
+  try {
+    // The second write lands while the first read is still cached; it must not be hidden.
+    for (const footerText of ["first footer", "second footer"]) {
+      expect((await admin.put("/api/site/settings", { data: { footerText } })).ok()).toBeTruthy();
+      expect((await (await anon.get("/api/site/settings")).json()).footerText).toBe(footerText);
+    }
+  } finally {
+    const footerText = typeof before.footerText === "string" ? before.footerText : "";
+    await admin.put("/api/site/settings", { data: { footerText } });
+    await anon.dispose();
+    await admin.dispose();
+  }
+});

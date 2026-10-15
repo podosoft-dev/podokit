@@ -278,6 +278,10 @@ migration Job before a rolling deployment.
 - **Bearer tokens (API/mobile clients)**: always on. Sign-in returns the session token in
   a `set-auth-token` response header; send it back as `Authorization: Bearer <token>` to
   authenticate without a cookie. Useful for native apps and server-to-server calls.
+  The value is signed (`<token>.<signature>`, the same value as the session cookie) and
+  must be sent unchanged: an unsigned session token, such as the `session.token` field
+  returned by `get-session`, is ignored. Other bearer credentials, such as API keys or OAuth
+  access tokens, therefore never trigger a session lookup.
 
   ```bash
   # grab the token from the sign-in response header, then call a protected route with it
@@ -521,6 +525,13 @@ individual host and port settings. The Redis module registers a readiness check,
 and rate limiting, BullMQ, SSE, and the Redis service share the same connection
 configuration without logging credentials.
 
+As the `CACHE` implementation, the module runs the fixed-window counter script
+with `EVALSHA`, using a SHA1 computed in the process. When Redis has dropped the
+script after a restart, failover, or `SCRIPT FLUSH`, the store falls back to
+`EVAL`, which loads the script again. Any other Redis error reaches the caller
+unchanged, so the rate limiter still answers `RATE_LIMIT_UNAVAILABLE`. A cache
+write with a TTL is a single `SET key value PX ms`.
+
 ```bash
 npx @podosoft/podokit add redis
 bun install
@@ -603,10 +614,28 @@ curl -b cookies.txt localhost:5002/audit-logs   # [{ userId, method:"POST", path
 
 Rate limiting with a native Elysia request guard backed by the selected `CACHE`
 provider, with `auth` and `api-key-auth` added automatically. Counters
-are selected by authenticated user first, then a validated `X-API-Key`, then the
+are selected by a validated `X-API-Key` first, then a signed-in session, then the
 trusted-proxy client address. Every identity is domain-separated and SHA-256
 hashed before it becomes a provider key. The limit holds across API replicas
 with Redis; memory counters require one API process.
+
+A session is recognized from the Better Auth session cookie (including its
+`__Secure-` form) or a signed `Authorization: Bearer` value by verifying its HMAC
+signature with `BETTER_AUTH_SECRET`. The limiter does not read the session from the
+database, so choosing a counter adds no query to the request. As a result:
+
+- Limits apply **per session, not per user**. Each sign-in starts its own counter,
+  so a user signed in on two devices has two counters.
+- A cookie or bearer value without a valid signature is counted with the client
+  address, so forged values never receive a fresh counter.
+- Signing out or revoking a session still takes effect on the next request, because
+  authentication itself still checks the session in the database. A revoked token
+  that still carries a valid signature keeps its single counter.
+- Without `BETTER_AUTH_SECRET` (for example, an app without `auth`), every request
+  without a validated API key is counted by client address.
+
+Better Auth's own per-address limits on sign-in, sign-up, and password endpoints
+still apply in production, so creating new sessions remains limited by address.
 The liveness and readiness endpoints (`GET /health` and `GET /health/ready`) are
 excluded so orchestrator probes cannot consume the application request quota.
 
@@ -689,6 +718,11 @@ The generated `routes/(admin)` group and
 visual shell, so applications can place signed-in product pages there. A
 different protected group must call
 `requireBackendAvailable(locals)` before authentication redirects.
+Server loads read `/account/capabilities` through `getCapabilities(event)` from
+the managed `#lib/server/capabilities.js`. It fetches once per request, for a
+full render or a `__data.json` navigation, and every layout and page load of
+that request shares the response. The response includes the `require2fa`
+policy, so the two-factor enrolment redirect needs no separate request.
 
 ```bash
 npx @podosoft/podokit add admin-dashboard   # also adds auth
@@ -724,6 +758,12 @@ OAuth, SMTP, and sign-up approval configuration.
 - **/admin/settings** (admin only) — enable/disable sign-in methods and configure OAuth providers, SMTP, sign-up approval, automatic logout, and other server toggles at runtime (see below), plus the **Appearance** tab for the runtime theme (see "Appearance").
 - **/account** — the signed-in user's profile and profile image, password, 2FA, passkeys, API keys, and sessions without the admin shell.
 - **/admin/account** — the same account controls inside the admin shell, retained for existing links and applications.
+
+Every page render loads the public site settings and the session in parallel.
+`GET /site/settings` reads all `site.*` rows, favicon fields included, in one
+query and serves them from a 3-second in-process snapshot. A save clears the
+snapshot on the replica that handled it, so the next read there is current;
+other replicas show the change, including maintenance mode, within 3 seconds.
 
 Admin, account, authentication, maintenance, and API routes send
 `X-Robots-Tag: noindex, nofollow` by default. This keeps generated applications'
@@ -855,6 +895,9 @@ app issues tokens to registered clients — other apps can "Sign in with this ap
 built on `@better-auth/oauth-provider` and signs id_tokens with the `jwt` plugin's keys
 (exposed at the discovery `jwks_uri`). Discovery is at
 `GET /api/auth/.well-known/openid-configuration` (404 while disabled).
+Session reads do not attach a `set-auth-jwt` header, so they never pay for a JWT
+signature. A client that needs a JWT for the signed-in session requests one from
+`GET /api/auth/token` and verifies it against `GET /api/auth/jwks`.
 
 Register a client, then run the authorization-code + PKCE flow:
 
