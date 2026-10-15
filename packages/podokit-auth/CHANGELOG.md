@@ -1,5 +1,11 @@
 # @podosoft/podokit-auth
 
+## 0.5.0
+
+### Minor Changes
+
+- [#216](https://github.com/podosoft-dev/podokit/pull/216) [`99a1305`](https://github.com/podosoft-dev/podokit/commit/99a1305eb040745ba3bbfaab9427fb8320533da4) Thanks [@korone00](https://github.com/korone00)! - Make runtime settings and the audit log scale. The settings store probes `auth_config` and `app_setting` versions with one cheap query per tick and reloads only on change, detects deleted rows, memoizes derived settings and the secret key, and refreshes `SettingsService` across replicas (with immediate invalidation over the events bus when one is installed). Auth settings save on SQLite. The audit log honours its toggle on every write, can defer non-security writes, pages with a cursor and server-side filters, indexes those filters, stores metadata as JSON, and can prune entries after `AUDIT_LOG_RETENTION_DAYS`.
+
 ## 0.4.0
 
 ### Minor Changes

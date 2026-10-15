@@ -39,6 +39,6 @@
     "List entries newest first (admin session required): curl -i -b cookies.txt 'localhost:5002/audit-logs?limit=50' and pass the X-Next-Cursor header back as ?cursor= for the next page"
   ],
   "dependencies": {
-    "@podosoft/podokit-auth": "^0.4.0"
+    "@podosoft/podokit-auth": "^0.5.0"
   }
 }

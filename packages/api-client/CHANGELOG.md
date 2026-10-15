@@ -1,5 +1,12 @@
 # @podosoft/podokit-api-client
 
+## 0.8.5
+
+### Patch Changes
+
+- Updated dependencies [[`526c506`](https://github.com/podosoft-dev/podokit/commit/526c50657fc0f64f7b84ccf553f94b141904e2c6)]:
+  - @podosoft/podokit-contracts@0.5.0
+
 ## 0.8.4
 
 ### Patch Changes

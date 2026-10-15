@@ -1,5 +1,11 @@
 # @podosoft/podokit-contracts
 
+## 0.5.0
+
+### Minor Changes
+
+- [#215](https://github.com/podosoft-dev/podokit/pull/215) [`526c506`](https://github.com/podosoft-dev/podokit/commit/526c50657fc0f64f7b84ccf553f94b141904e2c6) Thanks [@korone00](https://github.com/korone00)! - Cut the fixed cost of every request in generated apps. Session reads no longer sign an unused JWT header, unsigned bearer values are rejected without a session lookup, and rate limiting keys signed sessions by a verified cookie hash instead of a database lookup. Server rendering loads site settings and the session together, memoizes capabilities per request, and stops resending the message catalog on client navigation. `Capabilities` gains `require2fa`. Site settings come from one cached query, the merged OpenAPI document is reused, the rate-limit script runs by SHA, and OAuth consent sends the signed authorization query.
+
 ## 0.4.0
 
 ### Minor Changes
