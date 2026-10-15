@@ -386,7 +386,7 @@ command `bun dist/main-worker.js`).
 S3-compatible object storage that works with **AWS S3 and MinIO-compatible servers**,
 selected by the `STORAGE_PROVIDER` env var (`minio` or `aws`). Local development
 uses a pinned [Silo](https://github.com/pgsty/silo) image. Provides a `StorageService`
-(put, buffered `get`, streamed `open`, `stat`, delete, and presigned URLs) and demo
+(put, buffered `get`, streamed `open`, `stat`, paged `list`, delete, and presigned URLs) and demo
 `/storage` endpoints. `open(key)` reads the object's metadata first and starts
 the download only when the body is read; prefer it to `get` for anything that can
 be large.

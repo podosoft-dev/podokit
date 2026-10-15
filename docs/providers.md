@@ -200,6 +200,14 @@ accepts a `cacheControl` value and extra headers. Use
 `readObjectBytes(store, key, { maxBytes })` only for small objects you must hold
 in memory.
 
+`list(prefix, { cursor, limit })` returns one page of keys that start with
+`prefix`, in ascending order, and a `nextCursor` while more keys follow. A page
+holds at most `limit` keys (1 to 1000, default 1000); pass `nextCursor` back as
+`cursor` for the next page. Neither provider collects the whole bucket or tree:
+S3 pages with continuation tokens, and the local provider reads one directory at
+a time, skipping directories that sort before the cursor. Treat cursors as
+opaque and provider-specific.
+
 ## Local persistence and backup
 
 SQLite defaults to `./data/podokit.sqlite`; local object storage defaults to

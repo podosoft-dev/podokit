@@ -42,6 +42,7 @@ function memoryStore(): ObjectStore {
       return found && value ? { ...found, body: streamOf(value) } : null;
     },
     stat: async (key) => info(key),
+    list: async (prefix) => ({ keys: [...objects.keys()].filter((key) => key.startsWith(prefix)).sort() }),
     exists: async (key) => objects.has(key),
     delete: async (key) => {
       objects.delete(key);

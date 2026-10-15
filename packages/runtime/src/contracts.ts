@@ -140,12 +140,28 @@ export interface DownloadUrlOptions {
   expiresInSeconds?: number;
 }
 
+export interface ListObjectsOptions {
+  /** The `nextCursor` of the previous page. */
+  cursor?: string;
+  /** Keys per page, from 1 to 1000. Defaults to 1000. */
+  limit?: number;
+}
+
+export interface ObjectPage {
+  /** Keys in ascending order. */
+  keys: string[];
+  /** Present only when more keys follow. */
+  nextCursor?: string;
+}
+
 export interface ObjectStore {
   put(key: string, body: ObjectBody, options?: PutObjectOptions): Promise<StoredObject>;
   /** Metadata and a lazily opened body, or null when the object does not exist. */
   get(key: string): Promise<ObjectData | null>;
   /** Metadata only, or null when the object does not exist. */
   stat(key: string): Promise<ObjectInfo | null>;
+  /** One page of the keys that start with `prefix`. */
+  list(prefix: string, options?: ListObjectsOptions): Promise<ObjectPage>;
   exists(key: string): Promise<boolean>;
   delete(key: string): Promise<void>;
   getDownloadUrl(key: string, options?: DownloadUrlOptions): Promise<string>;

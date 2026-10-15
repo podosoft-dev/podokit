@@ -34,6 +34,17 @@ async function collect(body: ReadableStream<Uint8Array>): Promise<string> {
   return Buffer.from(await new Response(body).arrayBuffer()).toString("utf8");
 }
 
+async function listAll(store: LocalObjectStore, prefix: string, limit: number): Promise<string[][]> {
+  const pages: string[][] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await store.list(prefix, { limit, ...(cursor === undefined ? {} : { cursor }) });
+    pages.push(page.keys);
+    cursor = page.nextCursor;
+  } while (cursor !== undefined);
+  return pages;
+}
+
 interface FakeObject {
   object: ObjectData;
   /** Whether a consumer pulled from or cancelled the body. */
@@ -205,6 +216,51 @@ describe("LocalObjectStore", () => {
     await expect(collect(stale.body)).rejects.toThrow("changed while it was being read");
   });
 
+  it("lists keys in pages without leaking reserved or temporary files", async () => {
+    const root = await temporaryDirectory();
+    const store = new LocalObjectStore({ rootDirectory: root });
+    for (const key of ["a/b.txt", "a.txt", "a/c/d.txt", "a0.txt", "b.txt", "a/b-2.txt"]) {
+      await store.put(key, key, { contentType: "text/plain" });
+    }
+    await writeFile(join(root, "a", ".podokit-abc.tmp"), "partial");
+
+    expect(await store.list("")).toEqual({
+      keys: ["a.txt", "a/b-2.txt", "a/b.txt", "a/c/d.txt", "a0.txt", "b.txt"],
+    });
+    expect(await listAll(store, "", 2)).toEqual([
+      ["a.txt", "a/b-2.txt"],
+      ["a/b.txt", "a/c/d.txt"],
+      ["a0.txt", "b.txt"],
+    ]);
+    expect((await listAll(store, "a/", 1)).flat()).toEqual(["a/b-2.txt", "a/b.txt", "a/c/d.txt"]);
+    expect((await store.list("a/b")).keys).toEqual(["a/b-2.txt", "a/b.txt"]);
+    expect((await store.list("a")).keys).toEqual(["a.txt", "a/b-2.txt", "a/b.txt", "a/c/d.txt", "a0.txt"]);
+    expect(await store.list("missing/")).toEqual({ keys: [] });
+    expect(await store.list("a.txt/")).toEqual({ keys: [] });
+    expect(await store.list(".podokit/")).toEqual({ keys: [] });
+  });
+
+  it("rejects unsafe list prefixes and page sizes", async () => {
+    const store = new LocalObjectStore({ rootDirectory: await temporaryDirectory() });
+    await expect(store.list("../")).rejects.toThrow("safe relative path");
+    await expect(store.list("/etc/")).rejects.toThrow("safe relative path");
+    await expect(store.list("a//b")).rejects.toThrow("safe relative path");
+    await expect(store.list("", { limit: 0 })).rejects.toThrow("from 1 to 1000");
+    await expect(store.list("", { limit: 1001 })).rejects.toThrow("from 1 to 1000");
+    await expect(store.list("", { limit: 1.5 })).rejects.toThrow("from 1 to 1000");
+  });
+
+  it("rejects traversal, absolute paths, reserved paths, and symlink escapes", async () => {
+    const root = await temporaryDirectory();
+    const outside = await temporaryDirectory();
+    const store = new LocalObjectStore({ rootDirectory: root });
+    await expect(store.put("../outside.txt", "no")).rejects.toThrow("safe relative path");
+    await expect(store.put("/outside.txt", "no")).rejects.toThrow("safe relative path");
+    await expect(store.put(".podokit/metadata/no", "no")).rejects.toThrow("reserved path");
+    await mkdir(root, { recursive: true });
+    await symlink(outside, join(root, "escape"), "dir");
+    await expect(store.put("escape/no.txt", "no")).rejects.toThrow("symbolic link");
+  });
 });
 
 describe("readObjectBytes", () => {

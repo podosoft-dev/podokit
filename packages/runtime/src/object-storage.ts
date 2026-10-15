@@ -1,6 +1,16 @@
-import type { ObjectData, ObjectInfo, ObjectStore } from "./contracts";
+import type { ListObjectsOptions, ObjectData, ObjectInfo, ObjectStore } from "./contracts";
 
+export const MAX_OBJECT_LIST_LIMIT = 1000;
 export const DEFAULT_MAX_OBJECT_BYTES = 16 * 1024 * 1024;
+
+/** The page size for `ObjectStore.list`, validated the same way by every provider. */
+export function objectListLimit(options: ListObjectsOptions = {}): number {
+  const limit = options.limit ?? MAX_OBJECT_LIST_LIMIT;
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_OBJECT_LIST_LIMIT) {
+    throw new RangeError(`List limit must be an integer from 1 to ${MAX_OBJECT_LIST_LIMIT}`);
+  }
+  return limit;
+}
 
 export interface ReadObjectBytesOptions {
   /** Larger objects are rejected before any content is read. Defaults to 16 MiB. */

@@ -9,6 +9,7 @@ describe("ProfileImageService account deletion cleanup", () => {
     put: mock(async () => undefined),
     get: mock(async () => null),
     stat: mock(async () => null),
+    list: mock(async () => ({ keys: [] })),
     exists: mock(async () => true),
     getDownloadUrl: mock(async () => "https://example.com/image"),
     delete: mock(async () => undefined),

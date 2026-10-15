@@ -54,3 +54,17 @@ return objectResponse(request, object, { cacheControl: "no-cache" });
 
 `readObjectBytes(store, key)` reads a small object into one buffer. It rejects
 objects larger than `maxBytes` (16 MiB by default) before reading them.
+
+`list(prefix, { cursor, limit })` returns one page of keys in ascending order.
+Pass the returned `nextCursor` as `cursor` until it is absent:
+
+```ts
+let cursor: string | undefined;
+do {
+  const page = await objects.list("uploads/", { limit: 500, cursor });
+  for (const key of page.keys) console.log(key);
+  cursor = page.nextCursor;
+} while (cursor);
+```
+
+`limit` ranges from 1 to 1000 and defaults to 1000. Cursors are opaque.

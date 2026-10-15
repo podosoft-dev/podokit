@@ -1,8 +1,10 @@
 import type {
   DownloadUrlOptions,
+  ListObjectsOptions,
   ObjectBody,
   ObjectData,
   ObjectInfo,
+  ObjectPage,
   ObjectStore,
   PutObjectOptions,
   StoredObject,
@@ -32,6 +34,10 @@ export class S3ObjectStore implements ObjectStore {
 
   stat(key: string): Promise<ObjectInfo | null> {
     return this.storage.stat(key);
+  }
+
+  list(prefix: string, options?: ListObjectsOptions): Promise<ObjectPage> {
+    return this.storage.list(prefix, options);
   }
 
   exists(key: string): Promise<boolean> {

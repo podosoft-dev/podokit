@@ -1,8 +1,9 @@
-import { constants, type Stats } from "node:fs";
+import { constants, type Dirent, type Stats } from "node:fs";
 import {
   lstat,
   mkdir,
   open,
+  readdir,
   readFile,
   realpath,
   rename,
@@ -15,19 +16,23 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import type {
   DownloadUrlOptions,
+  ListObjectsOptions,
   ObjectBody,
   ObjectData,
   ObjectInfo,
+  ObjectPage,
   ObjectStore,
   PutObjectOptions,
   StoredObject,
 } from "./contracts";
+import { objectListLimit } from "./object-storage";
 
 interface ObjectMetadata {
   contentType?: string;
 }
 
 const CHUNK_BYTES = 64 * 1024;
+const TEMPORARY_FILE = /^\.podokit-.+\.tmp$/;
 
 export interface LocalObjectStoreOptions {
   rootDirectory: string;
@@ -125,6 +130,37 @@ function fileBody(path: string, expected: Stats): ReadableStream<Uint8Array> {
   }, { highWaterMark: 0 });
 }
 
+function encodeCursor(key: string): string {
+  return Buffer.from(key, "utf8").toString("base64url");
+}
+
+function decodeCursor(cursor: string): string {
+  const key = Buffer.from(cursor, "base64url").toString("utf8");
+  if (key.length === 0) throw new Error("Object list cursor is invalid");
+  return key;
+}
+
+/** Splits a key prefix into its directory part ("" or ending in "/") and the rest. */
+function splitPrefix(prefix: string): { directory: string; name: string } {
+  if (prefix.includes("\0") || isAbsolute(prefix) || /^[A-Za-z]:/.test(prefix)) {
+    throw new Error("Object key prefix must be a safe relative path");
+  }
+  const normalized = prefix.replaceAll("\\", "/");
+  const slash = normalized.lastIndexOf("/");
+  const directory = normalized.slice(0, slash + 1);
+  const segments = directory === "" ? [] : directory.slice(0, -1).split("/");
+  if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
+    throw new Error("Object key prefix must be a safe relative path");
+  }
+  return { directory, name: normalized.slice(slash + 1) };
+}
+
+interface ListEntry {
+  /** The object key, or the key prefix of a directory, ending in "/". */
+  key: string;
+  directory: boolean;
+}
+
 export class LocalObjectStore implements ObjectStore {
   private readonly rootDirectory: string;
   private readonly publicBaseUrl: string;
@@ -170,6 +206,18 @@ export class LocalObjectStore implements ObjectStore {
 
   async stat(key: string): Promise<ObjectInfo | null> {
     return (await this.find(key))?.info ?? null;
+  }
+
+  async list(prefix: string, options: ListObjectsOptions = {}): Promise<ObjectPage> {
+    const limit = objectListLimit(options);
+    const after = options.cursor === undefined ? undefined : decodeCursor(options.cursor);
+    const { directory, name } = splitPrefix(prefix);
+    const keys: string[] = [];
+    for await (const key of this.walk(directory, name, after)) {
+      if (keys.length === limit) return { keys, nextCursor: encodeCursor(keys[keys.length - 1] ?? "") };
+      keys.push(key);
+    }
+    return { keys };
   }
 
   async exists(key: string): Promise<boolean> {
@@ -221,6 +269,50 @@ export class LocalObjectStore implements ObjectStore {
         lastModified: details.mtime,
       },
     };
+  }
+
+  /**
+   * Yields keys in ascending order, one directory listing at a time. A
+   * directory sorts as its name plus "/", which keeps the order of whole keys.
+   */
+  private async *walk(directory: string, name: string, after: string | undefined): AsyncGenerator<string> {
+    const root = await this.ready;
+    const segments = directory === "" ? [] : directory.slice(0, -1).split("/");
+    if (segments[0] === ".podokit") return;
+    let path = root;
+    for (const segment of segments) {
+      path = join(path, segment);
+      try {
+        const details = await lstat(path);
+        if (!details.isDirectory()) return;
+      } catch (error) {
+        if (isMissing(error)) return;
+        throw error;
+      }
+    }
+    let entries: Dirent[];
+    try {
+      entries = await readdir(path, { withFileTypes: true });
+    } catch (error) {
+      if (isMissing(error)) return;
+      throw error;
+    }
+    const listed: ListEntry[] = [];
+    for (const entry of entries) {
+      if (!entry.name.startsWith(name) || (directory === "" && entry.name === ".podokit")) continue;
+      if (entry.isDirectory()) listed.push({ key: `${directory}${entry.name}/`, directory: true });
+      else if (entry.isFile() && !TEMPORARY_FILE.test(entry.name)) {
+        listed.push({ key: `${directory}${entry.name}`, directory: false });
+      }
+    }
+    listed.sort((left, right) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0));
+    for (const entry of listed) {
+      if (!entry.directory) {
+        if (after === undefined || entry.key > after) yield entry.key;
+      } else if (after === undefined || entry.key > after || after.startsWith(entry.key)) {
+        yield* this.walk(entry.key, "", after);
+      }
+    }
   }
 
   private async initialize(): Promise<string> {

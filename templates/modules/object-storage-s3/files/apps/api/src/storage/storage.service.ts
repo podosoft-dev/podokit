@@ -1,5 +1,11 @@
 import { S3Client, type S3Stats } from "bun";
-import type { ObjectData, ObjectInfo } from "@podosoft/podokit-runtime";
+import {
+  objectListLimit,
+  type ListObjectsOptions,
+  type ObjectData,
+  type ObjectInfo,
+  type ObjectPage,
+} from "@podosoft/podokit-runtime";
 import { ReadinessService } from "../health/readiness.service";
 import { storageSettings } from "./storage.config";
 
@@ -107,6 +113,19 @@ export class StorageService {
     const info = await this.stat(key);
     if (!info) return null;
     return { ...info, body: download(this.client, key, info.etag) };
+  }
+
+  /** One page of the keys under `prefix`; the bucket is never listed in full. */
+  async list(prefix: string, options: ListObjectsOptions = {}): Promise<ObjectPage> {
+    const page = await this.client.list({
+      prefix,
+      maxKeys: objectListLimit(options),
+      ...(options.cursor ? { continuationToken: options.cursor } : {}),
+    });
+    const keys = (page.contents ?? []).map((object) => object.key);
+    return page.isTruncated && page.nextContinuationToken
+      ? { keys, nextCursor: page.nextContinuationToken }
+      : { keys };
   }
 
   async exists(key: string): Promise<boolean> {
