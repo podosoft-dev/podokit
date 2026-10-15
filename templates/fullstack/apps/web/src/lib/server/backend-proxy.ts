@@ -71,6 +71,10 @@ export async function proxyRequest(
     // them as text corrupts bytes that are not valid UTF-8 before forwarding.
     body: hasBody ? await request.arrayBuffer() : undefined,
     redirect: "manual",
+    // Abort the upstream request when the browser disconnects. Without this, every
+    // closed EventSource or aborted request keeps its API socket open until Bun's
+    // fetch pool is exhausted and the web process stops serving requests.
+    signal: request.signal,
   });
 
   const responseHeaders = new Headers();

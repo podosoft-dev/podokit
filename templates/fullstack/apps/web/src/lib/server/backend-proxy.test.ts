@@ -77,6 +77,23 @@ describe("backend proxy client address handling", () => {
     expect(upstreamHeaders?.get("user-agent")).toBe(agent);
   });
 
+  it("aborts the upstream request when the client disconnects", async () => {
+    let upstreamSignal: AbortSignal | undefined;
+    vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+      upstreamSignal = init?.signal ?? undefined;
+      return new Response(null, { status: 204 });
+    });
+
+    const client = new AbortController();
+    const request = new Request("http://app.localhost/api/events", { signal: client.signal });
+    await proxyRequest(request, "http://api:5002/events");
+
+    expect(upstreamSignal).toBeDefined();
+    expect(upstreamSignal?.aborted).toBe(false);
+    client.abort();
+    expect(upstreamSignal?.aborted).toBe(true);
+  });
+
   it("relays rate-limit response headers to browser clients", async () => {
     vi.stubGlobal("fetch", async () => new Response(
       JSON.stringify({ success: false }),
