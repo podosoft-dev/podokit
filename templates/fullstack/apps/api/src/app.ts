@@ -8,6 +8,7 @@ import {
   appContext,
   createCoreServices,
   type AppPlugin,
+  type OpenApiContribution,
   type PodokitModule,
   type ServiceRegistry,
 } from "./core/services";
@@ -51,6 +52,47 @@ function mergeOpenApi(
     }
   }
   return { ...base, paths, components, tags };
+}
+
+export interface OpenApiDocumentSource {
+  routeCount: () => number;
+  base: () => Promise<Response>;
+  contributions: () => Promise<OpenApiContribution[]>;
+}
+
+export type OpenApiDocumentLoader = () => Promise<Record<string, unknown> | Response>;
+
+function sameContributions(left: OpenApiContribution[], right: OpenApiContribution[]): boolean {
+  return left.length === right.length && left.every((contribution, index) =>
+    contribution.document === right[index]?.document &&
+    contribution.pathPrefix === right[index]?.pathPrefix
+  );
+}
+
+/** Contributors return the same document object while their inputs are unchanged,
+ *  so identity plus the route count (the base spec's own cache key) identifies the
+ *  merged result without a staleness window. */
+export function cachedOpenApiDocument(source: OpenApiDocumentSource): OpenApiDocumentLoader {
+  let cached: {
+    routeCount: number;
+    contributions: OpenApiContribution[];
+    document: Record<string, unknown>;
+  } | undefined;
+  return async () => {
+    const contributions = await source.contributions();
+    const routeCount = source.routeCount();
+    if (
+      cached?.routeCount === routeCount &&
+      sameContributions(cached.contributions, contributions)
+    ) {
+      return cached.document;
+    }
+    const response = await source.base();
+    if (!response.ok) return response;
+    const document = mergeOpenApi(record(await response.json()), contributions);
+    cached = { routeCount, contributions, document };
+    return document;
+  };
 }
 
 function errorEnvelope(
@@ -149,11 +191,12 @@ const buildApp = (options: CreateAppOptions = {}) => {
     ...modules.flatMap((module) => module.plugin ? [module.plugin] : []),
   ];
   for (const plugin of plugins) app.use(plugin(context));
-  app.get("/api-docs-json", async () => {
-    const response = await app.handle(new Request("http://localhost/api-docs-elysia-json"));
-    const base = record(await response.json());
-    return mergeOpenApi(base, await context.openapi.contributions());
-  }, {
+  const openApiDocument = cachedOpenApiDocument({
+    routeCount: () => app.routes.length,
+    base: () => app.handle(new Request("http://localhost/api-docs-elysia-json")),
+    contributions: () => context.openapi.contributions(),
+  });
+  app.get("/api-docs-json", () => openApiDocument(), {
     detail: { hide: true },
   });
   app.onStop(() => { void services.close(); });

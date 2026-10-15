@@ -72,6 +72,11 @@ through the contracts described in [Runtime providers](providers.md). The merged
 OpenAPI document at `/api-docs-json` includes
 Elysia, module, and Better Auth routes. `bun run --cwd apps/api contract`
 compares that document with the generated project manifest.
+The API reuses the merged document until the route count changes or an OpenAPI
+contributor returns a different document object. A contributor should therefore
+return the same object while its inputs are unchanged. The auth module keeps one
+Better Auth document per auth instance, so an auth configuration rebuild
+regenerates it, and a failed generation is retried on the next request.
 
 Routes are session-protected by default when `auth` is installed. Modules use
 the startup service registry and explicitly register public or API-key access.
