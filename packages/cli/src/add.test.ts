@@ -855,7 +855,9 @@ describe("addModule (auth / better-auth)", () => {
     expect(disposableUsers).toContain('testInfo.project.name === "api"');
     expect(disposableUsers).toContain("ADMIN.email");
     expect(disposableUsers).toContain("headers: origin");
-    expect(disposableUsers).toContain("if (ownsRequest) await request.dispose()");
+    expect(disposableUsers).toContain("storageState: await context.storageState()");
+    expect(disposableUsers).toContain("await request.dispose()");
+    expect(disposableUsers).not.toContain("ownsRequest");
     const impersonationBanner = readFileSync(
       join(project, "apps/web/src/lib/components/impersonation-banner.svelte"),
       "utf8",
