@@ -56,6 +56,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The request budget, OIDC consent, user row menu, and password reset UI specs
   wait for hydration or read each response before navigating on, so they pass
   on slower development servers.
+- Generated Playwright specs and helpers pass strict type checking;
+  `playwright.extensions.ts` now types projects with `PlaywrightTestConfig`.
 
 ### Upgrade notes
 
@@ -70,6 +72,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Apps that already applied `IndexAuditLogFilters1792000000000` are unaffected;
   the migration does not run again. Custom TypeORM migrations now each run in
   their own transaction rather than all pending migrations in one.
+- Run `bun run --cwd apps/api migrate:all` after the update to build the admin
+  session list index.
+- A user with more than eight tabs streaming events from one replica now gets
+  429 `EVENTS_STREAM_LIMIT` for the extra streams; `$lib/events` retries them
+  with backoff. Raise `SSE_MAX_STREAMS_PER_USER` if your users need more.
 - `/admin/users/+page.svelte` is application-owned, so update keeps your page,
   which still uses Better Auth `listUsers` with one filter. Compare it with the
   template page to adopt `GET /admin/users`.
