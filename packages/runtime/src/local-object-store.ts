@@ -48,10 +48,6 @@ interface MultipartManifest {
 }
 
 const CHUNK_BYTES = 64 * 1024;
-// Bun sends a ReadableStream body with chunked encoding, dropping an explicit
-// Content-Length, unless the stream enqueues and closes within a single pull.
-// Objects up to this size are read whole so their responses keep the length.
-const SINGLE_READ_BYTES = 2 * 1024 * 1024;
 const COPY_CHUNK_BYTES = 1024 * 1024;
 const TEMPORARY_FILE = /^\.podokit-.+\.tmp$/;
 const UPLOAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -146,21 +142,15 @@ function fileBody(path: string, expected: Stats): ReadableStream<Uint8Array> {
           }
         }
         if (position < expected.size) {
-          const chunk = new Uint8Array(
-            expected.size <= SINGLE_READ_BYTES ? expected.size : Math.min(CHUNK_BYTES, expected.size - position),
-          );
-          let filled = 0;
-          do {
-            const { bytesRead } = await handle.read(chunk, filled, chunk.byteLength - filled, position + filled);
-            if (bytesRead === 0) throw new Error("Object changed while it was being read");
-            filled += bytesRead;
-          } while (expected.size <= SINGLE_READ_BYTES && filled < chunk.byteLength);
-          position += filled;
-          controller.enqueue(filled === chunk.byteLength ? chunk : chunk.subarray(0, filled));
+          const chunk = new Uint8Array(Math.min(CHUNK_BYTES, expected.size - position));
+          const { bytesRead } = await handle.read(chunk, 0, chunk.byteLength, position);
+          if (bytesRead === 0) throw new Error("Object changed while it was being read");
+          position += bytesRead;
+          controller.enqueue(bytesRead === chunk.byteLength ? chunk : chunk.subarray(0, bytesRead));
         }
         if (position === expected.size) {
-          controller.close();
           await close();
+          controller.close();
         }
       } catch (error) {
         await close().catch(() => undefined);

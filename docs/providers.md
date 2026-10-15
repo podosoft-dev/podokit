@@ -228,7 +228,13 @@ that was replaced after its metadata was read.
 Serve objects with `objectResponse(request, object, options)` from the runtime
 package. It sets `content-type`, `content-length`, `etag`, and `last-modified`,
 answers a matching `If-None-Match` with `304` without reading the content, and
-accepts a `cacheControl` value and extra headers. Use
+accepts a `cacheControl` value and extra headers. Bun keeps that
+`content-length` only for a body held in memory or read from a file, such as
+`new Blob([bytes]).stream()` or `Bun.file().stream()`. It sends any other
+`ReadableStream`, including a `fetch()` response body and the local provider's
+file stream, with `Transfer-Encoding: chunked` and drops the length, except
+sometimes for a few KiB or less
+([oven-sh/bun#10507](https://github.com/oven-sh/bun/issues/10507)). Use
 `readObjectBytes(store, key, { maxBytes })` only for small objects you must hold
 in memory.
 

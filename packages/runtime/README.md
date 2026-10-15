@@ -43,7 +43,12 @@ metadata alone.
 `objectResponse()` turns an object into an HTTP response without buffering it.
 It sets `content-type`, `content-length`, `etag`, and `last-modified`, and it
 answers a matching `If-None-Match` (or, without one, `If-Modified-Since`) with
-`304` and cancels the body unread:
+`304` and cancels the body unread. Bun keeps the `content-length` only for a
+body held in memory or read from a file, such as `new Blob([bytes]).stream()` or
+`Bun.file().stream()`. It sends any other `ReadableStream`, including a `fetch()`
+response body and the file stream of `LocalObjectStore`, with
+`Transfer-Encoding: chunked` and drops the length, except sometimes for a few
+KiB or less ([oven-sh/bun#10507](https://github.com/oven-sh/bun/issues/10507)):
 
 ```ts
 import { objectResponse } from "@podosoft/podokit-runtime";

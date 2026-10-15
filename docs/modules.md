@@ -502,8 +502,11 @@ The module serves the same administrator-only demo routes as `object-storage-s3`
 confined to `demo/`.
 
 Downloads and demo reads stream the file from disk in 64 KiB chunks. Each
-response carries `content-length`, `etag`, and `last-modified`, and a matching
-`If-None-Match` receives `304` without reading the file.
+response carries `etag` and `last-modified`, and a matching `If-None-Match`
+receives `304` without reading the file. The chunks come from a JavaScript
+`ReadableStream`, which Bun sends with `Transfer-Encoding: chunked`, dropping
+the `Content-Length` that `objectResponse` sets; only very small objects
+sometimes keep it.
 
 Streamed `put` bodies are written to a temporary file and renamed into place.
 Multipart uploads keep their parts under
@@ -1432,8 +1435,10 @@ renders them with a circular center crop.
 The module stores image objects through the selected object-storage provider and keeps
 the resulting versioned path in better-auth's `user.image`. The bucket stays
 private; `GET /api/profile-images/:fileName` streams the UUID path from storage
-with `content-length`, `etag`, `last-modified`, and immutable cache headers, and
-answers a matching `If-None-Match` with `304` without reading the object. A
+with `etag`, `last-modified`, and immutable cache headers, and answers a
+matching `If-None-Match` with `304` without reading the object. The local
+provider's responses are chunked, without `content-length` (see
+`object-storage-local`). A
 missing image returns 404; a storage failure is reported as a server error rather
 than a missing image. Replacing, removing, or self-deleting the account removes
 managed objects on a best-effort basis. Existing external/social avatar URLs are

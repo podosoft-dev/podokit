@@ -193,11 +193,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
-- Images and other objects served from the local storage provider lost their
-  `Content-Length`: Bun sends a `ReadableStream` body with chunked encoding unless
-  the stream enqueues and closes within one pull. `LocalObjectStore` now reads
-  objects up to 2 MiB whole; larger ones still stream in 64 KiB chunks and are
-  sent chunked.
+- The object storage documentation no longer says that local storage responses
+  carry `Content-Length`. `LocalObjectStore` streams files through a JavaScript
+  `ReadableStream`, which Bun sends with `Transfer-Encoding: chunked`, dropping
+  the length that `objectResponse` sets; only very small objects sometimes keep
+  it.
+
 - Requests that enqueue a BullMQ job no longer hang while Redis is down. The
   API's queues shared the workers' connection settings, whose
   `maxRetriesPerRequest: null` makes a command wait for Redis indefinitely, so
