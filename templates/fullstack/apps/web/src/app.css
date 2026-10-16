@@ -121,3 +121,6 @@
   color: var(--sidebar-foreground);
   font-weight: 400;
 }
+
+/* Application styles: @source paths, theme overrides, and base styles. */
+@import "./app.extensions.css";

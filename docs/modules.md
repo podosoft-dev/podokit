@@ -1362,7 +1362,7 @@ OAuth, SMTP, and sign-up approval configuration.
 - **/admin/organizations** (admin only) — organizations, members, and invitations.
 - **/admin/audit** (admin only) — the audit log of security-relevant actions.
 - **/admin/settings** (admin only) — enable/disable sign-in methods and configure OAuth providers, SMTP, sign-up approval, automatic logout, and other server toggles at runtime (see below), plus the **Appearance** tab for the runtime theme (see "Appearance").
-- **/account** — the signed-in user's profile and profile image, password, 2FA, passkeys, API keys, and sessions without the admin shell.
+- **/account** — the signed-in user's profile and profile image, password, 2FA, passkeys, API keys, and sessions without the admin shell. While an administrator impersonates the user, the managed `AccountPage` shows a banner with the way back to the administrator session.
 - **/admin/account** — the same account controls inside the admin shell, retained for existing links and applications.
 
 Every page render loads the public site settings and the session in parallel.
@@ -1378,12 +1378,50 @@ carries `cache-control: public, max-age=31536000, immutable`. Any other URL,
 including one without `v`, gets `no-cache` with an `ETag`, so the browser
 revalidates and receives `304` while the icon is unchanged.
 
+#### Search indexing
+
 Admin, account, authentication, maintenance, and API routes send
 `X-Robots-Tag: noindex, nofollow` by default. This keeps generated applications'
 private and transitional screens out of search results without relying on
-`robots.txt`. Public-site canonical URLs, sitemaps, robots rules, social metadata,
+`robots.txt`. Add the application's own private areas to `APP_NON_INDEXABLE_PATHS`
+in the application-owned `apps/web/src/lib/server/non-indexable-paths.ts`
+instead of editing the managed `search-indexing.ts`:
+
+```ts
+export const APP_NON_INDEXABLE_PATHS: readonly string[] = ["/", "/projects"];
+```
+
+A listed path also covers its subpaths; `"/"` covers only the landing page.
+Public-site canonical URLs, sitemaps, robots rules, social metadata,
 and structured data remain application-owned because their content and production
 domain are specific to each application.
+
+#### Request hook
+
+The managed `hooks.server.ts` loads the runtime context and then calls `appHandle`
+from the application-owned `apps/web/src/lib/server/app-hooks.ts` for every
+request. When it runs, `event.locals` already holds the site settings, the
+signed-in user, the session, and the locale, and the response it returns still
+gets the document language and the search-indexing header. Change `event.locals`,
+add headers, or answer a request there instead of editing `hooks.server.ts`:
+
+```ts
+import type { Handle } from "@sveltejs/kit/hooks";
+
+export const appHandle: Handle = async ({ event, resolve }) => {
+  if (process.env.SINGLE_USER === "true" && !event.locals.user) {
+    event.locals.user = { id: "local", email: "local@localhost", name: "Local user", role: "admin" };
+  }
+  const response = await resolve(event);
+  response.headers.set("x-frame-options", "DENY");
+  return response;
+};
+```
+
+Combine several handles with `sequence` from `@sveltejs/kit/hooks`. A page
+request that the availability check answers with 503 ends before `appHandle`
+runs. Sign-in redirects happen later, in the layout loads, and see the user that
+`appHandle` set.
 
 Use the managed `#lib/components/account-menu.svelte` in a public header to show
 a sign-in action to guests and an avatar menu to signed-in users. The avatar menu
@@ -1391,7 +1429,9 @@ links to `/account` and adds the admin dashboard entry only for administrators.
 For a product-shell footer outside `Sidebar.Provider`, use
 `<AccountMenu {user} variant="identity" side="top" />` to show the avatar, name,
 and email with the same account and sign-out actions. The managed
-`sidebar-user-menu.svelte` remains specific to the collapsible admin sidebar.
+`sidebar-user-menu.svelte` renders as a sidebar menu item inside a
+`Sidebar.Provider` and as that `AccountMenu` outside one, so a shell can use
+either component.
 The module injects this menu into the starter landing page. The default blog
 route layout also renders it, so signed-in identity and account actions remain
 available outside the admin shell.
@@ -1803,6 +1843,27 @@ indentation, and never writes a file that would stop validating:
   you deleted after it was added stays deleted.
 
 ## Adding admin nav & settings (module registry)
+
+### Admin navigation
+
+Add the application's own admin pages to the sidebar in `APP_ADMIN_NAV` in the
+application-owned `apps/web/src/lib/admin/app-nav.ts` instead of editing the
+managed `admin-sidebar.svelte`. The sidebar lists them after PodoKit's pages and
+before module entries and Settings:
+
+```ts
+import FileTextIcon from "@lucide/svelte/icons/file-text";
+import type { AdminNavEntry } from "./registry.svelte.js";
+
+export const APP_ADMIN_NAV: readonly AdminNavEntry[] = [
+  { href: "/admin/reports", label: (t) => t.reports.nav, icon: FileTextIcon, adminOnly: true },
+];
+```
+
+Put the label in the app-owned `i18n/catalogs/app/*.json` files. `adminOnly`
+hides an entry from users whose role is not `admin`.
+
+### Module entries
 
 When `admin-dashboard` is installed, a module can add its own **sidebar nav entry**
 and **settings tab** by injecting into the registry

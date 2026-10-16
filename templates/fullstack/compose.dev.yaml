@@ -48,6 +48,7 @@ services:
         - { action: sync, path: ./apps/web/src, target: /app/apps/web/src }
         - { action: sync, path: ./apps/web/static, target: /app/apps/web/static }
         - { action: sync+restart, path: ./apps/web/vite.config.ts, target: /app/apps/web/vite.config.ts }
+        - { action: sync+restart, path: ./apps/web/vite.extensions.ts, target: /app/apps/web/vite.extensions.ts }
         - { action: rebuild, path: ./apps/web/package.json }
 
   api:

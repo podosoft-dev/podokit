@@ -49,6 +49,56 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   In a 12-module app the suite took 142 seconds on one worker, 90 and 93 on two,
   and 81 on three (2026-10-16); before, two workers failed tests that saw
   another worker's settings.
+- Application-owned extension points in the web app, so applications no longer
+  edit managed files for these changes. `apps/web/vite.extensions.ts` exports
+  `appViteConfig`, which the managed `vite.config.ts` merges with Vite's
+  `mergeConfig` (warmup, `optimizeDeps`, `define`, plugins, allowed hosts), and
+  `appSvelteKitConfig`, which it passes to `sveltekit()` (`alias`, `csrf`). With
+  `admin-dashboard`, `appHandle` in `apps/web/src/lib/server/app-hooks.ts` runs
+  for every request after `hooks.server.ts` loads the site settings, the
+  session, and the locale, so it can adjust `event.locals` or the response;
+  `APP_ADMIN_NAV` in `apps/web/src/lib/admin/app-nav.ts` adds admin sidebar
+  entries before module entries and Settings; and `APP_NON_INDEXABLE_PATHS` in
+  `apps/web/src/lib/server/non-indexable-paths.ts` adds prefixes that answer
+  with `X-Robots-Tag: noindex, nofollow`. `podo update` creates each file once
+  in an existing app and never overwrites it. See
+  [web extension points](docs/templates.md#web-extension-points).
+- `bun run dev` proxies the exact `webSocketPaths` of `.podokit/dev.json`, with
+  or without a query string, from the Vite dev server to `BACKEND_INTERNAL_URL`.
+  A WebSocket endpoint on the API now works in host development the way it does
+  behind the `podo dev` gateway and a deployment's edge.
+- The `/api` proxy and the server-side API client tell the API which public
+  origin a request came in on, in `x-forwarded-host` and `x-forwarded-proto`.
+  The values come from the request URL SvelteKit resolved and are sent only when
+  `CORS_ORIGIN` lists that origin; a caller's own forwarded headers are still
+  dropped. An API route that builds links for the browser can pick the origin a
+  visitor used among its configured origins.
+- `tests/ui/same-origin-requests.ui.spec.ts` (admin-dashboard) sends a
+  `FormData` upload, a form-encoded body, and `POST` and `DELETE` requests
+  without a body from the browser through the `/api` proxy, and checks that each
+  carries the page's `Origin` and reaches the API. It passes on the built web
+  server, where SvelteKit checks the origin, and through the `podo dev` gateway.
+  When a deployment answers such requests with 403 "Cross-site POST form
+  submissions are forbidden", the web server resolved another origin than the
+  browser; see
+  [the deployment guide](docs/deployment.md#uploads-answer-403-cross-site-post-form-submissions-are-forbidden).
+- `DataTableColumn` takes a `head` snippet that replaces the column's label and
+  sort button in the header, for example a select-all checkbox. Give the
+  control its own accessible name.
+- `<html>` carries the `light` class in light mode as it carries `dark` in dark
+  mode, from the first paint. Component libraries that follow a `.dark` or
+  `.light` class and fall back to the system setting without one now match the
+  theme the visitor chose instead of painting their dark palette on a light page
+  when the system is dark.
+- `sidebar-user-menu.svelte` works outside a `Sidebar.Provider`. There it
+  renders the `AccountMenu` identity block (avatar, name, email, account and
+  sign-out actions) instead of failing on the missing sidebar state, so an
+  application's own shell can place it without a copy of its own.
+- `apps/web/src/app.extensions.css` is an application-owned stylesheet that the
+  managed `app.css` imports last, so its rules follow PodoKit's theme variables
+  and base styles. Override `:root` and `.dark` variables, add `@theme` entries,
+  fonts, and base styles, or add `@source` for a package whose built components
+  use Tailwind classes. `podo update` creates it once and never overwrites it.
 
 ### Removed
 
@@ -105,6 +155,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   time: the organization spec picks the seeded user as a manager instead of the
   first user listed, and the blog comment validation spec posts to a post of its
   own instead of the newest published one.
+- The impersonation banner on `/account` no longer depends on the
+  application-owned account page. The managed load returned `impersonating`, but
+  only pages generated after the banner was added rendered it, so an updated app
+  without it lost the way back to the administrator session, and the managed
+  impersonation spec failed when the app's owned users page navigated somewhere
+  other than `/account`. The managed `AccountPage` now renders the banner from
+  the load's new `showImpersonationBanner`, and the spec opens `/account` itself.
+  Pages whose server load is managed now follow one rule, described in
+  [route files and update tiers](docs/templates.md#route-files-and-update-tiers),
+  and a repository test fails when a template's owned page starts reading a
+  new field of such a load.
 
 ### Upgrade notes
 
@@ -157,6 +218,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `AGENTS.md` is application-owned, so `podo update` does not add its note
   about `E2E_WORKERS` and the `@exclusive` tag; copy it from a newly generated
   app if your agents should know.
+- Move edits you made to the managed `vite.config.ts`, `hooks.server.ts`,
+  `admin-sidebar.svelte`, or `search-indexing.ts` into the new owned files, then
+  take PodoKit's version of the managed file when `podo update` reports a merge
+  or conflict there. For example, a fixed user set in `loadRuntimeContext` goes
+  into `appHandle`, an extra sidebar link into `APP_ADMIN_NAV`, extra
+  `NON_INDEXABLE_PATH_PREFIXES` entries into `APP_NON_INDEXABLE_PATHS`, and Vite
+  `define`, `optimizeDeps`, `cacheDir`, plugins, or a SvelteKit `alias` into
+  `vite.extensions.ts`.
+- The managed `vite.config.ts` now imports `./vite.extensions.ts`. A running
+  `podo dev watch` syncs the new `vite.config.ts` but not the new file, so the
+  web container stops until you run `podo dev down` and start it again, which
+  rebuilds the image. `compose.dev.yaml` is application-owned; add
+  `- { action: sync+restart, path: ./apps/web/vite.extensions.ts, target: /app/apps/web/vite.extensions.ts }`
+  under the web service's `develop.watch` to restart the web container when the
+  file changes.
+- Remove a WebSocket proxy you added to `vite.config.ts` for a path that
+  `.podokit/dev.json` lists; the managed configuration proxies it now.
+- If you added `x-forwarded-host` or `x-forwarded-proto` to the managed
+  `backend-proxy.ts`, take PodoKit's version. List every public origin the web
+  app serves in `CORS_ORIGIN` of the web server's environment, or the proxy
+  sends neither header.
+- `routes/account/+page.server.ts` returns `showImpersonationBanner` instead of
+  `impersonating`, and the managed `AccountPage` renders the banner. Remove the
+  `{#if data.impersonating}` block and the `ImpersonationBanner` import from your
+  owned `routes/account/+page.svelte`; they no longer render anything. If you
+  reverted the managed load or edited `tests/ui/impersonation.ui.spec.ts` to make
+  it pass, take PodoKit's versions of both.
+- A client-side workaround for that 403, such as sending uploads as
+  `application/octet-stream` with the multipart type in another header or adding
+  `content-type: application/json` to requests without a body, can be removed
+  once `tests/ui/same-origin-requests.ui.spec.ts` passes against the deployment
+  without it. Fix the forwarded scheme in the ingress first if it does not.
+- If you added `lightClassNames` to the managed `site-runtime.svelte`, take
+  PodoKit's version. A rule of your own for a `.light` class now also matches
+  `<html>` in light mode; scope it if it was meant for one element.
+- Move your edits to the managed `app.css`, such as theme variables, fonts, base
+  styles, or `@source` lines, into `apps/web/src/app.extensions.css`, then take
+  PodoKit's `app.css` when `podo update` reports a merge or conflict. A relative
+  `@source` path keeps working because both files are in `apps/web/src`.
 
 ## [1.5.0] - 2026-10-16
 

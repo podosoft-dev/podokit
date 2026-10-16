@@ -54,7 +54,20 @@ Merge added module settings from `.env.example` into an existing `.env`.
   `apps/web/src/lib/server/proxy-timeouts.ts` (`APP_PROXY_TIMEOUTS`, `null` for
   none); never edit the managed deadline. Both lists take path prefixes with
   `:name` parameters, such as `/api/hosts/:hostId/file-transfers`, and the most
-  specific prefix wins.
+  specific prefix wins. The proxy and `serverApiClient` send the request's public
+  origin to the API in `x-forwarded-host`/`x-forwarded-proto` only when
+  `CORS_ORIGIN` lists it; an API route may use them to choose among its configured
+  origins, never as a new origin.
+- `apps/web/src/app.css` is managed. Put application styles (theme variable
+  overrides, `@theme` entries, fonts, base styles, and `@source` for packages
+  whose built components use Tailwind classes) in the app-owned
+  `apps/web/src/app.extensions.css`, which `app.css` imports last.
+- `apps/web/vite.config.ts` is managed. Put Vite options (warmup, `optimizeDeps`,
+  `define`, plugins, allowed hosts) in `appViteConfig` and SvelteKit options
+  (`alias`, `csrf`) in `appSvelteKitConfig` of the app-owned
+  `apps/web/vite.extensions.ts`. `bun run dev` proxies the exact
+  `webSocketPaths` of `.podokit/dev.json` to the API like the `podo dev` gateway,
+  so do not add a WebSocket proxy of your own.
 - Server-side API calls (`serverApiClient`) give up after `BACKEND_TIMEOUT_MS`
   (2000), and the proxy answers 504 `BACKEND_TIMEOUT` when the API sends no
   response headers within `BACKEND_PROXY_TIMEOUT_MS` (30000). Once the API's

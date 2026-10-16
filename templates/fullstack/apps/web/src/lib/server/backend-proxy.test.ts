@@ -7,6 +7,7 @@ import {
   bodyLimitFor,
   checkBackend,
   checkIdleTimeout,
+  configuredPublicOrigins,
   envMilliseconds,
   IN_MEMORY_RESPONSE_BYTES,
   proxyRequest,
@@ -23,6 +24,7 @@ import {
 describe("backend proxy client address handling", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
   it("returns the normalized address from a trusted proxy chain", () => {
@@ -73,6 +75,48 @@ describe("backend proxy client address handling", () => {
 
     expect(response.status).toBe(204);
     expect(upstreamHeaders?.get("x-forwarded-for")).toBe("203.0.113.9");
+  });
+
+  it("forwards the public origin a request came in on when CORS_ORIGIN lists it", async () => {
+    let upstreamHeaders: Headers | undefined;
+    vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+      upstreamHeaders = new Headers(init?.headers);
+      return new Response(null, { status: 204 });
+    });
+    vi.stubEnv("CORS_ORIGIN", "https://example.com,https://mirror.example.com");
+
+    // The adapter builds the request URL from the gateway's forwarded host and
+    // protocol; a caller's own forwarded headers never reach the API.
+    const request = new Request("https://mirror.example.com/api/mcp/info", {
+      headers: { "x-forwarded-host": "attacker.example", "x-forwarded-proto": "http" },
+    });
+    await proxyRequest(request, "http://api:5002/mcp/info");
+
+    expect(upstreamHeaders?.get("x-forwarded-host")).toBe("mirror.example.com");
+    expect(upstreamHeaders?.get("x-forwarded-proto")).toBe("https");
+  });
+
+  it("forwards no origin that CORS_ORIGIN does not list", async () => {
+    let upstreamHeaders: Headers | undefined;
+    vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+      upstreamHeaders = new Headers(init?.headers);
+      return new Response(null, { status: 204 });
+    });
+    vi.stubEnv("CORS_ORIGIN", "https://example.com");
+
+    const request = new Request("http://attacker.example/api/mcp/info", {
+      headers: { "x-forwarded-host": "example.com", "x-forwarded-proto": "https" },
+    });
+    await proxyRequest(request, "http://api:5002/mcp/info");
+
+    expect(upstreamHeaders?.has("x-forwarded-host")).toBe(false);
+    expect(upstreamHeaders?.has("x-forwarded-proto")).toBe(false);
+  });
+
+  it("reads absolute CORS_ORIGIN entries as origins and skips patterns", () => {
+    expect([...configuredPublicOrigins(" https://example.com/ , *.example.com, not a url, http://localhost:5001")])
+      .toEqual(["https://example.com", "http://localhost:5001"]);
+    expect(configuredPublicOrigins("").size).toBe(0);
   });
 
   // Not forwarding this does not leave the header unset: fetch substitutes its own

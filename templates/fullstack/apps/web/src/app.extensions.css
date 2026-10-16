@@ -1,0 +1,11 @@
+/*
+ * Application-owned styles. The managed app.css imports this file last, so rules
+ * here come after PodoKit's theme variables and base styles. Add `@source` for
+ * packages whose built components use Tailwind classes, override variables in
+ * `:root` and `.dark`, or add `@theme` entries and base styles, for example:
+ *
+ *   @source "../../../node_modules/@example/ui/dist";
+ *   :root { --radius: 0.5rem; }
+ *
+ * PodoKit creates this file once and never overwrites it.
+ */

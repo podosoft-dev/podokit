@@ -158,6 +158,19 @@ build and tests: hop-by-hop headers (`connection`, `transfer-encoding`,
 get the file empty; `podo update` creates it once in an existing app and never
 overwrites it.
 
+The proxy also tells the API which public origin a request came in on, in
+`x-forwarded-host` and `x-forwarded-proto`. The values come from the request URL
+SvelteKit resolved, from the `Host` header or from the gateway headers that
+`HOST_HEADER` and `PROTOCOL_HEADER` name, never from a caller's own forwarded
+headers, and the proxy sends them only when that origin is listed in
+`CORS_ORIGIN`. The server-side API client used by hooks and loaders sends the
+same pair. An API route that builds links for the browser, such as a connection
+URL shown on a page, can use them to pick the origin the visitor used and fall
+back to the first `CORS_ORIGIN` entry. The API must still accept only origins it
+is configured for, because a caller that reaches it directly can send anything.
+A web image built with `PODOKIT_BUILD_ORIGIN` resolves every request to that
+origin, so it reports only that one.
+
 ### Proxy path rules
 
 `APP_BODY_LIMITS` and `APP_PROXY_TIMEOUTS` below select `/api` routes by
@@ -402,6 +415,90 @@ compiling, and `API_MAX_REQUEST_BODY_SIZE` and `API_IDLE_TIMEOUT` still apply.
 Invalid values stop the API at startup. Requests through the web app's `/api` proxy are also
 bounded by the web server's `BODY_SIZE_LIMIT`.
 
+### Web extension points
+
+The web app's framework files are managed so that `podo update` can keep them
+current. Put application changes in these application-owned files instead; each
+is created once, by `podo create`, `podo add`, or the first `podo update` that
+ships it, and never overwritten.
+
+| File | Export | Purpose |
+| --- | --- | --- |
+| `apps/web/vite.extensions.ts` | `appViteConfig`, `appSvelteKitConfig` | Vite options merged into the managed `vite.config.ts`, and SvelteKit options passed to `sveltekit()` |
+| `apps/web/src/app.extensions.css` | | Styles the managed `app.css` imports last: `@source` paths, theme variable overrides, `@theme` entries, base styles ([UI foundation](#ui-foundation)) |
+| `apps/web/src/lib/server/proxy-headers.ts` | `APP_FORWARDED_REQUEST_HEADERS`, `APP_RELAYED_RESPONSE_HEADERS` | [Proxy headers](#proxy-headers) |
+| `apps/web/src/lib/server/body-limits.ts` | `APP_BODY_LIMITS` | [Request body limits](#request-body-limits) |
+| `apps/web/src/lib/server/proxy-timeouts.ts` | `APP_PROXY_TIMEOUTS` | [Proxy deadlines per route](#proxy-deadlines-per-route) |
+| `apps/web/src/error.html` | | [Fallback error page](#fallback-error-page) |
+| `apps/web/src/lib/server/app-hooks.ts` (admin-dashboard) | `appHandle` | [Request hook](modules.md#request-hook) |
+| `apps/web/src/lib/server/public-paths.ts` (admin-dashboard) | `APP_PUBLIC_PATHS` | [Public pages](modules.md#admin-dashboard) |
+| `apps/web/src/lib/server/asset-paths.ts` (admin-dashboard) | `APP_ASSET_PATHS` | [Endpoints without the session](modules.md#admin-dashboard) |
+| `apps/web/src/lib/server/non-indexable-paths.ts` (admin-dashboard) | `APP_NON_INDEXABLE_PATHS` | [Search indexing](modules.md#search-indexing) |
+| `apps/web/src/lib/admin/app-nav.ts` (admin-dashboard) | `APP_ADMIN_NAV` | [Admin navigation](modules.md#admin-navigation) |
+
+Route pages are owned too; see [route files and update tiers](#route-files-and-update-tiers)
+for the pages whose server load PodoKit manages.
+
+#### Vite and SvelteKit options
+
+`apps/web/vite.config.ts` is managed. It merges `appViteConfig` from the owned
+`apps/web/vite.extensions.ts` into its own configuration with Vite's
+`mergeConfig`, so lists such as `plugins` are appended and objects are merged
+key by key, and spreads `appSvelteKitConfig` into the `sveltekit()` options
+after `adapter` and `preprocess`:
+
+```ts
+import type { Config as SvelteKitConfig } from "@sveltejs/kit/vite";
+import type { UserConfig, UserConfigFnObject } from "vite";
+
+export const appViteConfig: UserConfig | UserConfigFnObject = {
+  server: { warmup: { clientFiles: ["./src/routes/+layout.svelte", "./src/routes/+page.svelte"] } },
+  optimizeDeps: { include: ["zod"] },
+  define: { __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? "") },
+};
+
+export const appSvelteKitConfig: SvelteKitConfig = {
+  alias: { $i18n: "src/lib/i18n" },
+};
+```
+
+A function receives Vite's `{ command, mode }`. `PODOKIT_BUILD_ORIGIN` still sets
+`paths.origin` at build time. The generated `compose.dev.yaml` restarts the web
+container when the file changes.
+
+#### WebSocket paths in host development
+
+A SvelteKit route cannot answer a WebSocket upgrade. The `podo dev` gateway and a
+deployment's edge send the exact paths listed in `webSocketPaths` of
+`.podokit/dev.json` straight to the API (see
+[containerized development](development.md#containerized-development)). For
+`bun run dev`, the managed `vite.config.ts` reads the same list and proxies each
+exact path, with or without a query string, to `BACKEND_INTERNAL_URL`, so a
+WebSocket feature works the same way in both setups without a proxy entry of
+your own. The API must authenticate each upgrade itself.
+
+### Route files and update tiers
+
+`apps/web/src/routes/**` is application-owned, but modules keep some route
+server loads managed, such as `routes/account/+page.server.ts` and the admin
+pages' loads, so that security and data fixes still arrive through
+`podo update`. The owned page beside such a load never receives updates, so
+PodoKit keeps each feature of those routes in managed files:
+
+- The owned page passes the load's `data` to a managed component, such as
+  `<AccountPage {data} />`, and reads only the fields earlier versions of the
+  page already read. A test in the PodoKit repository fails when a template
+  page starts reading another one.
+- A field a managed load starts returning is rendered by a managed component.
+  For example, the impersonation banner on `/account` is part of the managed
+  `AccountPage`, driven by the load's `showImpersonationBanner`.
+- A managed e2e spec keeps passing against the owned pages earlier versions
+  generated, so it does not assert a change PodoKit made only to an owned page.
+
+Keep your own chrome in the owned page and leave the `data` it passes on
+unchanged. If a managed load must change, `podo eject` it together with the
+page.
+
 ## `todo`
 
 The Todo template adds:
@@ -454,7 +551,25 @@ bunx --bun shadcn-svelte@latest add accordion progress
 shipped ones.
 
 Application components should wrap the vendored primitives rather than editing
-`src/lib/components/ui/**`. Colors and radius are CSS variables in `app.css`.
+`src/lib/components/ui/**`. Colors and radius are CSS variables in the managed
+`app.css`, which imports the application-owned `src/app.extensions.css` last.
+Put application styles there: override the variables in `:root` and `.dark`,
+add `@theme` entries and base styles, and add an `@source` line for a package
+whose built components use Tailwind classes, since Tailwind does not scan
+`node_modules`:
+
+```css
+@import "@fontsource-variable/inter";
+@source "../../../node_modules/@example/ui/dist";
+
+:root {
+  --radius: 0.5rem;
+  --primary: oklch(0.48 0.2 300);
+}
+```
+mode-watcher puts `dark` on `<html>` in dark mode and `light` in light mode, so a
+component library that follows either class, and falls back to the system
+setting without one, matches the theme the visitor chose.
 
 ## Dotfile convention
 

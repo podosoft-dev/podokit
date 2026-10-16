@@ -1,10 +1,14 @@
 <script lang="ts" module>
+  import type { Snippet } from "svelte";
   import { cn } from "#lib/utils.js";
 
   export type DataTableBreakpoint = "sm" | "md" | "lg" | "xl";
   export type DataTableColumn<Row> = {
     key: string;
     label: string;
+    // Header content in place of the label and sort button, such as a
+    // select-all checkbox. Give it its own accessible name.
+    head?: Snippet;
     sortable?: boolean;
     class?: string;
     hideBelow?: DataTableBreakpoint;
@@ -37,7 +41,6 @@
 </script>
 
 <script lang="ts" generics="Row">
-  import type { Snippet } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Table from "#lib/components/ui/table/index.js";
   import TablePagination from "#lib/components/table-pagination.svelte";
@@ -132,7 +135,9 @@
             class={getDataTableColumnClass(col)}
             aria-sort={sort?.key === col.key ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
           >
-            {#if col.sortable}
+            {#if col.head}
+              {@render col.head()}
+            {:else if col.sortable}
               <Button variant="ghost" size="sm" class="-mx-2 h-auto gap-1 px-2 py-1 font-medium" onclick={() => toggle(col)}>
                 {col.label}
                 {#if sort?.key === col.key}

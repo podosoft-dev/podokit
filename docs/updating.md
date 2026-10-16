@@ -166,7 +166,21 @@ For a new route, create an Elysia plugin, validate inputs with `t`, throw
 `AppException` with a stable code, declare OpenAPI details, register its access
 policy, and add Bun tests plus an API contract entry.
 
-## Extending the web proxy
+## Extending the web app
+
+The web app's framework files are managed. Application changes go in the owned
+files listed under [web extension points](templates.md#web-extension-points):
+Vite and SvelteKit options in `apps/web/vite.extensions.ts`, styles in
+`apps/web/src/app.extensions.css`, and with
+`admin-dashboard` a request hook in `apps/web/src/lib/server/app-hooks.ts`,
+admin sidebar entries in `apps/web/src/lib/admin/app-nav.ts`, and private page
+prefixes in `apps/web/src/lib/server/non-indexable-paths.ts`. `podo update`
+creates each of them once in an existing app. An app that edited the managed
+`vite.config.ts`, `app.css`, `hooks.server.ts`, `admin-sidebar.svelte`, or
+`search-indexing.ts` gets a merge or a conflict there; move the edit into the
+owned file and take PodoKit's version of the managed one.
+
+### Extending the web proxy
 
 The SvelteKit `/api` proxy, `apps/web/src/lib/server/backend-proxy.ts`, is
 managed. Instead of adding header names to its lists, put them in the

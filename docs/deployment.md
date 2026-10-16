@@ -442,6 +442,35 @@ The doctor reports what it renders and warns when the profile contradicts itself
   as 0 then.
 
 ## Direct API paths
+
+### Uploads answer 403 "Cross-site POST form submissions are forbidden"
+
+SvelteKit refuses a `POST`, `PUT`, `PATCH`, or `DELETE` that has no content
+type or one an HTML form can send (`multipart/form-data`,
+`application/x-www-form-urlencoded`, `text/plain`) unless the browser's `Origin`
+header equals the origin the web server resolved for the request. Browsers send
+`Origin` with every same-origin request of these kinds, so in a working
+deployment uploads with `FormData`, form-encoded bodies, and requests without a
+body reach the API through the `/api` proxy unchanged. The generated
+`tests/ui/same-origin-requests.ui.spec.ts` checks this against a running app; like
+the rest of the suite it signs up its seed accounts, so point it at a staging
+copy:
+
+```bash
+cd tests && E2E_BASE_URL=https://staging.example.com bunx playwright test same-origin-requests
+```
+
+When those requests answer 403 while JSON requests work, the web server sees a
+different origin from the browser, almost always the scheme: TLS ends at an
+outer proxy, and the ingress in front of the web server replaces its
+`X-Forwarded-Proto: https` with `http` because it does not trust that proxy.
+Count that outer proxy in `exposure.edgeProxies` (see Client addresses above) and
+configure the ingress to trust its forwarded headers, for example Traefik's
+`forwardedHeaders.trustedIPs` with the proxy's address, or build the image with
+`PODOKIT_BUILD_ORIGIN` set to the public origin. Do not work around
+it by sending uploads as `application/octet-stream` or adding a JSON content
+type to empty requests: that hides the wrong origin, and the forwarded origin
+the API sees is wrong as well.
 ## Direct API paths
 
 By default every `/api/*` request goes through the web server, which proxies it
