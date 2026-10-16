@@ -164,7 +164,9 @@ export const extensionModules: PodokitModule[] = [];
 
 For a new route, create an Elysia plugin, validate inputs with `t`, throw
 `AppException` with a stable code, declare OpenAPI details, register its access
-policy, and add Bun tests plus an API contract entry.
+policy, and add Bun tests plus an API contract entry. An `AppException`'s
+optional fourth argument reaches the client as `error.details`, for example
+`new AppException("SIGNUP_INVALID", "Invalid sign-up", 422, { fields })`.
 
 ## Extending the web app
 

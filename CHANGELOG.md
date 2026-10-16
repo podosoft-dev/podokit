@@ -124,6 +124,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   entities, `APP_ENTITIES`, that the migration data source loads, and the API's
   `tsconfig.json` enables `experimentalDecorators` and `emitDecoratorMetadata`
   for them. `podo update` creates the file once and never overwrites it.
+- `AppException` takes optional `details` as its fourth argument, and the API
+  returns them as `error.details` in the error envelope, for example the fields
+  a request failed on: `throw new AppException("SIGNUP_INVALID", "Invalid
+  sign-up", 422, { fields })`. Apps no longer subclass it or edit `app.ts`.
 
 ### Removed
 
@@ -360,6 +364,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   decorator settings you added to `apps/api/tsconfig.json`; `podo update`
   reports those edits as conflicts. Import `appDataSource` by name: the default
   export of `data-source.ts` is gone.
+- If you subclassed `AppException` to carry `details` and edited `app.ts` to
+  return them, drop both and pass `details` to `AppException` from
+  `@podosoft/podokit-contracts`; `podo update` reports the `app.ts` and
+  `common/app-exception.ts` edits as conflicts.
 
 ## [1.5.0] - 2026-10-16
 

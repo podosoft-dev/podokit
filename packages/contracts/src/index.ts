@@ -94,14 +94,16 @@ export interface ErrorEnvelope {
 
 /**
  * Backend exception carrying a stable `code`. The global exception filter
- * renders it into an {@link ErrorEnvelope}. Pure (extends Error), so it lives in
- * contracts and both layers can reference the code space.
+ * renders it into an {@link ErrorEnvelope}, with `details` as `error.details`
+ * when set, such as the fields a validation failed on. Pure (extends Error), so
+ * it lives in contracts and both layers can reference the code space.
  */
 export class AppException extends Error {
   constructor(
     readonly code: string,
     message: string,
     readonly statusCode = 400,
+    readonly details?: unknown,
   ) {
     super(message);
     this.name = "AppException";
