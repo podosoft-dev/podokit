@@ -160,6 +160,7 @@ describe("create (integration against templates)", () => {
     const apiSeams: ReadonlyArray<readonly [string, string]> = [
       ["apps/api/src/config/env.extensions.ts", "export const appEnvShape = {} satisfies z.ZodRawShape;"],
       ["apps/api/src/database/entities.ts", "export const APP_ENTITIES: AppEntities = [];"],
+      ["apps/api/src/core/api-contract.extensions.ts", "export const APP_DOCUMENTED_ROUTES: readonly string[] = [];"],
     ];
     for (const [path, seed] of apiSeams) {
       expect(readFileSync(join(target, path), "utf8")).toContain(seed);

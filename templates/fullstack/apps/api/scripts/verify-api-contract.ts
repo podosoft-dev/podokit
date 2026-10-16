@@ -4,9 +4,11 @@ import { createApp } from "../src/app";
 import { validateEnv } from "../src/config/env.validation";
 import {
   assertApiContract,
+  assertApplicationRoutes,
   assertConsistentRouteParameters,
   documentedApiRoutes,
 } from "../src/core/api-contract";
+import { APP_DOCUMENTED_ROUTES } from "../src/core/api-contract.extensions";
 import { createCoreServices } from "../src/core/services";
 
 interface ProjectManifest {
@@ -29,8 +31,10 @@ try {
   const document: unknown = await response.json();
   const modules = manifest.modules.map((module) => module.name);
   assertApiContract(document, manifest.template, modules);
+  assertApplicationRoutes(document, app.routes, APP_DOCUMENTED_ROUTES);
   process.stdout.write(
-    `Verified ${documentedApiRoutes(document).size} documented API operations for ${manifest.template}.\n`,
+    `Verified ${documentedApiRoutes(document).size} documented API operations for ${manifest.template}, ` +
+      `including ${APP_DOCUMENTED_ROUTES.length} application operations.\n`,
   );
 } finally {
   await services.close();

@@ -112,7 +112,10 @@ Other infrastructure is selected
 through the contracts described in [Runtime providers](providers.md). The merged
 OpenAPI document at `/api-docs-json` includes
 Elysia, module, and Better Auth routes. `bun run --cwd apps/api contract`
-compares that document with the generated project manifest.
+compares that document with the generated project manifest, and requires each
+operation in `APP_DOCUMENTED_ROUTES` of the owned
+`apps/api/src/core/api-contract.extensions.ts` to be both registered and
+documented.
 The API reuses the merged document until the route count changes or an OpenAPI
 contributor returns a different document object. A contributor should therefore
 return the same object while its inputs are unchanged. The auth module keeps one

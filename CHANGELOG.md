@@ -128,6 +128,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   returns them as `error.details` in the error envelope, for example the fields
   a request failed on: `throw new AppException("SIGNUP_INVALID", "Invalid
   sign-up", 422, { fields })`. Apps no longer subclass it or edit `app.ts`.
+- `apps/api/src/core/api-contract.extensions.ts` is an application-owned list,
+  `APP_DOCUMENTED_ROUTES`, of the operations the app's own API must serve, such
+  as `"GET /reports/{id}"` (`:id` works too). `bun run contract` fails when one
+  is not registered or missing from the OpenAPI document. `podo update` creates
+  the file once and never overwrites it.
 
 ### Removed
 
@@ -368,6 +373,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   return them, drop both and pass `details` to `AppException` from
   `@podosoft/podokit-contracts`; `podo update` reports the `app.ts` and
   `common/app-exception.ts` edits as conflicts.
+- Move route lists you check in the managed `scripts/verify-api-contract.ts` or
+  `src/core/api-contract.ts` into `APP_DOCUMENTED_ROUTES`; `podo update`
+  reports those edits as conflicts.
 
 ## [1.5.0] - 2026-10-16
 
