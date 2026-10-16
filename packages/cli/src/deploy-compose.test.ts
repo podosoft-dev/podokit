@@ -77,6 +77,11 @@ describe("docker-compose profile", () => {
     expect(profile.runtimeConfig).toMatchObject({ TRUSTED_PROXY_HOPS: "1", TRUSTED_PROXY_HEADER: "x-forwarded-for" });
   });
 
+  it("turns the audit log on when the audit-log module is installed", () => {
+    expect(composeProfileOf(initialized(["auth", "audit-log"])).runtimeConfig.AUDIT_LOG_ENABLED).toBe("true");
+    expect(composeProfileOf(initialized(["auth"])).runtimeConfig).not.toHaveProperty("AUDIT_LOG_ENABLED");
+  });
+
   it("records the driver so dispatch reads it back from disk", () => {
     const root = initialized();
     expect(readDeploymentDriver(root, "production")).toBe("docker-compose");
@@ -476,6 +481,32 @@ describe("compose doctor", () => {
   it("passes when every required key is present", () => {
     const findings = doctorComposeDeployment(initialized(), "production", scriptedRunner());
     expect(findings.filter((finding) => !finding.ok)).toEqual([]);
+  });
+
+  it("warns, without failing, when a profile does not turn the audit log on", () => {
+    const root = initialized(["auth", "audit-log"]);
+    const auditFinding = () =>
+      doctorComposeDeployment(root, "production", scriptedRunner()).find((finding) => finding.code === "audit-log");
+    expect(auditFinding()).toMatchObject({ ok: true });
+    expect(auditFinding()?.warning).toBeUndefined();
+
+    const file = profilePath(root, "production");
+    const value = JSON.parse(readFileSync(file, "utf8")) as { runtimeConfig: Record<string, string> };
+    value.runtimeConfig.AUDIT_LOG_ENABLED = "false";
+    writeFileSync(file, JSON.stringify(value));
+    expect(auditFinding()).toMatchObject({ ok: true, warning: true });
+    expect(auditFinding()?.message).toContain('AUDIT_LOG_ENABLED is "false"');
+
+    delete value.runtimeConfig.AUDIT_LOG_ENABLED;
+    writeFileSync(file, JSON.stringify(value));
+    expect(auditFinding()).toMatchObject({ ok: true, warning: true });
+    expect(auditFinding()?.message).toContain("does not set AUDIT_LOG_ENABLED");
+
+    // Without the module there is nothing to record, so nothing to report.
+    expect(
+      doctorComposeDeployment(initialized(["auth"]), "production", scriptedRunner())
+        .some((finding) => finding.code === "audit-log"),
+    ).toBe(false);
   });
 });
 

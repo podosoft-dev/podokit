@@ -571,6 +571,8 @@ export function initializeDeploymentProfile(
       TRUSTED_PROXY_HOPS: "1",
       TRUSTED_PROXY_HEADER: "x-forwarded-for",
       ...(usesAuth ? { BETTER_AUTH_URL: `https://${host}` } : {}),
+      // The API's fallback until an administrator saves the setting.
+      ...(modules.has("audit-log") ? { AUDIT_LOG_ENABLED: "true" } : {}),
       ...(modules.has("rate-limit")
         ? {
             RATE_LIMIT_TTL: "60",

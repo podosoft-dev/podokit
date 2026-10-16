@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { directApiRoutes } from "./api-paths";
+import { profileFindings, type DeployFinding } from "./deploy-checks";
 import type { CommandRunner } from "./dev";
 import { loadComposeProfile } from "./deploy-driver";
 import {
@@ -47,11 +48,7 @@ import { resolveToolchain, toolchainMigrationCommand } from "./toolchain";
  * that same volume replaces Helm revisions.
  */
 
-export interface ComposeDoctorFinding {
-  code: string;
-  ok: boolean;
-  message: string;
-}
+export type ComposeDoctorFinding = DeployFinding;
 
 export interface ComposePlanAction {
   order: number;
@@ -340,7 +337,7 @@ export function doctorComposeDeployment(
   release?: string,
 ): ComposeDoctorFinding[] {
   const profile = loadComposeProfile(projectRoot, profileName);
-  const findings: ComposeDoctorFinding[] = [];
+  const findings: ComposeDoctorFinding[] = profileFindings(projectRoot, profile);
   const record = (code: string, ok: boolean, message: string): void => {
     findings.push({ code, ok, message });
   };

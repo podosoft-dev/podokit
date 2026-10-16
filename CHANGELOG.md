@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- `podo deploy doctor` checks the profile against the application before it
+  contacts the target, and reports a setting that deploys but probably not as
+  intended as a `warn` line, which does not stop `podo deploy apply`. With the
+  `audit-log` module installed it warns when `runtimeConfig` lacks
+  `AUDIT_LOG_ENABLED` or sets it to anything but `"true"`. JSON findings carry
+  `"warning": true`.
 - Generated apps run their Playwright suite on more than one worker with
   `E2E_WORKERS` (default 1), for example `E2E_WORKERS=2 bun run test:e2e`. A
   test that changes state the other tests rely on carries the `@exclusive` tag:
@@ -34,6 +40,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Production deployments of apps with the `audit-log` module start with the
+  audit log on. `podo deploy init` sets `AUDIT_LOG_ENABLED: "true"` in the
+  profile's `runtimeConfig` for both drivers, and the module adds it to the
+  example `infra/k3s/configmap.yaml`; before, only `.env.example` and
+  `.env.docker.example` set it.
 - The Compose deployment gateway sends web and API the one client address it
   resolved, instead of appending the proxy in front to `X-Forwarded-For`. Behind
   a proxy listed in `exposure.trustedProxyCidrs`, web and API received
@@ -60,6 +71,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Upgrade notes
 
+- With the `audit-log` module installed, add `"AUDIT_LOG_ENABLED": "true"` to
+  the `runtimeConfig` of every existing deployment profile; `podo deploy doctor`
+  warns until you do. `podo update` adds the line to the example
+  `infra/k3s/configmap.yaml`, before a new `# podokit:end:runtime-config` marker.
 - A Compose deployment with WebSocket or direct API paths renders a new gateway
   configuration, so a rollback to a revision applied before this version is
   refused, because it no longer renders byte for byte; roll forward with a new

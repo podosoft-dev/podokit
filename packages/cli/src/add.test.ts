@@ -22,6 +22,7 @@ import {
   writeManifest,
 } from "./lockfile";
 import { applyProviderChange } from "./provider";
+import { removeModule } from "./remove";
 import { planUpdate } from "./update";
 
 const REPO_TEMPLATES = resolve(process.cwd(), "..", "..", "templates");
@@ -722,6 +723,27 @@ describe("addModule (auth / better-auth)", () => {
     expect(result.added).toContain("auth");
     expect(existsSync(join(project, "apps/api/src/audit/audit.service.ts"))).toBe(true);
     expect(existsSync(join(project, "apps/api/src/migrations/1720300000000-InitAuditLogs.ts"))).toBe(true);
+    expect(readFileSync(join(project, "apps/api/src/app.ts"), "utf8")).toContain("auditModule,");
+  });
+
+  it("audit-log turns auditing on in the example Kubernetes ConfigMap, and remove takes it out", () => {
+    const project = generate("fullstack");
+    const configMap = join(project, "infra", "k3s", "configmap.yaml");
+    expect(readFileSync(configMap, "utf8")).not.toContain("AUDIT_LOG_ENABLED");
+
+    addModule({ projectRoot: project, module: "audit-log", modulesDir: MODULES });
+    expect(readFileSync(configMap, "utf8")).toContain(
+      '  AUDIT_LOG_ENABLED: "true"\n  # podokit:end:runtime-config\n',
+    );
+
+    removeModule({ projectRoot: project, module: "audit-log", modulesDir: MODULES });
+    expect(readFileSync(configMap, "utf8")).not.toContain("AUDIT_LOG_ENABLED");
+  });
+
+  it("audit-log still installs when the example Kubernetes manifests were deleted", () => {
+    const project = generate("fullstack");
+    rmSync(join(project, "infra", "k3s"), { recursive: true });
+    addModule({ projectRoot: project, module: "audit-log", modulesDir: MODULES });
     expect(readFileSync(join(project, "apps/api/src/app.ts"), "utf8")).toContain("auditModule,");
   });
 

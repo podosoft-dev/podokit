@@ -157,7 +157,10 @@ Initialization reads the manifest's active providers and installed modules. Auth
 and API-key modules add their required secret key names, distributed providers
 select PostgreSQL, Redis, or Silo, BullMQ adds a worker, and the
 [direct API paths](#direct-api-paths) that installed modules contributed, such as
-`file-upload`'s `/api/files/uploads/`, go into `exposure.apiPaths`. Local providers
+`file-upload`'s `/api/files/uploads/`, go into `exposure.apiPaths`. With
+`audit-log` installed, `runtimeConfig` sets `AUDIT_LOG_ENABLED` to `"true"`, so a
+new deployment records from its first request until an administrator changes the
+setting. Local providers
 disable their managed external dependency, omit the separate worker, and constrain
 the API to one replica. Dependencies support
 `external` and `disabled` as well as PodoKit-managed. External endpoints and
@@ -210,7 +213,14 @@ podo deploy plan --profile production --release v1.2.3 --json
 ```
 
 The doctor is read-only. It validates the exact target, the tooling, the fingerprint,
-and the required secret key names without printing a value.
+and the required secret key names without printing a value. It also checks the
+profile against the application before it contacts the target. Each line starts
+with `ok`, `warn`, or `FAIL`; apply runs the doctor first and stops on a `FAIL`,
+while a `warn` reports a setting that deploys but probably not as intended:
+
+| Check | Result |
+| --- | --- |
+| `audit-log` (with the module installed) | `warn` when `runtimeConfig` lacks `AUDIT_LOG_ENABLED` or sets it to anything but `"true"`: the audit log then records nothing until an administrator turns it on, or depends on the API's built-in default |
 
 The plan resolves every image tag to an immutable registry digest and binds those
 digests, the profile, the rendered output, the current revision, and the identity of

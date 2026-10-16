@@ -156,6 +156,23 @@ describe("deployment profiles", () => {
       TRUSTED_PROXY_HEADER: "x-forwarded-for",
     });
     expect(profile.runtimeConfig).not.toHaveProperty("RATE_LIMIT_TRUSTED_PROXY_HOPS");
+    expect(profile.runtimeConfig).not.toHaveProperty("AUDIT_LOG_ENABLED");
+  });
+
+  it("turns the audit log on when the audit-log module is installed", () => {
+    const root = project();
+    const manifestPath = join(root, ".podokit", "manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+      modules: Array<{ name: string; order: number; addedWith: string }>;
+    };
+    manifest.modules = ["auth", "audit-log"].map((name, order) => ({ name, order, addedWith: "0.15.0" }));
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+    initializeDeploymentProfile(root, "production", {
+      context: "production",
+      clusterFingerprint: fingerprint,
+      host: "app.example.com",
+    });
+    expect(loadDeploymentProfile(root, "production").runtimeConfig.AUDIT_LOG_ENABLED).toBe("true");
   });
 
   it("selects Redis transport for multi-replica SSE profiles", () => {
