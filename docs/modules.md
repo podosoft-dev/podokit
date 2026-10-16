@@ -1447,6 +1447,27 @@ of accounts.
   audit hook (`user.session_revoke`) still apply. It returns `204`, or
   `404 ADMIN_SESSION_NOT_FOUND`.
   The manage dialog on `/admin/users` uses the same endpoint with `userId`.
+- **Your own sessions** on the account page come from `GET /account/sessions`,
+  which any signed-in user may call for their own sessions:
+
+  ```text
+  GET /account/sessions?limit=20&cursor=<nextCursor>
+  -> { "current": { "id", "ipAddress", "userAgent", "createdAt", "expiresAt" } | null,
+       "items": [ ...the other sessions, newest first... ],
+       "nextCursor": "<opaque>" | null, "total": 151 }
+  ```
+
+  `current` is the session making the request, on every page, and `total`
+  counts it with the others; paging and `limit` work as for `/admin/sessions`.
+  Better Auth's `GET /api/auth/list-sessions` returns at most 100 sessions, in
+  no set order, so a user with more might not see their current one there. The list
+  keeps Better Auth's freshness rule: a session older than `session.freshAge` (24
+  hours by default) gets `403 SESSION_NOT_FRESH`. Tokens are never returned.
+  `DELETE /account/sessions/{id}` revokes one of the caller's sessions through
+  Better Auth `revokeSession`, so the audit hook (`session.revoke`) still applies,
+  and answers `204` or `404 ACCOUNT_SESSION_NOT_FOUND`, also for another user's
+  session. "Sign out other sessions" calls `POST /api/auth/revoke-other-sessions`,
+  which revokes every other session (see the `auth` module).
 
 Every page, sort, or search of either list is one request to an `/admin/*`
 endpoint, and the `rate-limit` module counts those against the general budget.

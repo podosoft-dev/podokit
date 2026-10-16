@@ -115,6 +115,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   every switch of the cache, object storage, events, and jobs providers, in both
   directions. `PROVIDERS` is now typed `Readonly<ProviderSelections>`, with every
   provider name of each capability.
+- The account page's Sessions tab shows the current session and every other one,
+  however many there are. It read Better Auth's `GET /api/auth/list-sessions`,
+  which returns at most 100 sessions in no set order, so a user with more
+  sessions could see no "Current" row and only part of the list. The admin dashboard adds
+  `GET /account/sessions`, the caller's own sessions paged on the server with the
+  current one on every page and no tokens, and `DELETE /account/sessions/{id}`,
+  which revokes through Better Auth's audited `/revoke-session`. The list keeps
+  Better Auth's `SESSION_NOT_FRESH` rule. API and UI specs cover a user with 106
+  sessions and paging.
 - The admin dashboard's table toolbar keeps its search box usable on a phone.
   The input could shrink to about 42 px wide at a 390 px viewport, squeezed
   between the search field select and the Search button on the users page; it
