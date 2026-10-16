@@ -16,7 +16,7 @@ const REDIRECT = "https://example.com/callback";
 // docs/modules.md for the manual round-trip checklist.
 test("OIDC provider: discovery, JWKS, client registration, authorize handoff", async ({ page, baseURL }) => {
   // tests/api/auth.api.spec.ts also toggles the provider; the lock keeps the two apart.
-  test.setTimeout(60_000);
+  test.slow();
   await exclusive("oidc-provider", () => frontChannel(page, baseURL));
 });
 

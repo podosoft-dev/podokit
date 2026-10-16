@@ -145,46 +145,49 @@ test("two-factor: regenerating backup codes invalidates the old set", async ({ p
 });
 
 test("require-2fa: gates an un-enrolled user until they enrol", async ({ playwright }) => {
-  const admin = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
-  const caps = await (await admin.get("/api/account/capabilities")).json();
-  test.skip(!caps?.twoFactor, "two-factor not enabled");
-  await admin.post("/api/auth/sign-in/email", { data: { email: ADMIN.email, password: ADMIN.password } });
+  test.slow();
+  await exclusive("require2fa", async () => {
+    const admin = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+    const caps = await (await admin.get("/api/account/capabilities")).json();
+    test.skip(!caps?.twoFactor, "two-factor not enabled");
+    await admin.post("/api/auth/sign-in/email", { data: { email: ADMIN.email, password: ADMIN.password } });
 
-  const user = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
-  const email = `rq-${Date.now()}@example.com`;
-  const pw = "Podokit3e-Str0ng!pw";
-  await user.post("/api/auth/sign-up/email", { data: { email, password: pw, name: "RQ" } });
+    const user = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+    const email = `rq-${Date.now()}@example.com`;
+    const pw = "Podokit3e-Str0ng!pw";
+    await user.post("/api/auth/sign-up/email", { data: { email, password: pw, name: "RQ" } });
 
-  try {
-    // Turn the policy on (admin; the toggle endpoint is allow-listed by the guard).
-    await admin.put("/api/account/settings", { data: { require2fa: true } });
-    // Capabilities carry the same policy as the dedicated endpoint.
-    await expect(async () => {
-      expect((await (await admin.get("/api/account/capabilities")).json()).require2fa).toBe(true);
-      expect(await (await admin.get("/api/account/require-2fa")).json()).toEqual({ require2fa: true });
-    }).toPass({ timeout: 8000 });
-    // The guard caches for a few seconds — poll until the un-enrolled user is gated.
-    await expect(async () => {
-      expect((await user.get("/api/account/me")).status()).toBe(403);
-    }).toPass({ timeout: 8000 });
+    try {
+      // Turn the policy on (admin; the toggle endpoint is allow-listed by the guard).
+      await admin.put("/api/account/settings", { data: { require2fa: true } });
+      // Capabilities carry the same policy as the dedicated endpoint.
+      await expect(async () => {
+        expect((await (await admin.get("/api/account/capabilities")).json()).require2fa).toBe(true);
+        expect(await (await admin.get("/api/account/require-2fa")).json()).toEqual({ require2fa: true });
+      }).toPass({ timeout: 8000 });
+      // The guard caches for a few seconds — poll until the un-enrolled user is gated.
+      await expect(async () => {
+        expect((await user.get("/api/account/me")).status()).toBe(403);
+      }).toPass({ timeout: 8000 });
 
-    // Enrolling restores access.
-    const enable = await (await user.post("/api/auth/two-factor/enable", { data: { password: pw } })).json();
-    await user.post("/api/auth/two-factor/verify-totp", { data: { code: totpCode(enable.totpURI) } });
-    expect((await user.get("/api/account/me")).status()).toBe(200);
-  } finally {
-    // Always turn it back off so the shared (un-enrolled) sessions aren't gated.
-    await admin.put("/api/account/settings", { data: { require2fa: false } });
-    await expect(async () => {
-      const probe = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
-      await probe.post("/api/auth/sign-in/email", { data: { email: USER.email, password: USER.password } });
-      const status = (await probe.get("/api/account/me")).status();
-      await probe.dispose();
-      expect(status).toBe(200);
-    }).toPass({ timeout: 8000 });
-    await admin.dispose();
-    await user.dispose();
-  }
+      // Enrolling restores access.
+      const enable = await (await user.post("/api/auth/two-factor/enable", { data: { password: pw } })).json();
+      await user.post("/api/auth/two-factor/verify-totp", { data: { code: totpCode(enable.totpURI) } });
+      expect((await user.get("/api/account/me")).status()).toBe(200);
+    } finally {
+      // Always turn it back off so the shared (un-enrolled) sessions aren't gated.
+      await admin.put("/api/account/settings", { data: { require2fa: false } });
+      await expect(async () => {
+        const probe = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+        await probe.post("/api/auth/sign-in/email", { data: { email: USER.email, password: USER.password } });
+        const status = (await probe.get("/api/account/me")).status();
+        await probe.dispose();
+        expect(status).toBe(200);
+      }).toPass({ timeout: 8000 });
+      await admin.dispose();
+      await user.dispose();
+    }
+  });
 });
 
 test("multi-session holds several accounts and switches between them", async ({ playwright }) => {
@@ -385,7 +388,7 @@ test("the OIDC provider's discovery and endpoints follow its setting", async ({ 
   // The provider's metadata is answered before endpoint hooks run, so it needs its
   // own check that "off" hides it. The lock keeps tests/ui/oidc.ui.spec.ts, which
   // also toggles the provider, from running at the same time.
-  test.setTimeout(60_000);
+  test.slow();
   const admin = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   await admin.post("/api/auth/sign-in/email", { data: { email: ADMIN.email, password: ADMIN.password } });
   const status = (path: string): Promise<number> => admin.get(path).then((r) => r.status());
@@ -424,24 +427,27 @@ test("only admins can change settings @smoke", async ({ playwright }) => {
 });
 
 test("disabling a feature blocks its endpoint server-side and re-enabling restores it @smoke", async ({ playwright }) => {
-  // Uses a fresh admin context (not the shared storageState) so it never rotates
-  // the seeded session. Toggles a flag and confirms the feature gate enforces it.
-  const admin = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
-  await admin.post("/api/auth/sign-in/email", { data: { email: ADMIN.email, password: ADMIN.password } });
-  const caps = await (await admin.get("/api/account/capabilities")).json();
-  test.skip(!caps?.magicLink, "magic link not enabled");
+  test.slow();
+  await exclusive("magic-link", async () => {
+    // Uses a fresh admin context (not the shared storageState) so it never rotates
+    // the seeded session. Toggles a flag and confirms the feature gate enforces it.
+    const admin = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+    await admin.post("/api/auth/sign-in/email", { data: { email: ADMIN.email, password: ADMIN.password } });
+    const caps = await (await admin.get("/api/account/capabilities")).json();
+    test.skip(!caps?.magicLink, "magic link not enabled");
 
-  // A disabled feature's endpoint 404s; the gate reads the flag through a short cache.
-  const status = (): Promise<number> =>
-    admin.post("/api/auth/sign-in/magic-link", { data: { email: "probe@example.com" } }).then((r) => r.status());
+    // A disabled feature's endpoint 404s; the gate reads the flag through a short cache.
+    const status = (): Promise<number> =>
+      admin.post("/api/auth/sign-in/magic-link", { data: { email: "probe@example.com" } }).then((r) => r.status());
 
-  expect((await admin.put("/api/account/settings", { data: { magicLink: false } })).ok()).toBeTruthy();
-  await expect.poll(status, { timeout: 8000 }).toBe(404);
+    expect((await admin.put("/api/account/settings", { data: { magicLink: false } })).ok()).toBeTruthy();
+    await expect.poll(status, { timeout: 8000 }).toBe(404);
 
-  expect((await admin.put("/api/account/settings", { data: { magicLink: true } })).ok()).toBeTruthy();
-  await expect.poll(status, { timeout: 8000 }).not.toBe(404);
+    expect((await admin.put("/api/account/settings", { data: { magicLink: true } })).ok()).toBeTruthy();
+    await expect.poll(status, { timeout: 8000 }).not.toBe(404);
 
-  await admin.dispose();
+    await admin.dispose();
+  });
 });
 
 test("sign-in with a wrong password is rejected", async ({ request }) => {

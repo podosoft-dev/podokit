@@ -43,6 +43,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   managed file, the next `podo update` deleted it as removed upstream. Entries
   an earlier version wrote are ignored and dropped on the next lock write.
 
+- The admin dashboard's Playwright specs that change a server-wide setting hold
+  a lock shared by every worker on the machine (`tests/helpers/exclusive.ts`).
+  The suite runs on one worker by default; with `--workers` above 1, an api spec
+  and a ui spec could flip the same setting at once and undo each other. The
+  locks cover the `require2fa`, magic-link and OIDC provider flags, automatic
+  logout, social sign-in providers, the General settings (the form saves all of
+  its fields together) and the Appearance settings. A failing test releases its
+  lock, a lock left by a worker that exited (Ctrl-C, a timed-out test) is taken
+  over at once, and locked tests call `test.slow()` because waiting counts
+  against their timeout.
+
 ## [1.4.1] - 2026-10-16
 
 ### Fixed
