@@ -520,6 +520,20 @@ give the API `timeoutSeconds: 2` instead of the Kubernetes default of one second
 The Compose healthcheck allows `5s`, because it starts a Node process for every
 check.
 
+The web workload's probes request `/`, which renders without the API, so an
+API outage does not take the web pods out of service. The web server gives up
+on each server-side API call after `BACKEND_TIMEOUT_MS`, waits for the `/api`
+proxy's response headers up to `BACKEND_PROXY_TIMEOUT_MS`, and, once the API's
+`GET /health` does not answer either, fails API calls at once until it does;
+see [API timeouts and outages](templates.md#api-timeouts-and-outages).
+
+| Web setting | Default | Effect |
+| --- | --- | --- |
+| `BACKEND_TIMEOUT_MS` | `2000` | The longest one server-side API call may take, and the proxy's wait for response headers before it checks whether the API answers at all. Detecting an outage takes up to twice this long, and pages rendered meanwhile wait for it, so a large value can fail the web probes. |
+| `BACKEND_PROXY_TIMEOUT_MS` | `30000` | How long the `/api` proxy waits for response headers before it answers `504` `BACKEND_TIMEOUT`. Raise it with the API's `idleTimeout` and the web server's `CONNECTION_IDLE_TIMEOUT`. |
+
+Set them in the profile's `runtimeConfig`.
+
 ## Status and verification
 
 ```bash

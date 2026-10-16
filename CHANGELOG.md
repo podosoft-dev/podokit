@@ -53,6 +53,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   lock, a lock left by a worker that exited (Ctrl-C, a timed-out test) is taken
   over at once, and locked tests call `test.slow()` because waiting counts
   against their timeout.
+- Generated web apps no longer wait on an API that stops answering. Each
+  server-side call through `serverApiClient`, such as the hooks' site settings
+  and session lookups, gives up after `BACKEND_TIMEOUT_MS` (2000 ms by default),
+  so public pages render their fallbacks and protected pages answer `503`. The
+  `/api` proxy answers `504` `BACKEND_TIMEOUT` when the API sends no response
+  headers within `BACKEND_PROXY_TIMEOUT_MS` (30000 ms, the API's default idle
+  timeout), and `503` `BACKEND_UNAVAILABLE` with `Retry-After: 2` and the
+  standard error envelope instead of SvelteKit's bare `500` when it cannot reach
+  the API; streamed responses are not cut off. When a call gets no answer, or
+  response headers take longer than `BACKEND_TIMEOUT_MS`, the web server checks
+  the API's `GET /health`, so one slow endpoint does not fail other requests.
+  When that check gets no answer either, requests still waiting fail, new calls
+  fail at once (`BackendUnavailableError` on the server, `503` through the
+  proxy), and a check every two seconds ends the outage at the first HTTP
+  answer. Raising the API's `apiServerOptions.idleTimeout` needs a matching
+  `BACKEND_PROXY_TIMEOUT_MS`.
+
 
 ## [1.4.1] - 2026-10-16
 

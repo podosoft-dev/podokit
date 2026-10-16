@@ -194,6 +194,46 @@ upload route in `apiPaths` so the gateway sends it straight to the API; see
 [direct API paths](deployment.md#direct-api-paths). An app that splits uploads
 into chunks small enough for the web proxy can send larger parts that way.
 
+### API timeouts and outages
+
+The web server bounds its calls to the API, so a page does not wait for an API
+that has stopped answering:
+
+- Each server-side call through `serverApiClient`, such as the hooks' site
+  settings and session lookups, may take `BACKEND_TIMEOUT_MS` (2000 by default),
+  reading the response body included, and then rejects with a `TimeoutError`.
+  The hooks treat that like any other outage: public pages render their
+  fallbacks and protected pages answer `503`.
+- The `/api` proxy waits up to `BACKEND_PROXY_TIMEOUT_MS` (30000 by default,
+  the API's default idle timeout) for the response headers and then answers
+  `504` with the `BACKEND_TIMEOUT` error code. The wait ends when the headers
+  arrive, so server-sent events and large downloads keep streaming. A refused
+  connection or any other failure without an HTTP answer becomes `503`
+  `BACKEND_UNAVAILABLE` with `Retry-After: 2` instead of SvelteKit's bare `500`.
+  Both use the standard error envelope and `Cache-Control: no-store`.
+
+When a call gets no HTTP answer, or the proxy has waited `BACKEND_TIMEOUT_MS`
+for response headers, the web server requests the API's `GET /health` with the
+same bound. Only when that check gets no answer either is the API treated as
+unreachable, so one slow endpoint does not fail other requests. Then requests
+still waiting for the API fail at once, new server-side calls throw
+`BackendUnavailableError` from `#lib/server/api.js` without contacting the API,
+and the proxy answers `503` at once. A background check runs at most every two
+seconds while requests arrive, and the first HTTP answer, whatever its status,
+ends the outage. The state belongs to one web process.
+
+Both values are whole milliseconds from 1 to 2147483647, set in the web
+server's environment; any other value fails when the web server loads the
+proxy, which is at startup in apps with server hooks. Raise
+`BACKEND_TIMEOUT_MS` when a load function calls an endpoint that takes longer;
+it also lengthens how long pages wait while an outage is being detected. An API
+endpoint that takes longer than 30 seconds to start its response needs a higher
+`idleTimeout` in the API's [server options](#api-server-options) and a matching
+`BACKEND_PROXY_TIMEOUT_MS`. The web server also closes a connection that has
+received nothing for `CONNECTION_IDLE_TIMEOUT` seconds (an adapter-bun setting,
+Bun's 10 by default, lifted for `text/event-stream` responses), so such an
+endpoint needs that raised as well.
+
 ### Fallback error page
 
 When the root layout or a server hook fails, for example with 503 because the
@@ -225,7 +265,7 @@ export const apiServerOptions: ApiServerOptionsSource = {
 | Option | Default | Effect |
 | --- | --- | --- |
 | `maxRequestBodySize` | `API_MAX_REQUEST_BODY_SIZE`, else 128 MiB (Bun's default) | Larger bodies are refused with `413` before a handler runs. |
-| `idleTimeout` | 30 seconds (Elysia's default) | How long a connection may stay idle; `0` disables the timeout. |
+| `idleTimeout` | 30 seconds (Elysia's default) | How long a connection may stay idle; `0` disables the timeout. Requests through the web app's `/api` proxy also need a matching `BACKEND_PROXY_TIMEOUT_MS` on the web server; see [API timeouts and outages](#api-timeouts-and-outages). |
 
 Values in the export win over the environment. Export a function to derive
 them from the validated environment instead, for example
