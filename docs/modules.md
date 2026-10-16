@@ -195,6 +195,15 @@ with `services.resolve(RESOLVED_SESSIONS).listen(...)` in its `configure` learns
 about sessions without a lookup of its own, as the rate limiter does to count
 callers per user.
 
+`POST /api/auth/revoke-other-sessions` ("sign out other sessions") revokes every
+other session of the user, however many there are. Better Auth's endpoint on its
+own lists sessions through its adapter's default limit of 100 and revoked only
+those; the auth module's `revokeEveryOtherSession` plugin revokes the rest in
+batches after it, through Better Auth's internal adapter, so secondary-storage
+entries go too. Better Auth's `GET /api/auth/list-sessions` still returns at most
+100 sessions; use a paged endpoint, such as the admin dashboard's
+`GET /account/sessions`, to show them all.
+
 ```bash
 bunx @podosoft/podokit add auth
 bun install

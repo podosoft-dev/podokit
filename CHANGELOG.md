@@ -123,6 +123,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Security
 
+- "Sign out other sessions" (`POST /api/auth/revoke-other-sessions`) revokes
+  every other session of the user. Better Auth 1.7 lists a user's sessions
+  through the adapter's default findMany limit of 100 and revoked only those, so
+  a user with more sessions kept the rest signed in, and had to repeat the
+  action once per hundred. The auth module adds the `revokeEveryOtherSession`
+  Better Auth plugin, which revokes the remaining sessions in batches through the
+  internal adapter after the endpoint runs, secondary-storage entries included.
+  Measured with 151 sessions: one call leaves only the current session, where it
+  left 52 before. The admin dashboard's test seed now clears an account's earlier
+  sessions with one call.
 - Audit entries, Better Auth sessions, and Better Auth's own per-address limits
   no longer take the client address from a header the caller controls. The
   audit-log module stored `X-Forwarded-For` exactly as received, and Better Auth

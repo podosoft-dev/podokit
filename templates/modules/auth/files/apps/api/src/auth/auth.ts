@@ -16,6 +16,7 @@ import { runUserDeletedHandlers } from "./user-delete-handlers";
 import { authBaseUrl, authSecret } from "./auth-environment";
 import { isMaintenanceCommand } from "./maintenance";
 import { CLIENT_ADDRESS_HEADER } from "../core/client-address";
+import { revokeEveryOtherSession } from "./revoke-other-sessions";
 // podokit:begin:auth-imports
 // podokit:end:auth-imports
 
@@ -56,6 +57,8 @@ export function buildAuth(config: AuthConfig) {
     // First, so a disabled feature answers 404 before another plugin's onRequest
     // (such as the OIDC provider's discovery metadata) can answer.
     featureGatePlugin(gateSettings),
+    // "Sign out other sessions" revokes every other session, not only the first 100.
+    revokeEveryOtherSession(),
     twoFactor(),
     magicLink({
       sendMagicLink: async ({ email, url }: { email: string; url: string; token: string }) => {

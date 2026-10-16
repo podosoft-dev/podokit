@@ -125,6 +125,35 @@ test("revokeOtherSessions keeps the current session valid", async ({ playwright,
   await ctx.dispose();
 });
 
+test("revokeOtherSessions removes every other session, past Better Auth's page of 100", async ({
+  playwright,
+  disposableUsers,
+}) => {
+  test.slow();
+  const email = `api-revoke-many-${Date.now()}@example.com`;
+  const password = "Podokit3e-Str0ng!pw";
+  await disposableUsers.create({ email, password, name: "Many sessions" });
+
+  const others = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  for (let index = 0; index < 105; index += 1) {
+    const signIn = await others.post("/api/auth/sign-in/email", { data: { email, password } });
+    test.skip(signIn.status() === 429, "needs an authentication rate limit above 105 sign-ins per window");
+    expect(signIn.ok(), `sign-in ${index + 1}`).toBeTruthy();
+  }
+  await others.dispose();
+
+  const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  expect((await ctx.post("/api/auth/sign-in/email", { data: { email, password } })).ok()).toBeTruthy();
+  // Better Auth lists at most 100 sessions, so a full page shows the backlog.
+  expect(((await (await ctx.get("/api/auth/list-sessions")).json()) as unknown[]).length).toBe(100);
+
+  expect((await ctx.post("/api/auth/revoke-other-sessions")).ok()).toBeTruthy();
+  const left = (await (await ctx.get("/api/auth/list-sessions")).json()) as Array<{ token?: string }>;
+  expect(left).toHaveLength(1);
+  expect((await (await ctx.get("/api/auth/get-session")).json())?.user?.email).toBe(email);
+  await ctx.dispose();
+});
+
 test("sessions record a client IP (forwarded through the proxy)", async ({ playwright }) => {
   const ctx = await signedIn(playwright, ADMIN);
   const res = await ctx.get("/api/auth/list-sessions");
