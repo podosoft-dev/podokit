@@ -159,6 +159,7 @@ describe("create (integration against templates)", () => {
     // Application-owned API seams that managed files import, seeded empty.
     const apiSeams: ReadonlyArray<readonly [string, string]> = [
       ["apps/api/src/config/env.extensions.ts", "export const appEnvShape = {} satisfies z.ZodRawShape;"],
+      ["apps/api/src/database/entities.ts", "export const APP_ENTITIES: AppEntities = [];"],
     ];
     for (const [path, seed] of apiSeams) {
       expect(readFileSync(join(target, path), "utf8")).toContain(seed);

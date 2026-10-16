@@ -11,7 +11,7 @@
     "contract": "bun scripts/verify-api-contract.ts",
     "migrate:all": "bun scripts/run-migrations.mjs",
     "migrate:list": "bun scripts/run-migrations.mjs --list",
-    "typeorm": "bunx typeorm-ts-node-commonjs -d src/database/data-source.ts",
+    "typeorm": "bunx --bun typeorm -d src/database/data-source.ts",
     "migration:run": "bun src/database/migrate.ts",
     "migration:revert": "bun src/database/migrate.ts --revert",
     "migration:generate": "bun run typeorm -- migration:generate"
@@ -31,7 +31,6 @@
   "devDependencies": {
     "@types/bun": "^1.3.9",
     "@types/node": "^20.17.0",
-    "ts-node": "^10.9.2",
     "typescript": "^6.0.3"
   }
 }

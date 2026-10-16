@@ -4,13 +4,14 @@ import type { DatabaseProviderName } from "@podosoft/podokit-runtime";
 import { PROVIDERS } from "../config/providers";
 import { validateEnv } from "../config/env.validation";
 import { databaseUrl, sqliteDatabasePath } from "./database";
+import { APP_ENTITIES } from "./entities";
 import { migrationPaths, migrationSet } from "./migration-files";
 
 /** The migrations the data source loads; compare them with `assertMigrationsLoaded`. */
 export const appMigrations = migrationSet();
 
 const commonOptions = {
-  entities: [],
+  entities: APP_ENTITIES,
   migrations: migrationPaths(appMigrations),
   // One transaction per migration, so a migration can set `transaction = false`
   // for statements such as CREATE INDEX CONCURRENTLY.
@@ -41,6 +42,5 @@ export const dataSourceOptions: DataSourceOptions = databaseProvider() === "sqli
       ...commonOptions,
     };
 
-// Used by the TypeORM CLI for migrations (see package.json scripts).
+// The TypeORM CLI (see package.json scripts) takes the file's only DataSource export.
 export const appDataSource = new DataSource(dataSourceOptions);
-export default appDataSource;

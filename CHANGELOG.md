@@ -120,6 +120,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   adds checks across variables, such as one production requires. Redefining a
   PodoKit variable fails at startup. `podo update` creates the file once in
   existing apps and never overwrites it.
+- `apps/api/src/database/entities.ts` is an application-owned list of TypeORM
+  entities, `APP_ENTITIES`, that the migration data source loads, and the API's
+  `tsconfig.json` enables `experimentalDecorators` and `emitDecoratorMetadata`
+  for them. `podo update` creates the file once and never overwrites it.
 
 ### Removed
 
@@ -221,6 +225,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   they load fewer migrations than they expected. In production the API refuses
   to start without the list, and `GET /health/ready` reports a `migrations` check
   that stays down while a listed migration is missing from the database.
+- `bun run --cwd apps/api migration:generate src/migrations/<Name>` works. The
+  TypeORM CLI ran on Node through ts-node, which cannot load the data source's
+  Bun SQL import, and under Bun it rejected the data source file's two exports.
+  The `typeorm` script runs the CLI on Bun, `data-source.ts` exports only
+  `appDataSource`, and the unused `ts-node` development dependency is gone.
 
 ### Upgrade notes
 
@@ -346,6 +355,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `refineAppEnv`; `podo update` reports the old edit as a conflict. Production
   checks of `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are not needed there: the
   auth module makes them, and since this release they also run in the built API.
+- Move entities you listed in the managed `apps/api/src/database/data-source.ts`
+  into `APP_ENTITIES` in `apps/api/src/database/entities.ts`, and drop the
+  decorator settings you added to `apps/api/tsconfig.json`; `podo update`
+  reports those edits as conflicts. Import `appDataSource` by name: the default
+  export of `data-source.ts` is gone.
 
 ## [1.5.0] - 2026-10-16
 

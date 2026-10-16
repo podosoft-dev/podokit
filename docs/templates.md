@@ -94,6 +94,13 @@ missing. Both migrators also fail when they load fewer migrations than the list
 or the source directory holds, because TypeORM loads nothing, without an error,
 from a path that matches no file.
 
+Application entities go in `APP_ENTITIES` of the owned
+`apps/api/src/database/entities.ts`; the API's `tsconfig.json` enables the
+legacy decorators and design-type metadata TypeORM entities need. With the
+database running, `bun run --cwd apps/api migration:generate src/migrations/<Name>`
+writes a migration for the difference between the entities and the schema. The
+TypeORM CLI runs on Bun, which loads the data source like the API does.
+
 `bun run --cwd apps/api migrate:list` prints the name of every migration the
 current build would run, without a database, for example to inspect an image:
 `docker run --rm <api-image> bun run migrate:list`. In production the API

@@ -189,6 +189,7 @@ overwritten afterwards. Use them instead of editing the managed file.
 
 | File | Export | Use it instead of editing |
 | --- | --- | --- |
+| `apps/api/src/database/entities.ts` | `APP_ENTITIES` (TypeORM entity classes) | `database/data-source.ts`: the migration data source loads them, so `migration:generate` compares them with the database |
 | `apps/api/src/config/env.extensions.ts` | `appEnvShape` (zod fields) and `refineAppEnv(env, context)` | `config/env.validation.ts`: application variables are validated at startup and typed on `AppEnv`; redefining a PodoKit variable fails |
 
 ## Extending the web proxy
