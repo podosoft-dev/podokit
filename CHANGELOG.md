@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- The generated `apps/api/src/database/pool-guard.spec.ts` declares the row
+  types of two awaited queries, so `bun run lint` passes with every
+  `@types/bun` version the template allows. With 1.3.9 through 1.4.2, the
+  `expect()` overload for a missing value made TypeScript infer those rows as
+  `undefined`.
+
 ## [1.4.0] - 2026-10-16
 
 ### Added
