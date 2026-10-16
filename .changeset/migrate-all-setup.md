@@ -1,5 +1,0 @@
----
-"@podosoft/podokit": patch
----
-
-Make `migrate:all` the one migration command for every generated app and stop `migration:run` from failing obscurely on a new database. The admin dashboard's session index migration (`IndexSessionCreatedAt1792060000000`) needs Better Auth's `session` table, which only `migrate:all` creates, so `migration:run` on a new PostgreSQL or SQLite database failed with `relation "session" does not exist`. The migration now checks for the table first and stops with a message that names `bun run --cwd apps/api migrate:all`; it never records itself without building the index. The base template owns the `apps/api/scripts/run-migrations.mjs` launcher behind `migrate:all`, which runs the source in development and the compiled output in a production image, and prefers the auth module's `src/migrate.ts`, which applies the Better Auth schema first. Apps without auth can therefore run `migrate:all` before a build. Generated READMEs, AGENTS.md, module instructions, and the docs now set up and migrate with `migrate:all`. `podo update` adds the launcher to existing apps and replaces the auth module's copy in place.

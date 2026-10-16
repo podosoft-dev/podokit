@@ -1,5 +1,11 @@
 # @podosoft/podokit-module-blog
 
+## 1.1.1
+
+### Patch Changes
+
+- [#225](https://github.com/podosoft-dev/podokit/pull/225) [`76ac9ea`](https://github.com/podosoft-dev/podokit/commit/76ac9ea4ec3f757e94aa874424695ccaff8f3b92) Thanks [@korone00](https://github.com/korone00)! - Stop the blog migration from skipping the author foreign keys when Better Auth's `user` table does not exist yet, which happened when `migration:run` ran on a new database and left it migrated without them. The migration now stops with a message that names `bun run --cwd apps/api migrate:all`, and the install instructions use that command.
+
 ## 1.1.0
 
 ### Minor Changes
