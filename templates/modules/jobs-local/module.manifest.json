@@ -15,6 +15,9 @@
     "apps/api/src/jobs-local/**"
   ],
   "targetApp": "api",
+  "dependencies": {
+    "cron-parser": "^4.9.0"
+  },
   "env": [
     "LOCAL_JOBS_POLL_INTERVAL_MS=250"
   ],

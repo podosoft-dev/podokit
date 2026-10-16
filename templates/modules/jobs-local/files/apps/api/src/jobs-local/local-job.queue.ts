@@ -1,11 +1,14 @@
 import type { SQL } from "bun";
+import cronParser from "cron-parser";
 import {
+  assertRepeatOptions,
   type EnqueueOptions,
   type JobHandler,
   type JobQueue,
   type JobReference,
   type JobSnapshot,
   type JobStatus,
+  type RepeatOptions,
   type Unsubscribe,
 } from "@podosoft/podokit-runtime";
 
@@ -22,15 +25,52 @@ interface JobRow {
   error: string | null;
 }
 
+export interface ScheduleTimer {
+  /** Runs `task` once after `delayMs`; the returned function cancels it. */
+  after(delayMs: number, task: () => void): () => void;
+}
+
 export interface LocalJobQueueOptions {
   pollIntervalMs?: number;
   now?: () => number;
+  /** Waits for schedules; an unref'd setTimeout by default. */
+  timer?: ScheduleTimer;
+}
+
+interface Schedule {
+  id: string;
+  name: string;
+  payload: unknown;
+  repeat: RepeatOptions;
+  cancel?: () => void;
+}
+
+// setTimeout fires at once for a delay above 2^31 - 1 ms, so longer waits are split.
+const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
+
+const unrefTimer: ScheduleTimer = {
+  after: (delayMs, task) => {
+    const timer = setTimeout(task, delayMs);
+    timer.unref?.();
+    return () => clearTimeout(timer);
+  },
+};
+
+/** The first time after `after` (epoch milliseconds) that `repeat` adds a job. */
+export function nextScheduledTime(repeat: RepeatOptions, after: number): number {
+  if (repeat.everyMs !== undefined) return (Math.floor(after / repeat.everyMs) + 1) * repeat.everyMs;
+  return cronParser
+    .parseExpression(repeat.cron ?? "", { currentDate: new Date(after), tz: repeat.timezone ?? "UTC" })
+    .next()
+    .getTime();
 }
 
 export class LocalJobQueue implements JobQueue {
   private readonly handlers = new Map<string, JobHandler>();
+  private readonly schedules = new Map<string, Schedule>();
   private readonly pollIntervalMs: number;
   private readonly now: () => number;
+  private readonly scheduleTimer: ScheduleTimer;
   private timer?: ReturnType<typeof setTimeout>;
   private started = false;
   private initialized?: Promise<void>;
@@ -44,6 +84,7 @@ export class LocalJobQueue implements JobQueue {
       throw new Error("pollIntervalMs must be an integer of at least 10");
     }
     this.now = options.now ?? Date.now;
+    this.scheduleTimer = options.timer ?? unrefTimer;
   }
 
   initialize(): Promise<void> {
@@ -63,7 +104,8 @@ export class LocalJobQueue implements JobQueue {
     if (this.started) return;
     await this.initialize();
     this.started = true;
-    this.schedule(0);
+    this.poll(0);
+    for (const schedule of this.schedules.values()) this.arm(schedule);
   }
 
   async enqueue(
@@ -118,6 +160,22 @@ export class LocalJobQueue implements JobQueue {
     });
   }
 
+  async schedule(id: string, name: string, payload: unknown, repeat: RepeatOptions): Promise<void> {
+    assertRepeatOptions(repeat);
+    // Rejects an invalid cron expression or time zone now rather than at the first run.
+    nextScheduledTime(repeat, this.now());
+    if (JSON.stringify(payload) === undefined) throw new Error("Job payload must be JSON serializable");
+    this.schedules.get(id)?.cancel?.();
+    const schedule: Schedule = { id, name, payload, repeat };
+    this.schedules.set(id, schedule);
+    if (this.started) this.arm(schedule);
+  }
+
+  async unschedule(id: string): Promise<void> {
+    this.schedules.get(id)?.cancel?.();
+    this.schedules.delete(id);
+  }
+
   async runOnce(): Promise<boolean> {
     await this.initialize();
     const now = this.now();
@@ -157,7 +215,39 @@ export class LocalJobQueue implements JobQueue {
     this.started = false;
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;
+    for (const schedule of this.schedules.values()) schedule.cancel?.();
     this.handlers.clear();
+  }
+
+  /**
+   * Adds the schedule's next job when its time comes. The job id names the
+   * schedule and the time, so a job is added once for each time.
+   */
+  private arm(schedule: Schedule, after = this.now()): void {
+    const at = nextScheduledTime(schedule.repeat, after);
+    schedule.cancel = this.waitUntil(at, () => {
+      if (!this.started || this.schedules.get(schedule.id) !== schedule) return;
+      void this.enqueue(schedule.name, schedule.payload, { deduplicationKey: `schedule:${schedule.id}:${at}` })
+        .catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          process.stderr.write(`Add scheduled job failed: ${schedule.id} ${message}\n`);
+        });
+      this.arm(schedule, Math.max(this.now(), at));
+    });
+  }
+
+  private waitUntil(at: number, task: () => void): () => void {
+    let cancel = (): void => undefined;
+    const step = (): void => {
+      const delay = at - this.now();
+      if (delay <= 0) {
+        task();
+        return;
+      }
+      cancel = this.scheduleTimer.after(Math.min(delay, MAX_TIMER_DELAY_MS), step);
+    };
+    cancel = this.scheduleTimer.after(Math.max(0, Math.min(at - this.now(), MAX_TIMER_DELAY_MS)), step);
+    return () => cancel();
   }
 
   private async createTables(): Promise<void> {
@@ -181,7 +271,7 @@ export class LocalJobQueue implements JobQueue {
     `;
   }
 
-  private schedule(delay: number): void {
+  private poll(delay: number): void {
     if (!this.started) return;
     this.timer = setTimeout(() => {
       void this.runOnce()
@@ -189,7 +279,7 @@ export class LocalJobQueue implements JobQueue {
           const message = error instanceof Error ? error.message : String(error);
           process.stderr.write(`Process local job failed: ${message}\n`);
         })
-        .finally(() => this.schedule(this.pollIntervalMs));
+        .finally(() => this.poll(this.pollIntervalMs));
     }, delay);
     this.timer.unref?.();
   }

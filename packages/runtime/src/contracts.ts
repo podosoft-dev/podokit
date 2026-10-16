@@ -262,10 +262,54 @@ export interface JobSnapshot extends JobReference {
 
 export type JobHandler = (payload: unknown, job: JobReference) => void | Promise<void>;
 
+/** The shortest interval a repeating schedule may use. */
+export const MIN_REPEAT_INTERVAL_MS = 1_000;
+
+/** When a schedule adds its job: give exactly one of `cron` and `everyMs`. */
+export interface RepeatOptions {
+  /**
+   * A cron expression with five fields (minute, hour, day of month, month,
+   * day of week) or six with seconds first, such as `"0 3 * * *"` for 03:00.
+   */
+  cron?: string;
+  /** A fixed interval in milliseconds, at least `MIN_REPEAT_INTERVAL_MS`. */
+  everyMs?: number;
+  /** The IANA time zone `cron` is read in, such as `"Asia/Seoul"`. Defaults to UTC. */
+  timezone?: string;
+}
+
+/**
+ * Throws unless exactly one of `cron` and `everyMs` is set and `everyMs` is a
+ * whole number of milliseconds of at least `MIN_REPEAT_INTERVAL_MS`. Providers
+ * check the cron expression and the time zone themselves.
+ */
+export function assertRepeatOptions(repeat: RepeatOptions): void {
+  const hasCron = repeat.cron !== undefined;
+  const hasInterval = repeat.everyMs !== undefined;
+  if (hasCron === hasInterval) throw new Error("A job schedule needs exactly one of cron and everyMs");
+  if (hasCron && repeat.cron?.trim() === "") throw new Error("A job schedule's cron expression is empty");
+  if (hasInterval && (!Number.isSafeInteger(repeat.everyMs) || (repeat.everyMs ?? 0) < MIN_REPEAT_INTERVAL_MS)) {
+    throw new Error(`A job schedule's everyMs must be a whole number of at least ${MIN_REPEAT_INTERVAL_MS}`);
+  }
+  if (repeat.timezone !== undefined && !hasCron) throw new Error("A job schedule's timezone applies only to cron");
+}
+
 export interface JobQueue {
   enqueue(name: string, payload: unknown, options?: EnqueueOptions): Promise<JobReference>;
   get(id: string): Promise<JobSnapshot | null>;
   process(name: string, handler: JobHandler): Promise<Unsubscribe>;
+  /**
+   * Adds a `name` job with `payload` on a repeating schedule and replaces any
+   * earlier schedule with the same `id`. The queue keeps its schedules and
+   * applies them again when its connection is restored, so a backend that lost
+   * them, such as a restarted Redis without persistence, gets them back. It
+   * resolves while the backend is unreachable and applies the schedule once it
+   * is reachable; an invalid schedule rejects. A worker or `process()` handler
+   * for `name` runs the jobs. Missed times are not made up.
+   */
+  schedule(id: string, name: string, payload: unknown, repeat: RepeatOptions): Promise<void>;
+  /** Stops the schedule `id`. Jobs it already added stay. */
+  unschedule(id: string): Promise<void>;
   close(): void | Promise<void>;
 }
 

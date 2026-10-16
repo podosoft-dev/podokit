@@ -237,6 +237,32 @@ modules are the only layer that should import Redis, S3, BullMQ, or local storag
 implementation details. Application-owned replacements can use the same
 contracts through `apps/api/src/app.extensions.ts`.
 
+### Repeating jobs
+
+`JobQueue.schedule(id, name, payload, repeat)` adds a `name` job with `payload`
+on a schedule and replaces an earlier schedule with the same `id`;
+`unschedule(id)` stops it. `repeat` holds exactly one of `cron` (five fields, or
+six with seconds first, read in `timezone`, UTC by default) and `everyMs` (at
+least 1000). A worker or `process()` handler for `name` runs the jobs, and times
+missed while nothing was running are not made up. Register schedules when the
+API starts, for example in `app.extensions.ts`:
+
+```ts
+export function configureServices(services: ServiceRegistry): void {
+  const jobs = services.resolve(JOBS);
+  services.onStart(() => jobs.schedule("nightly-report", "report", {}, { cron: "0 3 * * *", timezone: "Asia/Seoul" }));
+}
+```
+
+The queue keeps its schedules and applies them again whenever its connection is
+restored, and `schedule()` resolves while the backend is down. BullMQ stores
+them as job schedulers in Redis, so the worker process keeps adding the jobs
+while the API is stopped, and every API replica applies the same ids. The local
+provider adds each job from a timer in the API process, at multiples of
+`everyMs` since the Unix epoch, with a job id made of the schedule id and the
+time, so a time is added once even across restarts. An invalid cron expression
+or time zone rejects.
+
 ### Object storage reads
 
 `ObjectStore.get(key)` resolves `null` for a missing key; otherwise it returns

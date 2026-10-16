@@ -24,6 +24,21 @@ await objects.put("uploads/hello.txt", "hello", { contentType: "text/plain" });
 Local providers are intended for a single application process or desktop runtime.
 Use distributed providers when multiple API or worker replicas share state.
 
+## Repeating jobs
+
+`JobQueue.schedule(id, name, payload, repeat)` adds a `name` job on a schedule,
+replacing an earlier one with the same `id`, and `unschedule(id)` stops it.
+`repeat` holds exactly one of `cron` (read in `timezone`, UTC by default) and
+`everyMs`; `assertRepeatOptions()` checks that shape and the
+`MIN_REPEAT_INTERVAL_MS` floor, and providers check the cron expression.
+Providers keep their schedules, apply them again when their connection is
+restored, and resolve `schedule()` while the backend is down.
+
+```ts
+await jobs.schedule("nightly-report", "report", {}, { cron: "0 3 * * *", timezone: "Asia/Seoul" });
+await jobs.schedule("heartbeat", "heartbeat", {}, { everyMs: 60_000 });
+```
+
 ## Object storage
 
 `ObjectStore.get(key)` resolves `null` for a missing key. Otherwise it returns the

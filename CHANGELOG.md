@@ -159,6 +159,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `appBuildTargets`, of entry points the API build bundles next to PodoKit's,
   such as a maintenance command run from the image. A missing entry point fails
   the build. `podo update` creates the file once and never overwrites it.
+- The jobs contract repeats jobs. `JobQueue.schedule(id, name, payload,
+  { cron | everyMs, timezone? })` adds a `name` job on a cron expression or a
+  fixed interval and replaces an earlier schedule with the same id, and
+  `unschedule(id)` stops it. The BullMQ provider stores them as Redis job
+  schedulers, and the local provider adds the jobs from a timer, once per time.
+  Both keep their schedules and apply them again when the connection is
+  restored, `schedule()` resolves while the backend is down, and an invalid
+  schedule rejects. `@podosoft/podokit-runtime` exports `RepeatOptions`,
+  `assertRepeatOptions()`, and `MIN_REPEAT_INTERVAL_MS`.
 
 ### Removed
 
@@ -422,6 +431,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Move build targets you added to the managed `apps/api/scripts/build.mjs` into
   `appBuildTargets` in `apps/api/scripts/build.extensions.mjs`; `podo update`
   reports the edit as a conflict.
+- A `JobQueue` implementation of your own, including a test fake, must add
+  `schedule()` and `unschedule()`. An app that ran its own repeating scheduler
+  beside the jobs provider can move it to `schedule()`.
 
 ## [1.5.0] - 2026-10-16
 
