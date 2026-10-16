@@ -94,6 +94,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   renders the `AccountMenu` identity block (avatar, name, email, account and
   sign-out actions) instead of failing on the missing sidebar state, so an
   application's own shell can place it without a copy of its own.
+- `apps/web/src/app.extensions.css` is an application-owned stylesheet that the
+  managed `app.css` imports last, so its rules follow PodoKit's theme variables
+  and base styles. Override `:root` and `.dark` variables, add `@theme` entries,
+  fonts, and base styles, or add `@source` for a package whose built components
+  use Tailwind classes. `podo update` creates it once and never overwrites it.
 
 ### Removed
 
@@ -248,6 +253,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - If you added `lightClassNames` to the managed `site-runtime.svelte`, take
   PodoKit's version. A rule of your own for a `.light` class now also matches
   `<html>` in light mode; scope it if it was meant for one element.
+- Move your edits to the managed `app.css`, such as theme variables, fonts, base
+  styles, or `@source` lines, into `apps/web/src/app.extensions.css`, then take
+  PodoKit's `app.css` when `podo update` reports a merge or conflict. A relative
+  `@source` path keeps working because both files are in `apps/web/src`.
 
 ## [1.5.0] - 2026-10-16
 

@@ -320,6 +320,10 @@ describe("create (integration against templates)", () => {
     // Application Vite and SvelteKit options live in an owned file next to the managed config.
     expect(viteConfig).toContain('from "./vite.extensions.ts"');
     expect(readFilesLock(target)?.files["apps/web/vite.extensions.ts"]?.tier).toBe("owned");
+    // Application styles live in an owned file the managed app.css imports last.
+    const appCss = readFileSync(join(target, "apps", "web", "src", "app.css"), "utf8");
+    expect(appCss.trimEnd().endsWith('@import "./app.extensions.css";')).toBe(true);
+    expect(readFilesLock(target)?.files["apps/web/src/app.extensions.css"]?.tier).toBe("owned");
     expect(existsSync(join(target, "infra", "k3s", "ingress.yaml"))).toBe(true);
     const gitignore = readFileSync(join(target, ".gitignore"), "utf8");
     expect(gitignore).toContain("playwright/.auth/");

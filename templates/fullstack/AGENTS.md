@@ -58,6 +58,10 @@ Merge added module settings from `.env.example` into an existing `.env`.
   origin to the API in `x-forwarded-host`/`x-forwarded-proto` only when
   `CORS_ORIGIN` lists it; an API route may use them to choose among its configured
   origins, never as a new origin.
+- `apps/web/src/app.css` is managed. Put application styles (theme variable
+  overrides, `@theme` entries, fonts, base styles, and `@source` for packages
+  whose built components use Tailwind classes) in the app-owned
+  `apps/web/src/app.extensions.css`, which `app.css` imports last.
 - `apps/web/vite.config.ts` is managed. Put Vite options (warmup, `optimizeDeps`,
   `define`, plugins, allowed hosts) in `appViteConfig` and SvelteKit options
   (`alias`, `csrf`) in `appSvelteKitConfig` of the app-owned

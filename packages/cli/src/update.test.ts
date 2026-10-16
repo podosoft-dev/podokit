@@ -1453,6 +1453,7 @@ describe("app-owned web extension seams", () => {
     "apps/web/src/lib/admin/app-nav.ts",
   ];
   const VITE_SEED = "apps/web/vite.extensions.ts";
+  const STYLE_SEED = "apps/web/src/app.extensions.css";
 
   // The fullstack and admin-dashboard layouts before they shipped these seams.
   function templatesWithoutSeams(): string {
@@ -1465,6 +1466,7 @@ describe("app-owned web extension seams", () => {
     manifest.ownedGlobs = manifest.ownedGlobs.filter((glob) => !MODULE_SEEDS.includes(glob));
     writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
     rmSync(join(dir, "fullstack", VITE_SEED));
+    rmSync(join(dir, "fullstack", STYLE_SEED));
     return dir;
   }
 
@@ -1475,11 +1477,14 @@ describe("app-owned web extension seams", () => {
     addModule({ projectRoot: project, module: "admin-dashboard", modulesDir: join(oldTemplates, "modules") });
     const manifest = readManifest(project);
     if (!manifest) throw new Error("expected manifest");
-    writeManifest(project, { ...manifest, ownedGlobs: manifest.ownedGlobs.filter((glob) => glob !== VITE_SEED) });
-    for (const seed of [...MODULE_SEEDS, VITE_SEED]) expect(existsSync(join(project, seed))).toBe(false);
+    writeManifest(project, {
+      ...manifest,
+      ownedGlobs: manifest.ownedGlobs.filter((glob) => glob !== VITE_SEED && glob !== STYLE_SEED),
+    });
+    for (const seed of [...MODULE_SEEDS, VITE_SEED, STYLE_SEED]) expect(existsSync(join(project, seed))).toBe(false);
 
     const plan = planUpdate(project, REPO_TEMPLATES);
-    for (const seed of [...MODULE_SEEDS, VITE_SEED]) {
+    for (const seed of [...MODULE_SEEDS, VITE_SEED, STYLE_SEED]) {
       expect(plan.changes.find((change) => change.path === seed)).toMatchObject({ action: "add", tier: "owned" });
     }
     const result = applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
@@ -1489,7 +1494,7 @@ describe("app-owned web extension seams", () => {
       'import { appHandle } from "#lib/server/app-hooks.js";',
     );
     expect(readFileSync(join(project, "apps/web/vite.config.ts"), "utf8")).toContain('from "./vite.extensions.ts"');
-    for (const seed of [...MODULE_SEEDS, VITE_SEED]) {
+    for (const seed of [...MODULE_SEEDS, VITE_SEED, STYLE_SEED]) {
       expect(readFilesLock(project)?.files[seed]?.tier).toBe("owned");
     }
 

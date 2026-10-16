@@ -425,6 +425,7 @@ ships it, and never overwritten.
 | File | Export | Purpose |
 | --- | --- | --- |
 | `apps/web/vite.extensions.ts` | `appViteConfig`, `appSvelteKitConfig` | Vite options merged into the managed `vite.config.ts`, and SvelteKit options passed to `sveltekit()` |
+| `apps/web/src/app.extensions.css` | | Styles the managed `app.css` imports last: `@source` paths, theme variable overrides, `@theme` entries, base styles ([UI foundation](#ui-foundation)) |
 | `apps/web/src/lib/server/proxy-headers.ts` | `APP_FORWARDED_REQUEST_HEADERS`, `APP_RELAYED_RESPONSE_HEADERS` | [Proxy headers](#proxy-headers) |
 | `apps/web/src/lib/server/body-limits.ts` | `APP_BODY_LIMITS` | [Request body limits](#request-body-limits) |
 | `apps/web/src/lib/server/proxy-timeouts.ts` | `APP_PROXY_TIMEOUTS` | [Proxy deadlines per route](#proxy-deadlines-per-route) |
@@ -550,7 +551,22 @@ bunx --bun shadcn-svelte@latest add accordion progress
 shipped ones.
 
 Application components should wrap the vendored primitives rather than editing
-`src/lib/components/ui/**`. Colors and radius are CSS variables in `app.css`.
+`src/lib/components/ui/**`. Colors and radius are CSS variables in the managed
+`app.css`, which imports the application-owned `src/app.extensions.css` last.
+Put application styles there: override the variables in `:root` and `.dark`,
+add `@theme` entries and base styles, and add an `@source` line for a package
+whose built components use Tailwind classes, since Tailwind does not scan
+`node_modules`:
+
+```css
+@import "@fontsource-variable/inter";
+@source "../../../node_modules/@example/ui/dist";
+
+:root {
+  --radius: 0.5rem;
+  --primary: oklch(0.48 0.2 300);
+}
+```
 mode-watcher puts `dark` on `<html>` in dark mode and `light` in light mode, so a
 component library that follows either class, and falls back to the system
 setting without one, matches the theme the visitor chose.
