@@ -93,7 +93,11 @@ function preserveExternalPackageDependency(
       ? { ...(current as Record<string, unknown>) }
       : {};
     dependencies[packageName] = version;
-    rootPackage[section] = dependencies;
+    // Bun and npm write dependency sections sorted by name; insertion order
+    // would leave the file looking edited after `bun add` a second module.
+    rootPackage[section] = Object.fromEntries(
+      Object.entries(dependencies).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+    );
     setText(tree, "package.json", `${JSON.stringify(rootPackage, null, 2)}\n`);
     return;
   }

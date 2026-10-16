@@ -19,6 +19,7 @@ import { eject } from "./eject";
 import { removeModule } from "./remove";
 import { planUpdate, applyUpdate, summarize, targetProject } from "./update";
 import {
+  computeDrift,
   computeFilesLock,
   DEFAULT_MANAGED_OVERRIDES,
   readFilesLock,
@@ -218,6 +219,43 @@ describe("external module updates", () => {
       modules: { name: string; moduleVersion?: string }[];
     };
     expect(after.modules.find((module) => module.name === "blog")?.moduleVersion).toBe("0.2.0");
+  });
+
+  it("keeps the root package.json clean when the package manager sorts external modules", () => {
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: REPO_TEMPLATES, targetDir: project });
+    const rootPackagePath = join(project, "package.json");
+    const install = (name: string): void => {
+      const packageName = `@podosoft/podokit-module-${name}`;
+      const packageDir = join(project, "node_modules", packageName);
+      mkdirSync(join(packageDir, "files"), { recursive: true });
+      writeFileSync(join(packageDir, "package.json"), JSON.stringify({ name: packageName, version: "1.1.1" }));
+      writeFileSync(
+        join(packageDir, "module.manifest.json"),
+        JSON.stringify({ manifestVersion: 1, name, description: "test", targetApp: "api" }),
+      );
+      // Like `bun add -d`, which writes the section sorted by name.
+      const rootPackage = JSON.parse(readFileSync(rootPackagePath, "utf8")) as {
+        devDependencies?: Record<string, string>;
+      };
+      const devDependencies = { ...rootPackage.devDependencies, [packageName]: "1.1.1" };
+      rootPackage.devDependencies = Object.fromEntries(
+        Object.entries(devDependencies).sort(([a], [b]) => a.localeCompare(b)),
+      );
+      writeFileSync(rootPackagePath, `${JSON.stringify(rootPackage, null, 2)}\n`);
+      addModule({ projectRoot: project, module: name, modulesDir: join(REPO_TEMPLATES, "modules") });
+    };
+    install("blog");
+    install("analytics");
+    expect(Object.keys(JSON.parse(readFileSync(rootPackagePath, "utf8")).devDependencies)).toEqual([
+      "@podosoft/podokit-module-analytics",
+      "@podosoft/podokit-module-blog",
+    ]);
+
+    expect(planUpdate(project, REPO_TEMPLATES).changes.find((change) => change.path === "package.json")?.action)
+      .toBe("up-to-date");
+    applyUpdate(project, REPO_TEMPLATES);
+    expect(computeDrift(project).drifted).not.toContain("package.json");
   });
 
   it("replays the recorded external module version for the merge base", () => {

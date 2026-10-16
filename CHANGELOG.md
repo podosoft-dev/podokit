@@ -220,6 +220,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- The root `package.json` of an app with two or more external modules no
+  longer stays marked as edited. Bun writes `devDependencies` sorted by name,
+  while PodoKit rebuilt the section in module order, so `podo status` and
+  `podo update` reported a change nobody made.
 - `podo dev` sets `CORS_ORIGIN` and `BETTER_AUTH_URL` for the web and API
   containers from `.podokit/dev.json`, and the generated
   `.env.docker.example`, `tests/README.md`, and `README.md` render its hostname.
