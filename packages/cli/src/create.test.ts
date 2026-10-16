@@ -316,7 +316,10 @@ describe("create (integration against templates)", () => {
       readFileSync(join(target, "apps", "web", "tsconfig.json"), "utf8"),
     ) as { extends: string; include: string[] };
     expect(webTsconfig.extends).toBe("$app/tsconfig");
-    expect(webTsconfig.include).toEqual(["src", "vite.config.ts"]);
+    expect(webTsconfig.include).toEqual(["src", "vite.config.ts", "vite.extensions.ts"]);
+    // Application Vite and SvelteKit options live in an owned file next to the managed config.
+    expect(viteConfig).toContain('from "./vite.extensions.ts"');
+    expect(readFilesLock(target)?.files["apps/web/vite.extensions.ts"]?.tier).toBe("owned");
     expect(existsSync(join(target, "infra", "k3s", "ingress.yaml"))).toBe(true);
     const gitignore = readFileSync(join(target, ".gitignore"), "utf8");
     expect(gitignore).toContain("playwright/.auth/");

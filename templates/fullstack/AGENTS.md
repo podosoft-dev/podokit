@@ -55,6 +55,10 @@ Merge added module settings from `.env.example` into an existing `.env`.
   none); never edit the managed deadline. Both lists take path prefixes with
   `:name` parameters, such as `/api/hosts/:hostId/file-transfers`, and the most
   specific prefix wins.
+- `apps/web/vite.config.ts` is managed. Put Vite options (warmup, `optimizeDeps`,
+  `define`, plugins, allowed hosts) in `appViteConfig` and SvelteKit options
+  (`alias`, `csrf`) in `appSvelteKitConfig` of the app-owned
+  `apps/web/vite.extensions.ts`.
 - Server-side API calls (`serverApiClient`) give up after `BACKEND_TIMEOUT_MS`
   (2000), and the proxy answers 504 `BACKEND_TIMEOUT` when the API sends no
   response headers within `BACKEND_PROXY_TIMEOUT_MS` (30000). Once the API's

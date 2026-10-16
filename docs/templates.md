@@ -402,6 +402,53 @@ compiling, and `API_MAX_REQUEST_BODY_SIZE` and `API_IDLE_TIMEOUT` still apply.
 Invalid values stop the API at startup. Requests through the web app's `/api` proxy are also
 bounded by the web server's `BODY_SIZE_LIMIT`.
 
+### Web extension points
+
+The web app's framework files are managed so that `podo update` can keep them
+current. Put application changes in these application-owned files instead; each
+is created once, by `podo create`, `podo add`, or the first `podo update` that
+ships it, and never overwritten.
+
+| File | Export | Purpose |
+| --- | --- | --- |
+| `apps/web/vite.extensions.ts` | `appViteConfig`, `appSvelteKitConfig` | Vite options merged into the managed `vite.config.ts`, and SvelteKit options passed to `sveltekit()` |
+| `apps/web/src/lib/server/proxy-headers.ts` | `APP_FORWARDED_REQUEST_HEADERS`, `APP_RELAYED_RESPONSE_HEADERS` | [Proxy headers](#proxy-headers) |
+| `apps/web/src/lib/server/body-limits.ts` | `APP_BODY_LIMITS` | [Request body limits](#request-body-limits) |
+| `apps/web/src/lib/server/proxy-timeouts.ts` | `APP_PROXY_TIMEOUTS` | [Proxy deadlines per route](#proxy-deadlines-per-route) |
+| `apps/web/src/error.html` | | [Fallback error page](#fallback-error-page) |
+| `apps/web/src/lib/server/app-hooks.ts` (admin-dashboard) | `appHandle` | [Request hook](modules.md#request-hook) |
+| `apps/web/src/lib/server/public-paths.ts` (admin-dashboard) | `APP_PUBLIC_PATHS` | [Public pages](modules.md#admin-dashboard) |
+| `apps/web/src/lib/server/asset-paths.ts` (admin-dashboard) | `APP_ASSET_PATHS` | [Endpoints without the session](modules.md#admin-dashboard) |
+| `apps/web/src/lib/server/non-indexable-paths.ts` (admin-dashboard) | `APP_NON_INDEXABLE_PATHS` | [Search indexing](modules.md#search-indexing) |
+| `apps/web/src/lib/admin/app-nav.ts` (admin-dashboard) | `APP_ADMIN_NAV` | [Admin navigation](modules.md#admin-navigation) |
+
+#### Vite and SvelteKit options
+
+`apps/web/vite.config.ts` is managed. It merges `appViteConfig` from the owned
+`apps/web/vite.extensions.ts` into its own configuration with Vite's
+`mergeConfig`, so lists such as `plugins` are appended and objects are merged
+key by key, and spreads `appSvelteKitConfig` into the `sveltekit()` options
+after `adapter` and `preprocess`:
+
+```ts
+import type { Config as SvelteKitConfig } from "@sveltejs/kit/vite";
+import type { UserConfig, UserConfigFnObject } from "vite";
+
+export const appViteConfig: UserConfig | UserConfigFnObject = {
+  server: { warmup: { clientFiles: ["./src/routes/+layout.svelte", "./src/routes/+page.svelte"] } },
+  optimizeDeps: { include: ["zod"] },
+  define: { __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? "") },
+};
+
+export const appSvelteKitConfig: SvelteKitConfig = {
+  alias: { $i18n: "src/lib/i18n" },
+};
+```
+
+A function receives Vite's `{ command, mode }`. `PODOKIT_BUILD_ORIGIN` still sets
+`paths.origin` at build time. The generated `compose.dev.yaml` restarts the web
+container when the file changes.
+
 ## `todo`
 
 The Todo template adds:

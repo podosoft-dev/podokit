@@ -49,6 +49,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   In a 12-module app the suite took 142 seconds on one worker, 90 and 93 on two,
   and 81 on three (2026-10-16); before, two workers failed tests that saw
   another worker's settings.
+- Application-owned extension points in the web app, so applications no longer
+  edit managed files for these changes. `apps/web/vite.extensions.ts` exports
+  `appViteConfig`, which the managed `vite.config.ts` merges with Vite's
+  `mergeConfig` (warmup, `optimizeDeps`, `define`, plugins, allowed hosts), and
+  `appSvelteKitConfig`, which it passes to `sveltekit()` (`alias`, `csrf`). With
+  `admin-dashboard`, `appHandle` in `apps/web/src/lib/server/app-hooks.ts` runs
+  for every request after `hooks.server.ts` loads the site settings, the
+  session, and the locale, so it can adjust `event.locals` or the response;
+  `APP_ADMIN_NAV` in `apps/web/src/lib/admin/app-nav.ts` adds admin sidebar
+  entries before module entries and Settings; and `APP_NON_INDEXABLE_PATHS` in
+  `apps/web/src/lib/server/non-indexable-paths.ts` adds prefixes that answer
+  with `X-Robots-Tag: noindex, nofollow`. `podo update` creates each file once
+  in an existing app and never overwrites it. See
+  [web extension points](docs/templates.md#web-extension-points).
 
 ### Removed
 
@@ -157,6 +171,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `AGENTS.md` is application-owned, so `podo update` does not add its note
   about `E2E_WORKERS` and the `@exclusive` tag; copy it from a newly generated
   app if your agents should know.
+- Move edits you made to the managed `vite.config.ts`, `hooks.server.ts`,
+  `admin-sidebar.svelte`, or `search-indexing.ts` into the new owned files, then
+  take PodoKit's version of the managed file when `podo update` reports a merge
+  or conflict there. For example, a fixed user set in `loadRuntimeContext` goes
+  into `appHandle`, an extra sidebar link into `APP_ADMIN_NAV`, extra
+  `NON_INDEXABLE_PATH_PREFIXES` entries into `APP_NON_INDEXABLE_PATHS`, and Vite
+  `define`, `optimizeDeps`, `cacheDir`, plugins, or a SvelteKit `alias` into
+  `vite.extensions.ts`.
+- The managed `vite.config.ts` now imports `./vite.extensions.ts`. A running
+  `podo dev watch` syncs the new `vite.config.ts` but not the new file, so the
+  web container stops until you run `podo dev down` and start it again, which
+  rebuilds the image. `compose.dev.yaml` is application-owned; add
+  `- { action: sync+restart, path: ./apps/web/vite.extensions.ts, target: /app/apps/web/vite.extensions.ts }`
+  under the web service's `develop.watch` to restart the web container when the
+  file changes.
 
 ## [1.5.0] - 2026-10-16
 

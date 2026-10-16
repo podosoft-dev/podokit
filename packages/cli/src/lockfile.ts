@@ -127,6 +127,8 @@ export const DEFAULT_OWNED_GLOBS = [
   "apps/web/src/lib/server/proxy-headers.ts",
   "apps/web/src/lib/server/body-limits.ts",
   "apps/web/src/lib/server/proxy-timeouts.ts",
+  // Owned additions to the managed Vite and SvelteKit configuration.
+  "apps/web/vite.extensions.ts",
   // Owned fallback page SvelteKit serves when the root layout or a hook fails.
   "apps/web/src/error.html",
   // AI agent guidance — yours to customize; update never touches it.

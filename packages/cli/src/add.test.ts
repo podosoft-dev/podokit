@@ -930,8 +930,15 @@ describe("addModule (auth / better-auth)", () => {
     expect(hooks).toContain("cause.statusCode === 408 || cause.statusCode === 429 || cause.statusCode >= 500");
     expect(hooks).toContain('error(503, "Service temporarily unavailable")');
     expect(hooks.indexOf('error(503, "Service temporarily unavailable")')).toBeLessThan(
-      hooks.lastIndexOf("const response = await resolve(event"),
+      hooks.lastIndexOf("const response = await appHandle({"),
     );
+    for (const seam of [
+      "apps/web/src/lib/server/app-hooks.ts",
+      "apps/web/src/lib/server/non-indexable-paths.ts",
+      "apps/web/src/lib/admin/app-nav.ts",
+    ]) {
+      expect(readFilesLock(project)?.files[seam]?.tier).toBe("owned");
+    }
     const appTypes = readFileSync(join(project, "apps/web/src/app.d.ts"), "utf8");
     expect(appTypes).toContain("authUnavailable: boolean");
     expect(appTypes).toContain("siteUnavailable: boolean");

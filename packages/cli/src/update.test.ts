@@ -1446,6 +1446,65 @@ describe("app-owned asset paths", () => {
   });
 });
 
+describe("app-owned web extension seams", () => {
+  const MODULE_SEEDS = [
+    "apps/web/src/lib/server/app-hooks.ts",
+    "apps/web/src/lib/server/non-indexable-paths.ts",
+    "apps/web/src/lib/admin/app-nav.ts",
+  ];
+  const VITE_SEED = "apps/web/vite.extensions.ts";
+
+  // The fullstack and admin-dashboard layouts before they shipped these seams.
+  function templatesWithoutSeams(): string {
+    const dir = join(tmp(), "old-templates");
+    cpSync(REPO_TEMPLATES, dir, { recursive: true });
+    const module = join(dir, "modules/admin-dashboard");
+    for (const seed of MODULE_SEEDS) rmSync(join(module, "files", seed));
+    const manifestPath = join(module, "module.manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { ownedGlobs: string[] };
+    manifest.ownedGlobs = manifest.ownedGlobs.filter((glob) => !MODULE_SEEDS.includes(glob));
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    rmSync(join(dir, "fullstack", VITE_SEED));
+    return dir;
+  }
+
+  it("creates each owned seam once for an existing app and keeps the app's version", () => {
+    const oldTemplates = templatesWithoutSeams();
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: project });
+    addModule({ projectRoot: project, module: "admin-dashboard", modulesDir: join(oldTemplates, "modules") });
+    const manifest = readManifest(project);
+    if (!manifest) throw new Error("expected manifest");
+    writeManifest(project, { ...manifest, ownedGlobs: manifest.ownedGlobs.filter((glob) => glob !== VITE_SEED) });
+    for (const seed of [...MODULE_SEEDS, VITE_SEED]) expect(existsSync(join(project, seed))).toBe(false);
+
+    const plan = planUpdate(project, REPO_TEMPLATES);
+    for (const seed of [...MODULE_SEEDS, VITE_SEED]) {
+      expect(plan.changes.find((change) => change.path === seed)).toMatchObject({ action: "add", tier: "owned" });
+    }
+    const result = applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+
+    expect(result.conflicts).toEqual([]);
+    expect(readFileSync(join(project, "apps/web/src/hooks.server.ts"), "utf8")).toContain(
+      'import { appHandle } from "#lib/server/app-hooks.js";',
+    );
+    expect(readFileSync(join(project, "apps/web/vite.config.ts"), "utf8")).toContain('from "./vite.extensions.ts"');
+    for (const seed of [...MODULE_SEEDS, VITE_SEED]) {
+      expect(readFilesLock(project)?.files[seed]?.tier).toBe("owned");
+    }
+
+    const own = 'export const APP_NON_INDEXABLE_PATHS: readonly string[] = ["/"];\n';
+    writeFileSync(join(project, MODULE_SEEDS[1] ?? ""), own);
+    rmSync(join(project, VITE_SEED));
+    const next = planUpdate(project, REPO_TEMPLATES);
+    expect(next.changes.find((change) => change.path === MODULE_SEEDS[1])?.action).toBe("skip");
+    expect(next.changes.find((change) => change.path === VITE_SEED)?.action).toBe("skip");
+    applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+    expect(readFileSync(join(project, MODULE_SEEDS[1] ?? ""), "utf8")).toBe(own);
+    expect(existsSync(join(project, VITE_SEED))).toBe(false);
+  });
+});
+
 describe("committed container environment example", () => {
   // The fullstack layout before .env.docker became a local copy of a committed example.
   function templatesWithIgnoredContainerEnv(): string {
