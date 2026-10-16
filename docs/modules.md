@@ -247,6 +247,10 @@ migration Job before a rolling deployment.
   injection in production). With `NODE_ENV=production` the API refuses to start with an unset
   or placeholder `BETTER_AUTH_SECRET`, or a `BETTER_AUTH_URL` that is not `https:` unless it
   is a loopback address such as `http://127.0.0.1:5002` (a desktop shell, for example).
+- **Starting before the migrations.** Better Auth checks the database schema and keeps a
+  mismatch it found, such as missing tables when the API started before `migrate:all`. While it
+  holds one, the API rebuilds the auth instance at most every 2 seconds on a request, so the first
+  sign-in after `migrate:all` ran in another process or container succeeds without a restart.
 - **The app name users see.** Authenticator apps show it as the TOTP issuer, browsers show it in
   the passkey prompt, and Better Auth uses it as its `appName`. `AUTH_APP_NAME` sets it; unset, it
   is the site name from the admin Settings (`site.name`, with `admin-dashboard`), then the project

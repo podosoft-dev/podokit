@@ -277,6 +277,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - In production the auth module accepts an `http:` `BETTER_AUTH_URL` on a
   loopback address (`localhost`, `127.0.0.0/8`, `[::1]`), such as an API a
   desktop shell runs on `127.0.0.1`; every other address still needs `https:`.
+- Sign-in works once `migrate:all` has run, even when the API started before
+  it. Better Auth keeps a schema mismatch it found until a migration run by the
+  same process clears it, so an API that started on an empty database, as the
+  container development stack can, answered every sign-in with `500` until it
+  restarted. While the auth instance holds a mismatch, the auth module rebuilds
+  it at most every 2 seconds on a request, and the new instance checks the
+  database again.
 
 ### Upgrade notes
 
