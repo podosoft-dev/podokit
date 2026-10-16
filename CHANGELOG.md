@@ -34,6 +34,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- The Compose deployment gateway sends web and API the one client address it
+  resolved, instead of appending the proxy in front to `X-Forwarded-For`. Behind
+  a proxy listed in `exposure.trustedProxyCidrs`, web and API received
+  `X-Forwarded-For: <client>, <proxy>`, and with `XFF_DEPTH=1` and
+  `TRUSTED_PROXY_HOPS=1` both recorded the proxy's address for sessions, audit
+  entries, and rate limits. Every gateway `reverse_proxy` now sets
+  `header_up X-Forwarded-For {client_ip}`; without trusted proxies the address is
+  the gateway's peer, as before.
 - The `/api` proxy no longer cuts a route listed in `APP_PROXY_TIMEOUTS` with
   `timeoutMs: null` after 300 seconds. Bun's `fetch` gives up on a connection
   that sends nothing for its idle timeout (300 seconds unless
@@ -52,6 +60,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Upgrade notes
 
+- A Compose deployment with WebSocket or direct API paths renders a new gateway
+  configuration, so a rollback to a revision applied before this version is
+  refused, because it no longer renders byte for byte; roll forward with a new
+  release instead. Sessions and audit entries created behind a trusted proxy
+  before the upgrade keep the proxy's address.
 - A spec of your own that imports `../helpers/exclusive` fails after
   `podo update` removes the helper. Drop the `exclusive()` wrapper and tag the
   test instead: `test("…", { tag: "@exclusive" }, async (…) => { … })`. Tag any

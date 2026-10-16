@@ -316,7 +316,11 @@ headers only from the IP networks listed in `trustedProxyCidrs`; keep the list e
 when there is no external proxy. Configure the direct upstream proxy CIDRs, not
 arbitrary client networks, and keep the published address reachable only by those
 proxies. Caddy strict proxy parsing then derives the client address from the first
-untrusted hop and safely replaces spoofed forwarding headers from other peers.
+untrusted hop and safely replaces spoofed forwarding headers from other peers. The
+gateway sends web and API that one address as `X-Forwarded-For`, never the chain
+with the proxy appended, so both record the client at one trusted hop. With an
+empty list the address is the gateway's peer: an external proxy in front then
+becomes every request's client address.
 
 Kubernetes deployments configure the web server to trust the ingress-provided
 `x-forwarded-proto` and `x-forwarded-host` headers. This keeps SvelteKit's
@@ -398,9 +402,12 @@ What changes for requests on these paths:
   route's size limit in its API handler.
 - The API reads the client address from the gateway's `X-Forwarded-For` header
   instead of from the web server. `TRUSTED_PROXY_HOPS`, 1 in the rendered
-  configuration, applies to both paths, and the web server always forwards a
-  single address, so keep it at 1. Behind another reverse proxy that appends to
-  the header, have that proxy set it to the client address instead.
+  configuration, applies to both paths, so both send one address: the web
+  server forwards the address it resolved, and the Compose gateway replaces the
+  header with the client address it derived from `trustedProxyCidrs`. A Traefik
+  Ingress sends one address only while it trusts no proxy in front of it; one
+  that trusts a proxy appends that proxy to the header, and the API then records
+  the proxy for requests on these paths.
 - Gateway timeouts still apply. Traefik v3 entry points close a request whose body
   takes longer than `respondingTimeouts.readTimeout`, 60 seconds by default; raise
   it on the ingress controller for slow uploads.

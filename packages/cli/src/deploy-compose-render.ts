@@ -347,10 +347,18 @@ function gatewayService(
 `
     : "";
   const api = `${serviceName(profile, "api")}:${CONTAINER_PORT}`;
+  // Caddy appends the peer to X-Forwarded-For, so behind a trusted proxy web and
+  // API would get "client, proxy" and record the proxy at one trusted hop. Send
+  // the client address Caddy resolved instead: the client behind a trusted proxy,
+  // the peer otherwise.
+  const reverseProxy = (upstream: string): string =>
+    `    reverse_proxy ${upstream} {\n` +
+    `      header_up X-Forwarded-For {client_ip}\n` +
+    `    }\n`;
   const webSocketRoutes = profile.exposure.webSocketPaths.length
     ? `  @api_websockets path ${profile.exposure.webSocketPaths.join(" ")}\n` +
       `  handle @api_websockets {\n` +
-      `    reverse_proxy ${api}\n` +
+      reverseProxy(api) +
       `  }\n`
     : "";
   const apiPathRoutes = profile.exposure.apiPaths.length
@@ -359,7 +367,7 @@ function gatewayService(
         .join(" ")}\n` +
       `  handle @api_paths {\n` +
       `    uri strip_prefix ${API_PATH_PREFIX}\n` +
-      `    reverse_proxy ${api}\n` +
+      reverseProxy(api) +
       `  }\n`
     : "";
   const caddyfile =
@@ -368,7 +376,7 @@ function gatewayService(
     webSocketRoutes +
     apiPathRoutes +
     `  handle {\n` +
-    `    reverse_proxy ${serviceName(profile, "web")}:${CONTAINER_PORT}\n` +
+    reverseProxy(`${serviceName(profile, "web")}:${CONTAINER_PORT}`) +
     `  }\n` +
     `}\n`;
   const start =

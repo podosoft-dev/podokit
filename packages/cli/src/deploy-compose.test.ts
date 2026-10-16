@@ -279,9 +279,12 @@ describe("compose rendering", () => {
     expect(gateway).toContain("path /agent/ws /terminal/ws");
     expect(gateway).toContain("trusted_proxies static 127.0.0.1/32 ::1/128");
     expect(gateway).toContain("trusted_proxies_strict");
-    expect(gateway).toContain("reverse_proxy example-app-api:3000");
-    expect(gateway).toContain("reverse_proxy example-app-web:3000");
-    expect(gateway).not.toContain("header_up X-Forwarded");
+    // Web and API each get the one address Caddy resolved from the trusted
+    // chain, never "client, proxy", so one trusted hop finds the client.
+    const forwardOne = "header_up X-Forwarded-For {client_ip}\\n";
+    expect(gateway).toContain(`reverse_proxy example-app-api:3000 {\\n      ${forwardOne}    }`);
+    expect(gateway).toContain(`reverse_proxy example-app-web:3000 {\\n      ${forwardOne}    }`);
+    expect(gateway.split(forwardOne)).toHaveLength(3);
     expect(gateway).toContain('"127.0.0.1:8080:3000"');
     expect(document.match(/ports:/g)).toHaveLength(1);
   });
@@ -302,10 +305,13 @@ describe("compose rendering", () => {
       "  @api_paths path /api/files/uploads /api/files/uploads/* /api/imports /api/imports/*\\n" +
         "  handle @api_paths {\\n" +
         "    uri strip_prefix /api\\n" +
-        "    reverse_proxy example-app-api:3000\\n" +
+        "    reverse_proxy example-app-api:3000 {\\n" +
+        "      header_up X-Forwarded-For {client_ip}\\n" +
+        "    }\\n" +
         "  }\\n" +
         "  handle {\\n" +
-        "    reverse_proxy example-app-web:3000\\n",
+        "    reverse_proxy example-app-web:3000 {\\n" +
+        "      header_up X-Forwarded-For {client_ip}\\n",
     );
     expect(gateway).not.toContain("@api_websockets");
     expect(gateway).toContain('"127.0.0.1:8080:3000"');
@@ -324,7 +330,9 @@ describe("compose rendering", () => {
       renderComposeDocument(profile, "v1.2.3", images, "sha256:0").split("example-app-gateway:")[1] ?? "";
 
     expect(gateway).toContain(
-      "  @api_websockets path /events/ws\\n  handle @api_websockets {\\n    reverse_proxy example-app-api:3000\\n  }\\n  @api_paths",
+      "  @api_websockets path /events/ws\\n  handle @api_websockets {\\n" +
+        "    reverse_proxy example-app-api:3000 {\\n      header_up X-Forwarded-For {client_ip}\\n    }\\n" +
+        "  }\\n  @api_paths",
     );
   });
 
