@@ -261,6 +261,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   Bun SQL import, and under Bun it rejected the data source file's two exports.
   The `typeorm` script runs the CLI on Bun, `data-source.ts` exports only
   `appDataSource`, and the unused `ts-node` development dependency is gone.
+- In production the auth module accepts an `http:` `BETTER_AUTH_URL` on a
+  loopback address (`localhost`, `127.0.0.0/8`, `[::1]`), such as an API a
+  desktop shell runs on `127.0.0.1`; every other address still needs `https:`.
 
 ### Upgrade notes
 

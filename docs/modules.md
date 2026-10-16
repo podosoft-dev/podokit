@@ -244,7 +244,9 @@ migration Job before a rolling deployment.
   restart** (paste a client id/secret and social login works on the next request). Only
   `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are required env vars; the rest are optional
   fallbacks/overrides that the DB config takes precedence over (handy for secrets-manager
-  injection in production).
+  injection in production). With `NODE_ENV=production` the API refuses to start with an unset
+  or placeholder `BETTER_AUTH_SECRET`, or a `BETTER_AUTH_URL` that is not `https:` unless it
+  is a loopback address such as `http://127.0.0.1:5002` (a desktop shell, for example).
 - **The app name users see.** Authenticator apps show it as the TOTP issuer, browsers show it in
   the passkey prompt, and Better Auth uses it as its `appName`. `AUTH_APP_NAME` sets it; unset, it
   is the site name from the admin Settings (`site.name`, with `admin-dashboard`), then the project
