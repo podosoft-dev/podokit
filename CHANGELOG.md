@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `apps/web/src/lib/server/proxy-timeouts.ts` is an application-owned
+  `APP_PROXY_TIMEOUTS` list of `{ pathPrefix, timeoutMs }` entries for `/api`
+  routes. An entry replaces `BACKEND_PROXY_TIMEOUT_MS` for its path and the paths
+  below it, matched like `APP_BODY_LIMITS` with the longest prefix winning, and
+  `timeoutMs: null` waits as long as the API takes. The proxy now also repeats
+  its `GET /health` check every `BACKEND_TIMEOUT_MS` while it waits for response
+  headers, so a request on such a route still ends with `503`
+  `BACKEND_UNAVAILABLE` when the API stops answering partway through the wait.
+  An invalid prefix or timeout fails when the web server loads the proxy.
+  `podo update` creates the file once in existing apps and never overwrites it.
+
+### Upgrade notes
+
+- If you edited `apps/web/src/lib/server/backend-proxy.ts` to give some routes a
+  longer deadline or none, `podo update` reports a conflict where the new proxy
+  picks the deadline. Take the new version, list those routes in
+  `APP_PROXY_TIMEOUTS` in `apps/web/src/lib/server/proxy-timeouts.ts`, and keep
+  the managed file unchanged so later updates stay clean.
+
 ## [1.4.2] - 2026-10-16
 
 ### Fixed

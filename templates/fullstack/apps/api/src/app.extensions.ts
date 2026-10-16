@@ -14,6 +14,8 @@ export const extensionModules: PodokitModule[] = [];
 // example { maxRequestBodySize: 1024 ** 3, idleTimeout: 120 }. Values set here
 // win over API_MAX_REQUEST_BODY_SIZE; a function receives the validated
 // environment instead: (env) => ({ maxRequestBodySize: ... }). A longer
-// idleTimeout also needs BACKEND_PROXY_TIMEOUT_MS on the web server, which stops
-// waiting for response headers after 30 seconds by default.
+// idleTimeout also needs a longer proxy deadline on the web server, which stops
+// waiting for response headers after 30 seconds by default:
+// BACKEND_PROXY_TIMEOUT_MS, or one route's entry in APP_PROXY_TIMEOUTS
+// (apps/web/src/lib/server/proxy-timeouts.ts).
 export const apiServerOptions: ApiServerOptionsSource = {};

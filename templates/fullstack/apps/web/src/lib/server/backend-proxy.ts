@@ -1,5 +1,6 @@
 import { APP_BODY_LIMITS } from "./body-limits";
 import { APP_FORWARDED_REQUEST_HEADERS, APP_RELAYED_RESPONSE_HEADERS } from "./proxy-headers";
+import { APP_PROXY_TIMEOUTS } from "./proxy-timeouts";
 
 // Server-side proxy boundary. The browser never talks to the API directly:
 // requests go through SvelteKit server routes, which forward an allowlist of
@@ -118,46 +119,60 @@ export interface BodyLimit {
   maxBytes: number;
 }
 
-const BODY_LIMIT_PREFIX = /^\/api(?:\/[A-Za-z0-9._~!$&'()+,;=:@-]+)*\/?$/;
+const API_PATH_PREFIX = /^\/api(?:\/[A-Za-z0-9._~!$&'()+,;=:@-]+)*\/?$/;
 
-/** Validate application body limits and order them so the longest prefix
- *  matches first. Prefixes are stored without a trailing slash. */
-export function sortedBodyLimits(limits: ReadonlyArray<BodyLimit>): BodyLimit[] {
+/** Validate an application list of /api path prefixes and order it so the
+ *  longest prefix matches first. Prefixes are stored without a trailing slash. */
+function sortedByPrefix<T extends { pathPrefix: string }>(
+  entries: ReadonlyArray<T>,
+  listName: string,
+  example: string,
+  check: (entry: T) => void,
+): T[] {
   const seen = new Set<string>();
-  const sorted = limits.map(({ pathPrefix, maxBytes }) => {
+  const sorted = entries.map((entry) => {
+    const { pathPrefix } = entry;
     if (
-      !BODY_LIMIT_PREFIX.test(pathPrefix) ||
+      !API_PATH_PREFIX.test(pathPrefix) ||
       pathPrefix.split("/").some((segment) => segment === "." || segment === "..")
     ) {
       throw new Error(
-        `APP_BODY_LIMITS pathPrefix must be a static path under /api/, such as "/api/feedback/": ${JSON.stringify(pathPrefix)}`,
+        `${listName} pathPrefix must be a static path under /api/, such as "${example}": ${JSON.stringify(pathPrefix)}`,
       );
     }
-    if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
-      throw new Error(`APP_BODY_LIMITS maxBytes for ${pathPrefix} must be a positive whole number of bytes.`);
-    }
+    check(entry);
     const base = pathPrefix.endsWith("/") ? pathPrefix.slice(0, -1) : pathPrefix;
-    if (seen.has(base)) throw new Error(`APP_BODY_LIMITS lists ${pathPrefix} more than once.`);
+    if (seen.has(base)) throw new Error(`${listName} lists ${pathPrefix} more than once.`);
     seen.add(base);
-    return { pathPrefix: base, maxBytes };
+    return { ...entry, pathPrefix: base };
   });
   return sorted.sort((left, right) => right.pathPrefix.length - left.pathPrefix.length);
 }
 
-const bodyLimits = sortedBodyLimits(APP_BODY_LIMITS);
-
-/** The body limit for a request path, matched on the decoded path so an encoded
+/** The entry for a request path, matched on the decoded path so an encoded
  *  segment cannot step around a prefix. */
-export function bodyLimitFor(pathname: string, limits: readonly BodyLimit[] = bodyLimits): number | undefined {
+function entryFor<T extends { pathPrefix: string }>(pathname: string, entries: readonly T[]): T | undefined {
   let path = pathname;
   try {
     path = decodeURIComponent(pathname);
   } catch {
     // Keep the raw path when it holds a malformed escape.
   }
-  return limits.find(
-    ({ pathPrefix }) => path === pathPrefix || path.startsWith(`${pathPrefix}/`),
-  )?.maxBytes;
+  return entries.find(({ pathPrefix }) => path === pathPrefix || path.startsWith(`${pathPrefix}/`));
+}
+
+export function sortedBodyLimits(limits: ReadonlyArray<BodyLimit>): BodyLimit[] {
+  return sortedByPrefix(limits, "APP_BODY_LIMITS", "/api/feedback/", ({ pathPrefix, maxBytes }) => {
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
+      throw new Error(`APP_BODY_LIMITS maxBytes for ${pathPrefix} must be a positive whole number of bytes.`);
+    }
+  });
+}
+
+const bodyLimits = sortedBodyLimits(APP_BODY_LIMITS);
+
+export function bodyLimitFor(pathname: string, limits: readonly BodyLimit[] = bodyLimits): number | undefined {
+  return entryFor(pathname, limits)?.maxBytes;
 }
 
 /** Read a request body, or return null as soon as it exceeds maxBytes. The rest
@@ -220,13 +235,14 @@ export function backendBaseUrl(): string {
 
 /**
  * Milliseconds one server-side API call may take, response body included, and
- * how long the proxy waits for response headers before it checks whether the
- * API still answers at all.
+ * how often the proxy checks whether the API still answers at all while it waits
+ * for response headers.
  */
 const DEFAULT_BACKEND_TIMEOUT_MS = 2_000;
 /**
  * Milliseconds the proxy waits for the API's response headers, matching the
- * API's default idle timeout. Streamed bodies are not cut off once they start.
+ * API's default idle timeout, unless APP_PROXY_TIMEOUTS lists the path.
+ * Streamed bodies are not cut off once they start.
  */
 const DEFAULT_BACKEND_PROXY_TIMEOUT_MS = 30_000;
 /** Seconds between checks while the API is unreachable, also sent as Retry-After. */
@@ -259,10 +275,35 @@ function backendProxyTimeoutMs(): number {
 backendTimeoutMs();
 backendProxyTimeoutMs();
 
+export interface ProxyTimeout {
+  pathPrefix: string;
+  /** Milliseconds to wait for response headers, or null for no deadline. */
+  timeoutMs: number | null;
+}
+
+export function sortedProxyTimeouts(timeouts: ReadonlyArray<ProxyTimeout>): ProxyTimeout[] {
+  return sortedByPrefix(timeouts, "APP_PROXY_TIMEOUTS", "/api/exports/", ({ pathPrefix, timeoutMs }) => {
+    if (timeoutMs !== null && (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > MAX_TIMER_MS)) {
+      throw new Error(
+        `APP_PROXY_TIMEOUTS timeoutMs for ${pathPrefix} must be null or a whole number of milliseconds from 1 to ${MAX_TIMER_MS}.`,
+      );
+    }
+  });
+}
+
+const proxyTimeouts = sortedProxyTimeouts(APP_PROXY_TIMEOUTS);
+
+/** How long the proxy waits for response headers on a request path, or null for no deadline. */
+export function proxyTimeoutFor(pathname: string, timeouts: readonly ProxyTimeout[] = proxyTimeouts): number | null {
+  const entry = entryFor(pathname, timeouts);
+  return entry ? entry.timeoutMs : backendProxyTimeoutMs();
+}
+
 // The API counts as unreachable only when GET /health gets no HTTP answer
-// within BACKEND_TIMEOUT_MS. It is checked when a request gets no answer, or
-// when the proxy waits longer than that for response headers, so one slow
-// endpoint does not fail every request in the process. Once the API is found
+// within BACKEND_TIMEOUT_MS. It is checked when a request gets no answer, and
+// every BACKEND_TIMEOUT_MS while the proxy waits for response headers, so one
+// slow endpoint does not fail every request in the process, while an API that
+// stops answering still ends a long or unbounded wait. Once the API is found
 // unreachable, requests still waiting for it fail, new ones fail at once instead
 // of each waiting for a refused connection, a DNS lookup, or a hung server, and
 // a background check runs at most every BACKEND_RETRY_AFTER_SECONDS. Any HTTP
@@ -301,6 +342,11 @@ export function checkBackend(): Promise<void> {
       });
   }
   return pendingCheck;
+}
+
+/** Check the API unless a check is running or one ended within BACKEND_TIMEOUT_MS. */
+function recheckBackend(now = Date.now()): void {
+  if (!pendingCheck && now - lastCheckEnded >= backendTimeoutMs()) void checkBackend();
 }
 
 /** Record an HTTP answer from the API, whatever its status. */
@@ -400,15 +446,19 @@ export async function proxyRequest(
       body = limited;
     }
   }
-  // The deadline, the health check, and the outage signal cover only the wait
+  // The deadline, the health checks, and the outage signal cover only the wait
   // for response headers, so streamed bodies such as server-sent events are not
   // cut off.
   const waiting = new AbortController();
-  const deadline = setTimeout(
-    () => waiting.abort(new DOMException("The API did not respond in time", "TimeoutError")),
-    backendProxyTimeoutMs(),
-  );
-  const healthCheck = setTimeout(() => void checkBackend(), backendTimeoutMs());
+  const timeoutMs = proxyTimeoutFor(pathname);
+  const deadline =
+    timeoutMs === null
+      ? undefined
+      : setTimeout(
+          () => waiting.abort(new DOMException("The API did not respond in time", "TimeoutError")),
+          timeoutMs,
+        );
+  const healthChecks = setInterval(() => recheckBackend(), backendTimeoutMs());
   const outage = backendOutageSignal();
   const failOnOutage = (): void => waiting.abort(outage.reason);
   outage.addEventListener("abort", failOnOutage);
@@ -432,7 +482,7 @@ export async function proxyRequest(
     return backendFailure(pathname, waiting.signal.aborted ? 504 : 503);
   } finally {
     clearTimeout(deadline);
-    clearTimeout(healthCheck);
+    clearInterval(healthChecks);
     outage.removeEventListener("abort", failOnOutage);
   }
   reportBackendAnswer();

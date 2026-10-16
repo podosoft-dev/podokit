@@ -536,8 +536,8 @@ see [API timeouts and outages](templates.md#api-timeouts-and-outages).
 
 | Web setting | Default | Effect |
 | --- | --- | --- |
-| `BACKEND_TIMEOUT_MS` | `2000` | The longest one server-side API call may take, and the proxy's wait for response headers before it checks whether the API answers at all. Detecting an outage takes up to twice this long, and pages rendered meanwhile wait for it. |
-| `BACKEND_PROXY_TIMEOUT_MS` | `30000` | How long the `/api` proxy waits for response headers before it answers `504` `BACKEND_TIMEOUT`. Raise it with the API's `idleTimeout` and the web server's `CONNECTION_IDLE_TIMEOUT`. |
+| `BACKEND_TIMEOUT_MS` | `2000` | The longest one server-side API call may take, and how often the proxy checks whether the API answers at all while it waits for response headers. Detecting an outage takes up to twice this long, and pages rendered meanwhile wait for it. |
+| `BACKEND_PROXY_TIMEOUT_MS` | `30000` | How long the `/api` proxy waits for response headers before it answers `504` `BACKEND_TIMEOUT`, unless [`APP_PROXY_TIMEOUTS`](templates.md#proxy-deadlines-per-route) gives the route its own deadline. Raise it with the API's `idleTimeout` and the web server's `CONNECTION_IDLE_TIMEOUT`. |
 
 Set them in the profile's `runtimeConfig`.
 

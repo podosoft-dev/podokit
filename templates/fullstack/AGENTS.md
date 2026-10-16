@@ -49,7 +49,10 @@ Merge added module settings from `.env.example` into an existing `.env`.
   managed lists. Cap a route's request body in the app-owned
   `apps/web/src/lib/server/body-limits.ts` (`APP_BODY_LIMITS`, 413
   `PAYLOAD_TOO_LARGE`). `BODY_SIZE_LIMIT` is the ceiling for every web route, so
-  uploads larger than it must use a direct API path (`apiPaths`) instead.
+  uploads larger than it must use a direct API path (`apiPaths`) instead. Give a
+  route a longer, shorter, or no response deadline in the app-owned
+  `apps/web/src/lib/server/proxy-timeouts.ts` (`APP_PROXY_TIMEOUTS`, `null` for
+  none); never edit the managed deadline.
 - Server-side API calls (`serverApiClient`) give up after `BACKEND_TIMEOUT_MS`
   (2000), and the proxy answers 504 `BACKEND_TIMEOUT` when the API sends no
   response headers within `BACKEND_PROXY_TIMEOUT_MS` (30000). Once the API's

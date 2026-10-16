@@ -212,10 +212,12 @@ that has stopped answering:
   `BACKEND_UNAVAILABLE` with `Retry-After: 2` instead of SvelteKit's bare `500`.
   Both use the standard error envelope and `Cache-Control: no-store`.
 
-When a call gets no HTTP answer, or the proxy has waited `BACKEND_TIMEOUT_MS`
-for response headers, the web server requests the API's `GET /health` with the
-same bound. Only when that check gets no answer either is the API treated as
-unreachable, so one slow endpoint does not fail other requests. Then requests
+When a call gets no HTTP answer, and every `BACKEND_TIMEOUT_MS` while the proxy
+waits for response headers, the web server requests the API's `GET /health` with
+the same bound, unless another check ran within that time. Only when that check
+gets no answer either is the API treated as unreachable, so one slow endpoint
+does not fail other requests, while an API that stops answering partway through
+a long wait still ends it. Then requests
 still waiting for the API fail at once, new server-side calls throw
 `BackendUnavailableError` from `#lib/server/api.js` without contacting the API,
 and the proxy answers `503` at once. A background check runs at most every two
@@ -233,6 +235,41 @@ endpoint that takes longer than 30 seconds to start its response needs a higher
 received nothing for `CONNECTION_IDLE_TIMEOUT` seconds (an adapter-bun setting,
 Bun's 10 by default, lifted for `text/event-stream` responses), so such an
 endpoint needs that raised as well.
+
+### Proxy deadlines per route
+
+Some endpoints take longer than `BACKEND_PROXY_TIMEOUT_MS` to start their
+response by design, such as a report export or a request that waits for a
+background worker, and some should give up sooner. Set their deadlines in the
+application-owned `apps/web/src/lib/server/proxy-timeouts.ts` instead of editing
+the managed proxy:
+
+```ts
+export const APP_PROXY_TIMEOUTS: ReadonlyArray<{ pathPrefix: string; timeoutMs: number | null }> = [
+  { pathPrefix: "/api/exports/", timeoutMs: 120_000 },
+  { pathPrefix: "/api/file-transfers/", timeoutMs: null },
+];
+```
+
+An entry covers its path and every path below it, matched on the decoded
+request path, and the longest matching prefix wins; other routes keep
+`BACKEND_PROXY_TIMEOUT_MS`. `timeoutMs` is how long the proxy waits for the
+response headers before it answers `504` `BACKEND_TIMEOUT`, and `null` waits as
+long as the API takes. The health checks keep running while a request waits, so
+a route without a deadline still answers `503` `BACKEND_UNAVAILABLE` once the
+API's `GET /health` stops answering, and the wait also ends when the browser
+disconnects. Like any proxied response, the body is never cut off once the
+headers arrive. A prefix that is not a static path under `/api/`, a prefix
+listed twice, or a `timeoutMs` that is neither `null` nor a whole number of
+milliseconds from 1 to 2147483647 fails the web tests and the web server when it
+loads the proxy.
+
+The proxy's deadline is one of three limits on such a request. The API must
+keep the connection open as long, so raise `idleTimeout` in its
+[server options](#api-server-options) (`0` turns it off), and the web server
+must not close the connection first; see `CONNECTION_IDLE_TIMEOUT` under
+[API timeouts and outages](#api-timeouts-and-outages). New apps get the file
+empty; `podo update` creates it once in an existing app and never overwrites it.
 
 ### Fallback error page
 

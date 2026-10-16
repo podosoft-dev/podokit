@@ -525,6 +525,12 @@ describe("create (integration against templates)", () => {
       "export const APP_BODY_LIMITS: ReadonlyArray<{ pathPrefix: string; maxBytes: number }> = [];",
     );
     expect(readFilesLock(target)?.files[bodyLimits]?.tier).toBe("owned");
+    expect(backendProxy).toContain('from "./proxy-timeouts"');
+    const proxyTimeouts = "apps/web/src/lib/server/proxy-timeouts.ts";
+    expect(readFileSync(join(target, proxyTimeouts), "utf8")).toContain(
+      "export const APP_PROXY_TIMEOUTS: ReadonlyArray<{ pathPrefix: string; timeoutMs: number | null }> = [];",
+    );
+    expect(readFilesLock(target)?.files[proxyTimeouts]?.tier).toBe("owned");
     expect(readFilesLock(target)?.files["apps/web/src/lib/server/backend-proxy.ts"]?.tier).toBe("managed");
     // The web server's health route answers the probes without calling the API.
     const healthRoute = "apps/web/src/routes/healthz/+server.ts";

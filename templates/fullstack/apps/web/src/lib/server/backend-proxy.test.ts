@@ -9,10 +9,12 @@ import {
   envMilliseconds,
   IN_MEMORY_RESPONSE_BYTES,
   proxyRequest,
+  proxyTimeoutFor,
   reportBackendAnswer,
   rawSubpath,
   resolveClientIp,
   sortedBodyLimits,
+  sortedProxyTimeouts,
   withAppHeaders,
 } from "./backend-proxy";
 
@@ -569,33 +571,44 @@ describe("backend proxy application body limits", () => {
   });
 });
 
-describe("backend proxy outages", () => {
-  type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
+// Never answers on its own, like a blackholed connection or a hung API, and
+// rejects when its signal aborts.
+const hang: Fetch = (_input, init) =>
+  new Promise((_settle, reject) => {
+    init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+  });
+const refuse: Fetch = async () => {
+  throw new TypeError("Unable to connect. Is the computer able to access the url?");
+};
+// Answers after a delay unless its signal aborts first, like a slow endpoint.
+const answerAfter =
+  (ms: number): Fetch =>
+  (_input, init) =>
+    new Promise((settle, reject) => {
+      const timer = setTimeout(() => settle(Response.json({ done: true })), ms);
+      init?.signal?.addEventListener("abort", () => {
+        clearTimeout(timer);
+        reject(init.signal?.reason);
+      });
+    });
+
+// Routes the background GET /health check and the proxied request separately.
+function stubApi(health: Fetch, upstream: Fetch): ReturnType<typeof vi.fn<Fetch>> {
+  const fetch = vi.fn<Fetch>((input, init) =>
+    String(input).endsWith("/health") ? health(input, init) : upstream(input, init),
+  );
+  vi.stubGlobal("fetch", fetch);
+  return fetch;
+}
+
+describe("backend proxy outages", () => {
   afterEach(() => {
     reportBackendAnswer();
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
   });
-
-  // Never answers on its own, like a blackholed connection or a hung API, and
-  // rejects when its signal aborts.
-  const hang: Fetch = (_input, init) =>
-    new Promise((_settle, reject) => {
-      init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
-    });
-  const refuse: Fetch = async () => {
-    throw new TypeError("Unable to connect. Is the computer able to access the url?");
-  };
-
-  // Routes the background GET /health check and the proxied request separately.
-  function stubApi(health: Fetch, upstream: Fetch): ReturnType<typeof vi.fn<Fetch>> {
-    const fetch = vi.fn<Fetch>((input, init) =>
-      String(input).endsWith("/health") ? health(input, init) : upstream(input, init),
-    );
-    vi.stubGlobal("fetch", fetch);
-    return fetch;
-  }
 
   async function takeApiDown(): Promise<void> {
     stubApi(refuse, refuse);
@@ -645,23 +658,35 @@ describe("backend proxy outages", () => {
     expect(backendReachable()).toBe(false);
   });
 
-  it("keeps waiting for a slow endpoint while the API answers its health check", async () => {
+  it("keeps waiting for a slow endpoint while the API answers its health checks", async () => {
     vi.stubEnv("BACKEND_INTERNAL_URL", "http://api:5002");
     vi.stubEnv("BACKEND_TIMEOUT_MS", "20");
-    const fetch = stubApi(
-      async () => new Response("ok"),
-      () => new Promise((settle) => setTimeout(() => settle(Response.json({ done: true })), 80)),
-    );
+    const fetch = stubApi(async () => new Response("ok"), answerAfter(100));
 
     const response = await proxyRequest(new Request("http://app.localhost/api/report"), "http://api:5002/report");
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ done: true });
-    expect(fetch.mock.calls.map(([input]) => String(input))).toEqual([
-      "http://api:5002/report",
-      "http://api:5002/health",
-    ]);
+    const [first, ...checks] = fetch.mock.calls.map(([input]) => String(input));
+    expect(first).toBe("http://api:5002/report");
+    expect(checks.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(checks)).toEqual(new Set(["http://api:5002/health"]));
     expect(backendReachable()).toBe(true);
+  });
+
+  it("fails a waiting request when the API stops answering after an earlier check", async () => {
+    vi.stubEnv("BACKEND_TIMEOUT_MS", "20");
+    vi.stubEnv("BACKEND_PROXY_TIMEOUT_MS", "10000");
+    let checks = 0;
+    stubApi((input, init) => (++checks <= 2 ? Promise.resolve(new Response("ok")) : hang(input, init)), hang);
+
+    const started = Date.now();
+    const response = await proxyRequest(new Request("http://app.localhost/api/report"), "http://api:5002/report");
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ error: { code: "BACKEND_UNAVAILABLE" } });
+    expect(checks).toBeGreaterThanOrEqual(3);
+    expect(Date.now() - started).toBeLessThan(5_000);
   });
 
   it("answers at once without contacting the API while it is unreachable", async () => {
@@ -737,5 +762,115 @@ describe("backend proxy outages", () => {
     expect(envMilliseconds("BACKEND_TIMEOUT_MS", 2_000)).toBe(2_000);
     vi.stubEnv("BACKEND_TIMEOUT_MS", "1500");
     expect(envMilliseconds("BACKEND_TIMEOUT_MS", 2_000)).toBe(1_500);
+  });
+});
+
+describe("backend proxy application timeouts", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    vi.doUnmock("./proxy-timeouts");
+    vi.resetModules();
+  });
+
+  async function proxyWithTimeouts(
+    timeouts: ReadonlyArray<{ pathPrefix: string; timeoutMs: number | null }>,
+  ): Promise<typeof proxyRequest> {
+    vi.resetModules();
+    vi.doMock("./proxy-timeouts", () => ({ APP_PROXY_TIMEOUTS: timeouts }));
+    return (await import("./backend-proxy")).proxyRequest;
+  }
+
+  it("waits longer on a route with a longer deadline", async () => {
+    vi.stubEnv("BACKEND_PROXY_TIMEOUT_MS", "20");
+    const proxy = await proxyWithTimeouts([{ pathPrefix: "/api/exports/", timeoutMs: 2_000 }]);
+    stubApi(async () => new Response("ok"), answerAfter(80));
+
+    const listed = await proxy(new Request("http://app.localhost/api/exports/42"), "http://api:5002/exports/42");
+    const other = await proxy(new Request("http://app.localhost/api/report"), "http://api:5002/report");
+
+    expect(listed.status).toBe(200);
+    expect(await listed.json()).toEqual({ done: true });
+    expect(other.status).toBe(504);
+  });
+
+  it("answers 504 at a route's shorter deadline", async () => {
+    const proxy = await proxyWithTimeouts([{ pathPrefix: "/api/quick", timeoutMs: 20 }]);
+    stubApi(async () => new Response("ok"), hang);
+
+    const started = Date.now();
+    const response = await proxy(new Request("http://app.localhost/api/quick/check"), "http://api:5002/quick/check");
+
+    expect(response.status).toBe(504);
+    expect(await response.json()).toMatchObject({ error: { code: "BACKEND_TIMEOUT", path: "/api/quick/check" } });
+    expect(Date.now() - started).toBeLessThan(5_000);
+  });
+
+  it("waits without a deadline on a null route until the API answers", async () => {
+    vi.stubEnv("BACKEND_TIMEOUT_MS", "20");
+    vi.stubEnv("BACKEND_PROXY_TIMEOUT_MS", "20");
+    const proxy = await proxyWithTimeouts([{ pathPrefix: "/api/file-transfers/", timeoutMs: null }]);
+    stubApi(async () => new Response("ok"), answerAfter(150));
+
+    const response = await proxy(
+      new Request("http://app.localhost/api/file-transfers/7/commit", { method: "POST", body: "{}" }),
+      "http://api:5002/file-transfers/7/commit",
+    );
+
+    expect(response.status).toBe(200);
+  });
+
+  it("still answers 503 on a null route once the API is found unreachable", async () => {
+    vi.stubEnv("BACKEND_TIMEOUT_MS", "20");
+    const proxy = await proxyWithTimeouts([{ pathPrefix: "/api/file-transfers/", timeoutMs: null }]);
+    let checks = 0;
+    stubApi((input, init) => (++checks <= 2 ? Promise.resolve(new Response("ok")) : hang(input, init)), hang);
+
+    const response = await proxy(
+      new Request("http://app.localhost/api/file-transfers/7/commit", { method: "POST", body: "{}" }),
+      "http://api:5002/file-transfers/7/commit",
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("retry-after")).toBe("2");
+    expect(await response.json()).toMatchObject({
+      error: { code: "BACKEND_UNAVAILABLE", path: "/api/file-transfers/7/commit" },
+    });
+    expect(checks).toBeGreaterThanOrEqual(3);
+  });
+
+  it("applies the longest matching prefix on the decoded path and the default elsewhere", () => {
+    vi.stubEnv("BACKEND_PROXY_TIMEOUT_MS", "1234");
+    const timeouts = sortedProxyTimeouts([
+      { pathPrefix: "/api/", timeoutMs: 5_000 },
+      { pathPrefix: "/api/file-transfers/", timeoutMs: null },
+      { pathPrefix: "/api/file-transfers/status", timeoutMs: 100 },
+    ]);
+
+    expect(proxyTimeoutFor("/api/file-transfers/7/commit", timeouts)).toBeNull();
+    expect(proxyTimeoutFor("/api/file-transfers", timeouts)).toBeNull();
+    expect(proxyTimeoutFor("/api/file-transfers/status/7", timeouts)).toBe(100);
+    expect(proxyTimeoutFor("/api/%66ile-transfers/7", timeouts)).toBeNull();
+    expect(proxyTimeoutFor("/api/file-transfers-old/7", timeouts)).toBe(5_000);
+    expect(proxyTimeoutFor("/api/auth/get-session", sortedProxyTimeouts([]))).toBe(1234);
+    expect(proxyTimeoutFor("/other", timeouts)).toBe(1234);
+  });
+
+  it.each<[{ pathPrefix: string; timeoutMs: number | null }[], string]>([
+    [[{ pathPrefix: "/exports/", timeoutMs: 10 }], "must be a static path under /api/"],
+    [[{ pathPrefix: "/api/exports/*", timeoutMs: 10 }], "must be a static path under /api/"],
+    [[{ pathPrefix: "/api/exports/../auth", timeoutMs: 10 }], "must be a static path under /api/"],
+    [[{ pathPrefix: "/api/exports", timeoutMs: 0 }], "must be null or a whole number of milliseconds"],
+    [[{ pathPrefix: "/api/exports", timeoutMs: 1.5 }], "must be null or a whole number of milliseconds"],
+    [[{ pathPrefix: "/api/exports", timeoutMs: 2_147_483_648 }], "must be null or a whole number of milliseconds"],
+    [[{ pathPrefix: "/api/exports", timeoutMs: null }, { pathPrefix: "/api/exports/", timeoutMs: 10 }], "more than once"],
+  ])("rejects an invalid timeout list %#", (timeouts, message) => {
+    expect(() => sortedProxyTimeouts(timeouts)).toThrow(message);
+  });
+
+  it("refuses to load with an invalid application timeout", async () => {
+    await expect(proxyWithTimeouts([{ pathPrefix: "/api/exports", timeoutMs: -1 }])).rejects.toThrow(
+      "APP_PROXY_TIMEOUTS timeoutMs for /api/exports must be null",
+    );
   });
 });
