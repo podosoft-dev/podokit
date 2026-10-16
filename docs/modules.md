@@ -1429,7 +1429,9 @@ links to `/account` and adds the admin dashboard entry only for administrators.
 For a product-shell footer outside `Sidebar.Provider`, use
 `<AccountMenu {user} variant="identity" side="top" />` to show the avatar, name,
 and email with the same account and sign-out actions. The managed
-`sidebar-user-menu.svelte` remains specific to the collapsible admin sidebar.
+`sidebar-user-menu.svelte` renders as a sidebar menu item inside a
+`Sidebar.Provider` and as that `AccountMenu` outside one, so a shell can use
+either component.
 The module injects this menu into the starter landing page. The default blog
 route layout also renders it, so signed-in identity and account actions remain
 available outside the admin shell.

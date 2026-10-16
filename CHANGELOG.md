@@ -90,6 +90,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `.light` class and fall back to the system setting without one now match the
   theme the visitor chose instead of painting their dark palette on a light page
   when the system is dark.
+- `sidebar-user-menu.svelte` works outside a `Sidebar.Provider`. There it
+  renders the `AccountMenu` identity block (avatar, name, email, account and
+  sign-out actions) instead of failing on the missing sidebar state, so an
+  application's own shell can place it without a copy of its own.
 
 ### Removed
 
