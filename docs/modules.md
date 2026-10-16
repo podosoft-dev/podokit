@@ -251,6 +251,14 @@ migration Job before a rolling deployment.
   name the app was generated with (`AUTH_CONFIG_DEFAULTS` in `apps/api/src/auth/auth-config-store.ts`).
   A changed site name applies to new enrolments within the settings refresh, without a restart;
   authenticator entries made before keep their old label.
+- **Application flags.** Declare the app's own on/off settings in the owned
+  `apps/api/src/settings/app-flags.ts`, for example
+  `export const APP_FLAG_DEFAULTS = { reportsEnabled: true } satisfies Record<string, boolean>;`.
+  They are stored in `app_setting` with the feature flags, changed by an administrator with
+  `PUT /account/settings` (`{ "reportsEnabled": false }`), read with
+  `SettingsService.getBool("reportsEnabled")`, and returned to every caller as
+  `appFlags` by `GET /account/capabilities`, so keep secrets out of them. A missing row keeps
+  the default, so no migration is needed; a name PodoKit already uses fails at startup.
 - **How settings changes reach every replica.** `auth_config` and `app_setting` share one
   in-process snapshot. The replica that handled a write applies it before responding. Other
   replicas run one version probe (row count and latest update time of both tables) at most every

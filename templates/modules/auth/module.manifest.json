@@ -6,6 +6,9 @@
   "managedOverrides": [
     ".claude/skills/podokit-configure-auth/**"
   ],
+  "ownedGlobs": [
+    "apps/api/src/settings/app-flags.ts"
+  ],
   "dependencies": {
     "@podosoft/podokit-auth": "^0.5.0",
     "@podosoft/podokit-contracts": "^0.5.0",

@@ -43,6 +43,8 @@ export interface Capabilities {
   roles: string[];
   /** Automatic logout after this many inactive minutes; null/absent means disabled. */
   sessionIdleTimeoutMinutes?: number | null;
+  /** The application's own on/off settings (APP_FLAG_DEFAULTS in the API's app-flags.ts). */
+  appFlags?: Record<string, boolean>;
 }
 
 /** Stable better-auth error code returned when a user still needs approval. */

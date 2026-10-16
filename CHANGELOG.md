@@ -133,6 +133,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   as `"GET /reports/{id}"` (`:id` works too). `bun run contract` fails when one
   is not registered or missing from the OpenAPI document. `podo update` creates
   the file once and never overwrites it.
+- The auth module's `apps/api/src/settings/app-flags.ts` is an
+  application-owned list of on/off settings with their defaults,
+  `APP_FLAG_DEFAULTS`. They are stored with the feature flags, changed with
+  `PUT /account/settings`, read with `SettingsService.getBool()`, and returned
+  as `appFlags` by `GET /account/capabilities` (`Capabilities.appFlags` in
+  `@podosoft/podokit-contracts`). A missing row keeps the default, and a name
+  PodoKit already uses fails at startup. `podo update` creates the file once
+  and never overwrites it.
 
 ### Removed
 
@@ -376,6 +384,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Move route lists you check in the managed `scripts/verify-api-contract.ts` or
   `src/core/api-contract.ts` into `APP_DOCUMENTED_ROUTES`; `podo update`
   reports those edits as conflicts.
+- Move flags you added to the managed `apps/api/src/settings/flag-defaults.ts`
+  into `APP_FLAG_DEFAULTS` in `apps/api/src/settings/app-flags.ts`, and read
+  them from `appFlags` of `GET /account/capabilities` instead of a route of your
+  own in `auth.module.ts`; `podo update` reports those edits as conflicts. A
+  stored row keeps its value, so a migration that seeded one can stay.
 
 ## [1.5.0] - 2026-10-16
 

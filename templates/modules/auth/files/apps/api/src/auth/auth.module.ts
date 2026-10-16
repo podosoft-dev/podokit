@@ -17,6 +17,7 @@ import {
   AuthConfigService,
   type AuthConfigUpdate,
 } from "../auth-config/auth-config.service";
+import { APP_FLAGS } from "../settings/flag-defaults";
 import { FEATURE_FLAGS, SettingsService, type FeatureFlag } from "../settings/settings.service";
 import { authConfigStore } from "./auth-config-store";
 import { getAuth, authRuntime, primeAuth } from "./auth-provider";
@@ -101,6 +102,7 @@ const accountPlugin: AppPlugin = ({ services }) => {
         auditLog: snapshot.auditLog,
         sessionIdleTimeoutMinutes: snapshot.sessionIdleTimeoutMinutes,
         roles: ROLE_NAMES,
+        appFlags: Object.fromEntries(APP_FLAGS.map((flag) => [flag, flags[flag]])),
       };
     }, {
       detail: { tags: ["account"], summary: "Get authentication capabilities" },
