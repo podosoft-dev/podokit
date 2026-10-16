@@ -220,6 +220,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- The Silo and `mc` images of `compose.dev.yaml` and the `object-storage-s3`
+  module's `infra/docker/minio.compose.yml` are pinned by digest, and their
+  bucket setup runs with `sh -e` and `mc mb --ignore-existing`. `mc mb … ||
+  true` and a trailing `exit 0` hid a bucket that could not be created, so
+  uploads failed later instead.
 - `podo update --apply` refuses when an external module package in
   `node_modules` is older than the version the project last applied, and the
   dry run warns about it. It used to write the older module's files and record
@@ -516,6 +521,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   sets both from `.podokit/dev.json` and wins over `compose.dev.yaml` and
   `.env.docker`. Use `PODOKIT_DEV_AUTH_URL=<publicUrl> podo dev watch` instead of
   a variable of your own for the OAuth tunnel.
+- `compose.dev.yaml` is application-owned, so `podo update` lists it for
+  review instead of pinning its storage images. Copy the `image:` digests and
+  the `minio-init` entrypoint from `podo diff compose.dev.yaml`.
 - `podo update` replaces unedited `podokit-*` skills and merges edited ones
   (pass `--from` with the previous templates; without it an edited skill is
   listed as a conflict and left as it is). To keep your own copy of one, add

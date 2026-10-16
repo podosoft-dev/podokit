@@ -483,6 +483,15 @@ describe("create (integration against templates)", () => {
     expect(compose).toContain("ADDRESS_HEADER=x-forwarded-for");
     expect(compose).toContain("XFF_DEPTH=1");
     expect(compose.match(/PODOKIT_NPM_REGISTRY: \$\{PODOKIT_NPM_REGISTRY:-\}/g)).toHaveLength(3);
+    // Storage images are pinned, and a bucket that cannot be created fails the
+    // init service instead of being ignored.
+    for (const image of compose.match(/image: pgsty\/\S+/g) ?? []) {
+      expect(image).toMatch(/@sha256:[0-9a-f]{64}$/);
+    }
+    expect(compose.match(/image: pgsty\//g)).toHaveLength(2);
+    expect(compose).toContain("      - -ec\n");
+    expect(compose).toContain("mc mb --ignore-existing loc/podokit\n");
+    expect(compose).not.toContain("|| true");
     expect(compose).not.toMatch(/\n\s+-\s+"5432:5432"/);
     expect(compose).not.toMatch(/\n\s+-\s+"5001:5001"/);
 
