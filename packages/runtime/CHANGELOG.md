@@ -1,5 +1,11 @@
 # @podosoft/podokit-runtime
 
+## 0.4.1
+
+### Patch Changes
+
+- [#232](https://github.com/podosoft-dev/podokit/pull/232) [`28acd36`](https://github.com/podosoft-dev/podokit/commit/28acd3693205038c3ebaefa8e95d0c4ae452aca4) Thanks [@korone00](https://github.com/korone00)! - Path prefixes in the rate-limit module's route profiles (`RATE_LIMIT_ROUTES`), `APP_BODY_LIMITS`, and `APP_PROXY_TIMEOUTS` take `:name` parameters that match exactly one non-empty path segment, such as `/hosts/:hostId/file-transfers` on the API and `/api/hosts/:hostId/file-transfers` on the web proxy. The most specific prefix wins: more segments, then, from the left, a literal segment over a parameter, then the existing tie-breakers. Wildcards, `.` or `..` segments, and malformed names are rejected, and the web lists reject two prefixes that cover the same paths.
+
 ## 0.4.0
 
 ### Minor Changes
