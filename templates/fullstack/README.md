@@ -188,11 +188,11 @@ HTTP, fix its public origin at build time instead:
 docker build --build-arg PODOKIT_BUILD_ORIGIN=https://example.com -f apps/web/Dockerfile -t {{projectName}}-web .
 ```
 
-For a Docker Compose deployment behind a trusted reverse proxy, set
-`PROTOCOL_HEADER=x-forwarded-proto` and `HOST_HEADER=x-forwarded-host` in the
-deployment profile runtime configuration and list the proxy's direct CIDR blocks in
-`exposure.trustedProxyCidrs`. Never trust client-controlled forwarded headers on a
-directly exposed container.
+Set `exposure.edgeProxies` in the deployment profile to the number of reverse
+proxies in front of the deployment; PodoKit derives which forwarded headers web and
+API trust from it, and trusts none when it is `0`. With a Compose gateway, also list
+the proxy's direct CIDR blocks in `exposure.trustedProxyCidrs`. Never count a proxy
+that clients can bypass.
 
 If the production API exposes WebSocket endpoints, list their exact paths under
 `exposure.webSocketPaths` in the deployment profile. The Compose driver then keeps a

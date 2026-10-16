@@ -38,6 +38,7 @@ import {
   readDeploymentDriver,
   type DeployDriver,
 } from "./deploy-driver";
+import { formatFinding } from "./deploy-checks";
 import { initializeComposeProfile } from "./deploy-compose-profile";
 import { renderComposeDeployment } from "./deploy-compose-render";
 import {
@@ -308,7 +309,7 @@ async function runComposeDeploy(
     process.stdout.write(
       args.json
         ? `${JSON.stringify(findings, null, 2)}\n`
-        : `${findings.map((f) => `${f.ok ? "ok  " : "FAIL"} ${f.message}`).join("\n")}\n`,
+        : `${findings.map(formatFinding).join("\n")}\n`,
     );
     if (findings.some((finding) => !finding.ok)) process.exitCode = 1;
     return;
@@ -634,7 +635,7 @@ async function main(argv: string[]): Promise<void> {
         process.stdout.write(
           args.json
             ? `${JSON.stringify(findings, null, 2)}\n`
-            : `${findings.map((finding) => `${finding.ok ? "ok  " : "FAIL"} ${finding.message}`).join("\n")}\n`,
+            : `${findings.map(formatFinding).join("\n")}\n`,
         );
         if (findings.some((finding) => !finding.ok)) process.exitCode = 1;
         return;
@@ -664,7 +665,9 @@ async function main(argv: string[]): Promise<void> {
         process.stdout.write(
           args.json
             ? `${JSON.stringify(plan, null, 2)}\n`
-            : `${plan.actions.map((entry) => `${entry.order}. ${entry.description}`).join("\n")}\nPlan hash: ${plan.planHash}\n`,
+            : `${plan.actions.map((entry) => `${entry.order}. ${entry.description}`).join("\n")}\n` +
+                `${plan.warnings.map((warning) => `warning: ${warning}`).join("\n")}\n` +
+                `Plan hash: ${plan.planHash}\n`,
         );
         return;
       }

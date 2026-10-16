@@ -4,11 +4,14 @@ import { join } from "node:path";
 import { readManifest } from "./lockfile";
 import {
   MigrationProfile,
+  PostgresBudgetProfile,
   VerificationCheckProfile,
   assertOnlyKeys,
   isRecord,
   optionalString,
   parseCommand,
+  parseEdgeProxies,
+  parsePostgresBudget,
   parseRequiredKeys,
   parseRuntimeConfig,
   parseVerification,
@@ -53,6 +56,8 @@ export interface StatefulDependencyProfile {
 
 export type RedisDependencyProfile = StatefulDependencyProfile;
 
+export interface PostgresDependencyProfile extends StatefulDependencyProfile, PostgresBudgetProfile {}
+
 export interface ObjectStorageDependencyProfile extends StatefulDependencyProfile {
   bucket: string;
   clientImage: string;
@@ -87,6 +92,8 @@ export interface DeployProfileV1 {
     webSocketPaths: string[];
     /** Path prefixes under /api/ that the Ingress sends to the API with /api removed. */
     apiPaths: string[];
+    /** Reverse proxies in front of the Ingress controller or NodePort that append to X-Forwarded-For. */
+    edgeProxies: number;
   };
   workloads: {
     api: WorkloadProfile;
@@ -94,7 +101,7 @@ export interface DeployProfileV1 {
     worker: WorkloadProfile | null;
   };
   dependencies: {
-    postgres: StatefulDependencyProfile;
+    postgres: PostgresDependencyProfile;
     redis: RedisDependencyProfile;
     objectStorage: ObjectStorageDependencyProfile;
   };
@@ -258,7 +265,7 @@ export function parseDeploymentProfile(value: unknown): DeployProfileV1 {
   );
   assertOnlyKeys(
     exposure,
-    ["mode", "host", "ingressClassName", "tlsSecretName", "webSocketPaths", "apiPaths"],
+    ["mode", "host", "ingressClassName", "tlsSecretName", "webSocketPaths", "apiPaths", "edgeProxies"],
     "exposure",
   );
   assertOnlyKeys(workloads, ["api", "web", "worker"], "workloads");
@@ -321,10 +328,12 @@ export function parseDeploymentProfile(value: unknown): DeployProfileV1 {
     throw new Error("Deployment exposure.apiPaths requires exposure.mode ingress.");
   }
 
-  const postgres = parseStatefulDependency(
-    requiredRecord(dependencies, "postgres"),
-    "dependencies.postgres",
-  );
+  const parsedConfig = parseRuntimeConfig(runtimeConfig);
+  const postgresRecord = requiredRecord(dependencies, "postgres");
+  const postgres: PostgresDependencyProfile = {
+    ...parseStatefulDependency(postgresRecord, "dependencies.postgres", ["maxConnections", "appPools"]),
+    ...parsePostgresBudget(postgresRecord, "dependencies.postgres", parsedConfig),
+  };
   const redis = parseRedisDependency(
     requiredRecord(dependencies, "redis"),
     "dependencies.redis",
@@ -355,7 +364,6 @@ export function parseDeploymentProfile(value: unknown): DeployProfileV1 {
   validateDnsLabel(objectStorage.bucket, "dependencies.objectStorage.bucket");
   validateImage(objectStorage.clientImage, "dependencies.objectStorage.clientImage");
 
-  const parsedConfig = parseRuntimeConfig(runtimeConfig);
   const { baseUrl, checks } = parseVerification(verification);
   const profile: DeployProfileV1 = {
     schemaVersion: 1,
@@ -380,6 +388,7 @@ export function parseDeploymentProfile(value: unknown): DeployProfileV1 {
       tlsSecretName,
       webSocketPaths,
       apiPaths,
+      edgeProxies: parseEdgeProxies(exposure, 0),
     },
     workloads: {
       api: parseWorkload(requiredRecord(workloads, "api"), "workloads.api"),
@@ -498,6 +507,7 @@ export function initializeDeploymentProfile(
       tlsSecretName: null,
       webSocketPaths: [],
       apiPaths: installedApiPaths(manifest.modules),
+      edgeProxies: 0,
     },
     workloads: {
       api: {
@@ -566,11 +576,9 @@ export function initializeDeploymentProfile(
     runtimeConfig: {
       NODE_ENV: "production",
       CORS_ORIGIN: `https://${host}`,
-      ADDRESS_HEADER: "x-forwarded-for",
-      XFF_DEPTH: "1",
-      TRUSTED_PROXY_HOPS: "1",
-      TRUSTED_PROXY_HEADER: "x-forwarded-for",
       ...(usesAuth ? { BETTER_AUTH_URL: `https://${host}` } : {}),
+      // The API's fallback until an administrator saves the setting.
+      ...(modules.has("audit-log") ? { AUDIT_LOG_ENABLED: "true" } : {}),
       ...(modules.has("rate-limit")
         ? {
             RATE_LIMIT_TTL: "60",

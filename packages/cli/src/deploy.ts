@@ -4,6 +4,13 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { directApiRoutes } from "./api-paths";
+import { readAppProxyTimeouts } from "./app-proxy-timeouts";
+import {
+  connectionBudgetWarning,
+  installedModules,
+  profileFindings,
+  type DeployFinding,
+} from "./deploy-checks";
 import type { CommandRunner } from "./dev";
 import {
   assertReleaseTag,
@@ -17,11 +24,7 @@ import {
   type DeploymentRuntime,
 } from "./deploy-render";
 
-export interface DeploymentDoctorFinding {
-  code: string;
-  ok: boolean;
-  message: string;
-}
+export type DeploymentDoctorFinding = DeployFinding;
 
 export interface DeploymentPlanAction {
   order: number;
@@ -267,7 +270,7 @@ export function doctorDeployment(
   runner: CommandRunner = defaultRunner,
 ): DeploymentDoctorFinding[] {
   const profile = loadDeploymentProfile(projectRoot, profileName);
-  const findings: DeploymentDoctorFinding[] = [];
+  const findings: DeploymentDoctorFinding[] = profileFindings(projectRoot, profile);
   const fingerprint = inspectClusterFingerprint(profile.target.context, runner);
   findings.push({
     code: "cluster-fingerprint",
@@ -739,6 +742,9 @@ export function planDeployment(
     warnings: [
       "Application rollback does not reverse database migrations.",
       "PersistentVolumeClaims and Kubernetes Secrets are never deleted by apply or rollback.",
+      ...[connectionBudgetWarning(profile, installedModules(projectRoot))].filter(
+        (warning): warning is string => warning !== null,
+      ),
     ],
   };
   const temporaryRoot = mkdtempSync(join(tmpdir(), "podokit-deploy-plan-"));
@@ -750,6 +756,7 @@ export function planDeployment(
       release,
       images,
       state.rolloutStateDigest,
+      readAppProxyTimeouts(projectRoot),
     );
     return { ...base, planHash: planDigest(base, runtime) };
   } finally {

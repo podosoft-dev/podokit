@@ -104,6 +104,8 @@ the migration job and for administration, and keep the total below the server's
 `max_connections`. PostgreSQL defaults to 100, so three replicas with the
 defaults already use 90. Lower the pool sizes, raise `max_connections`, or put a
 connection pooler such as PgBouncer in front before adding replicas.
+`podo deploy doctor` and `podo deploy plan` do this sum for a deployment profile;
+see [database connections](deployment.md#database-connections).
 
 Bun SQL queues a query while every connection is busy and does not time out that
 wait. While the pool stays full, the readiness check reports the database as down

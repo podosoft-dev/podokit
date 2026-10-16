@@ -31,6 +31,12 @@
       "file": "apps/api/src/auth/auth.ts",
       "marker": "// podokit:end:auth-hooks",
       "text": "hooks.after = auditAfterHook;"
+    },
+    {
+      "file": "infra/k3s/configmap.yaml",
+      "marker": "# podokit:end:runtime-config",
+      "text": "AUDIT_LOG_ENABLED: \"true\"",
+      "optional": true
     }
   ],
   "instructions": [

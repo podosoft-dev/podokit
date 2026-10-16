@@ -5,11 +5,14 @@ import { readManifest } from "./lockfile";
 import {
   DNS_LABEL,
   MigrationProfile,
+  PostgresBudgetProfile,
   ReleaseProfile,
   VerificationProfile,
   assertOnlyKeys,
   isRecord,
   parseCommand,
+  parseEdgeProxies,
+  parsePostgresBudget,
   parseReleaseProfile,
   parseRequiredKeys,
   parseRuntimeConfig,
@@ -65,6 +68,8 @@ export interface ComposeDependencyProfile {
   volume: string;
 }
 
+export interface ComposePostgresProfile extends ComposeDependencyProfile, PostgresBudgetProfile {}
+
 export interface ComposeObjectStorageProfile extends ComposeDependencyProfile {
   bucket: string;
   clientImage: string;
@@ -107,6 +112,8 @@ export interface DockerComposeProfileV1 {
     webSocketPaths: string[];
     /** Path prefixes under /api/ that the gateway sends to the API with /api removed. */
     apiPaths: string[];
+    /** Reverse proxies in front of the published port that append to X-Forwarded-For. */
+    edgeProxies: number;
     trustedProxyCidrs: string[];
     gatewayImage: string;
   };
@@ -116,7 +123,7 @@ export interface DockerComposeProfileV1 {
     worker: ComposeWorkloadProfile | null;
   };
   dependencies: {
-    postgres: ComposeDependencyProfile;
+    postgres: ComposePostgresProfile;
     redis: ComposeDependencyProfile;
     objectStorage: ComposeObjectStorageProfile;
   };
@@ -334,6 +341,7 @@ export function parseComposeProfile(value: unknown): DockerComposeProfileV1 {
       "port",
       "webSocketPaths",
       "apiPaths",
+      "edgeProxies",
       "trustedProxyCidrs",
       "gatewayImage",
     ],
@@ -372,6 +380,8 @@ export function parseComposeProfile(value: unknown): DockerComposeProfileV1 {
     "exposure.webSocketPaths",
   );
   const apiPaths = parseApiPaths(exposure.apiPaths ?? [], "exposure.apiPaths", webSocketPaths);
+  // A reverse proxy on the host is the expected front door, as bindAddress assumes.
+  const edgeProxies = parseEdgeProxies(exposure, 1);
   const trustedProxyCidrs = parseTrustedProxyCidrs(
     exposure.trustedProxyCidrs ?? [],
     "exposure.trustedProxyCidrs",
@@ -414,6 +424,13 @@ export function parseComposeProfile(value: unknown): DockerComposeProfileV1 {
     throw new Error("Deployment secrets.registryLogin must be a boolean.");
   }
 
+  const runtimeConfig = parseRuntimeConfig(requiredRecord(value, "runtimeConfig"));
+  const postgresRecord = requiredRecord(dependencies, "postgres");
+  const postgres: ComposePostgresProfile = {
+    ...parseComposeDependency(postgresRecord, "dependencies.postgres", ["maxConnections", "appPools"]),
+    ...parsePostgresBudget(postgresRecord, "dependencies.postgres", runtimeConfig),
+  };
+
   const profile: DockerComposeProfileV1 = {
     schemaVersion: 1,
     driver: "docker-compose",
@@ -426,6 +443,7 @@ export function parseComposeProfile(value: unknown): DockerComposeProfileV1 {
       port,
       webSocketPaths,
       apiPaths,
+      edgeProxies,
       trustedProxyCidrs,
       gatewayImage,
     },
@@ -438,10 +456,7 @@ export function parseComposeProfile(value: unknown): DockerComposeProfileV1 {
           : parseComposeWorkload(requiredRecord(workloads, "worker"), "workloads.worker"),
     },
     dependencies: {
-      postgres: parseComposeDependency(
-        requiredRecord(dependencies, "postgres"),
-        "dependencies.postgres",
-      ),
+      postgres,
       redis: parseComposeDependency(requiredRecord(dependencies, "redis"), "dependencies.redis"),
       objectStorage,
     },
@@ -454,7 +469,7 @@ export function parseComposeProfile(value: unknown): DockerComposeProfileV1 {
       ? { migration: { command: parseCommand(migration.command, "migration.command") } }
       : {}),
     ...(sync ? { sync: parseSyncProfile(sync, "sync") } : {}),
-    runtimeConfig: parseRuntimeConfig(requiredRecord(value, "runtimeConfig")),
+    runtimeConfig,
     verification: parseVerification(requiredRecord(value, "verification")),
   };
   return profile;
@@ -507,6 +522,7 @@ export function buildDefaultComposeProfile(
       port: 8080,
       webSocketPaths: [],
       apiPaths: [],
+      edgeProxies: 1,
       trustedProxyCidrs: [],
       gatewayImage: "caddy:2.10-alpine",
     },
@@ -555,10 +571,6 @@ export function buildDefaultComposeProfile(
     runtimeConfig: {
       NODE_ENV: "production",
       CORS_ORIGIN: `https://${host}`,
-      ADDRESS_HEADER: "x-forwarded-for",
-      XFF_DEPTH: "1",
-      TRUSTED_PROXY_HOPS: "1",
-      TRUSTED_PROXY_HEADER: "x-forwarded-for",
     },
     verification: {
       baseUrl: `https://${host}`,
@@ -621,6 +633,8 @@ export function initializeComposeProfile(
   draft.runtimeConfig = {
     ...draft.runtimeConfig,
     ...(usesAuth ? { BETTER_AUTH_URL: `https://${host}` } : {}),
+    // The API's fallback until an administrator saves the setting.
+    ...(modules.has("audit-log") ? { AUDIT_LOG_ENABLED: "true" } : {}),
     ...(modules.has("rate-limit")
       ? {
           RATE_LIMIT_TTL: "60",

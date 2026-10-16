@@ -8,6 +8,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Deployment profiles take `exposure.edgeProxies`, the number of reverse
+  proxies in front of the deployment (new Kubernetes profiles 0, new Compose
+  profiles 1), and PodoKit renders from it every setting that decides which
+  forwarded headers web and API trust: `XFF_DEPTH` is `edgeProxies` + 1 behind a
+  Kubernetes Ingress, `edgeProxies` for a NodePort or a directly published
+  Compose web service, and 1 behind the Compose gateway; `ADDRESS_HEADER`,
+  `PROTOCOL_HEADER`, and `HOST_HEADER` are set only behind a proxy; and the API
+  always trusts one hop. `podo deploy doctor` warns when `edgeProxies`,
+  `trustedProxyCidrs`, and direct paths contradict each other, including a
+  Kubernetes Ingress behind an edge proxy with WebSocket or direct API paths,
+  where the API records the edge proxy for those requests.
+- `podo deploy doctor` and `podo deploy plan` count the PostgreSQL connections a
+  deployment can open: every API and worker process with `DB_POOL_MAX` + 1 and,
+  with `auth`, `DB_AUTH_POOL_MAX`, one surge pod per workload during a
+  Kubernetes rollout, and the migration. The doctor fails when the processes
+  alone exceed `max_connections` minus the 3 reserved connections, and both warn
+  when a deployment can. `dependencies.postgres.maxConnections` (default 100)
+  states the server's limit and is rendered as `-c max_connections` for a
+  PostgreSQL server PodoKit runs, and `dependencies.postgres.appPools` lists the
+  application's own pools by the `runtimeConfig` key that caps them. The
+  Kubernetes `plan` prints its warnings too.
+- `podo deploy doctor` checks the profile against the application before it
+  contacts the target, and reports a setting that deploys but probably not as
+  intended as a `warn` line, which does not stop `podo deploy apply`. With the
+  `audit-log` module installed it warns when `runtimeConfig` lacks
+  `AUDIT_LOG_ENABLED` or sets it to anything but `"true"`. JSON findings carry
+  `"warning": true`.
 - Generated apps run their Playwright suite on more than one worker with
   `E2E_WORKERS` (default 1), for example `E2E_WORKERS=2 bun run test:e2e`. A
   test that changes state the other tests rely on carries the `@exclusive` tag:
@@ -34,6 +61,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- A Compose deployment behind a reverse proxy can trust `X-Forwarded-Proto` and
+  `X-Forwarded-Host`: the guide told profiles to set `PROTOCOL_HEADER` and
+  `HOST_HEADER`, which `runtimeConfig` refuses as managed keys, and the Compose
+  renderer never set them. They now follow `exposure.edgeProxies`. A Kubernetes
+  NodePort profile without edge proxies no longer trusts forwarded headers that
+  any client can send.
+- `podo deploy plan` and `render` derive `CONNECTION_IDLE_TIMEOUT` and
+  `API_IDLE_TIMEOUT` from the application's `APP_PROXY_TIMEOUTS` as well as
+  `BACKEND_PROXY_TIMEOUT_MS`: `0` when an entry has `timeoutMs: null`,
+  otherwise the longest wait's whole seconds plus 5. Before, they saw only
+  `BACKEND_PROXY_TIMEOUT_MS`, so an app with a longer or unbounded route had to
+  set both by hand or its web server refused to start. PodoKit reads
+  `apps/web/src/lib/server/proxy-timeouts.ts` as text without running it, and
+  the plan fails with the line it stopped at when an entry is not a literal;
+  `podo deploy doctor` fails a `CONNECTION_IDLE_TIMEOUT` in `runtimeConfig`
+  that cannot cover the longest wait and warns about such an `API_IDLE_TIMEOUT`.
+- Production deployments of apps with the `audit-log` module start with the
+  audit log on. `podo deploy init` sets `AUDIT_LOG_ENABLED: "true"` in the
+  profile's `runtimeConfig` for both drivers, and the module adds it to the
+  example `infra/k3s/configmap.yaml`; before, only `.env.example` and
+  `.env.docker.example` set it.
+- The Compose deployment gateway sends web and API the one client address it
+  resolved, instead of appending the proxy in front to `X-Forwarded-For`. Behind
+  a proxy listed in `exposure.trustedProxyCidrs`, web and API received
+  `X-Forwarded-For: <client>, <proxy>`, and with `XFF_DEPTH=1` and
+  `TRUSTED_PROXY_HOPS=1` both recorded the proxy's address for sessions, audit
+  entries, and rate limits. Every gateway `reverse_proxy` now sets
+  `header_up X-Forwarded-For {client_ip}`; without trusted proxies the address is
+  the gateway's peer, as before.
 - The `/api` proxy no longer cuts a route listed in `APP_PROXY_TIMEOUTS` with
   `timeoutMs: null` after 300 seconds. Bun's `fetch` gives up on a connection
   that sends nothing for its idle timeout (300 seconds unless
@@ -52,6 +108,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Upgrade notes
 
+- Deployment profiles refuse `ADDRESS_HEADER`, `XFF_DEPTH`,
+  `TRUSTED_PROXY_HOPS`, and `TRUSTED_PROXY_HEADER` in `runtimeConfig`. Remove
+  them and set `exposure.edgeProxies` instead: on Kubernetes with an Ingress to
+  your old `XFF_DEPTH` minus 1 (0 for the generated default), and on Compose to
+  the number of proxies in front of the published port (1 for the generated
+  default). With the Compose gateway, list those proxies' CIDRs in
+  `trustedProxyCidrs` too; the doctor warns until you do. A Kubernetes profile
+  with an edge proxy and WebSocket or direct API paths still records the edge
+  proxy for those requests, and the doctor says so.
+- `podo deploy doctor` now fails a profile whose API and worker processes can
+  open more PostgreSQL connections than the server allows, which stops
+  `podo deploy apply`. A Kubernetes profile with a BullMQ worker and the default
+  pools warns. Lower `DB_POOL_MAX` and `DB_AUTH_POOL_MAX` in `runtimeConfig`,
+  set `dependencies.postgres.maxConnections` to the server's real limit, and
+  list pools the application opens itself in `dependencies.postgres.appPools`.
+- A deployment profile that sets `CONNECTION_IDLE_TIMEOUT` or
+  `API_IDLE_TIMEOUT` only to cover an `APP_PROXY_TIMEOUTS` entry can drop them;
+  the plan now derives both. An app with an entry of `timeoutMs: null` that kept
+  `API_IDLE_TIMEOUT` at its default on purpose, because its API lifts the idle
+  timeout per request, keeps `"API_IDLE_TIMEOUT": "35"` in `runtimeConfig`;
+  otherwise the rendered value becomes `0`, and the doctor warns.
+- With the `audit-log` module installed, add `"AUDIT_LOG_ENABLED": "true"` to
+  the `runtimeConfig` of every existing deployment profile; `podo deploy doctor`
+  warns until you do. `podo update` adds the line to the example
+  `infra/k3s/configmap.yaml`, before a new `# podokit:end:runtime-config` marker.
+- Every Compose deployment renders new proxy settings, and one with WebSocket or
+  direct API paths a new gateway configuration, so a rollback to a revision
+  applied before this version is refused, because it no longer renders byte for
+  byte; roll forward with a new release instead. Sessions and audit entries
+  created behind a trusted proxy before the upgrade keep the proxy's address.
 - A spec of your own that imports `../helpers/exclusive` fails after
   `podo update` removes the helper. Drop the `exclusive()` wrapper and tag the
   test instead: `test("…", { tag: "@exclusive" }, async (…) => { … })`. Tag any

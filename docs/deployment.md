@@ -151,13 +151,18 @@ The application-owned profile is written to `.podokit/deploy/production.json`. R
 it before use: the target, the image repositories and accepted tag pattern, exposure,
 replicas and resources, dependency modes, the names (never the values) of the secrets
 it reads, an optional migration command, non-sensitive runtime configuration, and the
-public verification checks.
+public verification checks. Set `exposure.edgeProxies` to the number of reverse
+proxies in front of the deployment; it decides which forwarded headers web and API
+trust (see [client addresses](#client-addresses)).
 
 Initialization reads the manifest's active providers and installed modules. Auth
 and API-key modules add their required secret key names, distributed providers
 select PostgreSQL, Redis, or Silo, BullMQ adds a worker, and the
 [direct API paths](#direct-api-paths) that installed modules contributed, such as
-`file-upload`'s `/api/files/uploads/`, go into `exposure.apiPaths`. Local providers
+`file-upload`'s `/api/files/uploads/`, go into `exposure.apiPaths`. With
+`audit-log` installed, `runtimeConfig` sets `AUDIT_LOG_ENABLED` to `"true"`, so a
+new deployment records from its first request until an administrator changes the
+setting. Local providers
 disable their managed external dependency, omit the separate worker, and constrain
 the API to one replica. Dependencies support
 `external` and `disabled` as well as PodoKit-managed. External endpoints and
@@ -210,7 +215,17 @@ podo deploy plan --profile production --release v1.2.3 --json
 ```
 
 The doctor is read-only. It validates the exact target, the tooling, the fingerprint,
-and the required secret key names without printing a value.
+and the required secret key names without printing a value. It also checks the
+profile against the application before it contacts the target. Each line starts
+with `ok`, `warn`, or `FAIL`; apply runs the doctor first and stops on a `FAIL`,
+while a `warn` reports a setting that deploys but probably not as intended:
+
+| Check | Result |
+| --- | --- |
+| `client-address` | `warn` when `exposure.edgeProxies`, `trustedProxyCidrs`, and the direct paths contradict each other, see [client addresses](#client-addresses) |
+| `idle-timeouts` | `FAIL` when the idle timeouts cannot be derived or `CONNECTION_IDLE_TIMEOUT` set in `runtimeConfig` cannot cover the longest `/api` proxy wait; `warn` when `API_IDLE_TIMEOUT` cannot, see [idle timeouts](#idle-timeouts) |
+| `database-connections` (with PostgreSQL) | `FAIL` when the API and worker processes can open more connections than PostgreSQL allows between rollouts, `warn` when a rollout or the migration can; see [database connections](#database-connections) |
+| `audit-log` (with the module installed) | `warn` when `runtimeConfig` lacks `AUDIT_LOG_ENABLED` or sets it to anything but `"true"`: the audit log then records nothing until an administrator turns it on, or depends on the API's built-in default |
 
 The plan resolves every image tag to an immutable registry digest and binds those
 digests, the profile, the rendered output, the current revision, and the identity of
@@ -254,6 +269,50 @@ Application upgrades retain automatic rollback through Helm 3's
 External object storage, unchanged live and recorded managed server images in a
 deployed release, and new installations keep the existing Helm behavior. This execution safeguard
 does not change the rendered manifests or the plan confirmation hash.
+
+### Database connections
+
+Every API and worker process keeps its own PostgreSQL pools, and PostgreSQL
+refuses connections past `max_connections`. The doctor and the plan add up the
+most connections the deployment can open and compare them with what the server
+allows: `dependencies.postgres.maxConnections` (100, PostgreSQL's default, when
+unset) minus the 3 it reserves for superusers. The doctor fails when the
+processes alone can exceed it, and the doctor and the plan warn when they can
+exceed it during a deployment.
+
+| Term | Connections |
+| --- | --- |
+| One API or worker process | `DB_POOL_MAX` (20) + 1 that the query pool opens to check a stalled server, `DB_AUTH_POOL_MAX` (10) with the `auth` module, and each pool in `dependencies.postgres.appPools`; each from `runtimeConfig`, else the default in parentheses |
+| Between rollouts | API replicas + worker replicas, times one process |
+| A Kubernetes rollout | one surge pod more for the API and one for a worker, which the rendered `maxSurge: 1` allows; Compose replaces containers without a surge |
+| The migration | 2, beside the processes of the release still serving |
+
+With the defaults and `auth`, two API replicas hold 62 and a Kubernetes rollout
+93 of 97. A BullMQ worker on Kubernetes makes that 155 during a rollout, so lower
+the pools, for example `"DB_POOL_MAX": "10"` and `"DB_AUTH_POOL_MAX": "8"`, or
+raise the limit. Behind a connection pooler such as PgBouncer, set
+`maxConnections` to the pooler's client limit instead.
+
+An application that opens a pool of its own lists it, with the `runtimeConfig`
+key that caps it and any connections it opens beyond the cap:
+
+```json
+{
+  "runtimeConfig": { "REPORTS_DB_POOL_MAX": "10" },
+  "dependencies": {
+    "postgres": {
+      "mode": "inCluster",
+      "maxConnections": 200,
+      "appPools": [{ "sizeKey": "REPORTS_DB_POOL_MAX", "extraConnections": 1 }]
+    }
+  }
+}
+```
+
+The profile fails to load when `runtimeConfig` does not set that key to a
+positive integer. On a PostgreSQL server PodoKit runs, `maxConnections` is also
+rendered as `-c max_connections=<n>`, which recreates the database container or
+pod once; for an `external` server it only records the server's setting.
 
 ### ⚠ The migration runs against the release that is still serving
 
@@ -316,21 +375,73 @@ headers only from the IP networks listed in `trustedProxyCidrs`; keep the list e
 when there is no external proxy. Configure the direct upstream proxy CIDRs, not
 arbitrary client networks, and keep the published address reachable only by those
 proxies. Caddy strict proxy parsing then derives the client address from the first
-untrusted hop and safely replaces spoofed forwarding headers from other peers.
+untrusted hop and safely replaces spoofed forwarding headers from other peers. The
+gateway sends web and API that one address as `X-Forwarded-For`, never the chain
+with the proxy appended, so both record the client at one trusted hop. With an
+empty list the address is the gateway's peer: an external proxy in front then
+becomes every request's client address. See [client addresses](#client-addresses)
+for what web and API trust.
 
-Kubernetes deployments configure the web server to trust the ingress-provided
-`x-forwarded-proto` and `x-forwarded-host` headers. This keeps SvelteKit's
-same-origin form protection correct for multipart uploads and other form content.
-For a Docker Compose deployment behind a trusted reverse proxy, first list that
-proxy's direct CIDR blocks in `trustedProxyCidrs`, then add matching
-`PROTOCOL_HEADER` and `HOST_HEADER` values to `runtimeConfig`. Do not enable those
-settings when untrusted clients can reach the container directly. A directly served
-plain-HTTP image can instead set its origin while building:
+A directly served plain-HTTP image, with no proxy in front to send
+`X-Forwarded-Proto` and `X-Forwarded-Host`, can set its public origin while
+building instead, which keeps SvelteKit's same-origin form protection correct:
 
 ```bash
 docker build --build-arg PODOKIT_BUILD_ORIGIN=https://example.com -f apps/web/Dockerfile -t example-web .
 ```
 
+## Client addresses
+
+Sessions, audit entries, and rate limits record the address the API resolves for
+each request, and the web server resolves its own for pages. Both read it from
+`X-Forwarded-For`, which only the proxies in front of them can vouch for, so a
+profile states one number and PodoKit renders every setting from it:
+`exposure.edgeProxies`, the reverse proxies you run in front of the deployment,
+such as a host Caddy or a load balancer that terminates TLS. Do not count the
+Ingress controller or the Compose gateway; PodoKit adds them itself. New
+Kubernetes profiles start at `0`, because the Ingress controller is the expected
+front door, and new Compose profiles at `1`, because the published port binds to
+loopback for a reverse proxy on the host.
+
+| Driver and exposure | Proxies the web server trusts (`XFF_DEPTH`) |
+| --- | --- |
+| `kubernetes-helm`, Ingress | `edgeProxies` + 1: the controller appends its peer, the client or the last edge proxy |
+| `kubernetes-helm`, NodePort | `edgeProxies` |
+| `docker-compose`, web published directly | `edgeProxies` |
+| `docker-compose` with the gateway | 1: the gateway sends one address, resolved with `trustedProxyCidrs` |
+
+Behind at least one proxy the web server also takes its public origin from
+`X-Forwarded-Proto` and `X-Forwarded-Host` (`PROTOCOL_HEADER`, `HOST_HEADER`),
+which keeps SvelteKit's same-origin form protection correct for uploads and other
+form posts; with none it trusts no forwarded header at all. A Compose gateway
+that does not trust the edge proxy in front writes its own plain-HTTP values, so
+then the web server keeps its default origin, `https` and the `Host` header. The web server sends
+the API the one address it resolved, so the API trusts one hop
+(`TRUSTED_PROXY_HOPS` 1) on every path. `runtimeConfig` refuses `ADDRESS_HEADER`,
+`XFF_DEPTH`, `TRUSTED_PROXY_HOPS`, and `TRUSTED_PROXY_HEADER` with a message that
+points at `edgeProxies`, and `PROTOCOL_HEADER` and `HOST_HEADER` as managed keys.
+
+Every counted proxy must pass the client's address on: a Traefik Ingress behind
+an edge proxy appends it only when `forwardedHeaders.trustedIPs` lists that
+proxy, and otherwise reports the proxy as the client. Count only proxies that
+every request passes through, and keep the deployment unreachable around them:
+a caller that reaches the web server past a counted proxy chooses its own
+address and origin.
+
+The doctor reports what it renders and warns when the profile contradicts itself:
+
+- Compose with the gateway and `edgeProxies` above 0 but no `trustedProxyCidrs`:
+  the gateway reports the nearest edge proxy as every client.
+- Compose with `trustedProxyCidrs` but `edgeProxies` 0.
+- Kubernetes with an Ingress, `edgeProxies` above 0, and WebSocket or direct API
+  paths: those requests skip the web server, so the API receives the edge
+  proxies' chain and, trusting one hop, records the nearest edge proxy for them.
+  An edge proxy that hands the connection to the Ingress controller with the
+  PROXY protocol, such as Caddy's `proxy_protocol` transport with Traefik's
+  `proxyProtocol.trustedIPs`, makes the client the controller's peer; count it
+  as 0 then.
+
+## Direct API paths
 ## Direct API paths
 
 By default every `/api/*` request goes through the web server, which proxies it
@@ -397,10 +508,9 @@ What changes for requests on these paths:
   `maxRequestBodySize`, 128 MiB unless the API sets another value. Enforce each
   route's size limit in its API handler.
 - The API reads the client address from the gateway's `X-Forwarded-For` header
-  instead of from the web server. `TRUSTED_PROXY_HOPS`, 1 in the rendered
-  configuration, applies to both paths, and the web server always forwards a
-  single address, so keep it at 1. Behind another reverse proxy that appends to
-  the header, have that proxy set it to the client address instead.
+  instead of from the web server, with the same one trusted hop. The Compose
+  gateway sends the one address it resolved; an Ingress does so only with
+  `exposure.edgeProxies` 0 (see [client addresses](#client-addresses)).
 - Gateway timeouts still apply. Traefik v3 entry points close a request whose body
   takes longer than `respondingTimeouts.readTimeout`, 60 seconds by default; raise
   it on the ingress controller for slow uploads.
@@ -539,11 +649,39 @@ see [API timeouts and outages](templates.md#api-timeouts-and-outages).
 | Setting | Default | Effect |
 | --- | --- | --- |
 | `BACKEND_TIMEOUT_MS` | `2000` | The longest one server-side API call may take, and how often the proxy checks whether the API answers at all while it waits for response headers. Detecting an outage takes up to twice this long, and pages rendered meanwhile wait for it. |
-| `BACKEND_PROXY_TIMEOUT_MS` | `30000` | How long the `/api` proxy waits for response headers before it answers `504` `BACKEND_TIMEOUT`, unless [`APP_PROXY_TIMEOUTS`](templates.md#proxy-deadlines-per-route) gives the route its own deadline. Raise it with the API's `idleTimeout`; the rendered `CONNECTION_IDLE_TIMEOUT` follows it. |
-| `CONNECTION_IDLE_TIMEOUT` | `35` | Seconds the web server keeps a connection open while it sends nothing, from `0` (off) to `255`. Unless `runtimeConfig` sets it, the renderers derive it from `BACKEND_PROXY_TIMEOUT_MS`: 5 seconds above it in whole seconds, because Bun checks idle connections every 4 seconds. A deadline above 250 seconds needs `0` set here. Raise it as well for an `APP_PROXY_TIMEOUTS` entry longer than `BACKEND_PROXY_TIMEOUT_MS`; the web server refuses a value that cannot cover every deadline. |
-| `API_IDLE_TIMEOUT` | `35` | Seconds the API keeps a connection open while it sends nothing, from `0` (off) to `255`; the API's `apiServerOptions.idleTimeout` wins over it. The renderers derive it like `CONNECTION_IDLE_TIMEOUT`, and both have to be raised together for a longer deadline; see [proxy deadlines per route](templates.md#proxy-deadlines-per-route). |
+| `BACKEND_PROXY_TIMEOUT_MS` | `30000` | How long the `/api` proxy waits for response headers before it answers `504` `BACKEND_TIMEOUT`, unless [`APP_PROXY_TIMEOUTS`](templates.md#proxy-deadlines-per-route) gives the route its own deadline. The rendered idle timeouts follow it. |
+| `CONNECTION_IDLE_TIMEOUT` | derived | Seconds the web server keeps a connection open while it sends nothing, from `0` (off) to `255`; see [idle timeouts](#idle-timeouts). The web server refuses a value that cannot cover every deadline. |
+| `API_IDLE_TIMEOUT` | derived | Seconds the API keeps a connection open while it sends nothing, from `0` (off) to `255`; the API's `apiServerOptions.idleTimeout` wins over it. |
 
 Set them in the profile's `runtimeConfig`.
+
+### Idle timeouts
+
+Bun closes a connection that sends nothing for its idle timeout, checking every
+4 seconds, so both idle timeouts have to stay more than 4 seconds above the
+longest time the `/api` proxy waits for response headers. Unless `runtimeConfig`
+sets them, plan and render derive both from that wait: `BACKEND_PROXY_TIMEOUT_MS`,
+or the longest entry of the application's `APP_PROXY_TIMEOUTS` in
+`apps/web/src/lib/server/proxy-timeouts.ts` when that is longer.
+
+| Longest wait | Rendered `CONNECTION_IDLE_TIMEOUT` and `API_IDLE_TIMEOUT` |
+| --- | --- |
+| `30000` ms, the default | `35` |
+| `120_000` ms | `125`: the wait's whole seconds plus 5 |
+| an entry with `timeoutMs: null` | `0` (off) |
+| above 250 seconds | none: the plan fails until `runtimeConfig` sets the idle timeout to `"0"` |
+
+PodoKit reads the module as text and never runs it, so every entry must be an
+object literal with a string `pathPrefix` and a `timeoutMs` of `null`, a number,
+or a product of numbers such as `5 * 60_000`. When it cannot read the module,
+for example because the list is spread from another file, the plan fails with
+the line it stopped at, unless `runtimeConfig` sets both idle timeouts.
+
+A value `runtimeConfig` sets is rendered as it is. The doctor checks it against
+the same wait: a `CONNECTION_IDLE_TIMEOUT` that cannot cover it fails, because
+the web server would refuse to start, and an `API_IDLE_TIMEOUT` that cannot
+cover it warns, because the API can still lift its idle timeout for those routes
+itself with `server.timeout(request, 0)`.
 
 ## Status and verification
 

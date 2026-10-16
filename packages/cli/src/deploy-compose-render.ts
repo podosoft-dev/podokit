@@ -8,7 +8,8 @@ import {
   type ComposeWorkloadProfile,
   type DockerComposeProfileV1,
 } from "./deploy-compose-profile";
-import { idleTimeoutConfig, profilePath } from "./deploy-schema";
+import { readAppProxyTimeouts, type AppProxyTimeouts } from "./app-proxy-timeouts";
+import { idleTimeoutConfig, profilePath, proxyTrustConfig } from "./deploy-schema";
 import { readManifest } from "./lockfile";
 import {
   resolveToolchain,
@@ -65,11 +66,15 @@ export function serviceName(profile: DockerComposeProfileV1, role: string): stri
  * Configuration PodoKit derives rather than accepts, so a profile cannot point the
  * app at the wrong service or port.
  */
-export function derivedRuntimeConfig(profile: DockerComposeProfileV1): Record<string, string> {
+export function derivedRuntimeConfig(
+  profile: DockerComposeProfileV1,
+  proxyTimeouts: AppProxyTimeouts,
+): Record<string, string> {
   const result: Record<string, string> = {
     PORT: String(CONTAINER_PORT),
     BACKEND_INTERNAL_URL: `http://${serviceName(profile, "api")}:${CONTAINER_PORT}`,
-    ...idleTimeoutConfig(profile.runtimeConfig),
+    ...idleTimeoutConfig(profile.runtimeConfig, proxyTimeouts),
+    ...composeProxyTrust(profile),
     ...profile.runtimeConfig,
   };
   if (profile.dependencies.postgres.mode === "managed") {
@@ -86,6 +91,19 @@ export function derivedRuntimeConfig(profile: DockerComposeProfileV1): Record<st
     result.S3_FORCE_PATH_STYLE = "true";
   }
   return result;
+}
+
+/**
+ * The gateway replaces X-Forwarded-For with the one address it resolved. It keeps
+ * a trusted proxy's X-Forwarded-Proto and X-Forwarded-Host and otherwise writes its
+ * own, which name its plain-HTTP listener: behind an edge proxy it does not trust,
+ * the web server keeps its default origin (https and the Host header) instead.
+ */
+export function composeProxyTrust(profile: DockerComposeProfileV1): Record<string, string> {
+  const { edgeProxies, trustedProxyCidrs } = profile.exposure;
+  return composeHasGateway(profile)
+    ? proxyTrustConfig(1, edgeProxies === 0 || trustedProxyCidrs.length > 0)
+    : proxyTrustConfig(edgeProxies);
 }
 
 function sortedEnvironment(config: Record<string, string>): [string, string][] {
@@ -111,10 +129,11 @@ function environmentBlock(config: Record<string, string>, indent: string): strin
 export function rolloutStateDigest(
   profile: DockerComposeProfileV1,
   secretIdentities: Record<string, string>,
+  proxyTimeouts: AppProxyTimeouts,
 ): string {
   return digest([
     "compose-rollout-state",
-    JSON.stringify(sortedEnvironment(derivedRuntimeConfig(profile))),
+    JSON.stringify(sortedEnvironment(derivedRuntimeConfig(profile, proxyTimeouts))),
     JSON.stringify(Object.entries(secretIdentities).sort(([l], [r]) => l.localeCompare(r))),
   ]);
 }
@@ -183,8 +202,13 @@ function dependencyService(
 }
 
 function postgresService(profile: DockerComposeProfileV1, image: string): string {
+  const { maxConnections } = profile.dependencies.postgres;
   return dependencyService(profile, "postgres", profile.dependencies.postgres, image, {
     dataPath: "/var/lib/postgresql/data",
+    // The image's entry point runs postgres with arguments that start with "-".
+    ...(maxConnections === undefined
+      ? {}
+      : { command: `["-c", ${quote(`max_connections=${maxConnections}`)}]` }),
     healthcheck:
       `    healthcheck:\n` +
       `      test: ["CMD-SHELL", "pg_isready -U \\"$$POSTGRES_USER\\" -d \\"$$POSTGRES_DB\\""]\n` +
@@ -281,6 +305,7 @@ function applicationService(
   image: string,
   release: string,
   stateDigest: string,
+  environment: Record<string, string>,
   options: { command?: string; healthcheckPath?: string; publish?: boolean },
 ): string {
   const workload = role === "worker" ? profile.workloads.worker : profile.workloads[role];
@@ -307,7 +332,7 @@ function applicationService(
     `    restart: unless-stopped\n` +
     (options.command ? `    command: ${options.command}\n` : "") +
     (envFile ? `    env_file:\n      - ${quote(envFile.path)}\n` : "") +
-    environmentBlock(derivedRuntimeConfig(profile), "    ") +
+    environmentBlock(environment, "    ") +
     (dependsOn.length
       ? `    depends_on:\n${dependsOn
           .map(([name, condition]) => `      ${name}:\n        condition: ${condition}\n`)
@@ -347,10 +372,18 @@ function gatewayService(
 `
     : "";
   const api = `${serviceName(profile, "api")}:${CONTAINER_PORT}`;
+  // Caddy appends the peer to X-Forwarded-For, so behind a trusted proxy web and
+  // API would get "client, proxy" and record the proxy at one trusted hop. Send
+  // the client address Caddy resolved instead: the client behind a trusted proxy,
+  // the peer otherwise.
+  const reverseProxy = (upstream: string): string =>
+    `    reverse_proxy ${upstream} {\n` +
+    `      header_up X-Forwarded-For {client_ip}\n` +
+    `    }\n`;
   const webSocketRoutes = profile.exposure.webSocketPaths.length
     ? `  @api_websockets path ${profile.exposure.webSocketPaths.join(" ")}\n` +
       `  handle @api_websockets {\n` +
-      `    reverse_proxy ${api}\n` +
+      reverseProxy(api) +
       `  }\n`
     : "";
   const apiPathRoutes = profile.exposure.apiPaths.length
@@ -359,7 +392,7 @@ function gatewayService(
         .join(" ")}\n` +
       `  handle @api_paths {\n` +
       `    uri strip_prefix ${API_PATH_PREFIX}\n` +
-      `    reverse_proxy ${api}\n` +
+      reverseProxy(api) +
       `  }\n`
     : "";
   const caddyfile =
@@ -368,7 +401,7 @@ function gatewayService(
     webSocketRoutes +
     apiPathRoutes +
     `  handle {\n` +
-    `    reverse_proxy ${serviceName(profile, "web")}:${CONTAINER_PORT}\n` +
+    reverseProxy(`${serviceName(profile, "web")}:${CONTAINER_PORT}`) +
     `  }\n` +
     `}\n`;
   const start =
@@ -399,8 +432,10 @@ export function renderComposeDocument(
   release: string,
   images: ComposeImages,
   stateDigest: string,
+  proxyTimeouts: AppProxyTimeouts,
   workerCommand: string[] = ["bun", "dist/main-worker.js"],
 ): string {
+  const environment = derivedRuntimeConfig(profile, proxyTimeouts);
   const services: string[] = [];
   const hasGateway = composeHasGateway(profile);
   if (profile.dependencies.postgres.mode === "managed" && images.postgres) {
@@ -416,12 +451,12 @@ export function renderComposeDocument(
     }
   }
   services.push(
-    applicationService(profile, "api", images.api, release, stateDigest, {
+    applicationService(profile, "api", images.api, release, stateDigest, environment, {
       healthcheckPath: "/health/ready",
     }),
   );
   services.push(
-    applicationService(profile, "web", images.web, release, stateDigest, {
+    applicationService(profile, "web", images.web, release, stateDigest, environment, {
       // The web server's own route: an API outage must not mark it unhealthy.
       healthcheckPath: "/healthz",
       publish: !hasGateway,
@@ -437,7 +472,7 @@ export function renderComposeDocument(
     // The worker runs the API image with a different entry point, exactly as the
     // Kubernetes driver does.
     services.push(
-      applicationService(profile, "worker", images.api, release, stateDigest, {
+      applicationService(profile, "worker", images.api, release, stateDigest, environment, {
         command: `[${workerCommand.map((part) => quote(part)).join(", ")}]`,
       }),
     );
@@ -472,6 +507,7 @@ export function renderMigrationDocument(
   profile: DockerComposeProfileV1,
   release: string,
   images: ComposeImages,
+  proxyTimeouts: AppProxyTimeouts,
   defaultCommand: string[] = ["bun", "run", "migrate:all"],
 ): string {
   const command = profile.migration?.command ?? defaultCommand;
@@ -484,7 +520,7 @@ export function renderMigrationDocument(
     `    restart: "no"\n` +
     `    command: [${command.map((part) => quote(part)).join(", ")}]\n` +
     `    env_file:\n      - ${quote(profile.secrets.api.path)}\n` +
-    environmentBlock(derivedRuntimeConfig(profile), "    ") +
+    environmentBlock(derivedRuntimeConfig(profile, proxyTimeouts), "    ") +
     `    networks: [${profile.target.project}]\n` +
     `networks:\n  ${profile.target.project}:\n    name: ${profile.target.project}\n    external: true\n`
   );
@@ -525,7 +561,8 @@ export function renderComposeDeployment(
 ): ComposeRuntime {
   profilePath(projectRoot, profileName);
   const images = resolvedImages ?? defaultComposeImages(profile, release);
-  const effectiveStateDigest = stateDigest ?? rolloutStateDigest(profile, {});
+  const proxyTimeouts = readAppProxyTimeouts(projectRoot);
+  const effectiveStateDigest = stateDigest ?? rolloutStateDigest(profile, {}, proxyTimeouts);
   const root = join(resolve(projectRoot), ".podokit", "runtime", "deploy", profileName);
   rmSync(root, { recursive: true, force: true });
   mkdirSync(root, { recursive: true });
@@ -535,12 +572,14 @@ export function renderComposeDeployment(
     release,
     images,
     effectiveStateDigest,
+    proxyTimeouts,
     toolchainWorkerCommand(toolchain),
   );
   const migrationDocument = renderMigrationDocument(
     profile,
     release,
     images,
+    proxyTimeouts,
     toolchainMigrationCommand(toolchain),
   );
   const composeFile = join(root, "compose.yaml");

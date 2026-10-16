@@ -1,6 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { directApiRoutes } from "./api-paths";
+import { readAppProxyTimeouts } from "./app-proxy-timeouts";
+import {
+  connectionBudgetWarning,
+  installedModules,
+  profileFindings,
+  type DeployFinding,
+} from "./deploy-checks";
 import type { CommandRunner } from "./dev";
 import { loadComposeProfile } from "./deploy-driver";
 import {
@@ -47,11 +54,7 @@ import { resolveToolchain, toolchainMigrationCommand } from "./toolchain";
  * that same volume replaces Helm revisions.
  */
 
-export interface ComposeDoctorFinding {
-  code: string;
-  ok: boolean;
-  message: string;
-}
+export type ComposeDoctorFinding = DeployFinding;
 
 export interface ComposePlanAction {
   order: number;
@@ -340,7 +343,7 @@ export function doctorComposeDeployment(
   release?: string,
 ): ComposeDoctorFinding[] {
   const profile = loadComposeProfile(projectRoot, profileName);
-  const findings: ComposeDoctorFinding[] = [];
+  const findings: ComposeDoctorFinding[] = profileFindings(projectRoot, profile);
   const record = (code: string, ok: boolean, message: string): void => {
     findings.push({ code, ok, message });
   };
@@ -562,7 +565,7 @@ export function planComposeDeployment(
     secretIdentities[label] = output.trim();
   }
 
-  const stateDigest = rolloutStateDigest(profile, secretIdentities);
+  const stateDigest = rolloutStateDigest(profile, secretIdentities, readAppProxyTimeouts(projectRoot));
   const runtime = renderComposeDeployment(
     projectRoot,
     profileName,
@@ -612,6 +615,8 @@ export function planComposeDeployment(
   warnings.push(
     "The migration runs before the new containers start, so it must be compatible with the release currently serving traffic.",
   );
+  const budgetWarning = connectionBudgetWarning(profile, installedModules(projectRoot));
+  if (budgetWarning) warnings.push(budgetWarning);
 
   const profileDigest = composeProfileDigest(profile);
   const planHash = digest([
