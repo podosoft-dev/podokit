@@ -27,6 +27,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `QueryFailedError`. Those failures answer 503 `DATABASE_UNAVAILABLE` instead
   of 500, so applications no longer need their own translation.
 
+- `apps/api/scripts/run-migrations.mjs`, the launcher behind `migrate:all`,
+  runs the migration in `apps/api` wherever it is started from, such as the
+  repository root or a tool with another working directory. Bun 1.4.0 reads
+  decorator settings (`experimentalDecorators`, `emitDecoratorMetadata`) from
+  the `tsconfig.json` of the working directory, so TypeORM entities with
+  decorators failed to load outside `apps/api`, and the data source looked for
+  `.env` and the migrations relative to the wrong directory.
+
 ## [1.4.1] - 2026-10-16
 
 ### Fixed
