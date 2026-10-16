@@ -1,5 +1,11 @@
 # @podosoft/podokit-module-analytics
 
+## 1.1.1
+
+### Patch Changes
+
+- [#225](https://github.com/podosoft-dev/podokit/pull/225) [`76ac9ea`](https://github.com/podosoft-dev/podokit/commit/76ac9ea4ec3f757e94aa874424695ccaff8f3b92) Thanks [@korone00](https://github.com/korone00)! - Use `bun run --cwd apps/api migrate:all` in the install instructions, so a new database gets the Better Auth tables that the required admin dashboard needs.
+
 ## 1.1.0
 
 ### Minor Changes
