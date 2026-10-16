@@ -189,6 +189,20 @@ returns the user's roles as an array (the admin plugin's comma-separated value i
 split for you) and `activeOrganizationId` returns the session's active
 organization when the organization plugin has set one. All four share the one
 session lookup memoized per request, so asking several costs a single read.
+Every session that lookup finds is also reported to the core `RESOLVED_SESSIONS`
+registry as `{ token, userId, expiresAt }`; a module that registers a listener
+with `services.resolve(RESOLVED_SESSIONS).listen(...)` in its `configure` learns
+about sessions without a lookup of its own, as the rate limiter does to count
+callers per user.
+
+`POST /api/auth/revoke-other-sessions` ("sign out other sessions") revokes every
+other session of the user, however many there are. Better Auth's endpoint on its
+own lists sessions through its adapter's default limit of 100 and revoked only
+those; the auth module's `revokeEveryOtherSession` plugin revokes the rest in
+batches after it, through Better Auth's internal adapter, so secondary-storage
+entries go too. Better Auth's `GET /api/auth/list-sessions` still returns at most
+100 sessions; use a paged endpoint, such as the admin dashboard's
+`GET /account/sessions`, to show them all.
 
 ```bash
 bunx @podosoft/podokit add auth
@@ -1031,7 +1045,9 @@ Auth hook records sign-in, sign-up, password, session, two-factor, and admin use
 actions (`auth.login`, `user.ban`, `user.role_change`, ...). Nothing else is
 recorded automatically: application code records its own semantic events with
 `AuditService.recordRequest()` or `recordAudit()`. Admins read entries at
-`/audit-logs`.
+`/audit-logs`. An entry's `ip` is the client address the API resolved for the
+request (see [client address](templates.md#client-address)), never a forwarded
+header as the caller sent it.
 
 On/off is an **admin toggle on the Settings page** (stored in the DB, applied
 live — no restart); `AUDIT_LOG_ENABLED` is only the fallback default until an
@@ -1104,23 +1120,37 @@ curl -b cookies.txt localhost:5002/audit-logs   # [{ action:"auth.login", actorE
 
 Rate limiting with a native Elysia request guard backed by the selected `CACHE`
 provider, with `auth` and `api-key-auth` added automatically. Counters
-are selected by a validated `X-API-Key` first, then a signed-in session, then the
-trusted-proxy client address. Every identity is domain-separated and SHA-256
-hashed before it becomes a provider key. The limit holds across API replicas
-with Redis; memory counters require one API process.
+are selected by a validated `X-API-Key` first, then the signed-in user (or the
+session, until the API has resolved it), then the client address the API resolves
+behind its trusted proxies (see [client address](templates.md#client-address)).
+Every identity is domain-separated and SHA-256 hashed before it becomes a
+provider key. The limit holds across API replicas with Redis; memory counters
+require one API process.
 
 A session is recognized from the Better Auth session cookie (including its
 `__Secure-` form) or a signed `Authorization: Bearer` value by verifying its HMAC
 signature with `BETTER_AUTH_SECRET`. The limiter does not read the session from the
-database, so choosing a counter adds no query to the request. As a result:
+database itself, so choosing a counter adds no query to the request. Instead, each
+API process remembers the user of every session that authentication resolves
+while handling a request, such as for a route that requires a session, until the
+session expires (at most 10,000 sessions, oldest first). As a result:
 
-- Limits apply **per session, not per user**. Each sign-in starts its own counter,
-  so a user signed in on two devices has two counters.
+- Limits apply **per user**: a user signed in on a laptop and a phone, from
+  different addresses, or through different API replicas draws from one counter,
+  and another user has their own.
+- A session counts under its own counter until the API process first resolves it,
+  so the first request of a new session, or its first request on another API
+  process or after a restart, may count separately. With `auth` registered before
+  `rate-limit`, as `podo add` orders them, a route that requires a session resolves
+  it before the limiter runs, so even that request counts under the user. Better
+  Auth's own routes, such as `/api/auth/get-session`, do not resolve sessions this
+  way.
 - A cookie or bearer value without a valid signature is counted with the client
   address, so forged values never receive a fresh counter.
-- Signing out or revoking a session still takes effect on the next request, because
-  authentication itself still checks the session in the database. A revoked token
-  that still carries a valid signature keeps its single counter.
+- Signing out, revoking a session, or banning a user still takes effect on the next
+  request, because authentication itself still checks the session in the
+  database. The remembered user only selects a counter and is not removed when a
+  session is revoked; it expires with the session.
 - Without `BETTER_AUTH_SECRET` (for example, an app without `auth`), every request
   without a validated API key is counted by client address.
 
@@ -1140,10 +1170,10 @@ bun run dev
 General requests default to 300 per 60 seconds, authentication mutations to 20
 per 60 seconds, and read-only session and public site-settings checks to 1000 per
 60 seconds.
-Configure these with `RATE_LIMIT_*`. Set `RATE_LIMIT_TRUSTED_PROXY_HOPS` to the
-exact number of proxies that replace or append the configured header; keep it at
-0 when the API accepts direct traffic. Malformed or incomplete forwarding chains
-fall back to the direct peer instead of trusting attacker input.
+Configure these with `RATE_LIMIT_*`. Requests are attributed to a client address
+by the API core's `TRUSTED_PROXY_HOPS` and `TRUSTED_PROXY_HEADER`, the same
+settings that audit entries and Better Auth sessions use; see
+[client address](templates.md#client-address).
 Set a distinct `RATE_LIMIT_KEY_PREFIX` for deployments that share the same Redis
 database so their counters remain isolated. The default is
 `podokit:rate-limit`.
@@ -1184,11 +1214,18 @@ services.tryResolve(RATE_LIMIT_ROUTES)?.register({
 ```
 
 - `pathPrefix` matches that path and the paths below it by whole segments
-  (`/uploads` covers `/uploads/1/parts/2`, not `/uploads-old`). Use the path the
-  API receives: `/uploads`, not the `/api/uploads` the browser calls through the
-  web proxy. Better Auth routes keep `/api/auth`.
-- The most specific route wins: the longest prefix, then a route with a method
-  over one without, then the latest registration.
+  (`/uploads` covers `/uploads/1/parts/2`, not `/uploads-old`), and a `:name`
+  segment matches exactly one non-empty segment (`/hosts/:hostId/file-transfers`
+  covers `/hosts/h1/file-transfers/t1`, not `/hosts/file-transfers`). Use the
+  path the API receives: `/uploads`, not the `/api/uploads` the browser calls
+  through the web proxy. Better Auth routes keep `/api/auth`. Wildcards such as
+  `*`, `.` or `..` segments, and malformed parameter names are rejected when the
+  route is registered.
+- The most specific route wins: the prefix with more segments; at equal length,
+  the first segment from the left where one route has a literal and the other a
+  parameter decides for the literal; then a route with a method over one
+  without; then the latest registration. The web proxy's own lists use the same
+  [path rules](templates.md#proxy-path-rules).
 - `name` (1-64 letters, digits, `_`, or `-`) names the counter. Routes that
   share a name share one budget and must give the same `limit` and
   `ttlSeconds`; `ttlSeconds` defaults to `RATE_LIMIT_TTL`. Counters are per
@@ -1410,6 +1447,27 @@ of accounts.
   audit hook (`user.session_revoke`) still apply. It returns `204`, or
   `404 ADMIN_SESSION_NOT_FOUND`.
   The manage dialog on `/admin/users` uses the same endpoint with `userId`.
+- **Your own sessions** on the account page come from `GET /account/sessions`,
+  which any signed-in user may call for their own sessions:
+
+  ```text
+  GET /account/sessions?limit=20&cursor=<nextCursor>
+  -> { "current": { "id", "ipAddress", "userAgent", "createdAt", "expiresAt" } | null,
+       "items": [ ...the other sessions, newest first... ],
+       "nextCursor": "<opaque>" | null, "total": 151 }
+  ```
+
+  `current` is the session making the request, on every page, and `total`
+  counts it with the others; paging and `limit` work as for `/admin/sessions`.
+  Better Auth's `GET /api/auth/list-sessions` returns at most 100 sessions, in
+  no set order, so a user with more might not see their current one there. The list
+  keeps Better Auth's freshness rule: a session older than `session.freshAge` (24
+  hours by default) gets `403 SESSION_NOT_FRESH`. Tokens are never returned.
+  `DELETE /account/sessions/{id}` revokes one of the caller's sessions through
+  Better Auth `revokeSession`, so the audit hook (`session.revoke`) still applies,
+  and answers `204` or `404 ACCOUNT_SESSION_NOT_FOUND`, also for another user's
+  session. "Sign out other sessions" calls `POST /api/auth/revoke-other-sessions`,
+  which revokes every other session (see the `auth` module).
 
 Every page, sort, or search of either list is one request to an `/admin/*`
 endpoint, and the `rate-limit` module counts those against the general budget.

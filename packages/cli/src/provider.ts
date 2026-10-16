@@ -71,15 +71,18 @@ function assertProvider(capability: string, provider: string): ProviderCapabilit
   return capability;
 }
 
+/** The managed provider source; it must render byte for byte like the template's copy. */
 export function providerSource(providers: ProviderSelections): string {
   return `import type { ProviderSelections } from "@podosoft/podokit-runtime";\n\n` +
-    `export const PROVIDERS = {\n` +
+    `// Typed with every provider name, not the selected ones: the module of a\n` +
+    `// provider that stays installed after a switch compares against its own name.\n` +
+    `export const PROVIDERS: Readonly<ProviderSelections> = {\n` +
     `  database: "${providers.database}",\n` +
     `  cache: "${providers.cache}",\n` +
     `  "object-storage": "${providers["object-storage"]}",\n` +
     `  events: "${providers.events}",\n` +
     `  jobs: "${providers.jobs}",\n` +
-    `} as const satisfies ProviderSelections;\n`;
+    `};\n`;
 }
 
 export function listProviders(projectRoot: string): ProviderListItem[] {

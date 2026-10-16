@@ -174,7 +174,10 @@ application-owned `apps/web/src/lib/server/proxy-headers.ts`
 (`APP_FORWARDED_REQUEST_HEADERS` and `APP_RELAYED_RESPONSE_HEADERS`); see
 [proxy headers](templates.md#proxy-headers). Per-route request body limits go in
 the owned `apps/web/src/lib/server/body-limits.ts` (`APP_BODY_LIMITS`); see
-[request body limits](templates.md#request-body-limits). An app that already added names to
+[request body limits](templates.md#request-body-limits), and per-route response
+deadlines, including routes without one, in the owned
+`apps/web/src/lib/server/proxy-timeouts.ts` (`APP_PROXY_TIMEOUTS`); see
+[proxy deadlines per route](templates.md#proxy-deadlines-per-route). An app that already added names to
 the managed lists keeps them through `podo update`, because the new version adds
 its merge below the lists; move the names to the owned file and restore the
 managed copy so the next update is clean.

@@ -49,6 +49,12 @@ export const MANAGED_RUNTIME_CONFIG_KEYS = [
   "HOST_HEADER",
 ];
 
+/** Keys the generated API no longer reads; it refuses to start while they are set. */
+const RENAMED_RUNTIME_CONFIG_KEYS: Record<string, string> = {
+  RATE_LIMIT_TRUSTED_PROXY_HOPS: "TRUSTED_PROXY_HOPS",
+  RATE_LIMIT_PROXY_HEADER: "TRUSTED_PROXY_HEADER",
+};
+
 export function containsUrlCredentials(value: string): boolean {
   if (!value.includes("://")) return false;
   try {
@@ -230,6 +236,10 @@ export function parseRuntimeConfig(runtimeConfig: Record<string, unknown>): Reco
     if (MANAGED_RUNTIME_CONFIG_KEYS.includes(key)) {
       throw new Error(`Deployment runtimeConfig key "${key}" is managed by PodoKit.`);
     }
+    const renamed = RENAMED_RUNTIME_CONFIG_KEYS[key];
+    if (renamed) {
+      throw new Error(`Deployment runtimeConfig key "${key}" was renamed to "${renamed}".`);
+    }
     if (typeof entry !== "string") {
       throw new Error(`Deployment runtimeConfig value "${key}" must be a string.`);
     }
@@ -241,6 +251,39 @@ export function parseRuntimeConfig(runtimeConfig: Record<string, unknown>): Reco
     parsed[key] = entry;
   }
   return parsed;
+}
+
+/** Bun closes silent connections on a 4-second tick, up to 4 seconds before their idle timeout. */
+const IDLE_TICK_SECONDS = 4;
+const MAX_IDLE_TIMEOUT_SECONDS = 255;
+const DEFAULT_BACKEND_PROXY_TIMEOUT_MS = 30_000;
+
+/**
+ * The idle timeouts of the web server (CONNECTION_IDLE_TIMEOUT) and the API
+ * (API_IDLE_TIMEOUT), both run by Bun. Each is the profile's own value, or else
+ * the fewest seconds that keep a silent connection open past the /api proxy's
+ * BACKEND_PROXY_TIMEOUT_MS deadline: 35 for the default 30000 ms.
+ */
+export function idleTimeoutConfig(runtimeConfig: Record<string, string>): Record<string, string> {
+  const proxyTimeout = runtimeConfig.BACKEND_PROXY_TIMEOUT_MS?.trim();
+  const proxyMs =
+    proxyTimeout && /^\d+$/.test(proxyTimeout) ? Number(proxyTimeout) : DEFAULT_BACKEND_PROXY_TIMEOUT_MS;
+  const derived = Math.floor(proxyMs / 1000) + IDLE_TICK_SECONDS + 1;
+  const config: Record<string, string> = {};
+  for (const name of ["CONNECTION_IDLE_TIMEOUT", "API_IDLE_TIMEOUT"]) {
+    const configured = runtimeConfig[name];
+    if (configured !== undefined) {
+      config[name] = configured;
+    } else if (derived > MAX_IDLE_TIMEOUT_SECONDS) {
+      throw new Error(
+        `Deployment runtimeConfig BACKEND_PROXY_TIMEOUT_MS ${proxyMs} outlasts the longest idle timeout ` +
+          `(${MAX_IDLE_TIMEOUT_SECONDS} seconds); set ${name} to "0" to turn it off.`,
+      );
+    } else {
+      config[name] = String(derived);
+    }
+  }
+  return config;
 }
 
 export function validateHttpsOrigin(value: string): void {

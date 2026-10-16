@@ -73,6 +73,8 @@ describe("docker-compose profile", () => {
     }).profile;
     expect(profile.dependencies.objectStorage.image).toBe("pgsty/silo:RELEASE.2026-09-16T00-00-00Z");
     expect(profile.dependencies.objectStorage.clientImage).toBe("pgsty/mc:RELEASE.2026-09-16T00-00-00Z");
+    // The web server is the one proxy in front of the API.
+    expect(profile.runtimeConfig).toMatchObject({ TRUSTED_PROXY_HOPS: "1", TRUSTED_PROXY_HEADER: "x-forwarded-for" });
   });
 
   it("records the driver so dispatch reads it back from disk", () => {
@@ -644,6 +646,26 @@ describe("web service", () => {
     const web = document.split("\n  example-app-web:\n")[1]?.split(/\n  \S/)[0] ?? "";
     expect(web).toContain("fetch('http://127.0.0.1:3000/healthz')");
     expect(web).toContain("  timeout: 5s\n");
+  });
+
+  it("keeps a silent connection open past the proxy deadline, as the profile sets it", () => {
+    const profile = composeProfileOf(initialized(["auth"]));
+    const serviceOf = (document: string, role: string): string =>
+      document.split(`\n  example-app-${role}:\n`)[1]?.split(/\n  \S/)[0] ?? "";
+    const render = (): string =>
+      renderComposeDocument(profile, "v1.2.3", defaultComposeImages(profile, "v1.2.3"), "sha256:0");
+    for (const role of ["web", "api"]) {
+      expect(serviceOf(render(), role)).toContain('      CONNECTION_IDLE_TIMEOUT: "35"\n');
+      expect(serviceOf(render(), role)).toContain('      API_IDLE_TIMEOUT: "35"\n');
+    }
+    profile.runtimeConfig = { ...profile.runtimeConfig, BACKEND_PROXY_TIMEOUT_MS: "120000" };
+    expect(serviceOf(render(), "web")).toContain('      CONNECTION_IDLE_TIMEOUT: "125"\n');
+    expect(serviceOf(render(), "api")).toContain('      API_IDLE_TIMEOUT: "125"\n');
+    profile.runtimeConfig = { ...profile.runtimeConfig, BACKEND_PROXY_TIMEOUT_MS: "300000" };
+    expect(render).toThrow('set CONNECTION_IDLE_TIMEOUT to "0"');
+    profile.runtimeConfig = { ...profile.runtimeConfig, CONNECTION_IDLE_TIMEOUT: "0", API_IDLE_TIMEOUT: "0" };
+    expect(serviceOf(render(), "web")).toContain('      CONNECTION_IDLE_TIMEOUT: "0"\n');
+    expect(serviceOf(render(), "api")).toContain('      API_IDLE_TIMEOUT: "0"\n');
   });
 });
 

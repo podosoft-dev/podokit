@@ -379,6 +379,8 @@ describe("create (integration against templates)", () => {
         expect(dockerfile).not.toContain("/app/node_modules");
         expect(dockerfile).not.toContain("COPY --from=build /app/packages ./packages");
         expect(dockerfile).toContain("ENV BODY_SIZE_LIMIT=3M");
+        // Outlasts the /api proxy's 30-second deadline plus Bun's 4-second idle tick.
+        expect(dockerfile).toContain("ENV CONNECTION_IDLE_TIMEOUT=35");
         expect(dockerfile).toContain('CMD ["bun", "./build"]');
         expect(dockerfile).not.toContain("server.js");
       }
@@ -525,6 +527,12 @@ describe("create (integration against templates)", () => {
       "export const APP_BODY_LIMITS: ReadonlyArray<{ pathPrefix: string; maxBytes: number }> = [];",
     );
     expect(readFilesLock(target)?.files[bodyLimits]?.tier).toBe("owned");
+    expect(backendProxy).toContain('from "./proxy-timeouts"');
+    const proxyTimeouts = "apps/web/src/lib/server/proxy-timeouts.ts";
+    expect(readFileSync(join(target, proxyTimeouts), "utf8")).toContain(
+      "export const APP_PROXY_TIMEOUTS: ReadonlyArray<{ pathPrefix: string; timeoutMs: number | null }> = [];",
+    );
+    expect(readFilesLock(target)?.files[proxyTimeouts]?.tier).toBe("owned");
     expect(readFilesLock(target)?.files["apps/web/src/lib/server/backend-proxy.ts"]?.tier).toBe("managed");
     // The web server's health route answers the probes without calling the API.
     const healthRoute = "apps/web/src/routes/healthz/+server.ts";
@@ -570,6 +578,8 @@ describe("create (integration against templates)", () => {
     expect(k3sConfig).toContain('ADDRESS_HEADER: "x-forwarded-for"');
     expect(k3sConfig).toContain('XFF_DEPTH: "1"');
     expect(k3sConfig).toContain('BODY_SIZE_LIMIT: "3M"');
+    expect(k3sConfig).toContain('CONNECTION_IDLE_TIMEOUT: "35"');
+    expect(k3sConfig).toContain('API_IDLE_TIMEOUT: "35"');
 
     // AI-free of tiers: the dev scaffolding is owned so updates never clobber it
     const lock = readFileSync(join(target, ".podokit", "files.lock"), "utf8");

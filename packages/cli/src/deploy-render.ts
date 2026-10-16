@@ -9,6 +9,7 @@ import type {
 } from "./deploy-profile";
 import { profilePath } from "./deploy-profile";
 import { API_PATH_PREFIX, apiPathBase } from "./api-paths";
+import { idleTimeoutConfig } from "./deploy-schema";
 import { readManifest } from "./lockfile";
 import {
   resolveToolchain,
@@ -418,6 +419,7 @@ function derivedRuntimeConfig(profile: DeployProfileV1): Record<string, string> 
     BACKEND_INTERNAL_URL: `http://${profile.target.release}-api:3000`,
     PROTOCOL_HEADER: "x-forwarded-proto",
     HOST_HEADER: "x-forwarded-host",
+    ...idleTimeoutConfig(profile.runtimeConfig),
     ...profile.runtimeConfig,
   };
   if (profile.dependencies.postgres.mode === "inCluster") {

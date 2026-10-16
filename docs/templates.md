@@ -158,6 +158,33 @@ build and tests: hop-by-hop headers (`connection`, `transfer-encoding`,
 get the file empty; `podo update` creates it once in an existing app and never
 overwrites it.
 
+### Proxy path rules
+
+`APP_BODY_LIMITS` and `APP_PROXY_TIMEOUTS` below select `/api` routes by
+`pathPrefix`, and the rate-limit module's
+[route profiles](modules.md#route-profiles) select API routes the same way:
+
+- A prefix covers its path and every path below it, by whole segments:
+  `/api/files` covers `/api/files` and `/api/files/1`, not `/api/files-old`. A
+  trailing slash makes no difference.
+- A `:name` segment matches exactly one non-empty path segment:
+  `/api/hosts/:hostId/file-transfers` covers `/api/hosts/h1/file-transfers` and
+  the paths below it, but neither `/api/hosts/file-transfers` nor
+  `/api/hosts/h1/file-transfers-old`. The name is a letter or `_` followed by
+  letters, digits, or `_`, and only documents the segment.
+- When several prefixes cover a path, the most specific wins: the one with more
+  segments; at equal length, compare segments from the left, and the first
+  place where one has a literal segment and the other a parameter decides for
+  the literal. So `/api/hosts/local/:section` wins over
+  `/api/hosts/:hostId/files` for `/api/hosts/local/files`. The web lists reject
+  two prefixes that cover the same paths, such as `/api/a/:x` and `/api/a/:y`;
+  rate-limit routes fall back to the method and the latest registration.
+- The web lists match the decoded request path, so an encoded segment such as
+  `%66iles` cannot step around a prefix. Prefixes there start with `/api/` and
+  use URL path characters; empty, `.`, and `..` segments, wildcards such as `*`,
+  and malformed parameters fail when the web server loads the proxy and in the
+  web tests.
+
 ### Request body limits
 
 `BODY_SIZE_LIMIT` (3 MiB in the generated `.env.example`, web Dockerfile, and
@@ -174,17 +201,17 @@ Below that ceiling, cap individual `/api` routes in the application-owned
 ```ts
 export const APP_BODY_LIMITS: ReadonlyArray<{ pathPrefix: string; maxBytes: number }> = [
   { pathPrefix: "/api/feedback/", maxBytes: 64 * 1024 },
+  { pathPrefix: "/api/hosts/:hostId/file-transfers", maxBytes: 1024 * 1024 + 64 * 1024 },
 ];
 ```
 
-An entry covers its path and every path below it, matched on the decoded
-request path, and the longest matching prefix wins. The proxy rejects a declared
+Entries select routes by the [proxy path rules](#proxy-path-rules). The proxy rejects a declared
 `Content-Length` above the limit at once and otherwise counts the body as it
 streams in, stopping at the limit without buffering the rest. Either way it
 answers 413 with the standard envelope, code `PAYLOAD_TOO_LARGE` and
 `details.maxBytes`, without contacting the API. Routes without an entry keep the
-server-wide ceiling. An invalid prefix (not a static path under `/api/`) or a
-`maxBytes` that is not a positive whole number fails the web build and tests.
+server-wide ceiling. An invalid prefix or a `maxBytes` that is not a positive
+whole number fails the web build and tests.
 
 These limits can only lower the ceiling: a `maxBytes` above `BODY_SIZE_LIMIT`
 has no effect, because Bun rejects the body first. Raising `BODY_SIZE_LIMIT`
@@ -204,18 +231,20 @@ that has stopped answering:
   reading the response body included, and then rejects with a `TimeoutError`.
   The hooks treat that like any other outage: public pages render their
   fallbacks and protected pages answer `503`.
-- The `/api` proxy waits up to `BACKEND_PROXY_TIMEOUT_MS` (30000 by default,
-  the API's default idle timeout) for the response headers and then answers
+- The `/api` proxy waits up to `BACKEND_PROXY_TIMEOUT_MS` (30000 by default)
+  for the response headers and then answers
   `504` with the `BACKEND_TIMEOUT` error code. The wait ends when the headers
   arrive, so server-sent events and large downloads keep streaming. A refused
   connection or any other failure without an HTTP answer becomes `503`
   `BACKEND_UNAVAILABLE` with `Retry-After: 2` instead of SvelteKit's bare `500`.
   Both use the standard error envelope and `Cache-Control: no-store`.
 
-When a call gets no HTTP answer, or the proxy has waited `BACKEND_TIMEOUT_MS`
-for response headers, the web server requests the API's `GET /health` with the
-same bound. Only when that check gets no answer either is the API treated as
-unreachable, so one slow endpoint does not fail other requests. Then requests
+When a call gets no HTTP answer, and every `BACKEND_TIMEOUT_MS` while the proxy
+waits for response headers, the web server requests the API's `GET /health` with
+the same bound, unless another check ran within that time. Only when that check
+gets no answer either is the API treated as unreachable, so one slow endpoint
+does not fail other requests, while an API that stops answering partway through
+a long wait still ends it. Then requests
 still waiting for the API fail at once, new server-side calls throw
 `BackendUnavailableError` from `#lib/server/api.js` without contacting the API,
 and the proxy answers `503` at once. A background check runs at most every two
@@ -224,15 +253,83 @@ ends the outage. The state belongs to one web process.
 
 Both values are whole milliseconds from 1 to 2147483647, set in the web
 server's environment; any other value fails when the web server loads the
-proxy, which is at startup in apps with server hooks. Raise
+proxy. That is at startup in apps with server hooks, such as the admin
+dashboard's; otherwise the first `/api` request loads it, and every `/api`
+request answers `500` and logs the error. Raise
 `BACKEND_TIMEOUT_MS` when a load function calls an endpoint that takes longer;
 it also lengthens how long pages wait while an outage is being detected. An API
-endpoint that takes longer than 30 seconds to start its response needs a higher
-`idleTimeout` in the API's [server options](#api-server-options) and a matching
-`BACKEND_PROXY_TIMEOUT_MS`. The web server also closes a connection that has
-received nothing for `CONNECTION_IDLE_TIMEOUT` seconds (an adapter-bun setting,
-Bun's 10 by default, lifted for `text/event-stream` responses), so such an
-endpoint needs that raised as well.
+endpoint that takes longer than 30 seconds to start its response needs a longer
+proxy deadline and both idle timeouts raised with it; see
+[proxy deadlines per route](#proxy-deadlines-per-route).
+
+The built web server (adapter-bun) closes a connection that has sent nothing for
+`CONNECTION_IDLE_TIMEOUT` seconds, without any response, so neither the API's
+late answer nor the proxy's `504` reaches the browser. The generated web image,
+`.env.example`, reference Kubernetes config, and deployment renderers set it to
+35. Bun checks idle connections every 4 seconds and can close one up to 4
+seconds early, so the value must be more than 4 above the longest proxy deadline
+in seconds; 35 covers the default 30-second deadline, and the API's
+`API_IDLE_TIMEOUT` follows the same rule (see
+[proxy deadlines per route](#proxy-deadlines-per-route)). Bun accepts at most 255,
+and `0` turns the idle timeout off. When the variable is set, the proxy refuses
+to load unless it is `0` or covers `BACKEND_PROXY_TIMEOUT_MS` and every
+`APP_PROXY_TIMEOUTS` entry, and a route without a deadline needs `0`. Unset,
+Bun's default of 10 seconds applies and is not checked. adapter-bun lifts the
+timeout for `text/event-stream` responses, so server-sent events stay open
+through quiet periods; any other streamed response that pauses for longer is
+cut off. Only the built server reads the variable; `vite dev` does not. Calling Bun's
+`server.timeout(request, 0)` through `platform.server` in a route does not help:
+behind an HTTPS gateway, adapter-bun rewrites the request onto the public
+origin, and Bun ignores the call for the rewritten request.
+
+### Proxy deadlines per route
+
+Some endpoints take longer than `BACKEND_PROXY_TIMEOUT_MS` to start their
+response by design, such as a report export or a request that waits for a
+background worker, and some should give up sooner. Set their deadlines in the
+application-owned `apps/web/src/lib/server/proxy-timeouts.ts` instead of editing
+the managed proxy:
+
+```ts
+export const APP_PROXY_TIMEOUTS: ReadonlyArray<{ pathPrefix: string; timeoutMs: number | null }> = [
+  { pathPrefix: "/api/exports/", timeoutMs: 120_000 },
+  { pathPrefix: "/api/hosts/:hostId/file-transfers", timeoutMs: null },
+];
+```
+
+Entries select routes by the [proxy path rules](#proxy-path-rules); other
+routes keep `BACKEND_PROXY_TIMEOUT_MS`. `timeoutMs` is how long the proxy waits for the
+response headers before it answers `504` `BACKEND_TIMEOUT`, and `null` waits as
+long as the API takes. The health checks keep running while a request waits, so
+a route without a deadline still answers `503` `BACKEND_UNAVAILABLE` once the
+API's `GET /health` stops answering, and the wait also ends when the browser
+disconnects. The deadline ends when the headers arrive, so it never cuts off
+the body. An invalid prefix, two prefixes that cover the same paths, or a
+`timeoutMs` that is neither `null` nor a whole number of milliseconds from 1 to
+2147483647 fails the web tests and the web server when it loads the proxy.
+
+The proxy's deadline is one of three limits on such a request, and the other
+two have to be raised with it. Bun runs both the API and the built web server and
+checks idle connections every 4 seconds, so it can close a silent connection up
+to 4 seconds before its idle timeout. Each idle timeout must therefore be more
+than 4 seconds above the longest wait, in whole seconds:
+
+| Proxy deadline | `API_IDLE_TIMEOUT` (API) | `CONNECTION_IDLE_TIMEOUT` (web) |
+| --- | --- | --- |
+| `BACKEND_PROXY_TIMEOUT_MS` of 30000 (default) | 35 (default) | 35 (default) |
+| `timeoutMs: 120_000` | at least 125 | at least 125 |
+| `null`, or above 250000 ms | `0` | `0` |
+
+Both are environment variables from `0` (off) to `255` seconds. Set them in
+`.env`, or in a deployment profile's `runtimeConfig`, where the renderers derive
+both from `BACKEND_PROXY_TIMEOUT_MS` when they are unset but cannot see this
+file. The API's `idleTimeout` in its [server options](#api-server-options) wins
+over `API_IDLE_TIMEOUT`. With `0`, idle keep-alive connections stay open until the
+client or the gateway in front closes them. If the API closes the connection
+first, the proxy answers `503` `BACKEND_UNAVAILABLE`; if the web server does, the
+browser gets an empty reply. The proxy refuses to load when
+`CONNECTION_IDLE_TIMEOUT` cannot cover an entry here. New apps get the file
+empty; `podo update` creates it once in an existing app and never overwrites it.
 
 ### Fallback error page
 
@@ -247,6 +344,30 @@ fills in only `%sveltekit.status%` and the HTML-escaped
 `%sveltekit.error.message%`. It cannot use components, app CSS, scripts, or
 assets, because SvelteKit sends it as a plain template outside the app's
 rendering and build.
+
+### Client address
+
+The API resolves each caller's address once per request, before any guard,
+Better Auth, or handler runs, and every part of the API uses that one address:
+Better Auth's session `ipAddress` and its own per-address limits, audit entries,
+and the rate limiter.
+
+| Setting | Default | Effect |
+| --- | --- | --- |
+| `TRUSTED_PROXY_HOPS` | `0` in code; `1` in the generated `.env.example`, `.env.docker.example`, Kubernetes example, and deployment profiles | Reverse proxies in front of the API whose forwarded header is trusted. With `0` the address is the socket peer. With `n`, it is the entry `n` places left of the peer in the header, the one the outermost trusted proxy appended; entries further left were written by the caller and are ignored. A shorter chain or a malformed entry falls back to the peer. |
+| `TRUSTED_PROXY_HEADER` | `x-forwarded-for` | The header the trusted proxies append the address to. |
+
+The web app's `/api` proxy and the deployment gateway are each one proxy, so the
+generated configuration uses 1. Count only proxies that every request passes
+through: with 1, a caller that can reach the API directly chooses its own
+address. The settings replace the rate-limit module's
+`RATE_LIMIT_TRUSTED_PROXY_HOPS` and `RATE_LIMIT_PROXY_HEADER`, which the API
+now refuses at startup.
+
+The API records the result in the `x-podokit-client-address` request header,
+replacing any value a caller sent. Read it with `clientAddressOf(request.headers)`
+from `apps/api/src/core/client-address.ts` rather than reading `X-Forwarded-For`
+yourself; request guards also receive it as `clientAddress`.
 
 ### API server options
 
@@ -265,14 +386,14 @@ export const apiServerOptions: ApiServerOptionsSource = {
 | Option | Default | Effect |
 | --- | --- | --- |
 | `maxRequestBodySize` | `API_MAX_REQUEST_BODY_SIZE`, else 128 MiB (Bun's default) | Larger bodies are refused with `413` before a handler runs. |
-| `idleTimeout` | 30 seconds (Elysia's default) | How long a connection may stay idle; `0` disables the timeout. Requests through the web app's `/api` proxy also need a matching `BACKEND_PROXY_TIMEOUT_MS` on the web server; see [API timeouts and outages](#api-timeouts-and-outages). |
+| `idleTimeout` | `API_IDLE_TIMEOUT`, else 35 seconds | How long a connection may stay idle, from 0 to 255 seconds; `0` disables the timeout. 35 outlasts the web proxy's 30-second deadline; a longer deadline needs a longer idle timeout, see [proxy deadlines per route](#proxy-deadlines-per-route). |
 
 Values in the export win over the environment. Export a function to derive
 them from the validated environment instead, for example
 `(env) => ({ maxRequestBodySize: Math.max(env.API_MAX_REQUEST_BODY_SIZE, 1024 ** 3) })`.
 The export is optional: an `app.extensions.ts` written before it existed keeps
-compiling, and `API_MAX_REQUEST_BODY_SIZE` still applies. Invalid values stop
-the API at startup. Requests through the web app's `/api` proxy are also
+compiling, and `API_MAX_REQUEST_BODY_SIZE` and `API_IDLE_TIMEOUT` still apply.
+Invalid values stop the API at startup. Requests through the web app's `/api` proxy are also
 bounded by the web server's `BODY_SIZE_LIMIT`.
 
 ## `todo`

@@ -217,6 +217,8 @@ async function main() {
       `POSTGRES_PASSWORD=${env.POSTGRES_PASSWORD}`,
       `POSTGRES_DB=${env.POSTGRES_DB}`,
       `BACKEND_INTERNAL_URL=http://localhost:${env.API_PORT}`,
+      // The web server is the one proxy in front of the API, as in .env.example.
+      "TRUSTED_PROXY_HOPS=1",
       `CORS_ORIGIN=${webURL}`,
       "BETTER_AUTH_SECRET=e2e-secret-please-change-32-characters",
       `BETTER_AUTH_URL=http://localhost:${env.API_PORT}`,
@@ -395,6 +397,7 @@ async function main() {
       ORIGIN: webURL,
       BACKEND_INTERNAL_URL: `http://localhost:${env.API_PORT}`,
       BODY_SIZE_LIMIT: "3M",
+      CONNECTION_IDLE_TIMEOUT: "35",
     },
   });
   await waitFor(`${webURL}/login`, "web");
@@ -427,7 +430,10 @@ async function main() {
       ...process.env,
       E2E_BASE_URL: webURL,
       E2E_API_URL: `http://localhost:${env.API_PORT}`,
+      // The rate-limit spec compares each budget with the limits the API runs with.
       RATE_LIMIT_MAX: pgEnv.RATE_LIMIT_MAX,
+      RATE_LIMIT_AUTH_MAX: pgEnv.RATE_LIMIT_AUTH_MAX,
+      RATE_LIMIT_RUNTIME_MAX: pgEnv.RATE_LIMIT_RUNTIME_MAX,
       ...(hasRedis
         ? { E2E_SECONDARY_API_URL: `http://localhost:${env.SECONDARY_API_PORT}` }
         : {}),

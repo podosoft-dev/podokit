@@ -6,6 +6,212 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `apps/web/src/lib/server/proxy-timeouts.ts` is an application-owned
+  `APP_PROXY_TIMEOUTS` list of `{ pathPrefix, timeoutMs }` entries for `/api`
+  routes. An entry replaces `BACKEND_PROXY_TIMEOUT_MS` for its path and the paths
+  below it, matched by the same path rules as `APP_BODY_LIMITS`, and
+  `timeoutMs: null` waits as long as the API takes. The proxy now also repeats
+  its `GET /health` check every `BACKEND_TIMEOUT_MS` while it waits for response
+  headers, so a request on such a route still ends with `503`
+  `BACKEND_UNAVAILABLE` when the API stops answering partway through the wait.
+  An invalid prefix or timeout fails when the web server loads the proxy.
+  `podo update` creates the file once in existing apps and never overwrites it.
+- Path prefixes take `:name` parameters in the rate-limit module's route
+  profiles (`RATE_LIMIT_ROUTES`), `APP_BODY_LIMITS`, and `APP_PROXY_TIMEOUTS`. A
+  parameter matches exactly one non-empty path segment, matching still covers
+  whole segments and the paths below them, and the most specific prefix wins:
+  more segments, then, from the left, a literal segment over a parameter, then
+  the earlier tie-breakers (for rate limits, a route with a method, then the
+  latest registration). Routes keyed by an id in the middle of the path no longer
+  need edits to the managed `backend-proxy.ts`. For example, to give transfers
+  under every host their own request budget, a body cap for 1 MiB chunks, and no
+  proxy deadline:
+
+  ```ts
+  // apps/api/src/app.extensions.ts
+  import { RATE_LIMIT_ROUTES } from "@podosoft/podokit-runtime";
+
+  export function configureServices(services: ServiceRegistry): void {
+    services.tryResolve(RATE_LIMIT_ROUTES)?.register({
+      pathPrefix: "/hosts/:hostId/file-transfers",
+      profile: { name: "file-transfers", limit: 3000 },
+    });
+  }
+
+  // apps/web/src/lib/server/body-limits.ts
+  export const APP_BODY_LIMITS: ReadonlyArray<{ pathPrefix: string; maxBytes: number }> = [
+    { pathPrefix: "/api/hosts/:hostId/file-transfers", maxBytes: 1024 * 1024 + 64 * 1024 },
+  ];
+
+  // apps/web/src/lib/server/proxy-timeouts.ts
+  export const APP_PROXY_TIMEOUTS: ReadonlyArray<{ pathPrefix: string; timeoutMs: number | null }> = [
+    { pathPrefix: "/api/hosts/:hostId/file-transfers", timeoutMs: null },
+  ];
+  ```
+
+  A route without a deadline also needs `API_IDLE_TIMEOUT=0` and
+  `CONNECTION_IDLE_TIMEOUT=0`. Parameter names are a letter or `_` followed by
+  letters, digits, or `_`; wildcards such as `*`, `.` or `..` segments, and
+  malformed parameters are rejected, and the web lists also reject two prefixes
+  that cover the same paths, such as `/api/a/:x` and `/api/a/:y`.
+
+### Changed
+
+- The rate-limit module counts a signed-in caller per user instead of per
+  session, so one user's sessions on several devices, addresses, or API replicas
+  draw from one budget, and API keys still come first and unsigned or forged
+  sessions still count by client address. The limiter still reads no session
+  from the database: each API process remembers the user of every session that
+  authentication resolves for a request, reported through the new
+  `RESOLVED_SESSIONS` registry in `apps/api/src/core/services.ts`, until the
+  session expires (at most 10,000 sessions per process). Until then a session
+  keeps a counter of its own, so the first request of a new session, or its
+  first on another API process, can count separately; with `auth` registered
+  before `rate-limit`, a route that requires a session resolves it before the
+  limiter runs. Better Auth's own routes, such as `/api/auth/get-session`, do not
+  report sessions. Measured on a generated app with PostgreSQL and Redis, an
+  authenticated request makes the same Redis calls (one `EVALSHA` for the
+  counter) and the same SQL queries as before. Signing out, revoking, and banning
+  still take effect on the next request; a remembered session only selects a
+  counter.
+
+### Fixed
+
+- The built web server keeps a connection open for 35 seconds while it sends
+  nothing: the web image, `.env.example`, the reference Kubernetes config, and the
+  Compose and Kubernetes deployment renders set `CONNECTION_IDLE_TIMEOUT=35`.
+  Without it adapter-bun used Bun's default of 10 seconds, so a proxied request
+  whose API answer took longer got an empty reply after 8 to 12 seconds, and the
+  proxy's `504` `BACKEND_TIMEOUT` at `BACKEND_PROXY_TIMEOUT_MS` never arrived.
+  Bun checks idle connections every 4 seconds and can close one up to 4 seconds
+  early, so the value must be more than 4 seconds above the longest proxy
+  deadline, at most 255, or `0` to turn the timeout off. The renderers derive it
+  from the profile's `BACKEND_PROXY_TIMEOUT_MS` unless `runtimeConfig` sets it,
+  and the proxy refuses to load when a set value cannot cover
+  `BACKEND_PROXY_TIMEOUT_MS` or an `APP_PROXY_TIMEOUTS` entry. Server-sent events
+  were not affected, because adapter-bun lifts the timeout for them.
+- The API keeps a connection open for 35 seconds while it sends nothing, instead
+  of Elysia's 30, and reads the value from `API_IDLE_TIMEOUT` (0 to 255, 0 turns
+  it off; an empty value counts as unset, and `apiServerOptions.idleTimeout`
+  still wins). With Bun's 4-second idle checks, 30 cut an endpoint that answered
+  after 28 to 30 seconds, inside the web proxy's 30-second deadline, so the proxy
+  answered `503` `BACKEND_UNAVAILABLE`, and the API also cut every route with a
+  longer `APP_PROXY_TIMEOUTS` deadline. The Compose and Kubernetes renderers
+  derive `API_IDLE_TIMEOUT` from `BACKEND_PROXY_TIMEOUT_MS` the same way as
+  `CONNECTION_IDLE_TIMEOUT`, and the reference Kubernetes config sets it.
+- The `todo` template's `AGENTS.md` gives the same guidance as the `fullstack`
+  one it extends, plus its todo example. It had fallen behind and left out the
+  web server's `GET /healthz` route, the API timeouts, `apiServerOptions` and
+  its environment fallbacks, and `podo dev`, including that `podo dev down` also
+  stops `podo dev watch`.
+- After `podo provider set <capability> <provider> --apply`, the API type-checks
+  again. The generated `apps/api/src/config/providers.ts` declared `PROVIDERS` with
+  `as const`, so each field had the type of the selected provider only, and the
+  previous provider's module, which stays installed and inactive for a rollback,
+  failed `tsc` on its own check, such as `PROVIDERS.cache !== "memory"` in
+  `cache-memory.module.ts` after switching the cache to Redis (TS2367). This hit
+  every switch of the cache, object storage, events, and jobs providers, in both
+  directions. `PROVIDERS` is now typed `Readonly<ProviderSelections>`, with every
+  provider name of each capability.
+- The account page's Sessions tab shows the current session and every other one,
+  however many there are. It read Better Auth's `GET /api/auth/list-sessions`,
+  which returns at most 100 sessions in no set order, so a user with more
+  sessions could see no "Current" row and only part of the list. The admin dashboard adds
+  `GET /account/sessions`, the caller's own sessions paged on the server with the
+  current one on every page and no tokens, and `DELETE /account/sessions/{id}`,
+  which revokes through Better Auth's audited `/revoke-session`. The list keeps
+  Better Auth's `SESSION_NOT_FRESH` rule. API and UI specs cover a user with 106
+  sessions and paging.
+- The admin dashboard's table toolbar keeps its search box usable on a phone.
+  The input could shrink to about 42 px wide at a 390 px viewport, squeezed
+  between the search field select and the Search button on the users page; it
+  now keeps at least 192 px and wraps to its own row with the button, about
+  242 px wide there. Desktop layouts are unchanged.
+
+### Security
+
+- "Sign out other sessions" (`POST /api/auth/revoke-other-sessions`) revokes
+  every other session of the user. Better Auth 1.7 lists a user's sessions
+  through the adapter's default findMany limit of 100 and revoked only those, so
+  a user with more sessions kept the rest signed in, and had to repeat the
+  action once per hundred. The auth module adds the `revokeEveryOtherSession`
+  Better Auth plugin, which revokes the remaining sessions in batches through the
+  internal adapter after the endpoint runs, secondary-storage entries included.
+  Measured with 151 sessions: one call leaves only the current session, where it
+  left 52 before. The admin dashboard's test seed now clears an account's earlier
+  sessions with one call.
+- Audit entries, Better Auth sessions, and Better Auth's own per-address limits
+  no longer take the client address from a header the caller controls. The
+  audit-log module stored `X-Forwarded-For` exactly as received, and Better Auth
+  trusted a single-entry `X-Forwarded-For`, so a caller that reached the API
+  directly, or through more proxies than trusted, could write any address, or a
+  list of them, into the audit trail and the session list, and change addresses
+  to dodge sign-in limits. The API now resolves the address once per request in
+  `apps/api/src/core/client-address.ts`: the socket peer, or with
+  `TRUSTED_PROXY_HOPS` set, the entry of `TRUSTED_PROXY_HEADER` that the
+  outermost trusted proxy appended. It stores the result in the
+  `x-podokit-client-address` request header, replacing any value the caller
+  sent, and Better Auth (`ipAddressHeaders`), the audit hook,
+  `AuditService.recordRequest()`, and the rate limiter all read that one value.
+  These settings move from the rate-limit module (`RATE_LIMIT_TRUSTED_PROXY_HOPS`,
+  `RATE_LIMIT_PROXY_HEADER`) to the API core. The generated `.env.example`,
+  `.env.docker.example`, Kubernetes example, and new deployment profiles set
+  `TRUSTED_PROXY_HOPS=1`, for the web proxy or gateway in front of the API.
+
+### Upgrade notes
+
+- If you edited `apps/web/src/lib/server/backend-proxy.ts` to give some routes a
+  longer deadline or none, or a body limit of their own, `podo update` reports a
+  conflict where the new proxy picks them. Take the new version, list those
+  routes in `APP_PROXY_TIMEOUTS` and `APP_BODY_LIMITS`, with `:name` for an id in
+  the path, and keep the managed file unchanged so later updates stay clean.
+- A route that calls Bun's `server.timeout(request, 0)` through `platform.server`
+  to keep a long request open gets no longer timeout behind an HTTPS gateway:
+  adapter-bun rewrites the request onto the public origin there, and Bun ignores
+  the call for the rewritten request. Set `CONNECTION_IDLE_TIMEOUT` instead, `0`
+  for a route without a deadline.
+- `podo update --apply` sets `CONNECTION_IDLE_TIMEOUT=35` in the managed web
+  `Dockerfile`, `.env.example`, and `infra/k3s/configmap.yaml`. Add it to your
+  `.env` if you run the built web server with it. If you set
+  `BACKEND_PROXY_TIMEOUT_MS` above 30000 outside a deployment profile, such as in
+  a hand-managed ConfigMap, set `CONNECTION_IDLE_TIMEOUT` more than 4 seconds
+  above it as well. With the image's 35 the proxy refuses to load until it can
+  cover the deadline: the web server stops at startup in apps with server hooks,
+  and otherwise every `/api` request answers `500`.
+- Rate limits now apply per user. If you sized `RATE_LIMIT_MAX` or a route
+  profile for one session and your users stay signed in on several devices at
+  once, raise it to cover all of them.
+- `AuthService` takes its session resolver in an options object,
+  `new AuthService(settings, accessPolicy, { resolveSession, resolvedSessions })`.
+  Code of your own that constructs it with a resolver as the third argument
+  passes `{ resolveSession }` instead.
+- An API that relied on Elysia's default idle timeout of 30 seconds now uses 35;
+  an `idleTimeout` in `apiServerOptions` keeps its value and still wins over
+  `API_IDLE_TIMEOUT`.
+- The deployment renderers now set `CONNECTION_IDLE_TIMEOUT` and
+  `API_IDLE_TIMEOUT`, so a Compose
+  rollback to a revision applied before this version is refused, because it no
+  longer renders byte for byte; roll forward with a new release instead.
+- Rename `RATE_LIMIT_TRUSTED_PROXY_HOPS` to `TRUSTED_PROXY_HOPS` and
+  `RATE_LIMIT_PROXY_HEADER` to `TRUSTED_PROXY_HEADER` in your `.env`,
+  `.env.docker`, deployment profiles' `runtimeConfig`, and any hand-managed
+  ConfigMap. The API refuses to start, and deployment profiles fail to load,
+  while the old names are set, because falling back to the default of 0 would
+  attribute every request through the web proxy to the web server. Apps without
+  `rate-limit` set `TRUSTED_PROXY_HOPS=1` too, so audit entries and sessions keep
+  the browser's address. Code of your own that read `X-Forwarded-For` for an
+  address should call `clientAddressOf(request.headers)` instead, and a custom
+  request guard reads `context.clientAddress`.
+- `podo update --apply` rewrites the managed `apps/api/src/config/providers.ts`
+  with the new `PROVIDERS` type. If you ejected or edited that file, replace
+  `} as const satisfies ProviderSelections;` with `};` and declare
+  `export const PROVIDERS: Readonly<ProviderSelections> = {` yourself.
+- `AGENTS.md` is application-owned, so `podo update` does not add its new notes
+  about `APP_PROXY_TIMEOUTS`, `CONNECTION_IDLE_TIMEOUT`, and `API_IDLE_TIMEOUT`;
+  copy them from a newly generated app if your agents should know.
+
 ## [1.4.2] - 2026-10-16
 
 ### Fixed

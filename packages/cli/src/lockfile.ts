@@ -122,9 +122,11 @@ export const DEFAULT_OWNED_GLOBS = [
   "apps/web/src/lib/i18n/catalogs/app/**",
   // Owned Elysia extension slot — register application services and plugins here.
   "apps/api/src/app.extensions.ts",
-  // Owned additions to the managed /api proxy's header lists and body limits.
+  // Owned additions to the managed /api proxy's header lists, body limits, and
+  // response deadlines.
   "apps/web/src/lib/server/proxy-headers.ts",
   "apps/web/src/lib/server/body-limits.ts",
+  "apps/web/src/lib/server/proxy-timeouts.ts",
   // Owned fallback page SvelteKit serves when the root layout or a hook fails.
   "apps/web/src/error.html",
   // AI agent guidance — yours to customize; update never touches it.

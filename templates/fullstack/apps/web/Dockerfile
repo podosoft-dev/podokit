@@ -32,6 +32,10 @@ FROM oven/bun:1.4.0-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV BODY_SIZE_LIMIT=3M
+# Seconds a connection may stay silent, such as while the /api proxy waits for the
+# API: more than 4 above BACKEND_PROXY_TIMEOUT_MS (30 s), since Bun closes idle
+# connections on a 4-second tick.
+ENV CONNECTION_IDLE_TIMEOUT=35
 COPY --from=build /app/apps/web/build ./apps/web/build
 WORKDIR /app/apps/web
 USER bun

@@ -1,7 +1,7 @@
 {
   "name": "rate-limit",
   "manifestVersion": 3,
-  "description": "Provider-neutral Elysia request limiting by validated API key, signed-in session, or trusted-proxy client address.",
+  "description": "Provider-neutral Elysia request limiting by validated API key, signed-in user, or trusted-proxy client address.",
   "requires": ["api-key-auth"],
   "requiresCapabilities": ["cache"],
   "targetApp": "api",
@@ -19,9 +19,6 @@
     "RATE_LIMIT_AUTH_MAX=20",
     "# higher ceiling for SSR runtime settings and session reads",
     "RATE_LIMIT_RUNTIME_MAX=1000",
-    "# trust no proxy hop by default; set the exact production proxy depth",
-    "RATE_LIMIT_TRUSTED_PROXY_HOPS=0",
-    "RATE_LIMIT_PROXY_HEADER=x-forwarded-for",
     "RATE_LIMIT_STORAGE_TIMEOUT_MS=1000",
     "RATE_LIMIT_UNAVAILABLE_RETRY_AFTER=1"
   ],
@@ -40,20 +37,20 @@
       "file": "AGENTS.md",
       "marker": "<!-- podokit:end:agents-modules -->",
       "optional": true,
-      "text": "### rate-limit\n- Every request counts against a per-caller budget (general, `/api/auth`, or runtime reads); exceeded limits return 429 `RATE_LIMIT_EXCEEDED` with `Retry-After`.\n- Give routes that legitimately send many requests, such as upload chunks, their own budget instead of raising `RATE_LIMIT_MAX`: `services.tryResolve(RATE_LIMIT_ROUTES)?.register({ method: \"PUT\", pathPrefix: \"/uploads\", profile: { name: \"uploads\", limit: 3000 } })` (`RATE_LIMIT_ROUTES` from `@podosoft/podokit-runtime`). Register from a module's `plugin` factory or `configureServices()` in `app.extensions.ts`; the most specific prefix wins, and `profile: \"exempt\"` skips limiting.\n- Prefixes are API paths (`/uploads`, not the web proxy's `/api/uploads`); Better Auth routes keep `/api/auth`.\n"
+      "text": "### rate-limit\n- Every request counts against a per-caller budget (general, `/api/auth`, or runtime reads), keyed by API key, then signed-in user, then client address; exceeded limits return 429 `RATE_LIMIT_EXCEEDED` with `Retry-After`. A user's sessions share one budget once the API has resolved them for a request.\n- Give routes that legitimately send many requests, such as upload chunks, their own budget instead of raising `RATE_LIMIT_MAX`: `services.tryResolve(RATE_LIMIT_ROUTES)?.register({ method: \"PUT\", pathPrefix: \"/uploads\", profile: { name: \"uploads\", limit: 3000 } })` (`RATE_LIMIT_ROUTES` from `@podosoft/podokit-runtime`). Register from a module's `plugin` factory or `configureServices()` in `app.extensions.ts`; the most specific prefix wins (more segments, then a literal segment over a `:name` parameter), and `profile: \"exempt\"` skips limiting.\n- Prefixes are API paths (`/uploads`, not the web proxy's `/api/uploads`); Better Auth routes keep `/api/auth`. A `:name` segment matches one path segment, as in `/hosts/:hostId/file-transfers`.\n"
     }
   ],
   "instructions": [
     "Configure the selected cache provider before enabling request limits.",
     "Tune the general, authentication, and runtime limits in .env.",
     "Give each deployment that shares Redis a distinct RATE_LIMIT_KEY_PREFIX.",
-    "Set RATE_LIMIT_TRUSTED_PROXY_HOPS to the exact number of trusted reverse proxies; keep 0 for direct API access.",
-    "Validated X-API-Key clients and signed-in sessions receive independent opaque counters; other traffic uses the trusted client address.",
-    "Sessions are recognized by verifying the Better Auth cookie or bearer signature with BETTER_AUTH_SECRET, without a database read, so limits apply per session rather than per user.",
+    "Requests without a validated API key or session count by the client address the API resolves from TRUSTED_PROXY_HOPS and TRUSTED_PROXY_HEADER, which audit entries and Better Auth sessions use too.",
+    "Validated X-API-Key clients and signed-in users receive independent opaque counters; other traffic uses the resolved client address.",
+    "Sessions are recognized by verifying the Better Auth cookie or bearer signature with BETTER_AUTH_SECRET, without a database read, and count under their user once the API has resolved them for a request, so limits apply per user.",
     "Exceeded limits return RATE_LIMIT_EXCEEDED with HTTP 429 and Retry-After. Cache failures return RATE_LIMIT_UNAVAILABLE with HTTP 503.",
     "Register a RateLimitIdentityExtension under RATE_LIMIT_IDENTITY_EXTENSION in app.extensions.ts for another validated machine-key source.",
     "GET /health and GET /health/ready bypass request quotas so orchestrator probes remain reliable.",
-    "Give a route its own budget or exempt it with services.tryResolve(RATE_LIMIT_ROUTES)?.register({ method, pathPrefix, profile }) from a module's plugin factory or configureServices() in app.extensions.ts; the most specific prefix wins.",
+    "Give a route its own budget or exempt it with services.tryResolve(RATE_LIMIT_ROUTES)?.register({ method, pathPrefix, profile }) from a module's plugin factory or configureServices() in app.extensions.ts; a :name segment matches one path segment, and the most specific prefix wins.",
     "Redis counters are shared across replicas; memory counters require one API replica."
   ]
 }

@@ -1358,6 +1358,51 @@ describe("app-owned body limits", () => {
   });
 });
 
+describe("app-owned proxy timeouts", () => {
+  const SEED = "apps/web/src/lib/server/proxy-timeouts.ts";
+  const PROXY = "apps/web/src/lib/server/backend-proxy.ts";
+
+  it("creates the owned file once for an existing app and never overwrites it", () => {
+    const oldTemplates = join(tmp(), "old-templates");
+    cpSync(REPO_TEMPLATES, oldTemplates, { recursive: true });
+    const server = join(oldTemplates, "fullstack/apps/web/src/lib/server");
+    rmSync(join(server, "proxy-timeouts.ts"));
+    const proxyPath = join(server, "backend-proxy.ts");
+    const current = readFileSync(proxyPath, "utf8");
+    expect(current).toContain('import { APP_PROXY_TIMEOUTS } from "./proxy-timeouts";\n');
+    writeFileSync(
+      proxyPath,
+      current
+        .replace('import { APP_PROXY_TIMEOUTS } from "./proxy-timeouts";\n', "")
+        .replace("sortedProxyTimeouts(APP_PROXY_TIMEOUTS)", "sortedProxyTimeouts([])"),
+    );
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: project });
+    const manifest = readManifest(project);
+    if (!manifest) throw new Error("expected manifest");
+    writeManifest(project, { ...manifest, ownedGlobs: manifest.ownedGlobs.filter((glob) => glob !== SEED) });
+    expect(existsSync(join(project, SEED))).toBe(false);
+
+    expect(planUpdate(project, REPO_TEMPLATES).changes.find((change) => change.path === SEED)).toMatchObject({
+      action: "add",
+      tier: "owned",
+    });
+    const result = applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+
+    expect(result.conflicts).toEqual([]);
+    expect(readFileSync(join(project, PROXY), "utf8")).toContain('from "./proxy-timeouts"');
+    expect(readFilesLock(project)?.files[SEED]?.tier).toBe("owned");
+
+    const own =
+      "export const APP_PROXY_TIMEOUTS: ReadonlyArray<{ pathPrefix: string; timeoutMs: number | null }> = [\n" +
+      '  { pathPrefix: "/api/file-transfers/", timeoutMs: null },\n];\n';
+    writeFileSync(join(project, SEED), own);
+    expect(planUpdate(project, REPO_TEMPLATES).changes.find((change) => change.path === SEED)?.action).toBe("skip");
+    applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+    expect(readFileSync(join(project, SEED), "utf8")).toBe(own);
+  });
+});
+
 describe("app-owned asset paths", () => {
   const SEED = "apps/web/src/lib/server/asset-paths.ts";
   const DECISION = "apps/web/src/lib/server/runtime-context.ts";

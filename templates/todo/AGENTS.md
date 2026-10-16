@@ -10,8 +10,9 @@ A Bun 1.4 full-stack TypeScript monorepo ({{packageManager}} workspaces):
 
 - `apps/api` — **Elysia** backend (`{{projectName}}-api`), Bun.SQL + `{{databaseProvider}}`, merged OpenAPI at `/api-docs`.
 - `apps/web` — **SvelteKit** frontend (`{{projectName}}-web`), Tailwind v4 + shadcn-svelte + typesafe-i18n.
-- `infra/` — Docker Compose references for external services and example k3s manifests.
-- `.podokit/` — generation metadata plus application-owned development and deployment profiles.
+- `infra/` — provider-aware Docker Compose and example k3s manifests.
+- `.podokit/` — PodoKit generation metadata plus application-owned development and
+  deployment profiles (see "PodoKit tooling" below).
 - **Todo example**: `apps/api/src/todos/` (Elysia plugin, Bun.SQL repository, and migration) and the todo UI in `apps/web/src/routes/` show the end-to-end patterns to follow.
 
 ## Setup & commands
@@ -49,7 +50,32 @@ Merge added module settings from `.env.example` into an existing `.env`.
   managed lists. Cap a route's request body in the app-owned
   `apps/web/src/lib/server/body-limits.ts` (`APP_BODY_LIMITS`, 413
   `PAYLOAD_TOO_LARGE`). `BODY_SIZE_LIMIT` is the ceiling for every web route, so
-  uploads larger than it must use a direct API path (`apiPaths`) instead.
+  uploads larger than it must use a direct API path (`apiPaths`) instead. Give a
+  route a longer, shorter, or no response deadline in the app-owned
+  `apps/web/src/lib/server/proxy-timeouts.ts` (`APP_PROXY_TIMEOUTS`, `null` for
+  none); never edit the managed deadline. Both lists take path prefixes with
+  `:name` parameters, such as `/api/hosts/:hostId/file-transfers`, and the most
+  specific prefix wins.
+- Server-side API calls (`serverApiClient`) give up after `BACKEND_TIMEOUT_MS`
+  (2000), and the proxy answers 504 `BACKEND_TIMEOUT` when the API sends no
+  response headers within `BACKEND_PROXY_TIMEOUT_MS` (30000). Once the API's
+  `GET /health` stops answering too, calls throw `BackendUnavailableError` and the
+  proxy answers 503 `BACKEND_UNAVAILABLE` at once until it answers again. Handle
+  any non-`ApiError` failure in a load function as a temporary outage. The API
+  (`API_IDLE_TIMEOUT`) and the built web server (`CONNECTION_IDLE_TIMEOUT`) close
+  a connection that sends nothing for that many seconds (35 each): raise both
+  with any longer `BACKEND_PROXY_TIMEOUT_MS` or `APP_PROXY_TIMEOUTS` entry, more
+  than 4 above it, or set `0` when a route has no deadline. The proxy refuses to
+  load when `CONNECTION_IDLE_TIMEOUT` cannot cover a deadline.
+- Read a caller's address in the API with `clientAddressOf(request.headers)` from
+  `apps/api/src/core/client-address.ts`, never from `X-Forwarded-For` directly. The
+  API resolves it once per request from `TRUSTED_PROXY_HOPS` (1: the web proxy) and
+  `TRUSTED_PROXY_HEADER`; Better Auth sessions, audit entries, and rate limits use
+  the same address.
+- `GET /healthz` (`apps/web/src/routes/healthz/+server.ts`) is the web server's own
+  health route for the Kubernetes probes, the Compose healthcheck, and the image
+  `HEALTHCHECK`. Keep it free of API calls, so an API outage does not take the web
+  out of service.
 - When the root layout or a server hook fails, such as with 503 while the API is
   down, SvelteKit serves the app-owned `apps/web/src/error.html`. It is plain HTML
   with inline styles: no components, app CSS, scripts, or assets, and only the
@@ -96,15 +122,25 @@ changes need an e2e/unit test.
 This project is managed by the `podo` CLI. Files have an ownership tier recorded
 in `.podokit/files.lock` — respect it:
 
-- **owned** (your code: `apps/web/src/routes/**`, your components/services, `apps/api/src/app.extensions.ts`, and this `AGENTS.md`) — edit freely. Add application-owned services or module descriptors through `app.extensions.ts` instead of changing toolkit registrations.
+- **owned** (your code: `apps/web/src/routes/**`, your components/services, `apps/api/src/app.extensions.ts`, and this `AGENTS.md`) — edit freely. Add application-owned services or module descriptors through `app.extensions.ts` instead of changing toolkit registrations. Set Bun server options (`maxRequestBodySize`, `idleTimeout`) with its `apiServerOptions` export rather than editing `main.ts`; `API_MAX_REQUEST_BODY_SIZE` and `API_IDLE_TIMEOUT` apply when the export leaves them out.
 - **assembled** (e.g. `apps/api/src/app.ts`, `auth.ts`) — contain `// podokit:begin:… / …:end` fenced regions that the toolkit recomputes. Edit outside the fences only; **never hand-edit inside the fences**.
 - **managed** (bootstrap/config like `main.ts`) — the toolkit may update these; avoid gratuitous edits.
 
 Useful commands:
 
-- `podo provider list` / `podo provider set <capability> <provider> [--apply]` — inspect or switch database, cache, storage, events, and jobs; set previews by default.
+- `podo dev watch|up|ps|logs|exec|down` — run container development through the
+  shared loopback gateway. `.podokit/dev.json` owns the local/public hosts and the
+  exact API WebSocket allowlist; never use a prefix or wildcard for that allowlist.
+  `podo dev up` rebuilds the images from the current source so a recreated
+  container never runs code older than the files Compose Watch synced.
+  `podo dev down` also stops this project's running `podo dev watch`; do not
+  kill Compose processes by hand.
+  The containers read the untracked `.env.docker`; `podo dev` creates it from the
+  committed `.env.docker.example` with generated secrets when it is missing. Never
+  commit `.env.docker` or put secrets in the example.
 - `podo add <module>` — add a feature (auth, admin-dashboard, redis, bullmq, …). It wires itself into the app; run `podo add` with no argument to list modules.
 - `podo remove <module>` — un-apply a module (inverse of add; refuses if another module needs it, keeps files you edited).
+- `podo provider list` / `podo provider set <capability> <provider> [--apply]` — inspect or switch database, cache, object storage, events, and jobs. Set is dry-run by default and never migrates or deletes provider data. Local providers require one API process.
 - `podo status` / `podo diff` — see your local edits vs. what PodoKit generated.
 - `podo update` — pull in template/module improvements (3-way merges your edits; never touches owned files).
 - `podo deploy` — plan, apply, verify, or roll back an immutable release on Kubernetes or one Docker host. Production API WebSocket paths belong in the deployment profile's exact `exposure.webSocketPaths` allowlist, and API routes that take bodies above the web server's `BODY_SIZE_LIMIT` (file uploads) in `exposure.apiPaths` (and `.podokit/dev.json` `apiPaths` for `podo dev`; `podo add` and `podo deploy init` fill in the paths modules declare), which reach the API without the web proxy, so the API must check their size, session, and `Origin` itself; Compose trusts forwarding headers only from `exposure.trustedProxyCidrs`. Tag `vX.Y.Z` to build and push the images (`.github/workflows/release.yml`; check its runner — GitHub-hosted minutes are free for public repositories only). Use `.agents/skills/podokit-deploy`.
