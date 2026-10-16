@@ -35,6 +35,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   decorators failed to load outside `apps/api`, and the data source looked for
   `.env` and the migrations relative to the wrong directory.
 
+- `.podokit/files.lock` never records local environment files such as `.env`,
+  `.env.docker`, `.env.local` or `apps/api/.env`, which Git ignores and which
+  hold secrets; the committed `.env.example` and `.env.docker.example` are still
+  recorded. `podo update` wrote the hash of `.env.docker` into the lock, and
+  after `podo add`, `podo remove` or `podo provider set` recorded `.env` as a
+  managed file, the next `podo update` deleted it as removed upstream. Entries
+  an earlier version wrote are ignored and dropped on the next lock write.
+
 ## [1.4.1] - 2026-10-16
 
 ### Fixed
