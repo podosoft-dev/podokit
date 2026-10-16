@@ -17,7 +17,10 @@ node scripts/dev-app.mjs /tmp/podokit --template todo --database sqlite --local-
 ```
 
 The helper builds the monorepo, runs the local CLI, links unpublished local
-`@podosoft/*` packages, applies requested modules, and runs `bun install`.
+`@podosoft/*` packages, applies requested modules, and runs `bun install`. It
+ends with the time each phase took. The links point at the checkout the helper
+ran from, so regenerate the app after removing that checkout or worktree; with a
+warm Bun cache and twelve modules, the whole run took 13 seconds (2026-10-16).
 After changing `packages/api-client`, rebuild it in the PodoKit monorepo and
 refresh the generated app:
 

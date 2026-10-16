@@ -9,11 +9,13 @@
 //
 // It builds the monorepo, generates the app with the local CLI, points the
 // web app's @podosoft/podokit-api-client at the local package (file:), applies
-// any requested modules, and runs bun install.
+// any requested modules, and runs bun install. It prints how long each phase
+// took, so a slow regeneration shows which phase to look at.
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createPhaseTimer } from "./e2e-ci-lib.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
@@ -37,13 +39,14 @@ const name = target.split("/").pop();
 
 const run = (cmd, cmdArgs, cwd = repoRoot) =>
   execFileSync(cmd, cmdArgs, { cwd, stdio: "inherit" });
+const timer = createPhaseTimer();
 
 if (!args.includes("--no-build")) {
-  console.log("• building monorepo…");
+  timer.start("build the monorepo");
   run("npm", ["run", "build"]);
 }
 
-console.log(`• generating ${name} (${template}) at ${target}…`);
+timer.start(`generate ${name} (${template}) at ${target}`);
 rmSync(target, { recursive: true, force: true });
 run("node", [
   join(repoRoot, "packages/cli/dist/index.js"),
@@ -93,6 +96,7 @@ if (!usePublished) {
   }
 }
 
+if (modules.length > 0) timer.start(`add ${modules.join(", ")}`);
 for (const mod of modules) {
   console.log(`• podo add ${mod}…`);
   run("node", [join(repoRoot, "packages/cli/dist/index.js"), "add", mod], target);
@@ -118,8 +122,9 @@ if (!usePublished) {
   console.log("• using published @podosoft packages (container-friendly)");
 }
 
-console.log("• bun install…");
+timer.start("bun install");
 run("bun", ["install"], target);
+timer.finish();
 
 console.log(`\nDone. Local dev app at ${target}`);
 console.log("After editing api-client: npm run build -w @podosoft/podokit-api-client (in the monorepo),");
