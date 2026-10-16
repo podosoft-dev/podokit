@@ -58,6 +58,10 @@ Merge added module settings from `.env.example` into an existing `.env`.
   any non-`ApiError` failure in a load function as a temporary outage. Raising
   the API's `apiServerOptions.idleTimeout` needs a matching
   `BACKEND_PROXY_TIMEOUT_MS`.
+- `GET /healthz` (`apps/web/src/routes/healthz/+server.ts`) is the web server's own
+  health route for the Kubernetes probes, the Compose healthcheck, and the image
+  `HEALTHCHECK`. Keep it free of API calls, so an API outage does not take the web
+  out of service.
 - When the root layout or a server hook fails, such as with 503 while the API is
   down, SvelteKit serves the app-owned `apps/web/src/error.html`. It is plain HTML
   with inline styles: no components, app CSS, scripts, or assets, and only the

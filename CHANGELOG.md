@@ -80,6 +80,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   that fetch as aborted (`net::ERR_ABORTED`) once SvelteKit has consumed the
   body and then keeps no body, so the spec failed with "No data found for
   resource" even though the page had its data.
+- The web server has its own health route, `GET /healthz`, which answers `200`
+  with `Cache-Control: no-store` and `X-Robots-Tag: noindex, nofollow` without
+  the session, the site settings, or any other API call. The rendered Kubernetes
+  web readiness and liveness probes, the Compose healthcheck, the web image's
+  `HEALTHCHECK`, and the reference `infra/k3s/web-deployment.yaml` request it
+  instead of `/`, so an API outage no longer takes the web pods out of service or
+  restarts them while the pages could still render their fallbacks. The
+  Kubernetes web probes allow `timeoutSeconds: 2`, like the API probes.
+
+### Upgrade notes
+
+- `podo update --apply` adds `apps/web/src/routes/healthz/+server.ts` as an
+  application-owned file, the way it adds other new routes, and updates the
+  managed web `Dockerfile`, `infra/k3s/web-deployment.yaml`, and the admin
+  dashboard's `runtime-context.ts`, which skips the session and site settings
+  for `/healthz`. An app that already has a file at that path keeps its own, so
+  make sure it answers `200` without calling the API.
+- The deployment renderer in this version probes `/healthz`. Build and push a
+  release from the updated app before you deploy with it: a web image built from
+  older templates has no such route, so its pods never become ready and a Compose
+  web container stays unhealthy. A Kubernetes rollback to a revision deployed
+  before the upgrade keeps that revision's probes. A Compose rollback to such a
+  revision is refused, because its healthcheck no longer renders byte for byte;
+  roll forward with a new release instead.
+- `AGENTS.md` is application-owned, so `podo update` does not add its new notes
+  about the health route and the API timeouts; copy them from a newly generated
+  app if your agents should know.
 
 
 ## [1.4.1] - 2026-10-16

@@ -133,4 +133,15 @@ describe("handle", () => {
     expect(client.get).not.toHaveBeenCalled();
     expect(client.getSession).not.toHaveBeenCalled();
   });
+
+  it("answers the health route without runtime lookups", async () => {
+    client.get.mockRejectedValue(new BackendUnavailableError());
+    client.getSession.mockRejectedValue(new BackendUnavailableError());
+
+    await handle({ event: requestEvent("/healthz"), resolve });
+
+    expect(client.get).not.toHaveBeenCalled();
+    expect(client.getSession).not.toHaveBeenCalled();
+    expect(resolve).toHaveBeenCalledTimes(1);
+  });
 });

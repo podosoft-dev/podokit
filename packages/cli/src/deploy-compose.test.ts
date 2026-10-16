@@ -632,6 +632,21 @@ describe("api service", () => {
   });
 });
 
+describe("web service", () => {
+  it("checks the web server's own health route, not a page that calls the API", () => {
+    const profile = composeProfileOf(initialized(["auth"]));
+    const document = renderComposeDocument(
+      profile,
+      "v1.2.3",
+      defaultComposeImages(profile, "v1.2.3"),
+      "sha256:0",
+    );
+    const web = document.split("\n  example-app-web:\n")[1]?.split(/\n  \S/)[0] ?? "";
+    expect(web).toContain("fetch('http://127.0.0.1:3000/healthz')");
+    expect(web).toContain("  timeout: 5s\n");
+  });
+});
+
 describe("worker service", () => {
   it("disables the healthcheck it would inherit from the API image", () => {
     const profile = composeProfileOf(initialized(["auth", "bullmq"]));

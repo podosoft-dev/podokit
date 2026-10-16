@@ -526,6 +526,12 @@ describe("create (integration against templates)", () => {
     );
     expect(readFilesLock(target)?.files[bodyLimits]?.tier).toBe("owned");
     expect(readFilesLock(target)?.files["apps/web/src/lib/server/backend-proxy.ts"]?.tier).toBe("managed");
+    // The web server's health route answers the probes without calling the API.
+    const healthRoute = "apps/web/src/routes/healthz/+server.ts";
+    const healthSource = readFileSync(join(target, healthRoute), "utf8");
+    expect(healthSource).toContain('"cache-control": "no-store"');
+    expect(healthSource).not.toMatch(/serverApiClient|backend-proxy|fetch\(/);
+    expect(readFileSync(join(target, "apps/web/Dockerfile"), "utf8")).toContain("'/healthz'");
     // SvelteKit's fallback when the root layout or a hook fails: self-contained,
     // app-owned, and without text that would need translating.
     const errorPage = readFileSync(join(target, "apps/web/src/error.html"), "utf8");

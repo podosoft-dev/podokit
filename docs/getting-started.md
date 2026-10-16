@@ -83,7 +83,7 @@ bun run dev
 ```
 
 - API: http://localhost:5002 (`/health`, `/health/ready`, `/api-docs`)
-- Web: http://localhost:5001
+- Web: http://localhost:5001 (`/healthz` answers without the API)
 
 The host Compose file starts PostgreSQL by default. Redis needs `--profile
 cache`; Silo needs the `minio.compose.yml` overlay added by `object-storage-s3`.

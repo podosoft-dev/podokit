@@ -455,8 +455,10 @@ ${entries.length ? `data:\n${entries.map(([key, value]) => `  ${key}: ${quote(va
 `;
 }
 
-// Above the API's 800 ms per-check readiness bound; the Kubernetes default is 1 s.
-const API_PROBE_TIMEOUT_SECONDS = 2;
+// Every rendered API and web probe allows 2 s instead of the Kubernetes default
+// of 1 s: above the API's 800 ms per-check readiness bound, and enough for a busy
+// web server.
+const PROBE_TIMEOUT_SECONDS = 2;
 
 function deployment(
   profile: DeployProfileV1,
@@ -477,25 +479,29 @@ function deployment(
       ? `          readinessProbe:
             httpGet: { path: /health/ready, port: 3000 }
             periodSeconds: 5
-            timeoutSeconds: ${API_PROBE_TIMEOUT_SECONDS}
+            timeoutSeconds: ${PROBE_TIMEOUT_SECONDS}
           livenessProbe:
             httpGet: { path: /health, port: 3000 }
             initialDelaySeconds: 20
             periodSeconds: 10
-            timeoutSeconds: ${API_PROBE_TIMEOUT_SECONDS}
+            timeoutSeconds: ${PROBE_TIMEOUT_SECONDS}
           startupProbe:
             httpGet: { path: /health, port: 3000 }
             failureThreshold: 30
             periodSeconds: 2
-            timeoutSeconds: ${API_PROBE_TIMEOUT_SECONDS}
+            timeoutSeconds: ${PROBE_TIMEOUT_SECONDS}
 `
-      : `          readinessProbe:
-            httpGet: { path: /, port: 3000 }
+      : // The web server's own route: an API outage must not take the web pods
+        // out of service or restart them.
+        `          readinessProbe:
+            httpGet: { path: /healthz, port: 3000 }
             periodSeconds: 5
+            timeoutSeconds: ${PROBE_TIMEOUT_SECONDS}
           livenessProbe:
-            httpGet: { path: /, port: 3000 }
+            httpGet: { path: /healthz, port: 3000 }
             initialDelaySeconds: 20
             periodSeconds: 10
+            timeoutSeconds: ${PROBE_TIMEOUT_SECONDS}
 `;
   return `apiVersion: apps/v1
 kind: Deployment

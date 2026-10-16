@@ -55,7 +55,7 @@ apps/
     scripts/run-migrations.mjs # migrate:all: source in development, dist in production
     Dockerfile             # oven/bun:1.4.0-alpine
   web/
-    src/routes/            # SvelteKit pages and API proxy
+    src/routes/            # SvelteKit pages, API proxy, and GET /healthz
     src/lib/i18n/          # English and Korean JSON catalogs
     src/lib/components/ui/ # vendored shadcn-svelte primitives
     Dockerfile             # oven/bun:1.4.0-alpine
