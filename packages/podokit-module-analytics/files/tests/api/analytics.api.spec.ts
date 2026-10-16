@@ -42,7 +42,7 @@ test("analytics public config exposes no report credential", async ({
   await anonymous.dispose();
 });
 
-test("analytics administrator config is protected and write-only", async ({
+test("analytics administrator config is protected and write-only", { tag: "@exclusive" }, async ({
   playwright,
 }) => {
   const anonymous = await playwright.request.newContext({

@@ -9,7 +9,7 @@
 //   OUTAGE_WEB_PORT,
 //   SECONDARY_API_PORT,
 //   POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB,
-//   APP_DIR, E2E_BUN_CACHE, E2E_RATE_LIMIT_MAX, KEEP.
+//   APP_DIR, E2E_BUN_CACHE, E2E_RATE_LIMIT_MAX, E2E_WORKERS, KEEP.
 import { spawn, spawnSync, execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir, homedir } from "node:os";
@@ -19,6 +19,7 @@ import {
   assertCleanMigrationOutput,
   createPhaseTimer,
   playwrightArguments,
+  playwrightWorkers,
   resolveE2eOptions,
   retryTransientInstall,
 } from "./e2e-ci-lib.mjs";
@@ -427,7 +428,8 @@ async function main() {
 
   step("install Playwright Chromium");
   run("bunx", ["playwright", "install", "--with-deps", "chromium"], { cwd: join(target, "tests") });
-  step(`run Playwright${smoke ? " smoke" : " full suite"}`);
+  const workers = playwrightWorkers(options);
+  step(`run Playwright${smoke ? " smoke" : " full suite"} with E2E_WORKERS=${workers}`);
   // --grep wins when given (run just one feature's specs); otherwise --smoke runs
   // the @smoke subset, and the default runs everything.
   const testArgs = playwrightArguments(options);
@@ -443,6 +445,7 @@ async function main() {
       ...process.env,
       E2E_BASE_URL: webURL,
       E2E_API_URL: `http://localhost:${env.API_PORT}`,
+      E2E_WORKERS: workers,
       // The rate-limit spec compares each budget with the limits the API runs with.
       RATE_LIMIT_MAX: pgEnv.RATE_LIMIT_MAX,
       RATE_LIMIT_AUTH_MAX: pgEnv.RATE_LIMIT_AUTH_MAX,

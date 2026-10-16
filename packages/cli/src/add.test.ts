@@ -867,7 +867,7 @@ describe("addModule (auth / better-auth)", () => {
     );
     expect(disposableUsers).toContain("async ({ context, playwright }, use, testInfo)");
     expect(disposableUsers).toContain("playwright.request.newContext");
-    expect(disposableUsers).toContain('testInfo.project.name === "api"');
+    expect(disposableUsers).toContain('testInfo.project.name.replace(/-exclusive$/, "") === "api"');
     expect(disposableUsers).toContain("ADMIN.email");
     expect(disposableUsers).toContain("headers: origin");
     expect(disposableUsers).toContain("storageState: await context.storageState()");

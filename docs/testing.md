@@ -45,6 +45,45 @@ For the host-process layout, start the generated dependencies and application
 with the commands in [development.md](development.md), then use the default
 `http://localhost:5001` origin.
 
+### Workers and exclusive tests
+
+The suite runs on one worker unless `E2E_WORKERS` sets a count. More workers
+finish the whole suite sooner (see [Measured durations](#measured-durations)):
+
+```bash
+E2E_WORKERS=2 E2E_BASE_URL=http://my-app.localhost bun run test:e2e
+```
+
+Every test shares one API, database, Mailpit inbox, and SMS sink. A test that
+changes state other tests rely on carries the `@exclusive` tag:
+
+```ts
+test("maintenance mode holds visitors back", { tag: "@exclusive" }, async ({ page }) => {
+  // ...
+});
+```
+
+That covers server-wide settings (feature flags, the authentication
+configuration such as SMTP, social providers, sign-up approval, account
+deletion, automatic logout, or audit logging, the site settings and favicon,
+and module settings such as analytics) and the profile of a seeded account. The
+managed config gives every test project an `<name>-exclusive` twin, such as
+`api-exclusive` and `ui-exclusive`, that runs only the tagged tests on one
+worker. With one worker the twins come last; with more, each twin depends on
+every other test project and on the twin before it, so an exclusive test never
+runs alongside another test. Projects that applications add in
+`tests/playwright.projects.cjs` get twins as well, except setup projects that
+another project depends on. Tests never empty the shared inbox or sink; each
+one mails and texts recipients of its own.
+
+Playwright runs a project's dependencies in full. With more than one worker, a
+run that selects exclusive tests with a file name, `--grep`, or `--project`
+therefore runs every other test first, and a test that fails there marks the
+exclusive tests as not run. Use more workers for the whole suite and the default
+single worker for a few files. The global setup refuses `--workers` above 1
+without `E2E_WORKERS`, because the projects are already built by then; do not
+combine `--no-deps` with `E2E_WORKERS` above 1 either.
+
 Install the browser once from the generated project with:
 
 ```bash
@@ -128,6 +167,9 @@ node scripts/e2e-ci.mjs --grep "magic link"
   repeating the browser matrix; Changesets version PRs use it.
 - `--grep` narrows feature scenarios but still performs the faithful package and
   generated-app setup.
+- The full suite runs with `E2E_WORKERS=2`; smoke and `--grep` runs keep one
+  worker, because with more a selected exclusive test pulls in every other
+  test. Set `E2E_WORKERS` to override either.
 
 The harness publishes the template engine, contracts, auth helpers, API client,
 CLI, MCP server, and external modules to Verdaccio. It then uses the real CLI,
@@ -173,7 +215,8 @@ when a step's duration changes noticeably.
 | Starting its API and built web server until both answer | 1.1 s | 2026-10-16 |
 | `node scripts/e2e-ci.mjs --package-smoke` | 42 s | 2026-10-16 |
 | `node scripts/e2e-ci.mjs --smoke` | 77 to 95 s | 2026-10-16 |
-| `node scripts/e2e-ci.mjs` with Redis, S3, and SMTP | 155 to 206 s, of which Playwright 111 to 143 s | 2026-10-16 |
+| `node scripts/e2e-ci.mjs` with Redis, S3, and SMTP (232 tests, `E2E_WORKERS=2`) | 130 to 143 s, of which Playwright 93 s; with one worker 200 s, of which Playwright 134 s | 2026-10-16 |
+| The 12-module app's Playwright suite (214 tests) on a standing stack with `E2E_WORKERS` 1, 2, and 3 | 142, 90 to 93, and 81 s | 2026-10-16 |
 | GitHub Actions: CI, e2e (median), Release | 1.1, 1.9, and 1.3 min | 2026-10-09 to 2026-10-16 |
 | npm showing a published version in `npm view` | about 5 min after the Release workflow | 2026-10-09 to 2026-10-16 |
 
@@ -194,6 +237,18 @@ Changes made after a measurement:
   uplink dropped its first three requests, the install succeeded on its third
   attempt after 40 seconds; with Verdaccio's default five-minute `fail_timeout`,
   all three attempts failed (2026-10-16).
+- The generated suite ran on one worker, because `--workers=2` failed tests that
+  saw another worker's changes: three of 219 in the 12-module app and three of
+  530 in a larger app (2026-10-16). An upload got `401` because public sign-up
+  was closed, a user list came back empty because two-factor authentication was
+  required, and a password-reset email disappeared when another test emptied
+  Mailpit. Tests that change such state now carry the `@exclusive` tag
+  and run after the others (see
+  [Workers and exclusive tests](#workers-and-exclusive-tests)). Two workers took
+  the standing suite from 142 to 90 and 93 seconds and the Outer Playwright
+  phase from 134 to 93 seconds in two runs each, without a failure; the
+  exclusive tests take about 40 seconds of either. Running the require-2fa test
+  among the others again made an administrator request fail with `403`.
 - npm's delay is inherent. Poll it in the background, for example
   `until npm view @podosoft/podokit@<version> version; do sleep 30; done`.
 
@@ -220,12 +275,13 @@ module.exports = [
 ```
 
 For an app without `admin-dashboard`, omit `dependencies` and
-`storageState`. Project names must be non-empty and unique.
+`storageState`. Project names must be non-empty and unique, including the
+`<name>-exclusive` twin that each project gets (see
+[Workers and exclusive tests](#workers-and-exclusive-tests)).
 
 The admin setup project seeds sessions through the API and stores ignored browser
 state under `tests/playwright/.auth`. Its cleanup project removes users created
-by the suite. Tests share mutable backing services, so keep one worker unless the
-data and settings are explicitly isolated.
+by the suite.
 
 ## CI policy
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import {
@@ -8,6 +8,7 @@ import {
   createPhaseTimer,
   INSTALL_RETRY_DELAYS_MS,
   playwrightArguments,
+  playwrightWorkers,
   resolveE2eOptions,
   retryTransientInstall,
   transientInstallFailure,
@@ -74,6 +75,42 @@ test("builds Playwright arguments only for browser modes", () => {
     "account",
   ]);
   assert.throws(() => playwrightArguments({ mode: "package-smoke" }), /does not run Playwright/);
+});
+
+test("runs only the full suite on more than one worker", () => {
+  assert.equal(playwrightWorkers({ mode: "full" }, {}), "2");
+  assert.equal(playwrightWorkers({ mode: "smoke" }, {}), "1");
+  assert.equal(playwrightWorkers({ mode: "full", grep: "account" }, {}), "1");
+  assert.equal(playwrightWorkers({ mode: "smoke" }, { E2E_WORKERS: "3" }), "3");
+
+  const source = readFileSync(join(repoRoot, "scripts/e2e-ci.mjs"), "utf8");
+  assert.match(source, /const workers = playwrightWorkers\(options\);/);
+  assert.match(source, /E2E_WORKERS: workers,/);
+});
+
+test("tags every spec test that changes server-wide settings @exclusive", () => {
+  const settingsWrite =
+    /\.(?:put|post)\(\s*["'`]\/api\/(?:account\/settings|account\/auth-config|site\/settings|site\/favicon|admin\/analytics\/config)\b/;
+  // These only check that the endpoint refuses the write.
+  const refusals = new Set([
+    "auth-config is admin-only and never leaks secrets @smoke",
+    "only admins can change settings @smoke",
+    "theme settings: invalid values are rejected (no CSS injection)",
+  ]);
+  const untagged = [];
+  let tagged = 0;
+  for (const file of outerTestRoots.flatMap((root) => specFiles(join(repoRoot, root)))) {
+    const blocks = readFileSync(file, "utf8").split(/^(?=\s*test\()/m).slice(1);
+    for (const block of blocks) {
+      const firstLine = block.slice(0, block.indexOf("\n"));
+      const title = /test\(\s*"([^"]+)"/.exec(firstLine)?.[1] ?? firstLine.trim();
+      if (firstLine.includes('{ tag: "@exclusive" }')) tagged += 1;
+      else if (settingsWrite.test(block) && !refusals.has(title)) untagged.push(`${relative(repoRoot, file)}: ${title}`);
+    }
+  }
+
+  assert.deepEqual(untagged, []);
+  assert.equal(tagged, 35);
 });
 
 test("publishes and installs external modules in the faithful generated app", () => {

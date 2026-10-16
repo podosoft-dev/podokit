@@ -33,6 +33,14 @@ export function playwrightArguments({ mode, grep }) {
   ];
 }
 
+// The generated suite runs tests tagged @exclusive after all others when it has
+// more than one worker. Playwright then runs those other tests in full even when
+// --grep selects only some of them, so only the full suite gets two workers.
+export function playwrightWorkers({ mode, grep }, environment = process.env) {
+  if (environment.E2E_WORKERS) return environment.E2E_WORKERS;
+  return mode === "full" && !grep ? "2" : "1";
+}
+
 function formatDuration(milliseconds) {
   return `${(milliseconds / 1000).toFixed(1)}s`;
 }

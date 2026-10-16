@@ -38,7 +38,9 @@ test("create an org with a non-ascii name, a parent, and a manager", async ({ pa
   await page.getByLabel("Name", { exact: true }).fill(child);
   await page.locator("#o-parent").click();
   await page.getByRole("option", { name: parent }).click();
-  await page.getByRole("checkbox").first().click(); // first existing user as a manager
+  // The seeded user, not the first listed one: tests on other workers add and
+  // remove users while this one runs.
+  await page.locator("label", { hasText: "user@example.com" }).getByRole("checkbox").click();
   await page.getByRole("dialog").getByRole("button", { name: "Create", exact: true }).click();
   await expect(page.getByText("Organization created").first()).toBeVisible();
   // child row shows the parent org name
