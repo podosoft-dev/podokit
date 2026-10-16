@@ -37,7 +37,14 @@ async function frontChannel(page: Page, baseURL: string | undefined): Promise<vo
       expect(typeof disc[field]).toBe("string");
     }
     // JWKS exposes at least one signing key (the OAuth provider needs it for id_tokens).
-    const jwks = await (await page.request.get(disc.jwks_uri)).json();
+    // Discovery names BETTER_AUTH_URL's origin, which can be a public tunnel
+    // (publicUrl in .podokit/dev.json) that this runner cannot reach, so read the
+    // key set's path from the app under test.
+    const jwksUri = new URL(disc.jwks_uri);
+    expect(jwksUri.origin).toBe(new URL(disc.issuer).origin);
+    const jwksResponse = await page.request.get(`${jwksUri.pathname}${jwksUri.search}`);
+    expect(jwksResponse.ok(), await jwksResponse.text()).toBeTruthy();
+    const jwks = await jwksResponse.json();
     expect(Array.isArray(jwks.keys) && jwks.keys.length).toBeTruthy();
 
     // Dynamic client registration returns usable credentials. Retry: right after
