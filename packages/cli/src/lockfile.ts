@@ -125,6 +125,8 @@ export const DEFAULT_OWNED_GLOBS = [
   // Owned additions to the managed /api proxy's header lists and body limits.
   "apps/web/src/lib/server/proxy-headers.ts",
   "apps/web/src/lib/server/body-limits.ts",
+  // Owned fallback page SvelteKit serves when the root layout or a hook fails.
+  "apps/web/src/error.html",
   // AI agent guidance — yours to customize; update never touches it.
   "AGENTS.md",
   "CLAUDE.md",

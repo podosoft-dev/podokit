@@ -526,6 +526,14 @@ describe("create (integration against templates)", () => {
     );
     expect(readFilesLock(target)?.files[bodyLimits]?.tier).toBe("owned");
     expect(readFilesLock(target)?.files["apps/web/src/lib/server/backend-proxy.ts"]?.tier).toBe("managed");
+    // SvelteKit's fallback when the root layout or a hook fails: self-contained,
+    // app-owned, and without text that would need translating.
+    const errorPage = readFileSync(join(target, "apps/web/src/error.html"), "utf8");
+    expect(errorPage).toContain("<h1>%sveltekit.error.message%</h1>");
+    expect(errorPage).toContain('<p class="status">%sveltekit.status%</p>');
+    expect(errorPage).toContain("@media (prefers-color-scheme: dark)");
+    expect(errorPage).not.toMatch(/<(?:script|link|img)\b|\b(?:src|href)=|url\(/);
+    expect(readFilesLock(target)?.files["apps/web/src/error.html"]?.tier).toBe("owned");
     const serverApi = readFileSync(join(target, "apps", "web", "src", "lib", "server", "api.ts"), "utf8");
     expect(serverApi).toContain('headers.set("x-forwarded-for", clientIp)');
     expect(serverApi).toContain("resolveClientIp(event.getClientAddress)");

@@ -194,6 +194,20 @@ upload route in `apiPaths` so the gateway sends it straight to the API; see
 [direct API paths](deployment.md#direct-api-paths). An app that splits uploads
 into chunks small enough for the web proxy can send larger parts that way.
 
+### Fallback error page
+
+When the root layout or a server hook fails, for example with 503 because the
+API is down, SvelteKit cannot render the app's pages and serves
+`apps/web/src/error.html` instead. The generated page is self-contained HTML
+with inline styles that follow the light or dark color scheme. It shows only the
+status and the error message, so it needs no translations. Customize it freely:
+it is application-owned, and `podo update` creates it once in an existing app and
+never overwrites it, including an `error.html` the app already has. SvelteKit
+fills in only `%sveltekit.status%` and the HTML-escaped
+`%sveltekit.error.message%`. It cannot use components, app CSS, scripts, or
+assets, because SvelteKit sends it as a plain template outside the app's
+rendering and build.
+
 ### API server options
 
 `main.ts` is managed, so applications set Bun server options through the

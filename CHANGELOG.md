@@ -31,6 +31,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   has `S3_ENDPOINT`, because the API signs the URL for an in-network host such
   as `minio` that a host-side runner cannot resolve. It always downloads the
   signed API path that local storage returns.
+- Generated web apps have an application-owned `apps/web/src/error.html`, the
+  page SvelteKit serves when the root layout or a server hook fails, such as
+  with 503 while the API is down. It is self-contained HTML with inline styles
+  for light and dark color schemes and shows only the status and the error
+  message, so it needs no translations. `podo update` creates it once in
+  existing apps and never overwrites it, including an `error.html` an app
+  already has.
 
 ## [1.4.0] - 2026-10-16
 
