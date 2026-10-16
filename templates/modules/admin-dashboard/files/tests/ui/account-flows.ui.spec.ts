@@ -46,7 +46,7 @@ test("account: change email address", async ({ page, playwright }) => {
   await expect(page.getByText(/Email address updated|approve the change/)).toBeVisible();
 });
 
-test("account: delete my own account", async ({ page, playwright }) => {
+test("account: delete my own account", { tag: "@exclusive" }, async ({ page, playwright }) => {
   const admin = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   await admin.post("/api/auth/sign-in/email", { data: { email: "admin@example.com", password: PW } });
   try {

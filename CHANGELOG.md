@@ -6,8 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Generated apps run their Playwright suite on more than one worker with
+  `E2E_WORKERS` (default 1), for example `E2E_WORKERS=2 bun run test:e2e`. A
+  test that changes state the other tests rely on carries the `@exclusive` tag:
+  every project gets an `<name>-exclusive` twin that runs only tagged tests on
+  one worker, and with more than one worker the twins run after every other
+  test, one after another. The managed specs that change feature flags, the
+  authentication configuration, the site settings, module settings, or the
+  seeded administrator's profile carry the tag, and projects from
+  `tests/playwright.projects.cjs` get twins too. `test:e2e:api` and
+  `test:e2e:ui` include the twins. The global setup refuses `--workers` above 1
+  unless `E2E_WORKERS` is set, because the twins are ordered only through it.
+  In a 12-module app the suite took 142 seconds on one worker, 90 and 93 on two,
+  and 81 on three (2026-10-16); before, two workers failed tests that saw
+  another worker's settings.
+
 ### Removed
 
+- The `tests/helpers/exclusive.ts` lock helper and its self-test. The exclusive
+  phase replaces the locks, which kept apart only the tests that changed the
+  same setting, not the tests that relied on its default.
 - `clearMailpit()` and `clearSms()` from the generated e2e helpers. They emptied
   the Mailpit inbox and SMS sink that every test reads, so a test running at the
   same time lost its message. Each test already sends to recipients of its own.
@@ -32,9 +52,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Upgrade notes
 
+- A spec of your own that imports `../helpers/exclusive` fails after
+  `podo update` removes the helper. Drop the `exclusive()` wrapper and tag the
+  test instead: `test("…", { tag: "@exclusive" }, async (…) => { … })`. Tag any
+  other test of yours that changes a server-wide setting, a seeded account, or
+  something every test needs, such as stopping a backing service. Without the
+  tag it still passes on one worker but can fail others when `E2E_WORKERS` is
+  above 1.
 - A spec of your own that calls `clearMailpit()` or `clearSms()` fails after
   `podo update` removes them. Send to an address or phone number of the test's
   own instead, and drop the call.
+- Scripts and CI jobs that run `--project=api` or `--project=ui` skip the tagged
+  tests now; add `--project=api-exclusive` or `--project=ui-exclusive`. Pass
+  `E2E_WORKERS` instead of `--workers`.
+- If `tests/package.json` or `tests/playwright.config.ts` holds edits of yours,
+  `podo update` reports a conflict; take the new scripts and config and keep
+  application projects in `tests/playwright.projects.cjs`.
+- `AGENTS.md` is application-owned, so `podo update` does not add its note
+  about `E2E_WORKERS` and the `@exclusive` tag; copy it from a newly generated
+  app if your agents should know.
 
 ## [1.5.0] - 2026-10-16
 

@@ -30,7 +30,7 @@ test("profile image upload requires authentication", async ({ playwright }) => {
   await anonymous.dispose();
 });
 
-test("profile image upload, replacement, public read, and removal", async ({ playwright }) => {
+test("profile image upload, replacement, public read, and removal", { tag: "@exclusive" }, async ({ playwright }) => {
   const admin = await adminContext(playwright);
   await admin.delete("/api/account/profile-image");
 

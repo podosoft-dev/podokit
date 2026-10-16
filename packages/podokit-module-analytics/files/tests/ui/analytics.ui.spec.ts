@@ -144,7 +144,7 @@ test("analytics settings explains how to issue GA4 credentials", async ({
   await expect(dialog).toBeHidden();
 });
 
-test("analytics settings stores credentials without reading them back", async ({
+test("analytics settings stores credentials without reading them back", { tag: "@exclusive" }, async ({
   page,
 }) => {
   await ready(page, "/admin/settings");

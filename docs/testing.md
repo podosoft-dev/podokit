@@ -45,6 +45,45 @@ For the host-process layout, start the generated dependencies and application
 with the commands in [development.md](development.md), then use the default
 `http://localhost:5001` origin.
 
+### Workers and exclusive tests
+
+The suite runs on one worker unless `E2E_WORKERS` sets a count. More workers
+finish the whole suite sooner (see [Measured durations](#measured-durations)):
+
+```bash
+E2E_WORKERS=2 E2E_BASE_URL=http://my-app.localhost bun run test:e2e
+```
+
+Every test shares one API, database, Mailpit inbox, and SMS sink. A test that
+changes state other tests rely on carries the `@exclusive` tag:
+
+```ts
+test("maintenance mode holds visitors back", { tag: "@exclusive" }, async ({ page }) => {
+  // ...
+});
+```
+
+That covers server-wide settings (feature flags, the authentication
+configuration such as SMTP, social providers, sign-up approval, account
+deletion, automatic logout, or audit logging, the site settings and favicon,
+and module settings such as analytics) and the profile of a seeded account. The
+managed config gives every test project an `<name>-exclusive` twin, such as
+`api-exclusive` and `ui-exclusive`, that runs only the tagged tests on one
+worker. With one worker the twins come last; with more, each twin depends on
+every other test project and on the twin before it, so an exclusive test never
+runs alongside another test. Projects that applications add in
+`tests/playwright.projects.cjs` get twins as well, except setup projects that
+another project depends on. Tests never empty the shared inbox or sink; each
+one mails and texts recipients of its own.
+
+Playwright runs a project's dependencies in full. With more than one worker, a
+run that selects exclusive tests with a file name, `--grep`, or `--project`
+therefore runs every other test first, and a test that fails there marks the
+exclusive tests as not run. Use more workers for the whole suite and the default
+single worker for a few files. The global setup refuses `--workers` above 1
+without `E2E_WORKERS`, because the projects are already built by then; do not
+combine `--no-deps` with `E2E_WORKERS` above 1 either.
+
 Install the browser once from the generated project with:
 
 ```bash
@@ -220,12 +259,13 @@ module.exports = [
 ```
 
 For an app without `admin-dashboard`, omit `dependencies` and
-`storageState`. Project names must be non-empty and unique.
+`storageState`. Project names must be non-empty and unique, including the
+`<name>-exclusive` twin that each project gets (see
+[Workers and exclusive tests](#workers-and-exclusive-tests)).
 
 The admin setup project seeds sessions through the API and stores ignored browser
 state under `tests/playwright/.auth`. Its cleanup project removes users created
-by the suite. Tests share mutable backing services, so keep one worker unless the
-data and settings are explicitly isolated.
+by the suite.
 
 ## CI policy
 
