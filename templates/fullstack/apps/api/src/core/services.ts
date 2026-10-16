@@ -305,6 +305,31 @@ export interface RequestIdentity {
   activeOrganizationId(request: Request): Promise<string | undefined>;
 }
 
+/** A session the API resolved while handling a request. */
+export interface ResolvedSession {
+  /** The session token without its cookie signature. */
+  token: string;
+  userId: string;
+  expiresAt: Date;
+}
+
+/**
+ * Passes each session the API resolves for a request to the modules that listen,
+ * so they can use it without a session lookup of their own. The auth module
+ * reports; the rate limiter listens to count a signed-in caller per user.
+ */
+export class ResolvedSessions {
+  private readonly listeners: Array<(session: ResolvedSession) => void> = [];
+
+  listen(listener: (session: ResolvedSession) => void): void {
+    this.listeners.push(listener);
+  }
+
+  report(session: ResolvedSession): void {
+    for (const listener of this.listeners) listener(session);
+  }
+}
+
 export interface OpenApiContribution {
   document: Record<string, unknown>;
   pathPrefix?: string;
@@ -331,6 +356,7 @@ export const LOGGER = Symbol("logger") as ServiceKey<Logger>;
 export const ACCESS_POLICY = Symbol("access-policy") as ServiceKey<AccessPolicy>;
 export const REQUEST_GUARDS = Symbol("request-guards") as ServiceKey<RequestGuardRegistry>;
 export const REQUEST_IDENTITY = Symbol("request-identity") as ServiceKey<RequestIdentity>;
+export const RESOLVED_SESSIONS = Symbol("resolved-sessions") as ServiceKey<ResolvedSessions>;
 export const OPENAPI = Symbol("openapi") as ServiceKey<OpenApiRegistry>;
 
 export interface AppContext {
@@ -390,6 +416,7 @@ export function createCoreServices(env: AppEnv): ServiceRegistry {
     roles: async () => [],
     activeOrganizationId: async () => undefined,
   });
+  services.register(RESOLVED_SESSIONS, new ResolvedSessions());
   services.register(OPENAPI, openapiRegistry);
   return services;
 }

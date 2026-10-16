@@ -9,6 +9,7 @@ import {
   RATE_LIMIT_IDENTITY_EXTENSION,
   RateLimitIdentity,
   RateLimitIdentityExtension,
+  SessionUsers,
   verifiedSessionToken,
 } from "./rate-limit.identity";
 
@@ -177,6 +178,73 @@ describe("RateLimitIdentity", () => {
     expect(
       await identity.resolve(request({ "x-forwarded-for": "203.0.113.7" }), "10.0.0.9", proxyConfig),
     ).toBe(value);
+  });
+});
+
+describe("RateLimitIdentity per user", () => {
+  const otherToken = "AnotherSessionToken0123456789abcd";
+  const thirdToken = "ThirdSessionToken0123456789abcdef";
+  const resolveWith = (identity: RateLimitIdentity, headers: Record<string, string>): Promise<string> =>
+    identity.resolve(request({ "x-forwarded-for": "203.0.113.7", ...headers }), "10.0.0.9", proxyConfig);
+
+  test("counts every session of a user under one counter once the API resolved them", async () => {
+    let now = 1_000;
+    const users = new SessionUsers(100, () => now);
+    const identity = new RateLimitIdentity(rejectingVerifier(), new ServiceRegistry(), secret, users);
+    const first = { cookie: sessionCookie(signed(sessionToken)) };
+    const second = { authorization: `Bearer ${signed(otherToken)}` };
+
+    // Before the API resolves a session, it keeps a counter of its own.
+    const unresolved = await resolveWith(identity, first);
+    expect(unresolved).toMatch(/^session:[a-f0-9]{64}$/);
+
+    users.remember(sessionToken, "user-1", new Date(now + 60_000));
+    users.remember(otherToken, "user-1", new Date(now + 60_000));
+    users.remember(thirdToken, "user-2", new Date(now + 60_000));
+    const userCounter = await resolveWith(identity, first);
+    expect(userCounter).toMatch(/^user:[a-f0-9]{64}$/);
+    expect(userCounter).not.toContain("user-1");
+    expect(await resolveWith(identity, second)).toBe(userCounter);
+    expect(await resolveWith(identity, { cookie: sessionCookie(signed(thirdToken)) })).not.toBe(userCounter);
+
+    // The entry lasts until the session expires.
+    now += 60_000;
+    expect(await resolveWith(identity, first)).toBe(unresolved);
+  });
+
+  test("keeps API keys first and forged sessions on the client address", async () => {
+    const users = new SessionUsers();
+    users.remember(sessionToken, "user-1", new Date(Date.now() + 60_000));
+    const verifier = { isValid: mock((value: string) => value === "configured-valid") } as unknown as ApiKeyVerifier;
+    const identity = new RateLimitIdentity(verifier, new ServiceRegistry(), secret, users);
+    const cookie = sessionCookie(signed(sessionToken));
+
+    expect(await resolveWith(identity, { "x-api-key": "configured-valid", cookie })).toMatch(/^api-key:/);
+    expect(await resolveWith(identity, { cookie: sessionCookie(tamperedSignature(signed(sessionToken))) }))
+      .toBe(await resolveWith(identity, {}));
+    expect(await resolveWith(identity, {})).toMatch(/^ip:/);
+  });
+});
+
+describe("SessionUsers", () => {
+  test("ignores an expired session and forgets the oldest past its bound", () => {
+    let now = 1_000;
+    const users = new SessionUsers(2, () => now);
+    users.remember("expired", "user-0", new Date(now));
+    expect(users.userOf("expired")).toBeUndefined();
+
+    users.remember("a", "user-a", new Date(now + 10_000));
+    users.remember("b", "user-b", new Date(now + 10_000));
+    users.remember("a", "user-a", new Date(now + 20_000));
+    users.remember("c", "user-c", new Date(now + 10_000));
+    // "a" was refreshed, so "b" was the oldest.
+    expect(users.userOf("a")).toBe("user-a");
+    expect(users.userOf("b")).toBeUndefined();
+    expect(users.userOf("c")).toBe("user-c");
+
+    now += 10_000;
+    expect(users.userOf("c")).toBeUndefined();
+    expect(users.userOf("a")).toBe("user-a");
   });
 });
 

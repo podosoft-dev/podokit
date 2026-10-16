@@ -189,6 +189,11 @@ returns the user's roles as an array (the admin plugin's comma-separated value i
 split for you) and `activeOrganizationId` returns the session's active
 organization when the organization plugin has set one. All four share the one
 session lookup memoized per request, so asking several costs a single read.
+Every session that lookup finds is also reported to the core `RESOLVED_SESSIONS`
+registry as `{ token, userId, expiresAt }`; a module that registers a listener
+with `services.resolve(RESOLVED_SESSIONS).listen(...)` in its `configure` learns
+about sessions without a lookup of its own, as the rate limiter does to count
+callers per user.
 
 ```bash
 bunx @podosoft/podokit add auth
@@ -1104,23 +1109,36 @@ curl -b cookies.txt localhost:5002/audit-logs   # [{ action:"auth.login", actorE
 
 Rate limiting with a native Elysia request guard backed by the selected `CACHE`
 provider, with `auth` and `api-key-auth` added automatically. Counters
-are selected by a validated `X-API-Key` first, then a signed-in session, then the
-trusted-proxy client address. Every identity is domain-separated and SHA-256
-hashed before it becomes a provider key. The limit holds across API replicas
-with Redis; memory counters require one API process.
+are selected by a validated `X-API-Key` first, then the signed-in user (or the
+session, until the API has resolved it), then the trusted-proxy client address.
+Every identity is domain-separated and SHA-256 hashed before it becomes a
+provider key. The limit holds across API replicas with Redis; memory counters
+require one API process.
 
 A session is recognized from the Better Auth session cookie (including its
 `__Secure-` form) or a signed `Authorization: Bearer` value by verifying its HMAC
 signature with `BETTER_AUTH_SECRET`. The limiter does not read the session from the
-database, so choosing a counter adds no query to the request. As a result:
+database itself, so choosing a counter adds no query to the request. Instead, each
+API process remembers the user of every session that authentication resolves
+while handling a request, such as for a route that requires a session, until the
+session expires (at most 10,000 sessions, oldest first). As a result:
 
-- Limits apply **per session, not per user**. Each sign-in starts its own counter,
-  so a user signed in on two devices has two counters.
+- Limits apply **per user**: a user signed in on a laptop and a phone, from
+  different addresses, or through different API replicas draws from one counter,
+  and another user has their own.
+- A session counts under its own counter until the API process first resolves it,
+  so the first request of a new session, or its first request on another API
+  process or after a restart, may count separately. With `auth` registered before
+  `rate-limit`, as `podo add` orders them, a route that requires a session resolves
+  it before the limiter runs, so even that request counts under the user. Better
+  Auth's own routes, such as `/api/auth/get-session`, do not resolve sessions this
+  way.
 - A cookie or bearer value without a valid signature is counted with the client
   address, so forged values never receive a fresh counter.
-- Signing out or revoking a session still takes effect on the next request, because
-  authentication itself still checks the session in the database. A revoked token
-  that still carries a valid signature keeps its single counter.
+- Signing out, revoking a session, or banning a user still takes effect on the next
+  request, because authentication itself still checks the session in the
+  database. The remembered user only selects a counter and is not removed when a
+  session is revoked; it expires with the session.
 - Without `BETTER_AUTH_SECRET` (for example, an app without `auth`), every request
   without a validated API key is counted by client address.
 

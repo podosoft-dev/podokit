@@ -57,6 +57,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   malformed parameters are rejected, and the web lists also reject two prefixes
   that cover the same paths, such as `/api/a/:x` and `/api/a/:y`.
 
+### Changed
+
+- The rate-limit module counts a signed-in caller per user instead of per
+  session, so one user's sessions on several devices, addresses, or API replicas
+  draw from one budget, and API keys still come first and unsigned or forged
+  sessions still count by client address. The limiter still reads no session
+  from the database: each API process remembers the user of every session that
+  authentication resolves for a request, reported through the new
+  `RESOLVED_SESSIONS` registry in `apps/api/src/core/services.ts`, until the
+  session expires (at most 10,000 sessions per process). Until then a session
+  keeps a counter of its own, so the first request of a new session, or its
+  first on another API process, can count separately; with `auth` registered
+  before `rate-limit`, a route that requires a session resolves it before the
+  limiter runs. Better Auth's own routes, such as `/api/auth/get-session`, do not
+  report sessions. Measured on a generated app with PostgreSQL and Redis, an
+  authenticated request makes the same Redis calls (one `EVALSHA` for the
+  counter) and the same SQL queries as before. Signing out, revoking, and banning
+  still take effect on the next request; a remembered session only selects a
+  counter.
+
 ### Fixed
 
 - The built web server keeps a connection open for 35 seconds while it sends
@@ -112,6 +132,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   above it as well. With the image's 35 the proxy refuses to load until it can
   cover the deadline: the web server stops at startup in apps with server hooks,
   and otherwise every `/api` request answers `500`.
+- Rate limits now apply per user. If you sized `RATE_LIMIT_MAX` or a route
+  profile for one session and your users stay signed in on several devices at
+  once, raise it to cover all of them.
+- `AuthService` takes its session resolver in an options object,
+  `new AuthService(settings, accessPolicy, { resolveSession, resolvedSessions })`.
+  Code of your own that constructs it with a resolver as the third argument
+  passes `{ resolveSession }` instead.
 - An API that relied on Elysia's default idle timeout of 30 seconds now uses 35;
   an `idleTimeout` in `apiServerOptions` keeps its value and still wins over
   `API_IDLE_TIMEOUT`.
