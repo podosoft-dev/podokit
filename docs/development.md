@@ -480,7 +480,11 @@ The tag push is the single, explicit publish gate — merging PRs, even the Vers
 Packages PR, never publishes on its own. A release is complete only when the
 Release workflow succeeds, every intended npm version is visible, and
 `gh release view vX.Y.Z` resolves to the same tag shown as the latest release on
-GitHub. A pushed tag by itself is not a GitHub Release.
+GitHub. A pushed tag by itself is not a GitHub Release. npm can take about five
+minutes after the Release workflow before `npm view <package>@<version>` returns
+a new version, so poll it in the background, for example
+`until npm view @podosoft/podokit@X.Y.Z version; do sleep 30; done`, instead of
+rerunning the workflow.
 
 > **Running `npm run version` locally** (rarely needed — CI maintains the PR): the
 > GitHub changelog formatter queries the GitHub API, so set `GITHUB_TOKEN` (e.g.

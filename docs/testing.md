@@ -159,6 +159,44 @@ general request ceiling defaults to 1000; override it with
 `E2E_RATE_LIMIT_MAX` when extending or diagnosing the matrix. The rate-limit
 spec uses that same value so it still verifies a real 200-to-429 transition.
 
+### Measured durations
+
+Steps that take about 10 minutes or more are investigated and shortened (see
+[Long-running steps](../CONTRIBUTING.md#long-running-steps)). These numbers were
+measured on an 8-core, 16 GB Linux VM with warm npm and Bun caches; update them
+when a step's duration changes noticeably.
+
+| Step | Duration | Measured |
+| --- | --- | --- |
+| `node scripts/dev-app.mjs <dir> --add <12 modules>` | 13 s, of which the monorepo build 10 s | 2026-10-16 |
+| Tier 2 standing stack from that app: database, migrations, contract, and web build | 5 to 12 s | 2026-10-16 |
+| Starting its API and built web server until both answer | 1.1 s | 2026-10-16 |
+| `node scripts/e2e-ci.mjs --package-smoke` | 42 s | 2026-10-16 |
+| `node scripts/e2e-ci.mjs --smoke` | 77 to 95 s | 2026-10-16 |
+| `node scripts/e2e-ci.mjs` with Redis, S3, and SMTP | 155 to 206 s, of which Playwright 111 to 143 s | 2026-10-16 |
+| GitHub Actions: CI, e2e (median), Release | 1.1, 1.9, and 1.3 min | 2026-10-09 to 2026-10-16 |
+| npm showing a published version in `npm view` | about 5 min after the Release workflow | 2026-10-09 to 2026-10-16 |
+
+Changes made after a measurement:
+
+- A script that set up and started a standing stack did not return for 10
+  minutes (2026-10-15), although its servers answered within about 25 seconds.
+  It started each server with `(cd apps/api && nohup bun src/main.ts > log 2>&1 &)`.
+  Bash runs such a backgrounded list in a subshell that keeps the caller's
+  standard output open while it waits for the server, so a caller that piped the
+  output, as in `... | tail`, never saw its end. Redirecting the whole job, as in
+  `(cd apps/api && exec bun src/main.ts) < /dev/null > log 2>&1 &`, and bounding
+  each readiness probe with `curl -m` made the same start return after 1.2
+  seconds (2026-10-16).
+- A transient npm failure in the Outer install phase failed the whole run and
+  cost a rerun of about 3 to 4 minutes (2026-10-16). The install now retries as
+  described in [Tier 3](#tier-3-faithful-outer-gate). In a reproduction whose npm
+  uplink dropped its first three requests, the install succeeded on its third
+  attempt after 40 seconds; with Verdaccio's default five-minute `fail_timeout`,
+  all three attempts failed (2026-10-16).
+- npm's delay is inherent. Poll it in the background, for example
+  `until npm view @podosoft/podokit@<version> version; do sleep 30; done`.
+
 ## Playwright project extensions
 
 Keep `tests/playwright.config.ts` managed. Add application-owned browser or
