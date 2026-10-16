@@ -168,21 +168,6 @@ policy, and add Bun tests plus an API contract entry. An `AppException`'s
 optional fourth argument reaches the client as `error.details`, for example
 `new AppException("SIGNUP_INVALID", "Invalid sign-up", 422, { fields })`.
 
-## Extending the web app
-
-The web app's framework files are managed. Application changes go in the owned
-files listed under [web extension points](templates.md#web-extension-points):
-Vite and SvelteKit options in `apps/web/vite.extensions.ts`, styles in
-`apps/web/src/app.extensions.css`, and with
-`admin-dashboard` a request hook in `apps/web/src/lib/server/app-hooks.ts`,
-admin sidebar entries in `apps/web/src/lib/admin/app-nav.ts`, and private page
-prefixes in `apps/web/src/lib/server/non-indexable-paths.ts`. `podo update`
-creates each of them once in an existing app. An app that edited the managed
-`vite.config.ts`, `app.css`, `hooks.server.ts`, `admin-sidebar.svelte`, or
-`search-indexing.ts` gets a merge or a conflict there; move the edit into the
-owned file and take PodoKit's version of the managed one.
-
-### Extending the web proxy
 ### API extension files
 
 Each of these application-owned files starts empty, is imported by a managed
@@ -198,7 +183,21 @@ overwritten afterwards. Use them instead of editing the managed file.
 | `apps/api/scripts/build.extensions.mjs` | `appBuildTargets` (`{ entrypoint, outdir }[]`) | `scripts/build.mjs`: the API build bundles these entry points too, and fails when one does not exist |
 | `apps/api/src/config/env.extensions.ts` | `appEnvShape` (zod fields) and `refineAppEnv(env, context)` | `config/env.validation.ts`: application variables are validated at startup and typed on `AppEnv`; redefining a PodoKit variable fails |
 
-## Extending the web proxy
+## Extending the web app
+
+The web app's framework files are managed. Application changes go in the owned
+files listed under [web extension points](templates.md#web-extension-points):
+Vite and SvelteKit options in `apps/web/vite.extensions.ts`, styles in
+`apps/web/src/app.extensions.css`, and with
+`admin-dashboard` a request hook in `apps/web/src/lib/server/app-hooks.ts`,
+admin sidebar entries in `apps/web/src/lib/admin/app-nav.ts`, and private page
+prefixes in `apps/web/src/lib/server/non-indexable-paths.ts`. `podo update`
+creates each of them once in an existing app. An app that edited the managed
+`vite.config.ts`, `app.css`, `hooks.server.ts`, `admin-sidebar.svelte`, or
+`search-indexing.ts` gets a merge or a conflict there; move the edit into the
+owned file and take PodoKit's version of the managed one.
+
+### Extending the web proxy
 
 The SvelteKit `/api` proxy, `apps/web/src/lib/server/backend-proxy.ts`, is
 managed. Instead of adding header names to its lists, put them in the
