@@ -220,6 +220,7 @@ while a `warn` reports a setting that deploys but probably not as intended:
 
 | Check | Result |
 | --- | --- |
+| `idle-timeouts` | `FAIL` when the idle timeouts cannot be derived or `CONNECTION_IDLE_TIMEOUT` set in `runtimeConfig` cannot cover the longest `/api` proxy wait; `warn` when `API_IDLE_TIMEOUT` cannot, see [idle timeouts](#idle-timeouts) |
 | `audit-log` (with the module installed) | `warn` when `runtimeConfig` lacks `AUDIT_LOG_ENABLED` or sets it to anything but `"true"`: the audit log then records nothing until an administrator turns it on, or depends on the API's built-in default |
 
 The plan resolves every image tag to an immutable registry digest and binds those
@@ -556,11 +557,39 @@ see [API timeouts and outages](templates.md#api-timeouts-and-outages).
 | Setting | Default | Effect |
 | --- | --- | --- |
 | `BACKEND_TIMEOUT_MS` | `2000` | The longest one server-side API call may take, and how often the proxy checks whether the API answers at all while it waits for response headers. Detecting an outage takes up to twice this long, and pages rendered meanwhile wait for it. |
-| `BACKEND_PROXY_TIMEOUT_MS` | `30000` | How long the `/api` proxy waits for response headers before it answers `504` `BACKEND_TIMEOUT`, unless [`APP_PROXY_TIMEOUTS`](templates.md#proxy-deadlines-per-route) gives the route its own deadline. Raise it with the API's `idleTimeout`; the rendered `CONNECTION_IDLE_TIMEOUT` follows it. |
-| `CONNECTION_IDLE_TIMEOUT` | `35` | Seconds the web server keeps a connection open while it sends nothing, from `0` (off) to `255`. Unless `runtimeConfig` sets it, the renderers derive it from `BACKEND_PROXY_TIMEOUT_MS`: 5 seconds above it in whole seconds, because Bun checks idle connections every 4 seconds. A deadline above 250 seconds needs `0` set here. Raise it as well for an `APP_PROXY_TIMEOUTS` entry longer than `BACKEND_PROXY_TIMEOUT_MS`; the web server refuses a value that cannot cover every deadline. |
-| `API_IDLE_TIMEOUT` | `35` | Seconds the API keeps a connection open while it sends nothing, from `0` (off) to `255`; the API's `apiServerOptions.idleTimeout` wins over it. The renderers derive it like `CONNECTION_IDLE_TIMEOUT`, and both have to be raised together for a longer deadline; see [proxy deadlines per route](templates.md#proxy-deadlines-per-route). |
+| `BACKEND_PROXY_TIMEOUT_MS` | `30000` | How long the `/api` proxy waits for response headers before it answers `504` `BACKEND_TIMEOUT`, unless [`APP_PROXY_TIMEOUTS`](templates.md#proxy-deadlines-per-route) gives the route its own deadline. The rendered idle timeouts follow it. |
+| `CONNECTION_IDLE_TIMEOUT` | derived | Seconds the web server keeps a connection open while it sends nothing, from `0` (off) to `255`; see [idle timeouts](#idle-timeouts). The web server refuses a value that cannot cover every deadline. |
+| `API_IDLE_TIMEOUT` | derived | Seconds the API keeps a connection open while it sends nothing, from `0` (off) to `255`; the API's `apiServerOptions.idleTimeout` wins over it. |
 
 Set them in the profile's `runtimeConfig`.
+
+### Idle timeouts
+
+Bun closes a connection that sends nothing for its idle timeout, checking every
+4 seconds, so both idle timeouts have to stay more than 4 seconds above the
+longest time the `/api` proxy waits for response headers. Unless `runtimeConfig`
+sets them, plan and render derive both from that wait: `BACKEND_PROXY_TIMEOUT_MS`,
+or the longest entry of the application's `APP_PROXY_TIMEOUTS` in
+`apps/web/src/lib/server/proxy-timeouts.ts` when that is longer.
+
+| Longest wait | Rendered `CONNECTION_IDLE_TIMEOUT` and `API_IDLE_TIMEOUT` |
+| --- | --- |
+| `30000` ms, the default | `35` |
+| `120_000` ms | `125`: the wait's whole seconds plus 5 |
+| an entry with `timeoutMs: null` | `0` (off) |
+| above 250 seconds | none: the plan fails until `runtimeConfig` sets the idle timeout to `"0"` |
+
+PodoKit reads the module as text and never runs it, so every entry must be an
+object literal with a string `pathPrefix` and a `timeoutMs` of `null`, a number,
+or a product of numbers such as `5 * 60_000`. When it cannot read the module,
+for example because the list is spread from another file, the plan fails with
+the line it stopped at, unless `runtimeConfig` sets both idle timeouts.
+
+A value `runtimeConfig` sets is rendered as it is. The doctor checks it against
+the same wait: a `CONNECTION_IDLE_TIMEOUT` that cannot cover it fails, because
+the web server would refuse to start, and an `API_IDLE_TIMEOUT` that cannot
+cover it warns, because the API can still lift its idle timeout for those routes
+itself with `server.timeout(request, 0)`.
 
 ## Status and verification
 

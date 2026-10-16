@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CommandRunner } from "./dev";
 import {
@@ -24,6 +24,7 @@ import {
   profilePath,
 } from "./deploy-profile";
 import { renderDeployment } from "./deploy-render";
+import { APP_PROXY_TIMEOUTS_PATH, NO_APP_PROXY_TIMEOUTS } from "./app-proxy-timeouts";
 import { idleTimeoutConfig } from "./deploy-schema";
 import { initLockfile } from "./lockfile";
 
@@ -293,22 +294,61 @@ describe("deployment rendering and planning", () => {
     expect(configured).toContain('API_IDLE_TIMEOUT: "120"');
   });
 
+  it("derives the idle timeouts from the application's proxy deadlines, also while planning", () => {
+    const root = initializedProject();
+    const proxyTimeouts = join(root, APP_PROXY_TIMEOUTS_PATH);
+    mkdirSync(dirname(proxyTimeouts), { recursive: true });
+    writeFileSync(
+      proxyTimeouts,
+      'export const APP_PROXY_TIMEOUTS = [{ pathPrefix: "/api/hosts/:hostId/file-transfers", timeoutMs: null }];\n',
+    );
+    const runtime = renderDeployment(root, "production", loadDeploymentProfile(root, "production"), "v1.2.3");
+    expect(runtime.applicationManifest).toContain('CONNECTION_IDLE_TIMEOUT: "0"');
+    expect(runtime.applicationManifest).toContain('API_IDLE_TIMEOUT: "0"');
+    expect(readFileSync(runtime.migrationManifest, "utf8")).toContain(
+      '- name: CONNECTION_IDLE_TIMEOUT\n              value: "0"',
+    );
+
+    // Planning renders into a scratch directory; the deadlines still come from the project.
+    const runner: CommandRunner = (_command, args) => {
+      if (args.includes("config")) return { status: 0, stdout: clusterOutput, stderr: "" };
+      if (args.includes("imagetools")) {
+        return { status: 0, stdout: JSON.stringify({ digest: `sha256:${"b".repeat(64)}` }), stderr: "" };
+      }
+      if (args.some((entry) => entry.includes(".metadata.uid"))) return { status: 0, stdout: "uid:1", stderr: "" };
+      if (args.includes("status")) {
+        return { status: 0, stdout: JSON.stringify({ version: 7, info: { status: "deployed" } }), stderr: "" };
+      }
+      return { status: 0, stdout: "", stderr: "" };
+    };
+    const withoutDeadline = planDeployment(root, "production", "v1.2.3", runner).planHash;
+    writeFileSync(proxyTimeouts, 'export const APP_PROXY_TIMEOUTS = [{ pathPrefix: "/api/x/", timeoutMs: 60_000 }];\n');
+    expect(planDeployment(root, "production", "v1.2.3", runner).planHash).not.toBe(withoutDeadline);
+    writeFileSync(proxyTimeouts, "export const APP_PROXY_TIMEOUTS = [...shared];\n");
+    expect(() => planDeployment(root, "production", "v1.2.3", runner)).toThrow(
+      "Cannot read APP_PROXY_TIMEOUTS from apps/web/src/lib/server/proxy-timeouts.ts without running it",
+    );
+  });
+
   it("refuses a proxy deadline that no idle timeout can outlast", () => {
-    expect(idleTimeoutConfig({})).toEqual({ CONNECTION_IDLE_TIMEOUT: "35", API_IDLE_TIMEOUT: "35" });
-    expect(idleTimeoutConfig({ BACKEND_PROXY_TIMEOUT_MS: "30500" }).API_IDLE_TIMEOUT).toBe("35");
-    expect(idleTimeoutConfig({ BACKEND_PROXY_TIMEOUT_MS: "31000" }).API_IDLE_TIMEOUT).toBe("36");
-    expect(idleTimeoutConfig({ BACKEND_PROXY_TIMEOUT_MS: "250999" })).toEqual({
+    expect(idleTimeoutConfig({}, NO_APP_PROXY_TIMEOUTS)).toEqual({ CONNECTION_IDLE_TIMEOUT: "35", API_IDLE_TIMEOUT: "35" });
+    expect(idleTimeoutConfig({ BACKEND_PROXY_TIMEOUT_MS: "30500" }, NO_APP_PROXY_TIMEOUTS).API_IDLE_TIMEOUT).toBe("35");
+    expect(idleTimeoutConfig({ BACKEND_PROXY_TIMEOUT_MS: "31000" }, NO_APP_PROXY_TIMEOUTS).API_IDLE_TIMEOUT).toBe("36");
+    expect(idleTimeoutConfig({ BACKEND_PROXY_TIMEOUT_MS: "250999" }, NO_APP_PROXY_TIMEOUTS)).toEqual({
       CONNECTION_IDLE_TIMEOUT: "255",
       API_IDLE_TIMEOUT: "255",
     });
-    expect(() => idleTimeoutConfig({ BACKEND_PROXY_TIMEOUT_MS: "251000" })).toThrow(
+    expect(() => idleTimeoutConfig({ BACKEND_PROXY_TIMEOUT_MS: "251000" }, NO_APP_PROXY_TIMEOUTS)).toThrow(
       'set CONNECTION_IDLE_TIMEOUT to "0" to turn it off',
     );
-    expect(() => idleTimeoutConfig({ BACKEND_PROXY_TIMEOUT_MS: "600000", CONNECTION_IDLE_TIMEOUT: "0" })).toThrow(
+    expect(() => idleTimeoutConfig({ BACKEND_PROXY_TIMEOUT_MS: "600000", CONNECTION_IDLE_TIMEOUT: "0" }, NO_APP_PROXY_TIMEOUTS)).toThrow(
       'set API_IDLE_TIMEOUT to "0" to turn it off',
     );
     expect(
-      idleTimeoutConfig({ BACKEND_PROXY_TIMEOUT_MS: "600000", CONNECTION_IDLE_TIMEOUT: "0", API_IDLE_TIMEOUT: "0" }),
+      idleTimeoutConfig(
+        { BACKEND_PROXY_TIMEOUT_MS: "600000", CONNECTION_IDLE_TIMEOUT: "0", API_IDLE_TIMEOUT: "0" },
+        NO_APP_PROXY_TIMEOUTS,
+      ),
     ).toEqual({ CONNECTION_IDLE_TIMEOUT: "0", API_IDLE_TIMEOUT: "0" });
   });
 

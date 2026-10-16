@@ -325,10 +325,12 @@ than 4 seconds above the longest wait, in whole seconds:
 | `null`, or above 250000 ms | `0` | `0` |
 
 Both are environment variables from `0` (off) to `255` seconds. Set them in
-`.env`, or in a deployment profile's `runtimeConfig`, where the renderers derive
-both from `BACKEND_PROXY_TIMEOUT_MS` when they are unset but cannot see this
-file. The API's `idleTimeout` in its [server options](#api-server-options) wins
-over `API_IDLE_TIMEOUT`. With `0`, idle keep-alive connections stay open until the
+`.env`. `podo deploy` derives both from `BACKEND_PROXY_TIMEOUT_MS` and this file
+when a profile's `runtimeConfig` leaves them unset; it reads the file without
+running it, so keep each entry a literal `{ pathPrefix: "...", timeoutMs: ... }`
+(see [deployment idle timeouts](deployment.md#idle-timeouts)). The API's
+`idleTimeout` in its [server options](#api-server-options) wins over
+`API_IDLE_TIMEOUT`. With `0`, idle keep-alive connections stay open until the
 client or the gateway in front closes them. If the API closes the connection
 first, the proxy answers `503` `BACKEND_UNAVAILABLE`; if the web server does, the
 browser gets an empty reply. The proxy refuses to load when

@@ -1,4 +1,5 @@
 import { join, resolve } from "node:path";
+import type { AppProxyTimeout, AppProxyTimeouts } from "./app-proxy-timeouts";
 
 /**
  * Validation primitives shared by every deployment driver.
@@ -254,34 +255,81 @@ export function parseRuntimeConfig(runtimeConfig: Record<string, unknown>): Reco
 }
 
 /** Bun closes silent connections on a 4-second tick, up to 4 seconds before their idle timeout. */
-const IDLE_TICK_SECONDS = 4;
-const MAX_IDLE_TIMEOUT_SECONDS = 255;
+export const IDLE_TICK_SECONDS = 4;
+export const MAX_IDLE_TIMEOUT_SECONDS = 255;
 const DEFAULT_BACKEND_PROXY_TIMEOUT_MS = 30_000;
+export const IDLE_TIMEOUT_KEYS = ["CONNECTION_IDLE_TIMEOUT", "API_IDLE_TIMEOUT"] as const;
+
+/** The longest the /api proxy waits for response headers, and what sets it. */
+export interface LongestProxyWait {
+  /** Milliseconds, or null for a route without a deadline. */
+  timeoutMs: number | null;
+  source: string;
+}
+
+/**
+ * BACKEND_PROXY_TIMEOUT_MS, or the application's longest APP_PROXY_TIMEOUTS
+ * entry when that waits longer; an entry without a deadline wins outright.
+ */
+export function longestProxyWait(
+  runtimeConfig: Record<string, string>,
+  entries: AppProxyTimeout[],
+): LongestProxyWait {
+  const proxyTimeout = runtimeConfig.BACKEND_PROXY_TIMEOUT_MS?.trim();
+  let longest: LongestProxyWait = {
+    timeoutMs:
+      proxyTimeout && /^\d+$/.test(proxyTimeout) ? Number(proxyTimeout) : DEFAULT_BACKEND_PROXY_TIMEOUT_MS,
+    source: "BACKEND_PROXY_TIMEOUT_MS",
+  };
+  for (const entry of entries) {
+    if (longest.timeoutMs !== null && (entry.timeoutMs === null || entry.timeoutMs > longest.timeoutMs)) {
+      longest = { timeoutMs: entry.timeoutMs, source: `APP_PROXY_TIMEOUTS entry ${entry.pathPrefix}` };
+    }
+  }
+  return longest;
+}
+
+export function describeProxyWait(wait: LongestProxyWait): string {
+  return `${wait.timeoutMs === null ? "no deadline" : `${wait.timeoutMs} ms`}, ${wait.source}`;
+}
+
+/** Whether an idle timeout keeps a silent connection open for the whole wait. */
+export function idleTimeoutCovers(seconds: number, wait: LongestProxyWait): boolean {
+  return seconds === 0 || (wait.timeoutMs !== null && (seconds - IDLE_TICK_SECONDS) * 1000 > wait.timeoutMs);
+}
 
 /**
  * The idle timeouts of the web server (CONNECTION_IDLE_TIMEOUT) and the API
  * (API_IDLE_TIMEOUT), both run by Bun. Each is the profile's own value, or else
  * the fewest seconds that keep a silent connection open past the /api proxy's
- * BACKEND_PROXY_TIMEOUT_MS deadline: 35 for the default 30000 ms.
+ * longest wait: 35 for the default 30000 ms, and 0 (off) when an application
+ * route has no deadline.
  */
-export function idleTimeoutConfig(runtimeConfig: Record<string, string>): Record<string, string> {
-  const proxyTimeout = runtimeConfig.BACKEND_PROXY_TIMEOUT_MS?.trim();
-  const proxyMs =
-    proxyTimeout && /^\d+$/.test(proxyTimeout) ? Number(proxyTimeout) : DEFAULT_BACKEND_PROXY_TIMEOUT_MS;
-  const derived = Math.floor(proxyMs / 1000) + IDLE_TICK_SECONDS + 1;
+export function idleTimeoutConfig(
+  runtimeConfig: Record<string, string>,
+  proxyTimeouts: AppProxyTimeouts,
+): Record<string, string> {
   const config: Record<string, string> = {};
-  for (const name of ["CONNECTION_IDLE_TIMEOUT", "API_IDLE_TIMEOUT"]) {
+  for (const name of IDLE_TIMEOUT_KEYS) {
     const configured = runtimeConfig[name];
     if (configured !== undefined) {
       config[name] = configured;
-    } else if (derived > MAX_IDLE_TIMEOUT_SECONDS) {
+      continue;
+    }
+    if ("error" in proxyTimeouts) throw new Error(proxyTimeouts.error);
+    const wait = longestProxyWait(runtimeConfig, proxyTimeouts.entries);
+    if (wait.timeoutMs === null) {
+      config[name] = "0";
+      continue;
+    }
+    const derived = Math.floor(wait.timeoutMs / 1000) + IDLE_TICK_SECONDS + 1;
+    if (derived > MAX_IDLE_TIMEOUT_SECONDS) {
       throw new Error(
-        `Deployment runtimeConfig BACKEND_PROXY_TIMEOUT_MS ${proxyMs} outlasts the longest idle timeout ` +
+        `The /api proxy waits up to ${wait.timeoutMs} ms (${wait.source}), longer than the longest idle timeout ` +
           `(${MAX_IDLE_TIMEOUT_SECONDS} seconds); set ${name} to "0" to turn it off.`,
       );
-    } else {
-      config[name] = String(derived);
     }
+    config[name] = String(derived);
   }
   return config;
 }

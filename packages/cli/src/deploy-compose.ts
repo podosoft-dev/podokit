@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { directApiRoutes } from "./api-paths";
+import { readAppProxyTimeouts } from "./app-proxy-timeouts";
 import { profileFindings, type DeployFinding } from "./deploy-checks";
 import type { CommandRunner } from "./dev";
 import { loadComposeProfile } from "./deploy-driver";
@@ -559,7 +560,7 @@ export function planComposeDeployment(
     secretIdentities[label] = output.trim();
   }
 
-  const stateDigest = rolloutStateDigest(profile, secretIdentities);
+  const stateDigest = rolloutStateDigest(profile, secretIdentities, readAppProxyTimeouts(projectRoot));
   const runtime = renderComposeDeployment(
     projectRoot,
     profileName,

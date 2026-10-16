@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { directApiRoutes } from "./api-paths";
+import { readAppProxyTimeouts } from "./app-proxy-timeouts";
 import { profileFindings, type DeployFinding } from "./deploy-checks";
 import type { CommandRunner } from "./dev";
 import {
@@ -747,6 +748,7 @@ export function planDeployment(
       release,
       images,
       state.rolloutStateDigest,
+      readAppProxyTimeouts(projectRoot),
     );
     return { ...base, planHash: planDigest(base, runtime) };
   } finally {

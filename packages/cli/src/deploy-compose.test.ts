@@ -1,8 +1,9 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { CommandRunner } from "./dev";
+import { APP_PROXY_TIMEOUTS_PATH, NO_APP_PROXY_TIMEOUTS } from "./app-proxy-timeouts";
 import { initializeComposeProfile, parseComposeProfile } from "./deploy-compose-profile";
 import {
   defaultComposeImages,
@@ -248,6 +249,15 @@ describe("docker-compose profile", () => {
   });
 });
 
+function writeProxyTimeouts(root: string, entries: string): void {
+  const path = join(root, APP_PROXY_TIMEOUTS_PATH);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(
+    path,
+    `export const APP_PROXY_TIMEOUTS: ReadonlyArray<{ pathPrefix: string; timeoutMs: number | null }> = [\n${entries}\n];\n`,
+  );
+}
+
 function composeProfileOf(root: string) {
   const profile = loadAnyDeploymentProfile(root, "production");
   if (profile.driver !== "docker-compose") throw new Error("expected docker-compose profile");
@@ -262,6 +272,7 @@ describe("compose rendering", () => {
       "v1.2.3",
       defaultComposeImages(profile, "v1.2.3"),
       "sha256:0",
+      NO_APP_PROXY_TIMEOUTS,
     );
     expect(document).toContain('"127.0.0.1:8080:3000"');
     expect(document.match(/ports:/g)).toHaveLength(1);
@@ -275,7 +286,7 @@ describe("compose rendering", () => {
       ...defaultComposeImages(profile, "v1.2.3"),
       gateway: `caddy:2.10-alpine@${GATEWAY_DIGEST}`,
     };
-    const document = renderComposeDocument(profile, "v1.2.3", images, "sha256:0");
+    const document = renderComposeDocument(profile, "v1.2.3", images, "sha256:0", NO_APP_PROXY_TIMEOUTS);
     const web = document.split("example-app-web:")[1]?.split("example-app-gateway:")[0] ?? "";
     const gateway = document.split("example-app-gateway:")[1] ?? "";
 
@@ -301,7 +312,7 @@ describe("compose rendering", () => {
       ...defaultComposeImages(profile, "v1.2.3"),
       gateway: `caddy:2.10-alpine@${GATEWAY_DIGEST}`,
     };
-    const document = renderComposeDocument(profile, "v1.2.3", images, "sha256:0");
+    const document = renderComposeDocument(profile, "v1.2.3", images, "sha256:0", NO_APP_PROXY_TIMEOUTS);
     const web = document.split("example-app-web:")[1]?.split("example-app-gateway:")[0] ?? "";
     const gateway = document.split("example-app-gateway:")[1] ?? "";
 
@@ -332,7 +343,7 @@ describe("compose rendering", () => {
       gateway: `caddy:2.10-alpine@${GATEWAY_DIGEST}`,
     };
     const gateway =
-      renderComposeDocument(profile, "v1.2.3", images, "sha256:0").split("example-app-gateway:")[1] ?? "";
+      renderComposeDocument(profile, "v1.2.3", images, "sha256:0", NO_APP_PROXY_TIMEOUTS).split("example-app-gateway:")[1] ?? "";
 
     expect(gateway).toContain(
       "  @api_websockets path /events/ws\\n  handle @api_websockets {\\n" +
@@ -349,6 +360,7 @@ describe("compose rendering", () => {
       "v1.2.3",
       defaultComposeImages(profile, "v1.2.3"),
       "sha256:0",
+      NO_APP_PROXY_TIMEOUTS,
     );
 
     expect(document).toContain('command: ["bun", "dist/main-worker.js"]');
@@ -361,6 +373,7 @@ describe("compose rendering", () => {
       "v1.2.3",
       defaultComposeImages(profile, "v1.2.3"),
       "sha256:0",
+      NO_APP_PROXY_TIMEOUTS,
     );
     expect(document).toContain("example-app-postgres:\n    external: true");
   });
@@ -372,6 +385,7 @@ describe("compose rendering", () => {
       "v1.2.3",
       defaultComposeImages(profile, "v1.2.3"),
       "sha256:0",
+      NO_APP_PROXY_TIMEOUTS,
     );
     expect(document).toContain("/etc/podokit/example-app/api.env");
     // Every dependency credential arrives through env_file, so no key name that the
@@ -384,7 +398,7 @@ describe("compose rendering", () => {
   it("runs the migration from the API image on the application network", () => {
     const profile = composeProfileOf(initialized());
     const images = { ...defaultComposeImages(profile, "v1.2.3"), api: `repo/api@${API_DIGEST}` };
-    const document = renderMigrationDocument(profile, "v1.2.3", images);
+    const document = renderMigrationDocument(profile, "v1.2.3", images, NO_APP_PROXY_TIMEOUTS);
     expect(document).toContain(`repo/api@${API_DIGEST}`);
     expect(document).toContain('command: ["bun", "run", "migrate:all"]');
     expect(document).toContain("external: true");
@@ -403,8 +417,8 @@ describe("compose rendering", () => {
 
   it("changes the rollout state when an env file changes", () => {
     const profile = composeProfileOf(initialized());
-    const before = rolloutStateDigest(profile, { api: "aaa" });
-    const after = rolloutStateDigest(profile, { api: "bbb" });
+    const before = rolloutStateDigest(profile, { api: "aaa" }, NO_APP_PROXY_TIMEOUTS);
+    const after = rolloutStateDigest(profile, { api: "bbb" }, NO_APP_PROXY_TIMEOUTS);
     expect(before).not.toBe(after);
   });
 
@@ -666,6 +680,7 @@ describe("api service", () => {
       "v1.2.3",
       defaultComposeImages(profile, "v1.2.3"),
       "sha256:0",
+      NO_APP_PROXY_TIMEOUTS,
     );
     const api = document.split("\n  example-app-api:\n")[1]?.split(/\n  \S/)[0] ?? "";
     expect(api).toContain("/health/ready");
@@ -681,6 +696,7 @@ describe("web service", () => {
       "v1.2.3",
       defaultComposeImages(profile, "v1.2.3"),
       "sha256:0",
+      NO_APP_PROXY_TIMEOUTS,
     );
     const web = document.split("\n  example-app-web:\n")[1]?.split(/\n  \S/)[0] ?? "";
     expect(web).toContain("fetch('http://127.0.0.1:3000/healthz')");
@@ -692,7 +708,7 @@ describe("web service", () => {
     const serviceOf = (document: string, role: string): string =>
       document.split(`\n  example-app-${role}:\n`)[1]?.split(/\n  \S/)[0] ?? "";
     const render = (): string =>
-      renderComposeDocument(profile, "v1.2.3", defaultComposeImages(profile, "v1.2.3"), "sha256:0");
+      renderComposeDocument(profile, "v1.2.3", defaultComposeImages(profile, "v1.2.3"), "sha256:0", NO_APP_PROXY_TIMEOUTS);
     for (const role of ["web", "api"]) {
       expect(serviceOf(render(), role)).toContain('      CONNECTION_IDLE_TIMEOUT: "35"\n');
       expect(serviceOf(render(), role)).toContain('      API_IDLE_TIMEOUT: "35"\n');
@@ -708,6 +724,111 @@ describe("web service", () => {
   });
 });
 
+describe("application proxy deadlines", () => {
+  const environmentOf = (document: string, role: string): string =>
+    document.split(`\n  example-app-${role}:\n`)[1]?.split(/\n  \S/)[0] ?? "";
+
+  it("turns both idle timeouts off for a route without a deadline", () => {
+    const root = initialized(["auth"]);
+    writeProxyTimeouts(root, '  { pathPrefix: "/api/hosts/:hostId/file-transfers", timeoutMs: null },');
+    const runtime = renderComposeDeployment(root, "production", composeProfileOf(root), "v1.2.3");
+    for (const role of ["web", "api"]) {
+      expect(environmentOf(runtime.composeDocument, role)).toContain('      CONNECTION_IDLE_TIMEOUT: "0"\n');
+      expect(environmentOf(runtime.composeDocument, role)).toContain('      API_IDLE_TIMEOUT: "0"\n');
+    }
+    expect(runtime.migrationDocument).toContain('      CONNECTION_IDLE_TIMEOUT: "0"\n');
+  });
+
+  it("outlasts the longest deadline, and never shortens the default", () => {
+    const root = initialized(["auth"]);
+    writeProxyTimeouts(
+      root,
+      '  { pathPrefix: "/api/exports/", timeoutMs: 120_000 },\n  { pathPrefix: "/api/quick/", timeoutMs: 5_000 },',
+    );
+    const render = () => renderComposeDeployment(root, "production", composeProfileOf(root), "v1.2.3");
+    expect(environmentOf(render().composeDocument, "web")).toContain('      CONNECTION_IDLE_TIMEOUT: "125"\n');
+    expect(environmentOf(render().composeDocument, "api")).toContain('      API_IDLE_TIMEOUT: "125"\n');
+
+    writeProxyTimeouts(root, '  { pathPrefix: "/api/quick/", timeoutMs: 5_000 },');
+    expect(environmentOf(render().composeDocument, "web")).toContain('      CONNECTION_IDLE_TIMEOUT: "35"\n');
+
+    writeProxyTimeouts(root, '  { pathPrefix: "/api/exports/", timeoutMs: 251_000 },');
+    expect(render).toThrow(
+      'The /api proxy waits up to 251000 ms (APP_PROXY_TIMEOUTS entry /api/exports/), longer than the longest idle timeout (255 seconds); set CONNECTION_IDLE_TIMEOUT to "0" to turn it off.',
+    );
+  });
+
+  it("keeps idle timeouts the profile sets", () => {
+    const root = initialized(["auth"]);
+    writeProxyTimeouts(root, '  { pathPrefix: "/api/hosts/:hostId/file-transfers", timeoutMs: null },');
+    const file = profilePath(root, "production");
+    const value = JSON.parse(readFileSync(file, "utf8")) as { runtimeConfig: Record<string, string> };
+    value.runtimeConfig.API_IDLE_TIMEOUT = "35";
+    writeFileSync(file, JSON.stringify(value));
+    const document = renderComposeDeployment(root, "production", composeProfileOf(root), "v1.2.3").composeDocument;
+    expect(environmentOf(document, "api")).toContain('      API_IDLE_TIMEOUT: "35"\n');
+    expect(environmentOf(document, "api")).toContain('      CONNECTION_IDLE_TIMEOUT: "0"\n');
+  });
+
+  it("fails the plan when it cannot read the deadlines it needs", () => {
+    const root = initialized(["auth"]);
+    writeProxyTimeouts(root, "  ...SHARED_TIMEOUTS,");
+    expect(() => planComposeDeployment(root, "production", "v1.2.3", scriptedRunner())).toThrow(
+      "Cannot read APP_PROXY_TIMEOUTS from apps/web/src/lib/server/proxy-timeouts.ts without running it",
+    );
+
+    const file = profilePath(root, "production");
+    const value = JSON.parse(readFileSync(file, "utf8")) as { runtimeConfig: Record<string, string> };
+    value.runtimeConfig.CONNECTION_IDLE_TIMEOUT = "0";
+    value.runtimeConfig.API_IDLE_TIMEOUT = "0";
+    writeFileSync(file, JSON.stringify(value));
+    expect(planComposeDeployment(root, "production", "v1.2.3", scriptedRunner()).planHash).toMatch(/^sha256:/);
+  });
+
+  it("changes the plan hash when an application deadline changes", () => {
+    const root = initialized(["auth"]);
+    const first = planComposeDeployment(root, "production", "v1.2.3", scriptedRunner());
+    writeProxyTimeouts(root, '  { pathPrefix: "/api/hosts/:hostId/file-transfers", timeoutMs: null },');
+    const second = planComposeDeployment(root, "production", "v1.2.3", scriptedRunner());
+    expect(second.planHash).not.toBe(first.planHash);
+    expect(second.rolloutStateDigest).not.toBe(first.rolloutStateDigest);
+  });
+
+  it("checks idle timeouts the profile sets against the deadlines in the doctor", () => {
+    const root = initialized(["auth"]);
+    const finding = () =>
+      doctorComposeDeployment(root, "production", scriptedRunner()).find((entry) => entry.code === "idle-timeouts");
+    expect(finding()).toMatchObject({ ok: true });
+    expect(finding()?.warning).toBeUndefined();
+    expect(finding()?.message).toContain("CONNECTION_IDLE_TIMEOUT 35 and API_IDLE_TIMEOUT 35");
+
+    writeProxyTimeouts(root, '  { pathPrefix: "/api/hosts/:hostId/file-transfers", timeoutMs: null },');
+    expect(finding()?.message).toContain(
+      "CONNECTION_IDLE_TIMEOUT 0 and API_IDLE_TIMEOUT 0 outlast the /api proxy's longest wait (no deadline, APP_PROXY_TIMEOUTS entry /api/hosts/:hostId/file-transfers)",
+    );
+
+    const file = profilePath(root, "production");
+    const value = JSON.parse(readFileSync(file, "utf8")) as { runtimeConfig: Record<string, string> };
+    value.runtimeConfig.API_IDLE_TIMEOUT = "35";
+    writeFileSync(file, JSON.stringify(value));
+    expect(finding()).toMatchObject({ ok: true, warning: true });
+    expect(finding()?.message).toContain('API_IDLE_TIMEOUT "35" closes a silent connection');
+
+    value.runtimeConfig.CONNECTION_IDLE_TIMEOUT = "35";
+    writeFileSync(file, JSON.stringify(value));
+    expect(finding()).toMatchObject({ ok: false });
+    expect(finding()?.message).toContain("so the web server refuses to start");
+
+    writeProxyTimeouts(root, "  ...SHARED_TIMEOUTS,");
+    expect(finding()).toMatchObject({ ok: true, warning: true });
+    expect(finding()?.message).toContain("The idle timeouts were not checked.");
+    delete value.runtimeConfig.API_IDLE_TIMEOUT;
+    writeFileSync(file, JSON.stringify(value));
+    expect(finding()).toMatchObject({ ok: false });
+    expect(finding()?.message).toContain("Cannot read APP_PROXY_TIMEOUTS");
+  });
+});
+
 describe("worker service", () => {
   it("disables the healthcheck it would inherit from the API image", () => {
     const profile = composeProfileOf(initialized(["auth", "bullmq"]));
@@ -716,6 +837,7 @@ describe("worker service", () => {
       "v1.2.3",
       defaultComposeImages(profile, "v1.2.3"),
       "sha256:0",
+      NO_APP_PROXY_TIMEOUTS,
     );
     const worker = document.split("example-app-worker:")[1] ?? "";
     // The API image declares an HTTP healthcheck; a worker has no HTTP server, so
@@ -733,6 +855,7 @@ describe("object storage init", () => {
       "v1.2.3",
       defaultComposeImages(profile, "v1.2.3"),
       "sha256:0",
+      NO_APP_PROXY_TIMEOUTS,
     );
     // Referencing a policy file the job never creates leaves the application user
     // with no permissions, and the only symptom is a readiness check that is down.

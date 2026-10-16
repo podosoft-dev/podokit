@@ -9,6 +9,7 @@ import type {
 } from "./deploy-profile";
 import { profilePath } from "./deploy-profile";
 import { API_PATH_PREFIX, apiPathBase } from "./api-paths";
+import { readAppProxyTimeouts, type AppProxyTimeouts } from "./app-proxy-timeouts";
 import { idleTimeoutConfig } from "./deploy-schema";
 import { readManifest } from "./lockfile";
 import {
@@ -413,13 +414,16 @@ function dependencyManifest(
     .join("\n---\n");
 }
 
-function derivedRuntimeConfig(profile: DeployProfileV1): Record<string, string> {
+function derivedRuntimeConfig(
+  profile: DeployProfileV1,
+  proxyTimeouts: AppProxyTimeouts,
+): Record<string, string> {
   const result: Record<string, string> = {
     PORT: "3000",
     BACKEND_INTERNAL_URL: `http://${profile.target.release}-api:3000`,
     PROTOCOL_HEADER: "x-forwarded-proto",
     HOST_HEADER: "x-forwarded-host",
-    ...idleTimeoutConfig(profile.runtimeConfig),
+    ...idleTimeoutConfig(profile.runtimeConfig, proxyTimeouts),
     ...profile.runtimeConfig,
   };
   if (profile.dependencies.postgres.mode === "inCluster") {
@@ -438,17 +442,12 @@ function derivedRuntimeConfig(profile: DeployProfileV1): Record<string, string> 
   return result;
 }
 
-function derivedRuntimeConfigDigest(profile: DeployProfileV1): string {
-  const entries = Object.entries(derivedRuntimeConfig(profile)).sort(([left], [right]) =>
-    left.localeCompare(right),
-  );
-  return digest(["runtime-config", JSON.stringify(entries)]);
+function sortedRuntimeConfig(runtimeConfig: Record<string, string>): [string, string][] {
+  return Object.entries(runtimeConfig).sort(([left], [right]) => left.localeCompare(right));
 }
 
-function configMap(profile: DeployProfileV1): string {
-  const entries = Object.entries(derivedRuntimeConfig(profile)).sort(([left], [right]) =>
-    left.localeCompare(right),
-  );
+function configMap(profile: DeployProfileV1, runtimeConfig: Record<string, string>): string {
+  const entries = sortedRuntimeConfig(runtimeConfig);
   return `apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -722,10 +721,11 @@ function applicationManifest(
   images: DeploymentImages,
   rolloutStateDigest: string,
   workerCommand: string[],
+  runtimeConfig: Record<string, string>,
 ): string {
-  const runtimeConfigDigest = derivedRuntimeConfigDigest(profile);
+  const runtimeConfigDigest = digest(["runtime-config", JSON.stringify(sortedRuntimeConfig(runtimeConfig))]);
   return [
-    configMap(profile),
+    configMap(profile, runtimeConfig),
     deployment(
       profile,
       "api",
@@ -758,9 +758,8 @@ function applicationManifest(
     .join("\n---\n");
 }
 
-function migrationRuntimeEnv(profile: DeployProfileV1): string {
-  return Object.entries(derivedRuntimeConfig(profile))
-    .sort(([left], [right]) => left.localeCompare(right))
+function migrationRuntimeEnv(runtimeConfig: Record<string, string>): string {
+  return sortedRuntimeConfig(runtimeConfig)
     .map(
       ([key, value]) => `            - name: ${key}
               value: ${quote(value)}`,
@@ -773,6 +772,7 @@ function migrationManifest(
   release: string,
   images: DeploymentImages,
   defaultCommand: string[],
+  runtimeConfig: Record<string, string>,
 ): string {
   const releaseSlug = release.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   const command = profile.migration?.command ?? defaultCommand;
@@ -803,7 +803,7 @@ ${labels(`${profile.target.release}-migration`, 8)}    spec:
           imagePullPolicy: IfNotPresent
           command: ${yamlStringSequence(command)}
           env:
-${migrationRuntimeEnv(profile)}
+${migrationRuntimeEnv(runtimeConfig)}
           envFrom:
             - secretRef: { name: ${profile.secrets.api.name} }
           securityContext:
@@ -832,6 +832,8 @@ export function renderDeployment(
   release: string,
   resolvedImages?: DeploymentImages,
   rolloutStateDigest?: string,
+  // Planning renders into a scratch directory, so it reads these from the project.
+  proxyTimeouts: AppProxyTimeouts = readAppProxyTimeouts(projectRoot),
 ): DeploymentRuntime {
   profilePath(projectRoot, profileName);
   const images: DeploymentImages = resolvedImages ?? {
@@ -862,17 +864,20 @@ export function renderDeployment(
     rolloutStateDigest ?? offlineRolloutStateDigest(profile);
   const dependencies = dependencyManifest(profile, images, effectiveRolloutStateDigest);
   const toolchain = readManifest(projectRoot)?.toolchain ?? resolveToolchain();
+  const runtimeConfig = derivedRuntimeConfig(profile, proxyTimeouts);
   const application = applicationManifest(
     profile,
     images,
     effectiveRolloutStateDigest,
     toolchainWorkerCommand(toolchain),
+    runtimeConfig,
   );
   const migration = migrationManifest(
     profile,
     release,
     images,
     toolchainMigrationCommand(toolchain),
+    runtimeConfig,
   );
   chart(dependencyChart, "podokit-dependencies", dependencies);
   chart(applicationChart, "podokit-application", application);

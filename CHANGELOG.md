@@ -40,6 +40,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- `podo deploy plan` and `render` derive `CONNECTION_IDLE_TIMEOUT` and
+  `API_IDLE_TIMEOUT` from the application's `APP_PROXY_TIMEOUTS` as well as
+  `BACKEND_PROXY_TIMEOUT_MS`: `0` when an entry has `timeoutMs: null`,
+  otherwise the longest wait's whole seconds plus 5. Before, they saw only
+  `BACKEND_PROXY_TIMEOUT_MS`, so an app with a longer or unbounded route had to
+  set both by hand or its web server refused to start. PodoKit reads
+  `apps/web/src/lib/server/proxy-timeouts.ts` as text without running it, and
+  the plan fails with the line it stopped at when an entry is not a literal;
+  `podo deploy doctor` fails a `CONNECTION_IDLE_TIMEOUT` in `runtimeConfig`
+  that cannot cover the longest wait and warns about such an `API_IDLE_TIMEOUT`.
 - Production deployments of apps with the `audit-log` module start with the
   audit log on. `podo deploy init` sets `AUDIT_LOG_ENABLED: "true"` in the
   profile's `runtimeConfig` for both drivers, and the module adds it to the
@@ -71,6 +81,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Upgrade notes
 
+- A deployment profile that sets `CONNECTION_IDLE_TIMEOUT` or
+  `API_IDLE_TIMEOUT` only to cover an `APP_PROXY_TIMEOUTS` entry can drop them;
+  the plan now derives both. An app with an entry of `timeoutMs: null` that kept
+  `API_IDLE_TIMEOUT` at its default on purpose, because its API lifts the idle
+  timeout per request, keeps `"API_IDLE_TIMEOUT": "35"` in `runtimeConfig`;
+  otherwise the rendered value becomes `0`, and the doctor warns.
 - With the `audit-log` module installed, add `"AUDIT_LOG_ENABLED": "true"` to
   the `runtimeConfig` of every existing deployment profile; `podo deploy doctor`
   warns until you do. `podo update` adds the line to the example
