@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- `isDatabaseUnavailable` also recognizes refused, reset and unreachable
+  connections, pg's "Connection terminated unexpectedly", and the server-shutdown
+  and connection-exception SQLSTATEs (57P01, 57P02, 57P03, class 08), so those
+  failures answer 503 `DATABASE_UNAVAILABLE` instead of 500.
+
 - The generated `apps/api/src/database/pool-guard.spec.ts` declares the row
   types of two awaited queries, so `bun run lint` passes with every
   `@types/bun` version the template allows. With 1.3.9 through 1.4.2, the
