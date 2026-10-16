@@ -185,6 +185,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   defaults through a new `defaults` option of `createConfigStore()` and
   `envAuthConfig()`; the auth module's `auth-config-store.ts` holds them in
   `AUTH_CONFIG_DEFAULTS`, where the audit-log module adds `auditLog: true`.
+- The built API reads `NODE_ENV` when it runs. `Bun.build` replaced
+  `process.env.NODE_ENV` with `"development"` in every bundle, so a production
+  image ignored `NODE_ENV=production` wherever code read it directly: the logging
+  module loaded the development-only `pino-pretty` transport and the API exited
+  at startup when it was missing, the auth module accepted a placeholder
+  `BETTER_AUTH_SECRET` and an `http:` `BETTER_AUTH_URL`, the SQLite migration
+  runner looked for source migrations and ran none, and dependencies such as
+  Better Auth took their development branches. `scripts/build.mjs` now defines
+  `process.env.NODE_ENV` as itself for the API, worker, and migration bundles,
+  and the logging module reads the validated `NODE_ENV`.
 
 ### Upgrade notes
 
@@ -287,6 +297,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Authenticator entries enrolled before this update keep the "Better Auth"
   label; new enrolments use the app name. Set `AUTH_APP_NAME` if neither the
   site name nor the project name is the name your users know.
+- A production API image built after this update enforces the production
+  checks it skipped before: it refuses to start with an unset or placeholder
+  `BETTER_AUTH_SECRET` or a `BETTER_AUTH_URL` that is not `https:`. Fix the
+  deployment's environment before you roll the image out. An app that added
+  `define: { "process.env.NODE_ENV": JSON.stringify("production") }` to
+  `scripts/build.mjs` can drop it; `podo update` reports the edit as a conflict,
+  so take the new file.
 
 ## [1.5.0] - 2026-10-16
 

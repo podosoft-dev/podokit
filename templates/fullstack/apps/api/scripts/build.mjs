@@ -1,5 +1,10 @@
 import { existsSync, readdirSync } from "node:fs";
 
+// Bun inlines process.env.NODE_ENV as "development" unless told otherwise, which
+// would make every production check in the bundle, its dependencies included,
+// take the development branch. Keep it a read of the runtime environment.
+const define = { "process.env.NODE_ENV": "process.env.NODE_ENV" };
+
 const targets = [
   { entrypoint: "src/main.ts", outdir: "dist" },
   { entrypoint: "src/database/migrate.ts", outdir: "dist/database" },
@@ -13,6 +18,7 @@ for (const target of targets) {
     entrypoints: [target.entrypoint],
     outdir: target.outdir,
     target: "bun",
+    define,
   });
   if (!result.success) {
     for (const log of result.logs) process.stderr.write(`${log}\n`);
@@ -29,6 +35,7 @@ if (existsSync("src/migrations")) {
       entrypoints: migrations,
       outdir: "dist/migrations",
       target: "bun",
+      define,
       external: ["typeorm"],
     });
     if (!result.success) {

@@ -68,6 +68,11 @@ bun.lock
 
 The request path uses Elysia and Bun.SQL with PostgreSQL or SQLite. TypeORM
 executes PostgreSQL migrations; SQLite uses the local migration runner.
+
+`scripts/build.mjs` keeps `process.env.NODE_ENV` a read of the runtime
+environment in every bundle. Left to its default, `Bun.build` replaces it with
+`"development"`, so the built API, its dependencies included, would skip every
+production branch even with `NODE_ENV=production` set.
 `bun run --cwd apps/api migrate:all` is the one migration command for setup,
 after adding a module, and for the deployment migration job. It runs the source
 in development and the compiled output in a production image, and with the

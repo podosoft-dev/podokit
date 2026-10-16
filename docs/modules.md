@@ -1030,7 +1030,7 @@ owner, so they run without publishing progress.
 Structured request logging with [pino](https://getpino.io/): every Elysia request
 is logged with a per-request **correlation id** (`x-request-id`, honored from the
 inbound header and echoed back). Logs are pretty single-line records in
-development and JSON in production.
+development and JSON when the validated `NODE_ENV` is `production`.
 
 ```bash
 npx @podosoft/podokit add logging
