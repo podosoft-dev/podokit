@@ -132,6 +132,21 @@ test("downloads presigned objects only when the runner can reach the S3 endpoint
   assert.equal(spec.match(/ctx\.get\(pre\.url\)/g)?.length, 1);
 });
 
+test("downloads a completed chunked upload from S3 only when the runner can reach the endpoint", () => {
+  const spec = readFileSync(
+    join(repoRoot, "templates/modules/file-upload/files/tests/api/chunked-uploads.api.spec.ts"),
+    "utf8",
+  );
+
+  // Local storage returns a signed API path, which the runner always downloads.
+  assert.match(
+    spec,
+    /const local = result\.url\.startsWith\("\/"\);\s+if \(local \|\| process\.env\.S3_ENDPOINT\) \{\s+const download = await ctx\.get\(local \? `\$\{apiBase\}\$\{result\.url\}` : result\.url\);/,
+  );
+  assert.equal(spec.match(/ctx\.get\([^)]*result\.url/g)?.length, 1);
+  assert.match(spec, /expect\(sha256\(stored\)\)\.toBe\(sha256\(file\)\);/);
+});
+
 test("preserves the audit-log module default in the generated app environment", () => {
   const source = readFileSync(join(repoRoot, "scripts/e2e-ci.mjs"), "utf8");
 

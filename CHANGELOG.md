@@ -25,6 +25,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   prefers the auth module's entry, so apps without auth can run `migrate:all`
   before a build. READMEs, AGENTS.md, module instructions, and the docs set up
   with `migrate:all`; `podo update` adds the launcher to existing apps.
+- The file-upload module's `chunked-uploads.api.spec.ts` passes on a
+  containerized dev stack. Like the S3 storage spec, it downloads the completed
+  object through the presigned URL and checks its SHA-256 only when the runner
+  has `S3_ENDPOINT`, because the API signs the URL for an in-network host such
+  as `minio` that a host-side runner cannot resolve. It always downloads the
+  signed API path that local storage returns.
 
 ## [1.4.0] - 2026-10-16
 
