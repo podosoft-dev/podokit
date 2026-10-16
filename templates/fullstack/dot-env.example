@@ -3,9 +3,13 @@
 # ── Required (runtime) ───────────────────────────────────────────────
 NODE_ENV=development
 PORT=5002
+# Address the API listens on (default 0.0.0.0); 127.0.0.1 keeps it off the network.
+# HOST=0.0.0.0
 
 # Canonical database connection. Set this for PostgreSQL or SQLite; POSTGRES_* remains a fallback.
 # DATABASE_URL=postgres://podokit:podokit@localhost:5432/podokit
+# With SQLite and no DATABASE_URL, the database file, relative to apps/api.
+# SQLITE_PATH=./data/podokit.sqlite
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
 POSTGRES_USER=podokit

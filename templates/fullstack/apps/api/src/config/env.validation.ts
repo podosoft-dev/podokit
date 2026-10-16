@@ -3,6 +3,8 @@ import { z } from "zod";
 // Schema-validated environment. Fails fast at boot if something is wrong.
 const schema = z.object({
   NODE_ENV: z.string().default("development"),
+  // The address the API listens on; 127.0.0.1 keeps it off the network.
+  HOST: z.string().trim().min(1).default("0.0.0.0"),
   PORT: z.coerce.number().default(5002),
   // Bytes one request body may hold; 128 MiB is Bun's default.
   API_MAX_REQUEST_BODY_SIZE: z.coerce.number().int().positive().default(128 * 1024 * 1024),
@@ -24,6 +26,8 @@ const schema = z.object({
     .default("x-forwarded-for"),
   CORS_ORIGIN: z.string().optional(),
   DATABASE_URL: z.string().optional(),
+  // The SQLite file when DATABASE_URL is unset, relative to the API directory.
+  SQLITE_PATH: z.string().trim().min(1).default("./data/podokit.sqlite"),
   POSTGRES_HOST: z.string().default("localhost"),
   POSTGRES_PORT: z.coerce.number().default(5432),
   POSTGRES_USER: z.string().default("podokit"),

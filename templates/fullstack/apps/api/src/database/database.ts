@@ -14,8 +14,7 @@ function selectedDatabaseProvider(): DatabaseProviderName {
   return PROVIDERS.database;
 }
 
-export function databaseUrl(env: AppEnv): string {
-  const provider = selectedDatabaseProvider();
+export function databaseUrl(env: AppEnv, provider: DatabaseProviderName = selectedDatabaseProvider()): string {
   if (env.DATABASE_URL) {
     if (provider === "sqlite" && !isSqliteUrl(env.DATABASE_URL)) {
       throw new Error("DATABASE_URL must use sqlite:, file:, or :memory: for the SQLite provider");
@@ -26,7 +25,7 @@ export function databaseUrl(env: AppEnv): string {
     return env.DATABASE_URL;
   }
   if (provider === "sqlite") {
-    const path = resolve("./data/podokit.sqlite");
+    const path = resolve(env.SQLITE_PATH);
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
     return `sqlite://${path}`;
   }

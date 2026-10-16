@@ -68,6 +68,8 @@ bun.lock
 
 The request path uses Elysia and Bun.SQL with PostgreSQL or SQLite. TypeORM
 executes PostgreSQL migrations; SQLite uses the local migration runner.
+The API listens on `HOST` (default `0.0.0.0`) and `PORT`; set `HOST=127.0.0.1`
+to keep it off the network, for example in a desktop shell.
 `bun run --cwd apps/api migrate:all` is the one migration command for setup,
 after adding a module, and for the deployment migration job. It runs the source
 in development and the compiled output in a production image, and with the

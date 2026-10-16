@@ -110,6 +110,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `bun run --cwd apps/api migrate:list` prints the name of every migration the
   current build would run, without a database; in an image,
   `docker run --rm <api-image> bun run migrate:list`.
+- The API listens on `HOST` (default `0.0.0.0`), and `SQLITE_PATH` sets the
+  SQLite file when `DATABASE_URL` is unset (default `./data/podokit.sqlite`), so
+  an app that binds to loopback or keeps its database elsewhere, such as a
+  desktop shell, no longer edits `main.ts` or `database.ts`.
 
 ### Removed
 

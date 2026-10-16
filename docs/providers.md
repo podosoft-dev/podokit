@@ -74,7 +74,7 @@ the local combination. Provider commands and `podo add` append settings to
 | Provider | Setting | Default behavior |
 | --- | --- | --- |
 | PostgreSQL | `DATABASE_URL`, or `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Example connects to `localhost:5432`, database/user `podokit`; `DATABASE_URL` takes precedence |
-| SQLite | `DATABASE_URL` with a `sqlite:` or `file:` URL | `./data/podokit.sqlite` |
+| SQLite | `DATABASE_URL` with a `sqlite:` or `file:` URL, or the file path `SQLITE_PATH` | `./data/podokit.sqlite` |
 | Redis cache/events | `REDIS_URL`, or `REDIS_HOST`, `REDIS_PORT`, `REDIS_DB`, and optional auth/TLS settings | `localhost:6379`, database `0`; `REDIS_URL` takes precedence |
 | Memory cache/events | No external connection | Bounded state held inside the API process |
 | S3 | `STORAGE_PROVIDER`, `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, credentials, `S3_FORCE_PATH_STYLE` | Silo-compatible development settings described below |
@@ -320,7 +320,8 @@ carry more than 128 MiB, or keep requests small with multipart parts.
 
 ## Local persistence and backup
 
-SQLite defaults to `./data/podokit.sqlite`; local object storage defaults to
+SQLite defaults to `./data/podokit.sqlite` (`SQLITE_PATH` moves it when
+`DATABASE_URL` is unset); local object storage defaults to
 `./data/files`, both relative to the API process's working directory. Commands
 using `bun run --cwd apps/api` therefore use `apps/api/data` by default. Set
 absolute paths for packaged desktop and production use, and use the same
