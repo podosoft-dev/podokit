@@ -304,9 +304,13 @@ long as the API takes. The health checks keep running while a request waits, so
 a route without a deadline still answers `503` `BACKEND_UNAVAILABLE` once the
 API's `GET /health` stops answering, and the wait also ends when the browser
 disconnects. The deadline ends when the headers arrive, so it never cuts off
-the body. An invalid prefix, two prefixes that cover the same paths, or a
-`timeoutMs` that is neither `null` nor a whole number of milliseconds from 1 to
-2147483647 fails the web tests and the web server when it loads the proxy.
+the body. Bun's `fetch` also gives up on an API connection that sends nothing
+for its idle timeout, 300 seconds unless `BUN_CONFIG_HTTP_IDLE_TIMEOUT` sets
+another; the proxy turns that timeout off for a route without a deadline or with
+one of 300 seconds or more, so the deadline alone ends the wait. An invalid
+prefix, two prefixes that cover the same paths, or a `timeoutMs` that is
+neither `null` nor a whole number of milliseconds from 1 to 2147483647 fails the
+web tests and the web server when it loads the proxy.
 
 The proxy's deadline is one of three limits on such a request, and the other
 two have to be raised with it. Bun runs both the API and the built web server and

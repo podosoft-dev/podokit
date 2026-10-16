@@ -358,6 +358,23 @@ export function proxyTimeoutFor(
   return entry ? entry.timeoutMs : backendProxyTimeoutMs();
 }
 
+/**
+ * Bun's fetch fails a request whose connection sends nothing for its idle
+ * timeout, 300 seconds unless BUN_CONFIG_HTTP_IDLE_TIMEOUT sets another, even
+ * while the proxy still waits for response headers.
+ */
+const FETCH_IDLE_TIMEOUT_MS = 300_000;
+
+/**
+ * Bun's fetch options for a request that waits up to timeoutMs for response
+ * headers. A wait without a deadline, or one Bun's idle timeout would cut
+ * first, turns that timeout off, so only the deadline, the health checks, and
+ * the browser end it. Shorter waits keep Bun's default.
+ */
+export function upstreamFetchOptions(timeoutMs: number | null): { timeout?: false } {
+  return timeoutMs === null || timeoutMs >= FETCH_IDLE_TIMEOUT_MS ? { timeout: false } : {};
+}
+
 /** Bun closes silent connections on a 4-second tick, up to 4 seconds before their idle timeout. */
 const IDLE_TICK_SECONDS = 4;
 /** The longest idle timeout Bun accepts; 0 turns it off. */
@@ -578,6 +595,7 @@ export async function proxyRequest(
       // closed EventSource or aborted request keeps its API socket open until Bun's
       // fetch pool is exhausted and the web process stops serving requests.
       signal: AbortSignal.any([request.signal, waiting.signal]),
+      ...upstreamFetchOptions(timeoutMs),
     });
   } catch (cause: unknown) {
     // Nobody waits for an answer to a request the browser abandoned.

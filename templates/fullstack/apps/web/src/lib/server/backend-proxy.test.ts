@@ -16,6 +16,7 @@ import {
   resolveClientIp,
   sortedBodyLimits,
   sortedProxyTimeouts,
+  upstreamFetchOptions,
   withAppHeaders,
 } from "./backend-proxy";
 
@@ -884,6 +885,40 @@ describe("backend proxy application timeouts", () => {
       error: { code: "BACKEND_UNAVAILABLE", path: "/api/file-transfers/7/commit" },
     });
     expect(checks).toBeGreaterThanOrEqual(3);
+  });
+
+  it("turns off Bun's fetch idle timeout on a route without a deadline only", async () => {
+    const proxy = await proxyWithTimeouts([{ pathPrefix: "/api/hosts/:hostId/file-transfers", timeoutMs: null }]);
+    const fetch = stubApi(async () => new Response("ok"), async () => Response.json({ done: true }));
+
+    await proxy(
+      new Request("http://app.localhost/api/hosts/h1/file-transfers/t1/commit", { method: "POST", body: "{}" }),
+      "http://api:5002/hosts/h1/file-transfers/t1/commit",
+    );
+    await proxy(new Request("http://app.localhost/api/hosts/h1/notes"), "http://api:5002/hosts/h1/notes");
+
+    const upstream = fetch.mock.calls.filter(([input]) => !String(input).endsWith("/health"));
+    const [commit, notes] = upstream.map(([, init]) => init as RequestInit & { timeout?: unknown });
+    expect(upstream).toHaveLength(2);
+    expect(commit?.timeout).toBe(false);
+    expect(notes).not.toHaveProperty("timeout");
+  });
+
+  it("turns off Bun's fetch idle timeout for a deadline it would cut first", async () => {
+    expect(upstreamFetchOptions(null)).toEqual({ timeout: false });
+    expect(upstreamFetchOptions(600_000)).toEqual({ timeout: false });
+    expect(upstreamFetchOptions(300_000)).toEqual({ timeout: false });
+    expect(upstreamFetchOptions(299_999)).toEqual({});
+    expect(upstreamFetchOptions(30_000)).toEqual({});
+
+    vi.stubEnv("BACKEND_PROXY_TIMEOUT_MS", "300000");
+    vi.stubEnv("CONNECTION_IDLE_TIMEOUT", "0");
+    const proxy = await proxyWithTimeouts([]);
+    const fetch = stubApi(async () => new Response("ok"), async () => Response.json({ done: true }));
+
+    await proxy(new Request("http://app.localhost/api/report"), "http://api:5002/report");
+
+    expect(fetch.mock.calls[0]?.[1]).toHaveProperty("timeout", false);
   });
 
   it("waits without a deadline on a route with a path parameter", async () => {
