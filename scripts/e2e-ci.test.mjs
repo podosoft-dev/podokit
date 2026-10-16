@@ -7,6 +7,7 @@ import {
   assertCleanMigrationOutput,
   createPhaseTimer,
   INSTALL_RETRY_DELAYS_MS,
+  localRegistryEnvironment,
   playwrightArguments,
   playwrightWorkers,
   resolveE2eOptions,
@@ -150,6 +151,30 @@ test("isolates Bun package resolution from previously published local packages",
     /const bunCacheDir = process\.env\.E2E_BUN_CACHE[\s\S]*: join\(appDir, "\.bun-cache"\);/,
   );
   assert.equal(source.match(/"--cache-dir",\s*bunCacheDir/g)?.length, 2);
+});
+
+test("keeps local-registry packages out of the user's npm and npx cache", () => {
+  const environment = localRegistryEnvironment(
+    { registry: "http://localhost:4873", userconfig: "/tmp/run/.e2e-npmrc", cacheDir: "/tmp/run/.npm-cache" },
+    { HOME: "/home/someone", npm_config_cache: "/home/someone/.npm" },
+  );
+  assert.deepEqual(environment, {
+    HOME: "/home/someone",
+    npm_config_cache: "/tmp/run/.npm-cache",
+    npm_config_registry: "http://localhost:4873",
+    npm_config_userconfig: "/tmp/run/.e2e-npmrc",
+  });
+
+  const source = readFileSync(join(repoRoot, "scripts/e2e-ci.mjs"), "utf8");
+  // The run neither clears nor writes the user's ~/.npm/_npx.
+  assert.doesNotMatch(source, /homedir\(\)|_npx/);
+  assert.match(source, /const npmCacheDir = join\(appDir, "\.npm-cache"\);/);
+  assert.match(source, /const npmEnv = localRegistryEnvironment\(\{ registry, userconfig: npmrc, cacheDir: npmCacheDir \}\);/);
+  // Every npm or npx command that touches the local registry runs with that cache.
+  const commands = source.match(/run\("np[mx]", \[[^\]]*\][^)]*\)/g) ?? [];
+  const local = commands.filter((command) => /publish|@podosoft\/podokit/.test(command));
+  assert.ok(local.length >= 5, `expected the publish and podokit commands, got ${local.length}`);
+  for (const command of local) assert.match(command, /env: npmEnv/, command);
 });
 
 test("requires dependency readiness only when object storage is configured", () => {

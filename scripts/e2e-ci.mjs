@@ -12,12 +12,13 @@
 //   APP_DIR, E2E_BUN_CACHE, E2E_RATE_LIMIT_MAX, E2E_WORKERS, KEEP.
 import { spawn, spawnSync, execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir, homedir } from "node:os";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   assertCleanMigrationOutput,
   createPhaseTimer,
+  localRegistryEnvironment,
   playwrightArguments,
   playwrightWorkers,
   resolveE2eOptions,
@@ -52,6 +53,8 @@ const appDir = process.env.APP_DIR ? resolve(process.env.APP_DIR) : mkdtempSync(
 const bunCacheDir = process.env.E2E_BUN_CACHE
   ? resolve(process.env.E2E_BUN_CACHE)
   : join(appDir, ".bun-cache");
+// npm and npx get a cache of this run's own; see localRegistryEnvironment.
+const npmCacheDir = join(appDir, ".npm-cache");
 // The full shared suite uses one seeded administrator for many browser flows.
 // Keep enough headroom for that traffic while still crossing the real limiter
 // boundary in rate-limit.api.spec.ts with a separate disposable user.
@@ -169,20 +172,18 @@ async function main() {
   const npmrc = join(appDir, ".e2e-npmrc");
   mkdirSync(appDir, { recursive: true });
   writeFileSync(npmrc, `//localhost:${env.REGISTRY_PORT}/:_authToken=e2e\nregistry=${registry}\n`);
+  // A reused APP_DIR must not serve the previous run's packages: the same
+  // versions are republished to a throwaway registry each run.
+  rmSync(npmCacheDir, { recursive: true, force: true });
+  const npmEnv = localRegistryEnvironment({ registry, userconfig: npmrc, cacheDir: npmCacheDir });
   for (const pkg of PACKAGES) {
     // --provenance=false: packages set publishConfig.provenance for real npm; a
     // local registry can't attest, so turn it off for the Verdaccio publish.
-    run("npm", ["publish", "-w", pkg, "--registry", registry, "--userconfig", npmrc, "--provenance=false"], { cwd: repoRoot });
+    run("npm", ["publish", "-w", pkg, "--registry", registry, "--userconfig", npmrc, "--provenance=false"], { cwd: repoRoot, env: npmEnv });
   }
 
   step("generate an app the way a user would (npx create from the registry)");
-  // npx caches packages by version under ~/.npm/_npx; since we republish the same
-  // version to a throwaway registry each run, a stale cached CLI would mask template
-  // changes on local reruns (CI runners start clean). Clear it so the create/add
-  // below always fetch the freshly published packages.
-  rmSync(join(homedir(), ".npm", "_npx"), { recursive: true, force: true });
   const target = join(appDir, "app");
-  const npmEnv = { ...process.env, npm_config_registry: registry, npm_config_userconfig: npmrc };
   run("npx", ["--yes", "@podosoft/podokit", "create", "app", "--dir", target, "--template", "fullstack", "--yes"], { cwd: appDir, env: npmEnv });
   run("npx", ["--yes", "@podosoft/podokit", "add", "admin-dashboard"], { cwd: target, env: npmEnv });
   // Backend modules whose shipped api specs need Redis / Silo — added so their

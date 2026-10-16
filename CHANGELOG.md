@@ -230,6 +230,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- The Outer harness, `scripts/e2e-ci.mjs`, runs npm and npx against its local
+  registry with an npm cache inside the run's directory. It installed the
+  locally published `@podosoft/podokit` through the user's npx cache, where a
+  later `npx @podosoft/podokit@<same version>` ran it as the release, and it
+  deleted the whole `~/.npm/_npx` at the start of each run.
 - The account sessions specs (API and UI) no longer spend the per-address
   sign-in budget: each made 105 anonymous sign-ins, so a run with a raised
   `RATE_LIMIT_AUTH_MAX` of 300 refused sign-ins of unrelated specs within the

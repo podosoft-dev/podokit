@@ -177,6 +177,16 @@ installs the generated workspace with Bun 1.4.0, runs Better Auth and TypeORM
 migrations, verifies the OpenAPI contract, builds and starts the Bun API and
 worker plus the SvelteKit server, and runs the shipped Playwright suite.
 
+The packages it publishes carry the versions of the released ones. npx caches a
+package by name and version, not by registry, so the harness runs every npm and
+npx command against Verdaccio with an npm cache of its own, `.npm-cache` in the
+run's app directory, and Bun with `.bun-cache` beside it. Outer must never leave
+a Verdaccio build in the user's `~/.npm/_npx`, where a later
+`npx @podosoft/podokit@<version>` would run it as the release. Earlier versions
+of the harness installed through that cache and deleted `~/.npm/_npx` at the
+start of every run; find an entry they left with
+`grep -l "localhost:4873" ~/.npm/_npx/*/package-lock.json` and remove it.
+
 Verdaccio serves the published `@podosoft/*` packages and fetches every other
 package from npm. When that fetch fails, Verdaccio answers `404`, and after two
 failures it stops asking npm for `fail_timeout`, which
