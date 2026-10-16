@@ -19,7 +19,6 @@
     "@types/pg": "^8.11.10"
   },
   "scripts": {
-    "migrate:all": "bun scripts/run-migrations.mjs",
     "auth:configure": "bun scripts/configure-auth.mjs"
   },
   "env": [

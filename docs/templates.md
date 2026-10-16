@@ -52,6 +52,7 @@ apps/
       health/              # GET /health and /health/ready
       common/              # AppException and standard error envelope
     scripts/build.mjs      # Bun.build API, worker, and migrations
+    scripts/run-migrations.mjs # migrate:all: source in development, dist in production
     Dockerfile             # oven/bun:1.4.0-alpine
   web/
     src/routes/            # SvelteKit pages and API proxy
@@ -66,7 +67,15 @@ bun.lock
 ```
 
 The request path uses Elysia and Bun.SQL with PostgreSQL or SQLite. TypeORM
-executes PostgreSQL migrations; SQLite uses the local migration runner. Other
+executes PostgreSQL migrations; SQLite uses the local migration runner.
+`bun run --cwd apps/api migrate:all` is the one migration command for setup,
+after adding a module, and for the deployment migration job. It runs the source
+in development and the compiled output in a production image, and with the
+`auth` module installed it applies the Better Auth schema before the application
+migrations. `migration:run` and `migration:revert` work on the application
+migrations alone, so `migration:run` never creates Better Auth tables, and a
+module migration that needs one, such as the admin dashboard's session index,
+stops and names `migrate:all`. Other
 infrastructure is selected
 through the contracts described in [Runtime providers](providers.md). The merged
 OpenAPI document at `/api-docs-json` includes
@@ -227,7 +236,7 @@ npx @podosoft/podokit create podokit --template todo --database sqlite
 cd podokit
 bun install
 cp .env.example .env
-bun run --cwd apps/api migration:run
+bun run --cwd apps/api migrate:all
 bun run dev
 ```
 

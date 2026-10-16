@@ -13,6 +13,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `@types/bun` version the template allows. With 1.3.9 through 1.4.2, the
   `expect()` overload for a missing value made TypeScript infer those rows as
   `undefined`.
+- `migrate:all` is the one migration command for every generated app. On a new
+  database, `migration:run` failed at `IndexSessionCreatedAt1792060000000` with
+  `relation "session" does not exist`, because only `migrate:all` creates
+  Better Auth's tables. The admin dashboard's session index migration and the
+  blog module's migration now stop with a message that names
+  `bun run --cwd apps/api migrate:all` instead; the blog migration no longer
+  skips its author foreign keys without the `user` table. The base template
+  owns the `apps/api/scripts/run-migrations.mjs` launcher, which runs the
+  source in development and the compiled output in a production image and
+  prefers the auth module's entry, so apps without auth can run `migrate:all`
+  before a build. READMEs, AGENTS.md, module instructions, and the docs set up
+  with `migrate:all`; `podo update` adds the launcher to existing apps.
 
 ## [1.4.0] - 2026-10-16
 

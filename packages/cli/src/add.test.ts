@@ -449,13 +449,9 @@ describe("addModule (auth / better-auth)", () => {
     expect(
       readFileSync(join(project, "apps/api/scripts/configure-auth.mjs"), "utf8"),
     ).toMatch(/^#!\/usr\/bin\/env bun$/m);
-    const migrationRunner = readFileSync(
-      join(project, "apps/api/scripts/run-migrations.mjs"),
-      "utf8",
-    );
-    expect(migrationRunner).toContain("src/migrate.ts");
-    expect(migrationRunner).toContain("dist/migrate.js");
-    expect(migrationRunner).toContain('process.env.NODE_ENV === "production"');
+    // The base launcher behind migrate:all prefers this entry when it exists.
+    expect(readFileSync(join(project, "apps/api/scripts/run-migrations.mjs"), "utf8"))
+      .toContain('entry("migrate") ?? entry("database/migrate")');
     const migrationSource = readFileSync(join(project, "apps/api/src/migrate.ts"), "utf8");
     expect(migrationSource).toContain("migrateLegacyAccountIssuers");
     expect(migrationSource.indexOf("migrateLegacyAccountIssuers(")).toBeLessThan(

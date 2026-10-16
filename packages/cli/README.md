@@ -66,7 +66,7 @@ bunx --bun @podosoft/podokit provider set events memory --apply
 bunx --bun @podosoft/podokit provider set jobs local --apply
 bun install
 cp .env.example .env
-bun run --cwd apps/api migration:run
+bun run --cwd apps/api migrate:all
 ```
 
 Run `bun run --cwd apps/api dev` and `bun run --cwd apps/web dev` in separate

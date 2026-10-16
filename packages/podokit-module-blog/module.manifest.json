@@ -67,7 +67,7 @@
   ],
   "instructions": [
     "Install dependencies: bun install",
-    "Run migrations: bun run --cwd apps/api migration:run",
+    "Run migrations: bun run --cwd apps/api migrate:all",
     "Open /blog to read posts, /blog/mine to manage your drafts and published posts, or /admin/blog to manage all content.",
     "After upgrading this package, run podo update and then podo update --apply."
   ]

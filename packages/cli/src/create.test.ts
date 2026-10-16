@@ -133,6 +133,12 @@ describe("create (integration against templates)", () => {
     expect(readFileSync(join(target, "apps/api/package.json"), "utf8")).toContain(
       '"test": "bun test src"',
     );
+    // One setup command for every app: from source in development and from the
+    // compiled output in a production image.
+    expect(readFileSync(join(target, "apps/api/package.json"), "utf8")).toContain(
+      '"migrate:all": "bun scripts/run-migrations.mjs"',
+    );
+    expect(existsSync(join(target, "apps/api/scripts/run-migrations.mjs"))).toBe(true);
     for (const workspace of ["api", "web"]) {
       const { scripts } = JSON.parse(
         readFileSync(join(target, `apps/${workspace}/package.json`), "utf8"),

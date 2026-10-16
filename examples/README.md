@@ -20,7 +20,7 @@ bunx --bun @podosoft/podokit provider set events memory --apply
 bunx --bun @podosoft/podokit provider set jobs local --apply
 bun install
 cp .env.example .env
-bun run --cwd apps/api migration:run
+bun run --cwd apps/api migrate:all
 ```
 
 For only Todo CRUD, the four optional provider commands can be omitted. SQLite
@@ -173,7 +173,7 @@ PostgreSQL, Redis cache/events, S3, and BullMQ. The container loop enables the
 installed Redis, Silo, and worker profiles. Run migrations in a second terminal:
 
 ```bash
-bunx --bun @podosoft/podokit dev exec api bun run --cwd apps/api migration:run
+bunx --bun @podosoft/podokit dev exec api bun run --cwd apps/api migrate:all
 ```
 
 Open `http://podokit.localhost`. The S3 module uses Silo in development with

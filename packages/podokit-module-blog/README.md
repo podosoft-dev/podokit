@@ -11,7 +11,7 @@ SEO policy.
 bun add --dev @podosoft/podokit-module-blog
 podo add blog
 bun install
-bun run --cwd apps/api migration:run
+bun run --cwd apps/api migrate:all
 ```
 
 The module uses the shadcn-svelte `textarea` from the application's
