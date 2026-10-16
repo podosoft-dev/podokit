@@ -435,6 +435,9 @@ ships it, and never overwritten.
 | `apps/web/src/lib/server/non-indexable-paths.ts` (admin-dashboard) | `APP_NON_INDEXABLE_PATHS` | [Search indexing](modules.md#search-indexing) |
 | `apps/web/src/lib/admin/app-nav.ts` (admin-dashboard) | `APP_ADMIN_NAV` | [Admin navigation](modules.md#admin-navigation) |
 
+Route pages are owned too; see [route files and update tiers](#route-files-and-update-tiers)
+for the pages whose server load PodoKit manages.
+
 #### Vite and SvelteKit options
 
 `apps/web/vite.config.ts` is managed. It merges `appViteConfig` from the owned
@@ -472,6 +475,28 @@ deployment's edge send the exact paths listed in `webSocketPaths` of
 exact path, with or without a query string, to `BACKEND_INTERNAL_URL`, so a
 WebSocket feature works the same way in both setups without a proxy entry of
 your own. The API must authenticate each upgrade itself.
+
+### Route files and update tiers
+
+`apps/web/src/routes/**` is application-owned, but modules keep some route
+server loads managed, such as `routes/account/+page.server.ts` and the admin
+pages' loads, so that security and data fixes still arrive through
+`podo update`. The owned page beside such a load never receives updates, so
+PodoKit keeps each feature of those routes in managed files:
+
+- The owned page passes the load's `data` to a managed component, such as
+  `<AccountPage {data} />`, and reads only the fields earlier versions of the
+  page already read. A test in the PodoKit repository fails when a template
+  page starts reading another one.
+- A field a managed load starts returning is rendered by a managed component.
+  For example, the impersonation banner on `/account` is part of the managed
+  `AccountPage`, driven by the load's `showImpersonationBanner`.
+- A managed e2e spec keeps passing against the owned pages earlier versions
+  generated, so it does not assert a change PodoKit made only to an owned page.
+
+Keep your own chrome in the owned page and leave the `data` it passes on
+unchanged. If a managed load must change, `podo eject` it together with the
+page.
 
 ## `todo`
 

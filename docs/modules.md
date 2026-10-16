@@ -1362,7 +1362,7 @@ OAuth, SMTP, and sign-up approval configuration.
 - **/admin/organizations** (admin only) — organizations, members, and invitations.
 - **/admin/audit** (admin only) — the audit log of security-relevant actions.
 - **/admin/settings** (admin only) — enable/disable sign-in methods and configure OAuth providers, SMTP, sign-up approval, automatic logout, and other server toggles at runtime (see below), plus the **Appearance** tab for the runtime theme (see "Appearance").
-- **/account** — the signed-in user's profile and profile image, password, 2FA, passkeys, API keys, and sessions without the admin shell.
+- **/account** — the signed-in user's profile and profile image, password, 2FA, passkeys, API keys, and sessions without the admin shell. While an administrator impersonates the user, the managed `AccountPage` shows a banner with the way back to the administrator session.
 - **/admin/account** — the same account controls inside the admin shell, retained for existing links and applications.
 
 Every page render loads the public site settings and the session in parallel.

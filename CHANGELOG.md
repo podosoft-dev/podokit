@@ -129,6 +129,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   time: the organization spec picks the seeded user as a manager instead of the
   first user listed, and the blog comment validation spec posts to a post of its
   own instead of the newest published one.
+- The impersonation banner on `/account` no longer depends on the
+  application-owned account page. The managed load returned `impersonating`, but
+  only pages generated after the banner was added rendered it, so an updated app
+  without it lost the way back to the administrator session, and the managed
+  impersonation spec failed when the app's owned users page navigated somewhere
+  other than `/account`. The managed `AccountPage` now renders the banner from
+  the load's new `showImpersonationBanner`, and the spec opens `/account` itself.
+  Pages whose server load is managed now follow one rule, described in
+  [route files and update tiers](docs/templates.md#route-files-and-update-tiers),
+  and a repository test fails when a template's owned page starts reading a
+  new field of such a load.
 
 ### Upgrade notes
 
@@ -202,6 +213,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `backend-proxy.ts`, take PodoKit's version. List every public origin the web
   app serves in `CORS_ORIGIN` of the web server's environment, or the proxy
   sends neither header.
+- `routes/account/+page.server.ts` returns `showImpersonationBanner` instead of
+  `impersonating`, and the managed `AccountPage` renders the banner. Remove the
+  `{#if data.impersonating}` block and the `ImpersonationBanner` import from your
+  owned `routes/account/+page.svelte`; they no longer render anything. If you
+  reverted the managed load or edited `tests/ui/impersonation.ui.spec.ts` to make
+  it pass, take PodoKit's versions of both.
 
 ## [1.5.0] - 2026-10-16
 
