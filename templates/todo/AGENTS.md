@@ -53,6 +53,15 @@ Merge added module settings from `.env.example` into an existing `.env`.
   route a longer, shorter, or no response deadline in the app-owned
   `apps/web/src/lib/server/proxy-timeouts.ts` (`APP_PROXY_TIMEOUTS`, `null` for
   none); never edit the managed deadline.
+- Server-side API calls (`serverApiClient`) give up after `BACKEND_TIMEOUT_MS`
+  (2000), and the proxy answers 504 `BACKEND_TIMEOUT` when the API sends no
+  response headers within `BACKEND_PROXY_TIMEOUT_MS` (30000). Once the API's
+  `GET /health` stops answering too, calls throw `BackendUnavailableError` and the
+  proxy answers 503 `BACKEND_UNAVAILABLE` at once until it answers again. Handle
+  any non-`ApiError` failure in a load function as a temporary outage. The built
+  web server closes a connection that sends nothing for `CONNECTION_IDLE_TIMEOUT`
+  seconds (35): keep it more than 4 above the longest proxy deadline, or `0` when
+  a route has none; the proxy refuses to load otherwise.
 - When the root layout or a server hook fails, such as with 503 while the API is
   down, SvelteKit serves the app-owned `apps/web/src/error.html`. It is plain HTML
   with inline styles: no components, app CSS, scripts, or assets, and only the

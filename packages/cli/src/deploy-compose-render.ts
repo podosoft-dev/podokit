@@ -8,7 +8,7 @@ import {
   type ComposeWorkloadProfile,
   type DockerComposeProfileV1,
 } from "./deploy-compose-profile";
-import { profilePath } from "./deploy-schema";
+import { profilePath, webIdleTimeoutSeconds } from "./deploy-schema";
 import { readManifest } from "./lockfile";
 import {
   resolveToolchain,
@@ -69,6 +69,7 @@ export function derivedRuntimeConfig(profile: DockerComposeProfileV1): Record<st
   const result: Record<string, string> = {
     PORT: String(CONTAINER_PORT),
     BACKEND_INTERNAL_URL: `http://${serviceName(profile, "api")}:${CONTAINER_PORT}`,
+    CONNECTION_IDLE_TIMEOUT: webIdleTimeoutSeconds(profile.runtimeConfig),
     ...profile.runtimeConfig,
   };
   if (profile.dependencies.postgres.mode === "managed") {

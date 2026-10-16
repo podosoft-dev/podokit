@@ -6,6 +6,7 @@ import {
   backendReachable,
   bodyLimitFor,
   checkBackend,
+  checkIdleTimeout,
   envMilliseconds,
   IN_MEMORY_RESPONSE_BYTES,
   proxyRequest,
@@ -866,6 +867,54 @@ describe("backend proxy application timeouts", () => {
     [[{ pathPrefix: "/api/exports", timeoutMs: null }, { pathPrefix: "/api/exports/", timeoutMs: 10 }], "more than once"],
   ])("rejects an invalid timeout list %#", (timeouts, message) => {
     expect(() => sortedProxyTimeouts(timeouts)).toThrow(message);
+  });
+
+  it.each([undefined, "0", "35", "soon"])("accepts CONNECTION_IDLE_TIMEOUT=%s with the default deadline", (idle) => {
+    expect(() => checkIdleTimeout(idle, 30_000, [])).not.toThrow();
+  });
+
+  it("requires the idle timeout to outlast the longest deadline by Bun's check interval", () => {
+    expect(() => checkIdleTimeout("34", 30_000, [])).toThrow(
+      "CONNECTION_IDLE_TIMEOUT=34 lets the web server close a silent connection before the /api proxy stops " +
+        "waiting for response headers (30000 ms, BACKEND_PROXY_TIMEOUT_MS)",
+    );
+    expect(() => checkIdleTimeout("10", 30_000, [])).toThrow("Set CONNECTION_IDLE_TIMEOUT to at least 35, or to 0");
+    expect(() => checkIdleTimeout("35", 30_500, [])).not.toThrow();
+    expect(() => checkIdleTimeout("35", 31_000, [])).toThrow("at least 36");
+
+    const routes = sortedProxyTimeouts([
+      { pathPrefix: "/api/quick/", timeoutMs: 5_000 },
+      { pathPrefix: "/api/exports/", timeoutMs: 120_000 },
+    ]);
+    expect(() => checkIdleTimeout("35", 30_000, routes)).toThrow(
+      "(120000 ms, APP_PROXY_TIMEOUTS for /api/exports); Bun closes idle connections up to 4 seconds early. " +
+        "Set CONNECTION_IDLE_TIMEOUT to at least 125, or to 0 to turn the idle timeout off.",
+    );
+    expect(() => checkIdleTimeout("125", 30_000, routes)).not.toThrow();
+    expect(() => checkIdleTimeout("0", 30_000, routes)).not.toThrow();
+  });
+
+  it("requires the idle timeout off for a route without a deadline or beyond Bun's limit", () => {
+    const unbounded = sortedProxyTimeouts([
+      { pathPrefix: "/api/exports/", timeoutMs: 120_000 },
+      { pathPrefix: "/api/file-transfers/", timeoutMs: null },
+    ]);
+    expect(() => checkIdleTimeout("255", 30_000, unbounded)).toThrow(
+      "(no deadline, APP_PROXY_TIMEOUTS for /api/file-transfers); Bun closes idle connections up to 4 seconds " +
+        "early. Set CONNECTION_IDLE_TIMEOUT to 0 to turn the idle timeout off, since Bun allows at most 255 seconds.",
+    );
+    expect(() => checkIdleTimeout("0", 30_000, unbounded)).not.toThrow();
+    expect(() => checkIdleTimeout("255", 250_999, [])).not.toThrow();
+    expect(() => checkIdleTimeout("255", 251_000, [])).toThrow("Set CONNECTION_IDLE_TIMEOUT to 0");
+  });
+
+  it("refuses to load when CONNECTION_IDLE_TIMEOUT cannot cover a route's deadline", async () => {
+    vi.stubEnv("CONNECTION_IDLE_TIMEOUT", "35");
+    await expect(proxyWithTimeouts([{ pathPrefix: "/api/file-transfers/", timeoutMs: null }])).rejects.toThrow(
+      "CONNECTION_IDLE_TIMEOUT=35 lets the web server close a silent connection",
+    );
+    vi.stubEnv("CONNECTION_IDLE_TIMEOUT", "0");
+    await expect(proxyWithTimeouts([{ pathPrefix: "/api/file-transfers/", timeoutMs: null }])).resolves.toBeDefined();
   });
 
   it("refuses to load with an invalid application timeout", async () => {

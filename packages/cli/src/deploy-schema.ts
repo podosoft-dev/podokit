@@ -243,6 +243,33 @@ export function parseRuntimeConfig(runtimeConfig: Record<string, unknown>): Reco
   return parsed;
 }
 
+/** Bun closes silent connections on a 4-second tick, up to 4 seconds before their idle timeout. */
+const WEB_IDLE_TICK_SECONDS = 4;
+const MAX_WEB_IDLE_TIMEOUT_SECONDS = 255;
+const DEFAULT_BACKEND_PROXY_TIMEOUT_MS = 30_000;
+
+/**
+ * The web server's CONNECTION_IDLE_TIMEOUT: the profile's own value, or else the
+ * fewest seconds that keep a silent connection open past the /api proxy's
+ * BACKEND_PROXY_TIMEOUT_MS deadline (35 for the default 30000 ms). The web server
+ * checks the final value against every proxy deadline when it loads the proxy.
+ */
+export function webIdleTimeoutSeconds(runtimeConfig: Record<string, string>): string {
+  const configured = runtimeConfig.CONNECTION_IDLE_TIMEOUT;
+  if (configured !== undefined) return configured;
+  const proxyTimeout = runtimeConfig.BACKEND_PROXY_TIMEOUT_MS?.trim();
+  const proxyMs =
+    proxyTimeout && /^\d+$/.test(proxyTimeout) ? Number(proxyTimeout) : DEFAULT_BACKEND_PROXY_TIMEOUT_MS;
+  const seconds = Math.floor(proxyMs / 1000) + WEB_IDLE_TICK_SECONDS + 1;
+  if (seconds > MAX_WEB_IDLE_TIMEOUT_SECONDS) {
+    throw new Error(
+      `Deployment runtimeConfig BACKEND_PROXY_TIMEOUT_MS ${proxyMs} outlasts the longest web server idle ` +
+        `timeout (${MAX_WEB_IDLE_TIMEOUT_SECONDS} seconds); set CONNECTION_IDLE_TIMEOUT to "0" to turn it off.`,
+    );
+  }
+  return String(seconds);
+}
+
 export function validateHttpsOrigin(value: string): void {
   let parsed: URL;
   try {

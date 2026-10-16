@@ -537,7 +537,8 @@ see [API timeouts and outages](templates.md#api-timeouts-and-outages).
 | Web setting | Default | Effect |
 | --- | --- | --- |
 | `BACKEND_TIMEOUT_MS` | `2000` | The longest one server-side API call may take, and how often the proxy checks whether the API answers at all while it waits for response headers. Detecting an outage takes up to twice this long, and pages rendered meanwhile wait for it. |
-| `BACKEND_PROXY_TIMEOUT_MS` | `30000` | How long the `/api` proxy waits for response headers before it answers `504` `BACKEND_TIMEOUT`, unless [`APP_PROXY_TIMEOUTS`](templates.md#proxy-deadlines-per-route) gives the route its own deadline. Raise it with the API's `idleTimeout` and the web server's `CONNECTION_IDLE_TIMEOUT`. |
+| `BACKEND_PROXY_TIMEOUT_MS` | `30000` | How long the `/api` proxy waits for response headers before it answers `504` `BACKEND_TIMEOUT`, unless [`APP_PROXY_TIMEOUTS`](templates.md#proxy-deadlines-per-route) gives the route its own deadline. Raise it with the API's `idleTimeout`; the rendered `CONNECTION_IDLE_TIMEOUT` follows it. |
+| `CONNECTION_IDLE_TIMEOUT` | `35` | Seconds the web server keeps a connection open while it sends nothing, from `0` (off) to `255`. Unless `runtimeConfig` sets it, the renderers derive it from `BACKEND_PROXY_TIMEOUT_MS`: 5 seconds above it in whole seconds, because Bun checks idle connections every 4 seconds. A deadline above 250 seconds needs `0` set here. Raise it as well for an `APP_PROXY_TIMEOUTS` entry longer than `BACKEND_PROXY_TIMEOUT_MS`; the web server refuses a value that cannot cover every deadline. |
 
 Set them in the profile's `runtimeConfig`.
 

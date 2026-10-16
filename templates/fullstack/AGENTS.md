@@ -60,7 +60,10 @@ Merge added module settings from `.env.example` into an existing `.env`.
   proxy answers 503 `BACKEND_UNAVAILABLE` at once until it answers again. Handle
   any non-`ApiError` failure in a load function as a temporary outage. Raising
   the API's `apiServerOptions.idleTimeout` needs a matching
-  `BACKEND_PROXY_TIMEOUT_MS`.
+  `BACKEND_PROXY_TIMEOUT_MS` or `APP_PROXY_TIMEOUTS` entry. The built web server
+  closes a connection that sends nothing for `CONNECTION_IDLE_TIMEOUT` seconds
+  (35): keep it more than 4 above the longest proxy deadline, or `0` when a
+  route has none; the proxy refuses to load otherwise.
 - `GET /healthz` (`apps/web/src/routes/healthz/+server.ts`) is the web server's own
   health route for the Kubernetes probes, the Compose healthcheck, and the image
   `HEALTHCHECK`. Keep it free of API calls, so an API outage does not take the web

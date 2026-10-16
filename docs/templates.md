@@ -226,15 +226,33 @@ ends the outage. The state belongs to one web process.
 
 Both values are whole milliseconds from 1 to 2147483647, set in the web
 server's environment; any other value fails when the web server loads the
-proxy, which is at startup in apps with server hooks. Raise
+proxy. That is at startup in apps with server hooks, such as the admin
+dashboard's; otherwise the first `/api` request loads it, and every `/api`
+request answers `500` and logs the error. Raise
 `BACKEND_TIMEOUT_MS` when a load function calls an endpoint that takes longer;
 it also lengthens how long pages wait while an outage is being detected. An API
 endpoint that takes longer than 30 seconds to start its response needs a higher
-`idleTimeout` in the API's [server options](#api-server-options) and a matching
-`BACKEND_PROXY_TIMEOUT_MS`. The web server also closes a connection that has
-received nothing for `CONNECTION_IDLE_TIMEOUT` seconds (an adapter-bun setting,
-Bun's 10 by default, lifted for `text/event-stream` responses), so such an
-endpoint needs that raised as well.
+`idleTimeout` in the API's [server options](#api-server-options), a matching
+`BACKEND_PROXY_TIMEOUT_MS` or [route deadline](#proxy-deadlines-per-route), and
+a matching `CONNECTION_IDLE_TIMEOUT`.
+
+The built web server (adapter-bun) closes a connection that has sent nothing for
+`CONNECTION_IDLE_TIMEOUT` seconds, without any response, so neither the API's
+late answer nor the proxy's `504` reaches the browser. The generated web image,
+`.env.example`, reference Kubernetes config, and deployment renderers set it to
+35. Bun checks idle connections every 4 seconds and can close one up to 4
+seconds early, so the value must be more than 4 above the longest proxy deadline
+in seconds; 35 covers the default 30-second deadline. Bun accepts at most 255,
+and `0` turns the idle timeout off. When the variable is set, the proxy refuses
+to load unless it is `0` or covers `BACKEND_PROXY_TIMEOUT_MS` and every
+`APP_PROXY_TIMEOUTS` entry, and a route without a deadline needs `0`. Unset,
+Bun's default of 10 seconds applies and is not checked. adapter-bun lifts the
+timeout for `text/event-stream` responses, so server-sent events stay open
+through quiet periods; any other streamed response that pauses for longer is
+cut off. Only the built server reads the variable; `vite dev` does not. Calling Bun's
+`server.timeout(request, 0)` through `platform.server` in a route does not help:
+behind an HTTPS gateway, adapter-bun rewrites the request onto the public
+origin, and Bun ignores the call for the rewritten request.
 
 ### Proxy deadlines per route
 
@@ -258,18 +276,26 @@ response headers before it answers `504` `BACKEND_TIMEOUT`, and `null` waits as
 long as the API takes. The health checks keep running while a request waits, so
 a route without a deadline still answers `503` `BACKEND_UNAVAILABLE` once the
 API's `GET /health` stops answering, and the wait also ends when the browser
-disconnects. Like any proxied response, the body is never cut off once the
-headers arrive. A prefix that is not a static path under `/api/`, a prefix
-listed twice, or a `timeoutMs` that is neither `null` nor a whole number of
+disconnects. The deadline ends when the headers arrive, so it never cuts off
+the body. A prefix that is not a static path under `/api/`, a prefix listed
+twice, or a `timeoutMs` that is neither `null` nor a whole number of
 milliseconds from 1 to 2147483647 fails the web tests and the web server when it
 loads the proxy.
 
-The proxy's deadline is one of three limits on such a request. The API must
-keep the connection open as long, so raise `idleTimeout` in its
-[server options](#api-server-options) (`0` turns it off), and the web server
-must not close the connection first; see `CONNECTION_IDLE_TIMEOUT` under
-[API timeouts and outages](#api-timeouts-and-outages). New apps get the file
-empty; `podo update` creates it once in an existing app and never overwrites it.
+The proxy's deadline is one of three limits on such a request, and the other
+two have to be raised with it. Bun runs both the API and the built web server and
+checks idle connections every 4 seconds, so each server's idle timeout must be
+more than 4 seconds above the longest wait. To give `/api/exports/` two minutes,
+list it with `timeoutMs: 120_000`, set `idleTimeout` in the API's
+[server options](#api-server-options) to at least 125, and set the web server's
+`CONNECTION_IDLE_TIMEOUT` environment variable to at least 125, in `.env` or in a
+deployment profile's `runtimeConfig` (where it otherwise follows
+`BACKEND_PROXY_TIMEOUT_MS` but not this file). A route without a deadline, or one
+longer than 250 seconds, needs `0` for both, which turns the idle timeout off;
+idle keep-alive connections then stay open until the client or the gateway in
+front closes them. The proxy refuses to load when `CONNECTION_IDLE_TIMEOUT`
+cannot cover an entry here. New apps get the file empty; `podo update` creates it
+once in an existing app and never overwrites it.
 
 ### Fallback error page
 

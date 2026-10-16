@@ -299,6 +299,52 @@ export function proxyTimeoutFor(pathname: string, timeouts: readonly ProxyTimeou
   return entry ? entry.timeoutMs : backendProxyTimeoutMs();
 }
 
+/** Bun closes silent connections on a 4-second tick, up to 4 seconds before their idle timeout. */
+const IDLE_TICK_SECONDS = 4;
+/** The longest idle timeout Bun accepts; 0 turns it off. */
+const MAX_IDLE_TIMEOUT_SECONDS = 255;
+
+/**
+ * Throw unless the web server keeps a silent connection open longer than the
+ * proxy waits for response headers. adapter-bun takes its idle timeout from
+ * CONNECTION_IDLE_TIMEOUT (Bun's 10 seconds when unset) and closes a connection
+ * that sends nothing for that long without a response, so neither the API's late
+ * answer nor the proxy's 504 would reach the browser.
+ */
+export function checkIdleTimeout(
+  idleTimeout: string | undefined,
+  defaultTimeoutMs: number,
+  timeouts: readonly ProxyTimeout[],
+): void {
+  // adapter-bun rejects a malformed value itself when it starts.
+  if (idleTimeout === undefined || !/^\d+$/.test(idleTimeout) || Number(idleTimeout) === 0) return;
+  let longest: { timeoutMs: number | null; source: string } = {
+    timeoutMs: defaultTimeoutMs,
+    source: "BACKEND_PROXY_TIMEOUT_MS",
+  };
+  for (const { pathPrefix, timeoutMs } of timeouts) {
+    if (longest.timeoutMs !== null && (timeoutMs === null || timeoutMs > longest.timeoutMs)) {
+      longest = { timeoutMs, source: `APP_PROXY_TIMEOUTS for ${pathPrefix}` };
+    }
+  }
+  const seconds = Number(idleTimeout);
+  if (longest.timeoutMs !== null && (seconds - IDLE_TICK_SECONDS) * 1000 > longest.timeoutMs) return;
+  const minimum =
+    longest.timeoutMs === null ? Infinity : Math.floor(longest.timeoutMs / 1000) + IDLE_TICK_SECONDS + 1;
+  const wait = longest.timeoutMs === null ? "no deadline" : `${longest.timeoutMs} ms`;
+  const fix =
+    minimum <= MAX_IDLE_TIMEOUT_SECONDS
+      ? `at least ${minimum}, or to 0 to turn the idle timeout off`
+      : `0 to turn the idle timeout off, since Bun allows at most ${MAX_IDLE_TIMEOUT_SECONDS} seconds`;
+  throw new Error(
+    `CONNECTION_IDLE_TIMEOUT=${seconds} lets the web server close a silent connection before the /api proxy ` +
+      `stops waiting for response headers (${wait}, ${longest.source}); Bun closes idle connections up to ` +
+      `${IDLE_TICK_SECONDS} seconds early. Set CONNECTION_IDLE_TIMEOUT to ${fix}.`,
+  );
+}
+
+checkIdleTimeout(process.env.CONNECTION_IDLE_TIMEOUT, backendProxyTimeoutMs(), proxyTimeouts);
+
 // The API counts as unreachable only when GET /health gets no HTTP answer
 // within BACKEND_TIMEOUT_MS. It is checked when a request gets no answer, and
 // every BACKEND_TIMEOUT_MS while the proxy waits for response headers, so one

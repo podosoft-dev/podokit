@@ -17,5 +17,6 @@ export const extensionModules: PodokitModule[] = [];
 // idleTimeout also needs a longer proxy deadline on the web server, which stops
 // waiting for response headers after 30 seconds by default:
 // BACKEND_PROXY_TIMEOUT_MS, or one route's entry in APP_PROXY_TIMEOUTS
-// (apps/web/src/lib/server/proxy-timeouts.ts).
+// (apps/web/src/lib/server/proxy-timeouts.ts), and the web server's
+// CONNECTION_IDLE_TIMEOUT (35 seconds).
 export const apiServerOptions: ApiServerOptionsSource = {};

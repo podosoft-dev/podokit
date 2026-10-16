@@ -395,6 +395,7 @@ async function main() {
       ORIGIN: webURL,
       BACKEND_INTERNAL_URL: `http://localhost:${env.API_PORT}`,
       BODY_SIZE_LIMIT: "3M",
+      CONNECTION_IDLE_TIMEOUT: "35",
     },
   });
   await waitFor(`${webURL}/login`, "web");

@@ -379,6 +379,8 @@ describe("create (integration against templates)", () => {
         expect(dockerfile).not.toContain("/app/node_modules");
         expect(dockerfile).not.toContain("COPY --from=build /app/packages ./packages");
         expect(dockerfile).toContain("ENV BODY_SIZE_LIMIT=3M");
+        // Outlasts the /api proxy's 30-second deadline plus Bun's 4-second idle tick.
+        expect(dockerfile).toContain("ENV CONNECTION_IDLE_TIMEOUT=35");
         expect(dockerfile).toContain('CMD ["bun", "./build"]');
         expect(dockerfile).not.toContain("server.js");
       }
@@ -576,6 +578,7 @@ describe("create (integration against templates)", () => {
     expect(k3sConfig).toContain('ADDRESS_HEADER: "x-forwarded-for"');
     expect(k3sConfig).toContain('XFF_DEPTH: "1"');
     expect(k3sConfig).toContain('BODY_SIZE_LIMIT: "3M"');
+    expect(k3sConfig).toContain('CONNECTION_IDLE_TIMEOUT: "35"');
 
     // AI-free of tiers: the dev scaffolding is owned so updates never clobber it
     const lock = readFileSync(join(target, ".podokit", "files.lock"), "utf8");

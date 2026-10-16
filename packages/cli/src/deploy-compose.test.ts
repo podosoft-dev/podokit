@@ -645,6 +645,21 @@ describe("web service", () => {
     expect(web).toContain("fetch('http://127.0.0.1:3000/healthz')");
     expect(web).toContain("  timeout: 5s\n");
   });
+
+  it("keeps a silent connection open past the proxy deadline, as the profile sets it", () => {
+    const profile = composeProfileOf(initialized(["auth"]));
+    const webOf = (document: string): string =>
+      document.split("\n  example-app-web:\n")[1]?.split(/\n  \S/)[0] ?? "";
+    const render = (): string =>
+      webOf(renderComposeDocument(profile, "v1.2.3", defaultComposeImages(profile, "v1.2.3"), "sha256:0"));
+    expect(render()).toContain('      CONNECTION_IDLE_TIMEOUT: "35"\n');
+    profile.runtimeConfig = { ...profile.runtimeConfig, BACKEND_PROXY_TIMEOUT_MS: "120000" };
+    expect(render()).toContain('      CONNECTION_IDLE_TIMEOUT: "125"\n');
+    profile.runtimeConfig = { ...profile.runtimeConfig, BACKEND_PROXY_TIMEOUT_MS: "300000" };
+    expect(render).toThrow('set CONNECTION_IDLE_TIMEOUT to "0"');
+    profile.runtimeConfig = { ...profile.runtimeConfig, CONNECTION_IDLE_TIMEOUT: "0" };
+    expect(render()).toContain('      CONNECTION_IDLE_TIMEOUT: "0"\n');
+  });
 });
 
 describe("worker service", () => {

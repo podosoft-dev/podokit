@@ -19,6 +19,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   An invalid prefix or timeout fails when the web server loads the proxy.
   `podo update` creates the file once in existing apps and never overwrites it.
 
+### Fixed
+
+- The built web server keeps a connection open for 35 seconds while it sends
+  nothing: the web image, `.env.example`, the reference Kubernetes config, and the
+  Compose and Kubernetes deployment renders set `CONNECTION_IDLE_TIMEOUT=35`.
+  Without it adapter-bun used Bun's default of 10 seconds, so a proxied request
+  whose API answer took longer got an empty reply after 8 to 12 seconds, and the
+  proxy's `504` `BACKEND_TIMEOUT` at `BACKEND_PROXY_TIMEOUT_MS` never arrived.
+  Bun checks idle connections every 4 seconds and can close one up to 4 seconds
+  early, so the value must be more than 4 seconds above the longest proxy
+  deadline, at most 255, or `0` to turn the timeout off. The renderers derive it
+  from the profile's `BACKEND_PROXY_TIMEOUT_MS` unless `runtimeConfig` sets it,
+  and the proxy refuses to load when a set value cannot cover
+  `BACKEND_PROXY_TIMEOUT_MS` or an `APP_PROXY_TIMEOUTS` entry. Server-sent events
+  were not affected, because adapter-bun lifts the timeout for them.
+
 ### Upgrade notes
 
 - If you edited `apps/web/src/lib/server/backend-proxy.ts` to give some routes a
@@ -26,6 +42,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   picks the deadline. Take the new version, list those routes in
   `APP_PROXY_TIMEOUTS` in `apps/web/src/lib/server/proxy-timeouts.ts`, and keep
   the managed file unchanged so later updates stay clean.
+- A route that calls Bun's `server.timeout(request, 0)` through `platform.server`
+  to keep a long request open gets no longer timeout behind an HTTPS gateway:
+  adapter-bun rewrites the request onto the public origin there, and Bun ignores
+  the call for the rewritten request. Set `CONNECTION_IDLE_TIMEOUT` instead, `0`
+  for a route without a deadline.
+- `podo update --apply` sets `CONNECTION_IDLE_TIMEOUT=35` in the managed web
+  `Dockerfile`, `.env.example`, and `infra/k3s/configmap.yaml`. Add it to your
+  `.env` if you run the built web server with it. If you set
+  `BACKEND_PROXY_TIMEOUT_MS` above 30000 outside a deployment profile, such as in
+  a hand-managed ConfigMap, set `CONNECTION_IDLE_TIMEOUT` more than 4 seconds
+  above it as well. With the image's 35 the proxy refuses to load until it can
+  cover the deadline: the web server stops at startup in apps with server hooks,
+  and otherwise every `/api` request answers `500`.
+- The deployment renderers now set `CONNECTION_IDLE_TIMEOUT`, so a Compose
+  rollback to a revision applied before this version is refused, because it no
+  longer renders byte for byte; roll forward with a new release instead.
+- `AGENTS.md` is application-owned, so `podo update` does not add its new notes
+  about `APP_PROXY_TIMEOUTS` and `CONNECTION_IDLE_TIMEOUT`; copy them from a newly
+  generated app if your agents should know.
 
 ## [1.4.2] - 2026-10-16
 
