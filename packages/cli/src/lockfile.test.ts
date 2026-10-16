@@ -12,6 +12,8 @@ import {
   mergeOwnedGlobs,
   readManifest,
   readFilesLock,
+  writeFilesLock,
+  isLocalEnvFile,
   DEFAULT_OWNED_GLOBS,
   type FilesLock,
 } from "./lockfile";
@@ -84,6 +86,42 @@ describe("walkFiles", () => {
     write(root, ".git/config", "z");
     write(root, ".podokit/manifest.json", "{}");
     expect(walkFiles(root)).toEqual(["apps/api/src/main.ts"]);
+  });
+
+  it("skips local env files at any depth but keeps the committed examples", () => {
+    const root = tmp();
+    for (const rel of [".env", ".env.docker", ".env.local", "apps/api/.env", "apps/web/.env.production"]) {
+      write(root, rel, "SECRET=local-only");
+    }
+    write(root, ".env.example", "SECRET=");
+    write(root, ".env.docker.example", "SECRET=");
+    write(root, "apps/api/src/main.ts", "x");
+    expect(walkFiles(root).sort()).toEqual([".env.docker.example", ".env.example", "apps/api/src/main.ts"]);
+    expect(Object.keys(computeFilesLock(root, DEFAULT_OWNED_GLOBS).files).sort())
+      .toEqual([".env.docker.example", ".env.example", "apps/api/src/main.ts"]);
+  });
+});
+
+describe("isLocalEnvFile", () => {
+  it("matches gitignored env files, not examples or look-alikes", () => {
+    for (const path of [".env", ".env.docker", ".env.local", "apps/api/.env", "infra/.env.production"]) {
+      expect(isLocalEnvFile(path)).toBe(true);
+    }
+    for (const path of [".env.example", ".env.docker.example", "apps/api/.env.example", ".envrc", "env.ts", "docs/.environment.md"]) {
+      expect(isLocalEnvFile(path)).toBe(false);
+    }
+  });
+});
+
+describe("readFilesLock", () => {
+  it("drops local env files that an earlier version recorded", () => {
+    const root = tmp();
+    const entry = { tier: "owned" as const, outHash: "sha256:local" };
+    writeFilesLock(root, {
+      schemaVersion: 4,
+      files: { ".env.docker": entry, ".env": { ...entry, tier: "managed" }, ".env.docker.example": entry },
+    });
+    expect(Object.keys(readFilesLock(root)?.files ?? {})).toEqual([".env.docker.example"]);
   });
 });
 

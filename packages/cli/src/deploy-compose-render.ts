@@ -421,7 +421,8 @@ export function renderComposeDocument(
   );
   services.push(
     applicationService(profile, "web", images.web, release, stateDigest, {
-      healthcheckPath: "/",
+      // The web server's own route: an API outage must not mark it unhealthy.
+      healthcheckPath: "/healthz",
       publish: !hasGateway,
     }),
   );

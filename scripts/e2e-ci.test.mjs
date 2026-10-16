@@ -197,9 +197,10 @@ test("keeps the ready-PR smoke suite within its reviewed risk budget", () => {
     .join("\n");
   const smokeCount = source.match(/@smoke/g)?.length ?? 0;
 
-  assert.equal(smokeCount, 35);
+  assert.equal(smokeCount, 36);
   for (const requiredScenario of [
     "GET /health is public and ok @smoke",
+    "GET /healthz answers from the web server without caching or indexing @smoke",
     "two-factor: enable with a real TOTP code and require it at sign-in @smoke",
     "protected route redirects to login @smoke",
     "protected app routes do not inherit the admin shell @smoke",

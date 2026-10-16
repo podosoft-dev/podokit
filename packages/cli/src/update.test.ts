@@ -16,6 +16,7 @@ import { create } from "./create";
 import { addModule } from "./add";
 import { assembleProject } from "./assemble";
 import { eject } from "./eject";
+import { removeModule } from "./remove";
 import { planUpdate, applyUpdate, summarize } from "./update";
 import { readFilesLock, readManifest, writeManifest } from "./lockfile";
 
@@ -1433,5 +1434,54 @@ describe("committed container environment example", () => {
     expect(readFileSync(join(project, ".env.docker.example"), "utf8")).toMatch(/^BETTER_AUTH_SECRET=$/m);
     expect(readFileSync(join(project, ".gitignore"), "utf8")).toContain(".env.*\n!.env.example\n!.env.docker.example\n");
     expect(readFileSync(join(project, ".env.docker"), "utf8")).toBe(localEnv);
+  });
+});
+
+describe("local env files in the lock", () => {
+  it("never records them and drops entries an earlier version wrote", () => {
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: REPO_TEMPLATES, targetDir: project });
+    const env = "BETTER_AUTH_SECRET=local-only\n";
+    writeFileSync(join(project, ".env"), env);
+    writeFileSync(join(project, ".env.docker"), env);
+    writeFileSync(join(project, "apps/api/.env"), env);
+    // Earlier versions recorded the hash of whatever env files were on disk.
+    const lockFile = join(project, ".podokit/files.lock");
+    const stale = JSON.parse(readFileSync(lockFile, "utf8")) as {
+      files: Record<string, { tier: string; outHash: string }>;
+    };
+    stale.files[".env"] = { tier: "managed", outHash: "sha256:stale" };
+    stale.files[".env.docker"] = { tier: "owned", outHash: "sha256:stale" };
+    stale.files["apps/api/.env"] = { tier: "managed", outHash: "sha256:stale" };
+    writeFileSync(lockFile, `${JSON.stringify(stale, null, 2)}\n`);
+
+    const plan = planUpdate(project, REPO_TEMPLATES);
+    expect(plan.changes.filter((change) => change.path.split("/").pop()?.startsWith(".env") &&
+      !change.path.endsWith(".example"))).toEqual([]);
+    applyUpdate(project, REPO_TEMPLATES);
+
+    const lock = readFileSync(lockFile, "utf8");
+    expect(lock).not.toContain('".env"');
+    expect(lock).not.toContain('".env.docker"');
+    expect(lock).not.toContain('"apps/api/.env"');
+    expect(lock).toContain('".env.example"');
+    for (const path of [".env", ".env.docker", "apps/api/.env"]) {
+      expect(readFileSync(join(project, path), "utf8")).toBe(env);
+    }
+  });
+
+  it("leaves them out when a module is added or removed", () => {
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: REPO_TEMPLATES, targetDir: project });
+    writeFileSync(join(project, ".env"), "SECRET=local-only\n");
+    writeFileSync(join(project, ".env.docker"), "SECRET=local-only\n");
+    const modulesDir = join(REPO_TEMPLATES, "modules");
+    addModule({ projectRoot: project, module: "redis", modulesDir });
+    removeModule({ projectRoot: project, module: "redis", modulesDir });
+    const files = Object.keys(readFilesLock(project)?.files ?? {});
+    const raw = JSON.parse(readFileSync(join(project, ".podokit/files.lock"), "utf8")) as { files: object };
+    expect(files).toEqual(Object.keys(raw.files));
+    expect(files).not.toContain(".env");
+    expect(files).not.toContain(".env.docker");
   });
 });

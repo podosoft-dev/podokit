@@ -520,6 +520,27 @@ give the API `timeoutSeconds: 2` instead of the Kubernetes default of one second
 The Compose healthcheck allows `5s`, because it starts a Node process for every
 check.
 
+The web server answers `GET /healthz` itself: `200` with `ok`, `Cache-Control:
+no-store`, and `X-Robots-Tag: noindex, nofollow`, without the session, the site
+settings, or any other API call. The rendered Kubernetes readiness and liveness
+probes, the Compose healthcheck, and the web image's `HEALTHCHECK` request it,
+so an API outage neither takes the web pods out of service nor restarts them;
+the web keeps serving its pages, their fallbacks, and the `503` responses that
+tell visitors the API is down. The Kubernetes web probes also allow
+`timeoutSeconds: 2`. The route is `apps/web/src/routes/healthz/+server.ts`;
+keep it free of API calls. For pages, the web server gives up on each
+server-side API call after `BACKEND_TIMEOUT_MS`, waits for the `/api` proxy's
+response headers up to `BACKEND_PROXY_TIMEOUT_MS`, and, once the API's
+`GET /health` does not answer either, fails API calls at once until it does;
+see [API timeouts and outages](templates.md#api-timeouts-and-outages).
+
+| Web setting | Default | Effect |
+| --- | --- | --- |
+| `BACKEND_TIMEOUT_MS` | `2000` | The longest one server-side API call may take, and the proxy's wait for response headers before it checks whether the API answers at all. Detecting an outage takes up to twice this long, and pages rendered meanwhile wait for it. |
+| `BACKEND_PROXY_TIMEOUT_MS` | `30000` | How long the `/api` proxy waits for response headers before it answers `504` `BACKEND_TIMEOUT`. Raise it with the API's `idleTimeout` and the web server's `CONNECTION_IDLE_TIMEOUT`. |
+
+Set them in the profile's `runtimeConfig`.
+
 ## Status and verification
 
 ```bash

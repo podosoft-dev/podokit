@@ -262,7 +262,18 @@ export function classifyTier(
   return "managed";
 }
 
-/** List project files as POSIX-relative paths, skipping generated/vendored dirs. */
+/**
+ * Whether a path is a local environment file such as `.env`, `.env.docker` or
+ * `apps/api/.env.local`. Git ignores these and they hold secrets, so the lock
+ * never records them; the committed `*.example` files are project files.
+ */
+export function isLocalEnvFile(relPath: string): boolean {
+  const name = relPath.slice(relPath.lastIndexOf("/") + 1);
+  return (name === ".env" || name.startsWith(".env.")) && !name.endsWith(".example");
+}
+
+/** List project files as POSIX-relative paths, skipping generated/vendored dirs
+ *  and local environment files. */
 export function walkFiles(projectRoot: string, prefix = ""): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(join(projectRoot, prefix))) {
@@ -270,7 +281,7 @@ export function walkFiles(projectRoot: string, prefix = ""): string[] {
     const rel = prefix ? `${prefix}/${entry}` : entry;
     if (statSync(join(projectRoot, rel)).isDirectory()) {
       out.push(...walkFiles(projectRoot, rel));
-    } else {
+    } else if (!isLocalEnvFile(rel)) {
       out.push(rel);
     }
   }
@@ -296,7 +307,12 @@ export function computeFilesLock(
 
 export function readFilesLock(projectRoot: string): FilesLock | null {
   const file = filesLockPath(projectRoot);
-  return existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as FilesLock) : null;
+  if (!existsSync(file)) return null;
+  const lock = JSON.parse(readFileSync(file, "utf8")) as FilesLock;
+  // Earlier versions recorded local env files. Leaving them out here keeps
+  // update from treating them as PodoKit files, and the next write drops them.
+  const files = Object.entries(lock.files).filter(([path]) => !isLocalEnvFile(path));
+  return { ...lock, files: Object.fromEntries(files) };
 }
 
 export interface Drift {

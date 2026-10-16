@@ -131,7 +131,7 @@ Run each service in a separate terminal from the project root:
 ```
 
 - API: http://localhost:5002 — health at `/health`, docs at `/api-docs`
-- Web: http://localhost:5001
+- Web: http://localhost:5001 — its own health at `/healthz`, which never calls the API
 
 ## Database & migrations
 

@@ -198,7 +198,7 @@ describe("deployment profiles", () => {
 });
 
 describe("deployment rendering and planning", () => {
-  it("renders a web-only ingress, pinned release images, and ready API probes", () => {
+  it("renders a web-only ingress, pinned release images, and API and web probes", () => {
     const root = initializedProject();
     const profile = loadDeploymentProfile(root, "production");
     const runtime = renderDeployment(root, "production", profile, "v1.2.3");
@@ -216,6 +216,18 @@ describe("deployment rendering and planning", () => {
       const block = apiDeployment.split(`${probe}:`)[1]?.split(/\n {10}\S/)[0] ?? "";
       expect(block).toContain("timeoutSeconds: 2");
     }
+    // The web probes use the web server's own route, which never calls the API.
+    const webDeployment = runtime.applicationManifest
+      .split(/^---$/m)
+      .find((document) =>
+        document.includes("kind: Deployment") && document.includes("name: example-app-web\n"),
+      ) ?? "";
+    for (const probe of ["readinessProbe", "livenessProbe"]) {
+      const block = webDeployment.split(`${probe}:`)[1]?.split(/\n {10}\S/)[0] ?? "";
+      expect(block).toContain("httpGet: { path: /healthz, port: 3000 }");
+      expect(block).toContain("timeoutSeconds: 2");
+    }
+    expect(webDeployment).not.toContain("path: /, port");
     expect(runtime.applicationManifest).toContain(
       "labels:\n        app.kubernetes.io/name: example-app-api",
     );

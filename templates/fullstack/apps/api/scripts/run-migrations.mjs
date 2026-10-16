@@ -16,7 +16,11 @@ if (!target) {
   process.stderr.write("Run database migrations failed: no migration entry in src or dist\n");
   process.exit(1);
 }
+// Run in the API directory wherever this was started from: Bun reads decorator
+// settings from the tsconfig.json of the working directory, and the data source
+// finds .env and the migrations relative to it.
 const subprocess = Bun.spawn([process.execPath, fileURLToPath(target)], {
+  cwd: fileURLToPath(new URL("..", import.meta.url)),
   stdin: "inherit",
   stdout: "inherit",
   stderr: "inherit",

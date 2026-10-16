@@ -10,7 +10,8 @@ Every generated project commits:
 - `.podokit/manifest.json` — PodoKit version, template, Bun toolchain, modules,
   and rendering answers.
 - `.podokit/files.lock` — ownership tier and generated hash for every tracked
-  file.
+  file. Local environment files such as `.env` and `.env.docker` are never
+  recorded; the committed `.env.example` and `.env.docker.example` are.
 
 | Tier | Meaning | Example |
 |---|---|---|

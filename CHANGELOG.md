@@ -6,6 +6,109 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- With the OIDC provider turned off in the admin settings, its discovery
+  documents (`/api/auth/.well-known/openid-configuration`,
+  `/api/auth/.well-known/oauth-authorization-server`, and the RFC 8414 form
+  outside the base path) answer 404 like the provider's other endpoints.
+  `@better-auth/oauth-provider` serves them from its own request hook, which
+  ran before the feature gate, so they stayed public. The auth module registers
+  the feature gate as the first Better Auth plugin as well, and the admin
+  dashboard's API tests toggle the provider and check both states. The `jwt`
+  plugin's `/api/auth/jwks` and `/api/auth/token` stay available.
+
+- `isDatabaseUnavailable` also recognizes a database host that does not
+  resolve (`ENOTFOUND`) or whose lookup times out (`ETIMEOUT` in Bun,
+  `EAI_AGAIN` in Node), pg's "Connection terminated", "Client was closed and is
+  not queryable" and "Client has encountered a connection error and is not
+  queryable", the per-address errors of an `AggregateError` (a connection to
+  `localhost` that tried IPv6 and IPv4), and the `driverError` of TypeORM's
+  `QueryFailedError`. Those failures answer 503 `DATABASE_UNAVAILABLE` instead
+  of 500, so applications no longer need their own translation.
+
+- `apps/api/scripts/run-migrations.mjs`, the launcher behind `migrate:all`,
+  runs the migration in `apps/api` wherever it is started from, such as the
+  repository root or a tool with another working directory. Bun 1.4.0 reads
+  decorator settings (`experimentalDecorators`, `emitDecoratorMetadata`) from
+  the `tsconfig.json` of the working directory, so TypeORM entities with
+  decorators failed to load outside `apps/api`, and the data source looked for
+  `.env` and the migrations relative to the wrong directory.
+
+- `.podokit/files.lock` never records local environment files such as `.env`,
+  `.env.docker`, `.env.local` or `apps/api/.env`, which Git ignores and which
+  hold secrets; the committed `.env.example` and `.env.docker.example` are still
+  recorded. `podo update` wrote the hash of `.env.docker` into the lock, and
+  after `podo add`, `podo remove` or `podo provider set` recorded `.env` as a
+  managed file, the next `podo update` deleted it as removed upstream. Entries
+  an earlier version wrote are ignored and dropped on the next lock write.
+
+- The admin dashboard's Playwright specs that change a server-wide setting hold
+  a lock shared by every worker on the machine (`tests/helpers/exclusive.ts`).
+  The suite runs on one worker by default; with `--workers` above 1, an api spec
+  and a ui spec could flip the same setting at once and undo each other. The
+  locks cover the `require2fa`, magic-link and OIDC provider flags, automatic
+  logout, social sign-in providers, the General settings (the form saves all of
+  its fields together) and the Appearance settings. A failing test releases its
+  lock, a lock left by a worker that exited (Ctrl-C, a timed-out test) is taken
+  over at once, and locked tests call `test.slow()` because waiting counts
+  against their timeout.
+- Generated web apps no longer wait on an API that stops answering. Each
+  server-side call through `serverApiClient`, such as the hooks' site settings
+  and session lookups, gives up after `BACKEND_TIMEOUT_MS` (2000 ms by default),
+  so public pages render their fallbacks and protected pages answer `503`. The
+  `/api` proxy answers `504` `BACKEND_TIMEOUT` when the API sends no response
+  headers within `BACKEND_PROXY_TIMEOUT_MS` (30000 ms, the API's default idle
+  timeout), and `503` `BACKEND_UNAVAILABLE` with `Retry-After: 2` and the
+  standard error envelope instead of SvelteKit's bare `500` when it cannot reach
+  the API; streamed responses are not cut off. When a call gets no answer, or
+  response headers take longer than `BACKEND_TIMEOUT_MS`, the web server checks
+  the API's `GET /health`, so one slow endpoint does not fail other requests.
+  When that check gets no answer either, requests still waiting fail, new calls
+  fail at once (`BackendUnavailableError` on the server, `503` through the
+  proxy), and a check every two seconds ends the outage at the first HTTP
+  answer. Raising the API's `apiServerOptions.idleTimeout` needs a matching
+  `BACKEND_PROXY_TIMEOUT_MS`.
+- The admin dashboard's `oidc.ui.spec.ts` reads the JWKS through the app under
+  test. It requested discovery's `jwks_uri` directly, which failed with a JSON
+  parse error when `BETTER_AUTH_URL` is a public origin the runner cannot use,
+  such as a tunnel set as `publicUrl` in `.podokit/dev.json` that answers with an
+  access login page. The spec now checks that `jwks_uri` has the issuer's origin
+  and requests its path from the tested app.
+- The admin dashboard's `request-budget.ui.spec.ts` reads each `__data.json`
+  body through `page.route` instead of `response.text()`. Chromium can report
+  that fetch as aborted (`net::ERR_ABORTED`) once SvelteKit has consumed the
+  body and then keeps no body, so the spec failed with "No data found for
+  resource" even though the page had its data.
+- The web server has its own health route, `GET /healthz`, which answers `200`
+  with `Cache-Control: no-store` and `X-Robots-Tag: noindex, nofollow` without
+  the session, the site settings, or any other API call. The rendered Kubernetes
+  web readiness and liveness probes, the Compose healthcheck, the web image's
+  `HEALTHCHECK`, and the reference `infra/k3s/web-deployment.yaml` request it
+  instead of `/`, so an API outage no longer takes the web pods out of service or
+  restarts them while the pages could still render their fallbacks. The
+  Kubernetes web probes allow `timeoutSeconds: 2`, like the API probes.
+
+### Upgrade notes
+
+- `podo update --apply` adds `apps/web/src/routes/healthz/+server.ts` as an
+  application-owned file, the way it adds other new routes, and updates the
+  managed web `Dockerfile`, `infra/k3s/web-deployment.yaml`, and the admin
+  dashboard's `runtime-context.ts`, which skips the session and site settings
+  for `/healthz`. An app that already has a file at that path keeps its own, so
+  make sure it answers `200` without calling the API.
+- The deployment renderer in this version probes `/healthz`. Build and push a
+  release from the updated app before you deploy with it: a web image built from
+  older templates has no such route, so its pods never become ready and a Compose
+  web container stays unhealthy. A Kubernetes rollback to a revision deployed
+  before the upgrade keeps that revision's probes. A Compose rollback to such a
+  revision is refused, because its healthcheck no longer renders byte for byte;
+  roll forward with a new release instead.
+- `AGENTS.md` is application-owned, so `podo update` does not add its new notes
+  about the health route and the API timeouts; copy them from a newly generated
+  app if your agents should know.
+
+
 ## [1.4.1] - 2026-10-16
 
 ### Fixed
