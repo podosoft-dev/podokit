@@ -141,6 +141,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `@podosoft/podokit-contracts`). A missing row keeps the default, and a name
   PodoKit already uses fails at startup. `podo update` creates the file once
   and never overwrites it.
+- The bullmq module's `apps/api/src/worker.extensions.ts` is an
+  application-owned `configureWorkers(setup)` that returns the queues the
+  worker process consumes next to the demo queue, with optional BullMQ worker
+  options. Resources it opens are released with `setup.onClose` after the
+  workers stop, and two workers for one queue fail at startup.
+  `startWorkers()` is now asynchronous and returns `{ workers, close }`.
+  `podo update` creates the file once and never overwrites it.
 
 ### Removed
 
@@ -389,6 +396,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   them from `appFlags` of `GET /account/capabilities` instead of a route of your
   own in `auth.module.ts`; `podo update` reports those edits as conflicts. A
   stored row keeps its value, so a migration that seeded one can stay.
+- Move queues you added to the managed `apps/api/src/jobs/worker.module.ts`,
+  and setup you added to `main-worker.ts`, into `configureWorkers()` in
+  `apps/api/src/worker.extensions.ts`; `podo update` reports those edits as
+  conflicts. Code of yours that calls `startWorkers()` awaits it now and stops
+  the workers with the returned `close()`.
 
 ## [1.5.0] - 2026-10-16
 

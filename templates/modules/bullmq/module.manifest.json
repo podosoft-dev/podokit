@@ -16,6 +16,9 @@
     "apps/api/src/jobs/**",
     "apps/api/src/main-worker.ts"
   ],
+  "ownedGlobs": [
+    "apps/api/src/worker.extensions.ts"
+  ],
   "targetApp": "api",
   "dependencies": {
     "bullmq": "^5.57.0"

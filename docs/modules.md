@@ -419,6 +419,22 @@ processing shortly after Redis returns. A job whose enqueue timed out may still
 be added if the server resumes; pass `deduplicationKey` when a retried enqueue
 must not create a second job.
 
+The worker process (`main-worker.ts`) consumes the demo queue and the queues
+that `configureWorkers(setup)` in the owned `apps/api/src/worker.extensions.ts`
+returns, one BullMQ worker per queue. Open what the processors need there and
+release it with `setup.onClose`, which runs after the workers stop:
+
+```ts
+// apps/api/src/worker.extensions.ts
+export async function configureWorkers(setup: WorkerSetup): Promise<WorkerDefinition[]> {
+  const database = new Database(validateEnv(process.env));
+  setup.onClose(() => database.close());
+  return [{ queue: "reports", processor: (job) => buildReport(database, job.data), options: { concurrency: 2 } }];
+}
+```
+
+Two workers for one queue fail at startup.
+
 ### `jobs-local`
 
 A database-persistent job queue with an embedded worker in the API process. It
