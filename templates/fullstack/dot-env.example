@@ -27,6 +27,10 @@ POSTGRES_DB=podokit
 # Largest API request body in bytes (Bun's default is 128 MiB). Requests through
 # the web app's /api proxy are also bounded by BODY_SIZE_LIMIT below.
 # API_MAX_REQUEST_BODY_SIZE=134217728
+# Seconds the API keeps a silent connection open (0 to 255, 0 turns it off). Keep
+# it, like CONNECTION_IDLE_TIMEOUT below, more than 4 above the longest /api proxy
+# deadline in seconds.
+# API_IDLE_TIMEOUT=35
 
 # Readiness (GET /health/ready): the longest one dependency check may run, and how
 # long a result is reused across probes (0 checks on every request).
@@ -39,7 +43,7 @@ BACKEND_INTERNAL_URL=http://localhost:5002
 # waits for response headers (504 BACKEND_TIMEOUT after the second value). When
 # the API's GET /health does not answer within BACKEND_TIMEOUT_MS either, API
 # calls fail at once until it does. Raise BACKEND_PROXY_TIMEOUT_MS together with
-# the API's apiServerOptions.idleTimeout and CONNECTION_IDLE_TIMEOUT below.
+# API_IDLE_TIMEOUT above and CONNECTION_IDLE_TIMEOUT below.
 # BACKEND_TIMEOUT_MS=2000
 # BACKEND_PROXY_TIMEOUT_MS=30000
 

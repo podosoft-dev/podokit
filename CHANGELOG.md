@@ -34,6 +34,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   and the proxy refuses to load when a set value cannot cover
   `BACKEND_PROXY_TIMEOUT_MS` or an `APP_PROXY_TIMEOUTS` entry. Server-sent events
   were not affected, because adapter-bun lifts the timeout for them.
+- The API keeps a connection open for 35 seconds while it sends nothing, instead
+  of Elysia's 30, and reads the value from `API_IDLE_TIMEOUT` (0 to 255, 0 turns
+  it off; an empty value counts as unset, and `apiServerOptions.idleTimeout`
+  still wins). With Bun's 4-second idle checks, 30 cut an endpoint that answered
+  after 28 to 30 seconds, inside the web proxy's 30-second deadline, so the proxy
+  answered `503` `BACKEND_UNAVAILABLE`, and the API also cut every route with a
+  longer `APP_PROXY_TIMEOUTS` deadline. The Compose and Kubernetes renderers
+  derive `API_IDLE_TIMEOUT` from `BACKEND_PROXY_TIMEOUT_MS` the same way as
+  `CONNECTION_IDLE_TIMEOUT`, and the reference Kubernetes config sets it.
 
 ### Upgrade notes
 
@@ -55,12 +64,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   above it as well. With the image's 35 the proxy refuses to load until it can
   cover the deadline: the web server stops at startup in apps with server hooks,
   and otherwise every `/api` request answers `500`.
-- The deployment renderers now set `CONNECTION_IDLE_TIMEOUT`, so a Compose
+- An API that relied on Elysia's default idle timeout of 30 seconds now uses 35;
+  an `idleTimeout` in `apiServerOptions` keeps its value and still wins over
+  `API_IDLE_TIMEOUT`.
+- The deployment renderers now set `CONNECTION_IDLE_TIMEOUT` and
+  `API_IDLE_TIMEOUT`, so a Compose
   rollback to a revision applied before this version is refused, because it no
   longer renders byte for byte; roll forward with a new release instead.
 - `AGENTS.md` is application-owned, so `podo update` does not add its new notes
-  about `APP_PROXY_TIMEOUTS` and `CONNECTION_IDLE_TIMEOUT`; copy them from a newly
-  generated app if your agents should know.
+  about `APP_PROXY_TIMEOUTS`, `CONNECTION_IDLE_TIMEOUT`, and `API_IDLE_TIMEOUT`;
+  copy them from a newly generated app if your agents should know.
 
 ## [1.4.2] - 2026-10-16
 

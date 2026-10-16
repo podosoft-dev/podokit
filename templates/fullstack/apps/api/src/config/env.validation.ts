@@ -6,6 +6,13 @@ const schema = z.object({
   PORT: z.coerce.number().default(5002),
   // Bytes one request body may hold; 128 MiB is Bun's default.
   API_MAX_REQUEST_BODY_SIZE: z.coerce.number().int().positive().default(128 * 1024 * 1024),
+  // Seconds a connection may stay silent, 0 (never closed) to 255. Bun closes idle
+  // connections on a 4-second sweep, so 35 outlasts the web proxy's 30-second
+  // deadline. An empty value means unset rather than 0.
+  API_IDLE_TIMEOUT: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.coerce.number().int().min(0).max(255).default(35),
+  ),
   CORS_ORIGIN: z.string().optional(),
   DATABASE_URL: z.string().optional(),
   POSTGRES_HOST: z.string().default("localhost"),

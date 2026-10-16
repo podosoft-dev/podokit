@@ -240,8 +240,9 @@ export function backendBaseUrl(): string {
  */
 const DEFAULT_BACKEND_TIMEOUT_MS = 2_000;
 /**
- * Milliseconds the proxy waits for the API's response headers, matching the
- * API's default idle timeout, unless APP_PROXY_TIMEOUTS lists the path.
+ * Milliseconds the proxy waits for the API's response headers, unless
+ * APP_PROXY_TIMEOUTS lists the path. The API's default idle timeout of 35
+ * seconds outlasts it.
  * Streamed bodies are not cut off once they start.
  */
 const DEFAULT_BACKEND_PROXY_TIMEOUT_MS = 30_000;

@@ -58,12 +58,12 @@ Merge added module settings from `.env.example` into an existing `.env`.
   response headers within `BACKEND_PROXY_TIMEOUT_MS` (30000). Once the API's
   `GET /health` stops answering too, calls throw `BackendUnavailableError` and the
   proxy answers 503 `BACKEND_UNAVAILABLE` at once until it answers again. Handle
-  any non-`ApiError` failure in a load function as a temporary outage. Raising
-  the API's `apiServerOptions.idleTimeout` needs a matching
-  `BACKEND_PROXY_TIMEOUT_MS` or `APP_PROXY_TIMEOUTS` entry. The built web server
-  closes a connection that sends nothing for `CONNECTION_IDLE_TIMEOUT` seconds
-  (35): keep it more than 4 above the longest proxy deadline, or `0` when a
-  route has none; the proxy refuses to load otherwise.
+  any non-`ApiError` failure in a load function as a temporary outage. The API
+  (`API_IDLE_TIMEOUT`) and the built web server (`CONNECTION_IDLE_TIMEOUT`) close
+  a connection that sends nothing for that many seconds (35 each): raise both
+  with any longer `BACKEND_PROXY_TIMEOUT_MS` or `APP_PROXY_TIMEOUTS` entry, more
+  than 4 above it, or set `0` when a route has no deadline. The proxy refuses to
+  load when `CONNECTION_IDLE_TIMEOUT` cannot cover a deadline.
 - `GET /healthz` (`apps/web/src/routes/healthz/+server.ts`) is the web server's own
   health route for the Kubernetes probes, the Compose healthcheck, and the image
   `HEALTHCHECK`. Keep it free of API calls, so an API outage does not take the web
@@ -114,7 +114,7 @@ changes need an e2e/unit test.
 This project is managed by the `podo` CLI. Files have an ownership tier recorded
 in `.podokit/files.lock` — respect it:
 
-- **owned** (your code: `apps/web/src/routes/**`, your components/services, `apps/api/src/app.extensions.ts`, and this `AGENTS.md`) — edit freely. Add application-owned services or module descriptors through `app.extensions.ts` instead of changing toolkit registrations. Set Bun server options (`maxRequestBodySize`, `idleTimeout`) with its `apiServerOptions` export rather than editing `main.ts`; `API_MAX_REQUEST_BODY_SIZE` sets the body limit when the export leaves it out.
+- **owned** (your code: `apps/web/src/routes/**`, your components/services, `apps/api/src/app.extensions.ts`, and this `AGENTS.md`) — edit freely. Add application-owned services or module descriptors through `app.extensions.ts` instead of changing toolkit registrations. Set Bun server options (`maxRequestBodySize`, `idleTimeout`) with its `apiServerOptions` export rather than editing `main.ts`; `API_MAX_REQUEST_BODY_SIZE` and `API_IDLE_TIMEOUT` apply when the export leaves them out.
 - **assembled** (e.g. `apps/api/src/app.ts`, `auth.ts`) — contain `// podokit:begin:… / …:end` fenced regions that the toolkit recomputes. Edit outside the fences only; **never hand-edit inside the fences**.
 - **managed** (bootstrap/config like `main.ts`) — the toolkit may update these; avoid gratuitous edits.
 

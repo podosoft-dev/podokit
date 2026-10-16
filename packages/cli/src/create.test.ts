@@ -579,6 +579,7 @@ describe("create (integration against templates)", () => {
     expect(k3sConfig).toContain('XFF_DEPTH: "1"');
     expect(k3sConfig).toContain('BODY_SIZE_LIMIT: "3M"');
     expect(k3sConfig).toContain('CONNECTION_IDLE_TIMEOUT: "35"');
+    expect(k3sConfig).toContain('API_IDLE_TIMEOUT: "35"');
 
     // AI-free of tiers: the dev scaffolding is owned so updates never clobber it
     const lock = readFileSync(join(target, ".podokit", "files.lock"), "utf8");

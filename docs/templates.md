@@ -204,8 +204,8 @@ that has stopped answering:
   reading the response body included, and then rejects with a `TimeoutError`.
   The hooks treat that like any other outage: public pages render their
   fallbacks and protected pages answer `503`.
-- The `/api` proxy waits up to `BACKEND_PROXY_TIMEOUT_MS` (30000 by default,
-  the API's default idle timeout) for the response headers and then answers
+- The `/api` proxy waits up to `BACKEND_PROXY_TIMEOUT_MS` (30000 by default)
+  for the response headers and then answers
   `504` with the `BACKEND_TIMEOUT` error code. The wait ends when the headers
   arrive, so server-sent events and large downloads keep streaming. A refused
   connection or any other failure without an HTTP answer becomes `503`
@@ -231,10 +231,9 @@ dashboard's; otherwise the first `/api` request loads it, and every `/api`
 request answers `500` and logs the error. Raise
 `BACKEND_TIMEOUT_MS` when a load function calls an endpoint that takes longer;
 it also lengthens how long pages wait while an outage is being detected. An API
-endpoint that takes longer than 30 seconds to start its response needs a higher
-`idleTimeout` in the API's [server options](#api-server-options), a matching
-`BACKEND_PROXY_TIMEOUT_MS` or [route deadline](#proxy-deadlines-per-route), and
-a matching `CONNECTION_IDLE_TIMEOUT`.
+endpoint that takes longer than 30 seconds to start its response needs a longer
+proxy deadline and both idle timeouts raised with it; see
+[proxy deadlines per route](#proxy-deadlines-per-route).
 
 The built web server (adapter-bun) closes a connection that has sent nothing for
 `CONNECTION_IDLE_TIMEOUT` seconds, without any response, so neither the API's
@@ -242,7 +241,9 @@ late answer nor the proxy's `504` reaches the browser. The generated web image,
 `.env.example`, reference Kubernetes config, and deployment renderers set it to
 35. Bun checks idle connections every 4 seconds and can close one up to 4
 seconds early, so the value must be more than 4 above the longest proxy deadline
-in seconds; 35 covers the default 30-second deadline. Bun accepts at most 255,
+in seconds; 35 covers the default 30-second deadline, and the API's
+`API_IDLE_TIMEOUT` follows the same rule (see
+[proxy deadlines per route](#proxy-deadlines-per-route)). Bun accepts at most 255,
 and `0` turns the idle timeout off. When the variable is set, the proxy refuses
 to load unless it is `0` or covers `BACKEND_PROXY_TIMEOUT_MS` and every
 `APP_PROXY_TIMEOUTS` entry, and a route without a deadline needs `0`. Unset,
@@ -284,18 +285,26 @@ loads the proxy.
 
 The proxy's deadline is one of three limits on such a request, and the other
 two have to be raised with it. Bun runs both the API and the built web server and
-checks idle connections every 4 seconds, so each server's idle timeout must be
-more than 4 seconds above the longest wait. To give `/api/exports/` two minutes,
-list it with `timeoutMs: 120_000`, set `idleTimeout` in the API's
-[server options](#api-server-options) to at least 125, and set the web server's
-`CONNECTION_IDLE_TIMEOUT` environment variable to at least 125, in `.env` or in a
-deployment profile's `runtimeConfig` (where it otherwise follows
-`BACKEND_PROXY_TIMEOUT_MS` but not this file). A route without a deadline, or one
-longer than 250 seconds, needs `0` for both, which turns the idle timeout off;
-idle keep-alive connections then stay open until the client or the gateway in
-front closes them. The proxy refuses to load when `CONNECTION_IDLE_TIMEOUT`
-cannot cover an entry here. New apps get the file empty; `podo update` creates it
-once in an existing app and never overwrites it.
+checks idle connections every 4 seconds, so it can close a silent connection up
+to 4 seconds before its idle timeout. Each idle timeout must therefore be more
+than 4 seconds above the longest wait, in whole seconds:
+
+| Proxy deadline | `API_IDLE_TIMEOUT` (API) | `CONNECTION_IDLE_TIMEOUT` (web) |
+| --- | --- | --- |
+| `BACKEND_PROXY_TIMEOUT_MS` of 30000 (default) | 35 (default) | 35 (default) |
+| `timeoutMs: 120_000` | at least 125 | at least 125 |
+| `null`, or above 250000 ms | `0` | `0` |
+
+Both are environment variables from `0` (off) to `255` seconds. Set them in
+`.env`, or in a deployment profile's `runtimeConfig`, where the renderers derive
+both from `BACKEND_PROXY_TIMEOUT_MS` when they are unset but cannot see this
+file. The API's `idleTimeout` in its [server options](#api-server-options) wins
+over `API_IDLE_TIMEOUT`. With `0`, idle keep-alive connections stay open until the
+client or the gateway in front closes them. If the API closes the connection
+first, the proxy answers `503` `BACKEND_UNAVAILABLE`; if the web server does, the
+browser gets an empty reply. The proxy refuses to load when
+`CONNECTION_IDLE_TIMEOUT` cannot cover an entry here. New apps get the file
+empty; `podo update` creates it once in an existing app and never overwrites it.
 
 ### Fallback error page
 
@@ -328,14 +337,14 @@ export const apiServerOptions: ApiServerOptionsSource = {
 | Option | Default | Effect |
 | --- | --- | --- |
 | `maxRequestBodySize` | `API_MAX_REQUEST_BODY_SIZE`, else 128 MiB (Bun's default) | Larger bodies are refused with `413` before a handler runs. |
-| `idleTimeout` | 30 seconds (Elysia's default) | How long a connection may stay idle; `0` disables the timeout. Requests through the web app's `/api` proxy also need a matching `BACKEND_PROXY_TIMEOUT_MS` on the web server; see [API timeouts and outages](#api-timeouts-and-outages). |
+| `idleTimeout` | `API_IDLE_TIMEOUT`, else 35 seconds | How long a connection may stay idle, from 0 to 255 seconds; `0` disables the timeout. 35 outlasts the web proxy's 30-second deadline; a longer deadline needs a longer idle timeout, see [proxy deadlines per route](#proxy-deadlines-per-route). |
 
 Values in the export win over the environment. Export a function to derive
 them from the validated environment instead, for example
 `(env) => ({ maxRequestBodySize: Math.max(env.API_MAX_REQUEST_BODY_SIZE, 1024 ** 3) })`.
 The export is optional: an `app.extensions.ts` written before it existed keeps
-compiling, and `API_MAX_REQUEST_BODY_SIZE` still applies. Invalid values stop
-the API at startup. Requests through the web app's `/api` proxy are also
+compiling, and `API_MAX_REQUEST_BODY_SIZE` and `API_IDLE_TIMEOUT` still apply.
+Invalid values stop the API at startup. Requests through the web app's `/api` proxy are also
 bounded by the web server's `BODY_SIZE_LIMIT`.
 
 ## `todo`

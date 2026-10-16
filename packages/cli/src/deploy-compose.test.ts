@@ -648,17 +648,22 @@ describe("web service", () => {
 
   it("keeps a silent connection open past the proxy deadline, as the profile sets it", () => {
     const profile = composeProfileOf(initialized(["auth"]));
-    const webOf = (document: string): string =>
-      document.split("\n  example-app-web:\n")[1]?.split(/\n  \S/)[0] ?? "";
+    const serviceOf = (document: string, role: string): string =>
+      document.split(`\n  example-app-${role}:\n`)[1]?.split(/\n  \S/)[0] ?? "";
     const render = (): string =>
-      webOf(renderComposeDocument(profile, "v1.2.3", defaultComposeImages(profile, "v1.2.3"), "sha256:0"));
-    expect(render()).toContain('      CONNECTION_IDLE_TIMEOUT: "35"\n');
+      renderComposeDocument(profile, "v1.2.3", defaultComposeImages(profile, "v1.2.3"), "sha256:0");
+    for (const role of ["web", "api"]) {
+      expect(serviceOf(render(), role)).toContain('      CONNECTION_IDLE_TIMEOUT: "35"\n');
+      expect(serviceOf(render(), role)).toContain('      API_IDLE_TIMEOUT: "35"\n');
+    }
     profile.runtimeConfig = { ...profile.runtimeConfig, BACKEND_PROXY_TIMEOUT_MS: "120000" };
-    expect(render()).toContain('      CONNECTION_IDLE_TIMEOUT: "125"\n');
+    expect(serviceOf(render(), "web")).toContain('      CONNECTION_IDLE_TIMEOUT: "125"\n');
+    expect(serviceOf(render(), "api")).toContain('      API_IDLE_TIMEOUT: "125"\n');
     profile.runtimeConfig = { ...profile.runtimeConfig, BACKEND_PROXY_TIMEOUT_MS: "300000" };
     expect(render).toThrow('set CONNECTION_IDLE_TIMEOUT to "0"');
-    profile.runtimeConfig = { ...profile.runtimeConfig, CONNECTION_IDLE_TIMEOUT: "0" };
-    expect(render()).toContain('      CONNECTION_IDLE_TIMEOUT: "0"\n');
+    profile.runtimeConfig = { ...profile.runtimeConfig, CONNECTION_IDLE_TIMEOUT: "0", API_IDLE_TIMEOUT: "0" };
+    expect(serviceOf(render(), "web")).toContain('      CONNECTION_IDLE_TIMEOUT: "0"\n');
+    expect(serviceOf(render(), "api")).toContain('      API_IDLE_TIMEOUT: "0"\n');
   });
 });
 

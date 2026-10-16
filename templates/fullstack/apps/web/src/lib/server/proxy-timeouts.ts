@@ -10,10 +10,10 @@
  * deadline ends when the response headers arrive.
  *
  * Bun closes a silent connection up to 4 seconds before its idle timeout, so a
- * longer wait also needs the API's apiServerOptions.idleTimeout and the web
- * server's CONNECTION_IDLE_TIMEOUT (35 seconds by default) more than 4 seconds
- * above the deadline, or 0 for null or anything above 250 seconds. The proxy
- * refuses to load when CONNECTION_IDLE_TIMEOUT cannot cover an entry here.
+ * longer wait also needs the API's API_IDLE_TIMEOUT and the web server's
+ * CONNECTION_IDLE_TIMEOUT (35 seconds each by default) more than 4 seconds above
+ * the deadline, or 0 for null or anything above 250 seconds. The proxy refuses
+ * to load when CONNECTION_IDLE_TIMEOUT cannot cover an entry here.
  * PodoKit creates this file once and never overwrites it.
  */
 export const APP_PROXY_TIMEOUTS: ReadonlyArray<{ pathPrefix: string; timeoutMs: number | null }> = [];

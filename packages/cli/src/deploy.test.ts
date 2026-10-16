@@ -24,7 +24,7 @@ import {
   profilePath,
 } from "./deploy-profile";
 import { renderDeployment } from "./deploy-render";
-import { webIdleTimeoutSeconds } from "./deploy-schema";
+import { idleTimeoutConfig } from "./deploy-schema";
 import { initLockfile } from "./lockfile";
 
 const created: string[] = [];
@@ -242,8 +242,9 @@ describe("deployment rendering and planning", () => {
     );
     expect(runtime.applicationManifest).toContain('PROTOCOL_HEADER: "x-forwarded-proto"');
     expect(runtime.applicationManifest).toContain('HOST_HEADER: "x-forwarded-host"');
-    // The web server keeps a silent connection open past the proxy's 30 s deadline.
+    // The web server and the API keep a silent connection open past the proxy's 30 s deadline.
     expect(runtime.applicationManifest).toContain('CONNECTION_IDLE_TIMEOUT: "35"');
+    expect(runtime.applicationManifest).toContain('API_IDLE_TIMEOUT: "35"');
     expect(runtime.applicationManifest).not.toContain(
       "name: example-app-web\n          image",
     );
@@ -255,28 +256,36 @@ describe("deployment rendering and planning", () => {
     ).toThrow("Invalid deployment profile name");
   });
 
-  it("derives the web idle timeout from the proxy deadline unless the profile sets it", () => {
+  it("derives the idle timeouts from the proxy deadline unless the profile sets them", () => {
     const root = initializedProject();
     const profile = loadDeploymentProfile(root, "production");
     profile.runtimeConfig = { ...profile.runtimeConfig, BACKEND_PROXY_TIMEOUT_MS: "60000" };
-    expect(renderDeployment(root, "production", profile, "v1.2.3").applicationManifest).toContain(
-      'CONNECTION_IDLE_TIMEOUT: "65"',
-    );
-    profile.runtimeConfig = { ...profile.runtimeConfig, CONNECTION_IDLE_TIMEOUT: "0" };
-    expect(renderDeployment(root, "production", profile, "v1.2.3").applicationManifest).toContain(
-      'CONNECTION_IDLE_TIMEOUT: "0"',
-    );
+    const derived = renderDeployment(root, "production", profile, "v1.2.3").applicationManifest;
+    expect(derived).toContain('CONNECTION_IDLE_TIMEOUT: "65"');
+    expect(derived).toContain('API_IDLE_TIMEOUT: "65"');
+    profile.runtimeConfig = { ...profile.runtimeConfig, CONNECTION_IDLE_TIMEOUT: "0", API_IDLE_TIMEOUT: "120" };
+    const configured = renderDeployment(root, "production", profile, "v1.2.3").applicationManifest;
+    expect(configured).toContain('CONNECTION_IDLE_TIMEOUT: "0"');
+    expect(configured).toContain('API_IDLE_TIMEOUT: "120"');
   });
 
-  it("refuses a proxy deadline that no web idle timeout can outlast", () => {
-    expect(webIdleTimeoutSeconds({})).toBe("35");
-    expect(webIdleTimeoutSeconds({ BACKEND_PROXY_TIMEOUT_MS: "30500" })).toBe("35");
-    expect(webIdleTimeoutSeconds({ BACKEND_PROXY_TIMEOUT_MS: "31000" })).toBe("36");
-    expect(webIdleTimeoutSeconds({ BACKEND_PROXY_TIMEOUT_MS: "250999" })).toBe("255");
-    expect(() => webIdleTimeoutSeconds({ BACKEND_PROXY_TIMEOUT_MS: "251000" })).toThrow(
+  it("refuses a proxy deadline that no idle timeout can outlast", () => {
+    expect(idleTimeoutConfig({})).toEqual({ CONNECTION_IDLE_TIMEOUT: "35", API_IDLE_TIMEOUT: "35" });
+    expect(idleTimeoutConfig({ BACKEND_PROXY_TIMEOUT_MS: "30500" }).API_IDLE_TIMEOUT).toBe("35");
+    expect(idleTimeoutConfig({ BACKEND_PROXY_TIMEOUT_MS: "31000" }).API_IDLE_TIMEOUT).toBe("36");
+    expect(idleTimeoutConfig({ BACKEND_PROXY_TIMEOUT_MS: "250999" })).toEqual({
+      CONNECTION_IDLE_TIMEOUT: "255",
+      API_IDLE_TIMEOUT: "255",
+    });
+    expect(() => idleTimeoutConfig({ BACKEND_PROXY_TIMEOUT_MS: "251000" })).toThrow(
       'set CONNECTION_IDLE_TIMEOUT to "0" to turn it off',
     );
-    expect(webIdleTimeoutSeconds({ BACKEND_PROXY_TIMEOUT_MS: "600000", CONNECTION_IDLE_TIMEOUT: "0" })).toBe("0");
+    expect(() => idleTimeoutConfig({ BACKEND_PROXY_TIMEOUT_MS: "600000", CONNECTION_IDLE_TIMEOUT: "0" })).toThrow(
+      'set API_IDLE_TIMEOUT to "0" to turn it off',
+    );
+    expect(
+      idleTimeoutConfig({ BACKEND_PROXY_TIMEOUT_MS: "600000", CONNECTION_IDLE_TIMEOUT: "0", API_IDLE_TIMEOUT: "0" }),
+    ).toEqual({ CONNECTION_IDLE_TIMEOUT: "0", API_IDLE_TIMEOUT: "0" });
   });
 
   it("keeps runtime values inert inside Helm charts", () => {

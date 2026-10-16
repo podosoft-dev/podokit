@@ -58,10 +58,12 @@ Merge added module settings from `.env.example` into an existing `.env`.
   response headers within `BACKEND_PROXY_TIMEOUT_MS` (30000). Once the API's
   `GET /health` stops answering too, calls throw `BackendUnavailableError` and the
   proxy answers 503 `BACKEND_UNAVAILABLE` at once until it answers again. Handle
-  any non-`ApiError` failure in a load function as a temporary outage. The built
-  web server closes a connection that sends nothing for `CONNECTION_IDLE_TIMEOUT`
-  seconds (35): keep it more than 4 above the longest proxy deadline, or `0` when
-  a route has none; the proxy refuses to load otherwise.
+  any non-`ApiError` failure in a load function as a temporary outage. The API
+  (`API_IDLE_TIMEOUT`) and the built web server (`CONNECTION_IDLE_TIMEOUT`) close
+  a connection that sends nothing for that many seconds (35 each): raise both
+  with any longer `BACKEND_PROXY_TIMEOUT_MS` or `APP_PROXY_TIMEOUTS` entry, more
+  than 4 above it, or set `0` when a route has no deadline. The proxy refuses to
+  load when `CONNECTION_IDLE_TIMEOUT` cannot cover a deadline.
 - When the root layout or a server hook fails, such as with 503 while the API is
   down, SvelteKit serves the app-owned `apps/web/src/error.html`. It is plain HTML
   with inline styles: no components, app CSS, scripts, or assets, and only the

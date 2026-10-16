@@ -10,6 +10,7 @@ data:
   BACKEND_INTERNAL_URL: "http://api:3000"
   BODY_SIZE_LIMIT: "3M"
   CONNECTION_IDLE_TIMEOUT: "35"
+  API_IDLE_TIMEOUT: "35"
   PROTOCOL_HEADER: "x-forwarded-proto"
   HOST_HEADER: "x-forwarded-host"
   ADDRESS_HEADER: "x-forwarded-for"
