@@ -67,6 +67,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   or without a query string, from the Vite dev server to `BACKEND_INTERNAL_URL`.
   A WebSocket endpoint on the API now works in host development the way it does
   behind the `podo dev` gateway and a deployment's edge.
+- The `/api` proxy and the server-side API client tell the API which public
+  origin a request came in on, in `x-forwarded-host` and `x-forwarded-proto`.
+  The values come from the request URL SvelteKit resolved and are sent only when
+  `CORS_ORIGIN` lists that origin; a caller's own forwarded headers are still
+  dropped. An API route that builds links for the browser can pick the origin a
+  visitor used among its configured origins.
 
 ### Removed
 
@@ -192,6 +198,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   file changes.
 - Remove a WebSocket proxy you added to `vite.config.ts` for a path that
   `.podokit/dev.json` lists; the managed configuration proxies it now.
+- If you added `x-forwarded-host` or `x-forwarded-proto` to the managed
+  `backend-proxy.ts`, take PodoKit's version. List every public origin the web
+  app serves in `CORS_ORIGIN` of the web server's environment, or the proxy
+  sends neither header.
 
 ## [1.5.0] - 2026-10-16
 

@@ -158,6 +158,19 @@ build and tests: hop-by-hop headers (`connection`, `transfer-encoding`,
 get the file empty; `podo update` creates it once in an existing app and never
 overwrites it.
 
+The proxy also tells the API which public origin a request came in on, in
+`x-forwarded-host` and `x-forwarded-proto`. The values come from the request URL
+SvelteKit resolved, from the `Host` header or from the gateway headers that
+`HOST_HEADER` and `PROTOCOL_HEADER` name, never from a caller's own forwarded
+headers, and the proxy sends them only when that origin is listed in
+`CORS_ORIGIN`. The server-side API client used by hooks and loaders sends the
+same pair. An API route that builds links for the browser, such as a connection
+URL shown on a page, can use them to pick the origin the visitor used and fall
+back to the first `CORS_ORIGIN` entry. The API must still accept only origins it
+is configured for, because a caller that reaches it directly can send anything.
+A web image built with `PODOKIT_BUILD_ORIGIN` resolves every request to that
+origin, so it reports only that one.
+
 ### Proxy path rules
 
 `APP_BODY_LIMITS` and `APP_PROXY_TIMEOUTS` below select `/api` routes by

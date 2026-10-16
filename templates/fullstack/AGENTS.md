@@ -54,7 +54,10 @@ Merge added module settings from `.env.example` into an existing `.env`.
   `apps/web/src/lib/server/proxy-timeouts.ts` (`APP_PROXY_TIMEOUTS`, `null` for
   none); never edit the managed deadline. Both lists take path prefixes with
   `:name` parameters, such as `/api/hosts/:hostId/file-transfers`, and the most
-  specific prefix wins.
+  specific prefix wins. The proxy and `serverApiClient` send the request's public
+  origin to the API in `x-forwarded-host`/`x-forwarded-proto` only when
+  `CORS_ORIGIN` lists it; an API route may use them to choose among its configured
+  origins, never as a new origin.
 - `apps/web/vite.config.ts` is managed. Put Vite options (warmup, `optimizeDeps`,
   `define`, plugins, allowed hosts) in `appViteConfig` and SvelteKit options
   (`alias`, `csrf`) in `appSvelteKitConfig` of the app-owned
