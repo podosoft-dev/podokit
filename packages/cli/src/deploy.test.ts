@@ -90,6 +90,11 @@ describe("deployment profiles", () => {
     profile.runtimeConfig = { DATABASE_URL: "postgres://user:password@db.example.com/app" };
     writeFileSync(path, JSON.stringify(profile));
     expect(() => loadDeploymentProfile(root, "production")).toThrow("contains URL credentials");
+
+    profile.runtimeConfig = { RATE_LIMIT_TRUSTED_PROXY_HOPS: "1" };
+    writeFileSync(path, JSON.stringify(profile));
+    expect(() => loadDeploymentProfile(root, "production"))
+      .toThrow('"RATE_LIMIT_TRUSTED_PROXY_HOPS" was renamed to "TRUSTED_PROXY_HOPS"');
   });
 
   it("accepts registry ports but rejects tagged release repositories", () => {
@@ -147,8 +152,10 @@ describe("deployment profiles", () => {
       NODE_ENV: "production",
       BETTER_AUTH_URL: "https://app.example.com",
       RATE_LIMIT_AUTH_MAX: "20",
-      RATE_LIMIT_TRUSTED_PROXY_HOPS: "1",
+      TRUSTED_PROXY_HOPS: "1",
+      TRUSTED_PROXY_HEADER: "x-forwarded-for",
     });
+    expect(profile.runtimeConfig).not.toHaveProperty("RATE_LIMIT_TRUSTED_PROXY_HOPS");
   });
 
   it("selects Redis transport for multi-replica SSE profiles", () => {

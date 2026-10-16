@@ -121,6 +121,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   now keeps at least 192 px and wraps to its own row with the button, about
   242 px wide there. Desktop layouts are unchanged.
 
+### Security
+
+- Audit entries, Better Auth sessions, and Better Auth's own per-address limits
+  no longer take the client address from a header the caller controls. The
+  audit-log module stored `X-Forwarded-For` exactly as received, and Better Auth
+  trusted a single-entry `X-Forwarded-For`, so a caller that reached the API
+  directly, or through more proxies than trusted, could write any address, or a
+  list of them, into the audit trail and the session list, and change addresses
+  to dodge sign-in limits. The API now resolves the address once per request in
+  `apps/api/src/core/client-address.ts`: the socket peer, or with
+  `TRUSTED_PROXY_HOPS` set, the entry of `TRUSTED_PROXY_HEADER` that the
+  outermost trusted proxy appended. It stores the result in the
+  `x-podokit-client-address` request header, replacing any value the caller
+  sent, and Better Auth (`ipAddressHeaders`), the audit hook,
+  `AuditService.recordRequest()`, and the rate limiter all read that one value.
+  These settings move from the rate-limit module (`RATE_LIMIT_TRUSTED_PROXY_HOPS`,
+  `RATE_LIMIT_PROXY_HEADER`) to the API core. The generated `.env.example`,
+  `.env.docker.example`, Kubernetes example, and new deployment profiles set
+  `TRUSTED_PROXY_HOPS=1`, for the web proxy or gateway in front of the API.
+
 ### Upgrade notes
 
 - If you edited `apps/web/src/lib/server/backend-proxy.ts` to give some routes a
@@ -155,6 +175,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `API_IDLE_TIMEOUT`, so a Compose
   rollback to a revision applied before this version is refused, because it no
   longer renders byte for byte; roll forward with a new release instead.
+- Rename `RATE_LIMIT_TRUSTED_PROXY_HOPS` to `TRUSTED_PROXY_HOPS` and
+  `RATE_LIMIT_PROXY_HEADER` to `TRUSTED_PROXY_HEADER` in your `.env`,
+  `.env.docker`, deployment profiles' `runtimeConfig`, and any hand-managed
+  ConfigMap. The API refuses to start, and deployment profiles fail to load,
+  while the old names are set, because falling back to the default of 0 would
+  attribute every request through the web proxy to the web server. Apps without
+  `rate-limit` set `TRUSTED_PROXY_HOPS=1` too, so audit entries and sessions keep
+  the browser's address. Code of your own that read `X-Forwarded-For` for an
+  address should call `clientAddressOf(request.headers)` instead, and a custom
+  request guard reads `context.clientAddress`.
 - `podo update --apply` rewrites the managed `apps/api/src/config/providers.ts`
   with the new `PROVIDERS` type. If you ejected or edited that file, replace
   `} as const satisfies ProviderSelections;` with `};` and declare

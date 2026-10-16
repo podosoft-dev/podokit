@@ -280,7 +280,10 @@ export class AccessPolicy {
 
 export interface RequestGuardContext {
   request: Request;
+  /** The socket peer. */
   remoteAddress?: string;
+  /** The caller's address behind the trusted proxies; see core/client-address.ts. */
+  clientAddress?: string;
   setHeader: (name: string, value: string) => void;
 }
 

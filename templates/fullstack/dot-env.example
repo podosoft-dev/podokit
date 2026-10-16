@@ -32,6 +32,14 @@ POSTGRES_DB=podokit
 # deadline in seconds.
 # API_IDLE_TIMEOUT=35
 
+# Reverse proxies in front of the API whose X-Forwarded-For names the caller. The
+# web app's /api proxy is one, so 1 records the browser's address for sessions,
+# audit entries, and rate limits; 0 uses the socket peer. Count only proxies that
+# every request passes: with 1, a caller that reaches the API directly chooses
+# its own recorded address.
+TRUSTED_PROXY_HOPS=1
+# TRUSTED_PROXY_HEADER=x-forwarded-for
+
 # Readiness (GET /health/ready): the longest one dependency check may run, and how
 # long a result is reused across probes (0 checks on every request).
 # READINESS_CHECK_TIMEOUT_MS=800

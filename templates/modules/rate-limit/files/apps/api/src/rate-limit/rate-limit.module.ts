@@ -62,7 +62,7 @@ export class RateLimiter {
     const profile = this.routes.resolve(request.method, path) ?? generalProfile(this.config);
     if (profile === "exempt") return;
     try {
-      const tracker = await this.identity.resolve(request, context.remoteAddress, this.config);
+      const tracker = await this.identity.resolve(request, context.clientAddress);
       await this.enforceCustom(profile.name, tracker, profile.ttlSeconds, profile.limit, context.setHeader);
     } catch (error) {
       if (error instanceof AppException) throw error;

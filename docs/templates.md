@@ -345,6 +345,30 @@ fills in only `%sveltekit.status%` and the HTML-escaped
 assets, because SvelteKit sends it as a plain template outside the app's
 rendering and build.
 
+### Client address
+
+The API resolves each caller's address once per request, before any guard,
+Better Auth, or handler runs, and every part of the API uses that one address:
+Better Auth's session `ipAddress` and its own per-address limits, audit entries,
+and the rate limiter.
+
+| Setting | Default | Effect |
+| --- | --- | --- |
+| `TRUSTED_PROXY_HOPS` | `0` in code; `1` in the generated `.env.example`, `.env.docker.example`, Kubernetes example, and deployment profiles | Reverse proxies in front of the API whose forwarded header is trusted. With `0` the address is the socket peer. With `n`, it is the entry `n` places left of the peer in the header, the one the outermost trusted proxy appended; entries further left were written by the caller and are ignored. A shorter chain or a malformed entry falls back to the peer. |
+| `TRUSTED_PROXY_HEADER` | `x-forwarded-for` | The header the trusted proxies append the address to. |
+
+The web app's `/api` proxy and the deployment gateway are each one proxy, so the
+generated configuration uses 1. Count only proxies that every request passes
+through: with 1, a caller that can reach the API directly chooses its own
+address. The settings replace the rate-limit module's
+`RATE_LIMIT_TRUSTED_PROXY_HOPS` and `RATE_LIMIT_PROXY_HEADER`, which the API
+now refuses at startup.
+
+The API records the result in the `x-podokit-client-address` request header,
+replacing any value a caller sent. Read it with `clientAddressOf(request.headers)`
+from `apps/api/src/core/client-address.ts` rather than reading `X-Forwarded-For`
+yourself; request guards also receive it as `clientAddress`.
+
 ### API server options
 
 `main.ts` is managed, so applications set Bun server options through the

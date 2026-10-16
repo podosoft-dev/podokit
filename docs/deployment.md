@@ -397,8 +397,10 @@ What changes for requests on these paths:
   `maxRequestBodySize`, 128 MiB unless the API sets another value. Enforce each
   route's size limit in its API handler.
 - The API reads the client address from the gateway's `X-Forwarded-For` header
-  instead of from the web server. Behind an external reverse proxy, check that
-  `RATE_LIMIT_TRUSTED_PROXY_HOPS` picks the client on these paths.
+  instead of from the web server. `TRUSTED_PROXY_HOPS`, 1 in the rendered
+  configuration, applies to both paths, and the web server always forwards a
+  single address, so keep it at 1. Behind another reverse proxy that appends to
+  the header, have that proxy set it to the client address instead.
 - Gateway timeouts still apply. Traefik v3 entry points close a request whose body
   takes longer than `respondingTimeouts.readTimeout`, 60 seconds by default; raise
   it on the ingress controller for slow uploads.

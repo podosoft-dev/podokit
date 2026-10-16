@@ -739,7 +739,9 @@ describe("addModule (auth / better-auth)", () => {
     expect(envExample).toContain("RATE_LIMIT_KEY_PREFIX=podokit:rate-limit");
     expect(envExample).toContain("RATE_LIMIT_AUTH_MAX");
     expect(envExample).toContain("RATE_LIMIT_RUNTIME_MAX");
-    expect(envExample).toContain("RATE_LIMIT_TRUSTED_PROXY_HOPS");
+    // The API core resolves the client address; the module no longer has proxy settings.
+    expect(envExample).not.toContain("RATE_LIMIT_TRUSTED_PROXY_HOPS");
+    expect(envExample).toContain("TRUSTED_PROXY_HOPS=1");
     expect(readFileSync(join(project, "apps/api/src/app.ts"), "utf8")).toContain("rateLimitModule,");
     const rateLimitModule = readFileSync(join(project, "apps/api/src/rate-limit/rate-limit.module.ts"), "utf8");
     expect(rateLimitModule).toContain("CacheRateLimitStorage");

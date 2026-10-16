@@ -557,6 +557,8 @@ export function buildDefaultComposeProfile(
       CORS_ORIGIN: `https://${host}`,
       ADDRESS_HEADER: "x-forwarded-for",
       XFF_DEPTH: "1",
+      TRUSTED_PROXY_HOPS: "1",
+      TRUSTED_PROXY_HEADER: "x-forwarded-for",
     },
     verification: {
       baseUrl: `https://${host}`,
@@ -627,8 +629,6 @@ export function initializeComposeProfile(
           RATE_LIMIT_AUTH_TTL: "60",
           RATE_LIMIT_AUTH_MAX: "20",
           RATE_LIMIT_RUNTIME_MAX: "1000",
-          RATE_LIMIT_TRUSTED_PROXY_HOPS: "1",
-          RATE_LIMIT_PROXY_HEADER: "x-forwarded-for",
           RATE_LIMIT_STORAGE_TIMEOUT_MS: "1000",
           RATE_LIMIT_UNAVAILABLE_RETRY_AFTER: "1",
         }

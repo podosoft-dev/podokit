@@ -73,6 +73,8 @@ describe("docker-compose profile", () => {
     }).profile;
     expect(profile.dependencies.objectStorage.image).toBe("pgsty/silo:RELEASE.2026-09-16T00-00-00Z");
     expect(profile.dependencies.objectStorage.clientImage).toBe("pgsty/mc:RELEASE.2026-09-16T00-00-00Z");
+    // The web server is the one proxy in front of the API.
+    expect(profile.runtimeConfig).toMatchObject({ TRUSTED_PROXY_HOPS: "1", TRUSTED_PROXY_HEADER: "x-forwarded-for" });
   });
 
   it("records the driver so dispatch reads it back from disk", () => {

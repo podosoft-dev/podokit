@@ -13,7 +13,8 @@ import {
   verifiedSessionToken,
 } from "./rate-limit.identity";
 
-const proxyConfig = { proxyHeader: "x-forwarded-for", trustedProxyHops: 1 };
+// The address the API resolved for the request (see core/client-address.ts).
+const clientAddress = "203.0.113.7";
 const secret = "rate-limit-test-secret-with-at-least-32-characters";
 const sessionToken = "Sx0d8mFqY3KcT7wJpLr2NvBhZa9EgUi4";
 
@@ -64,8 +65,7 @@ describe("RateLimitIdentity", () => {
 
     const value = await identity.resolve(
       request({ cookie: sessionCookie(signed(sessionToken)) }),
-      "10.0.0.9",
-      proxyConfig,
+      clientAddress,
     );
 
     expect(value).toMatch(/^session:[a-f0-9]{64}$/);
@@ -77,25 +77,22 @@ describe("RateLimitIdentity", () => {
     const identity = new RateLimitIdentity(rejectingVerifier(), new ServiceRegistry(), secret);
     const value = signed(sessionToken);
     const resolved = await Promise.all([
-      identity.resolve(request({ cookie: sessionCookie(value) }), "10.0.0.9", proxyConfig),
+      identity.resolve(request({ cookie: sessionCookie(value) }), clientAddress),
       identity.resolve(
         request({ cookie: sessionCookie(value, "__Secure-better-auth.session_token") }),
-        "10.0.0.9",
-        proxyConfig,
+        clientAddress,
       ),
-      identity.resolve(request({ authorization: `Bearer ${value}` }), "10.0.0.9", proxyConfig),
+      identity.resolve(request({ authorization: `Bearer ${value}` }), clientAddress),
       identity.resolve(
         request({ authorization: `bearer ${encodeURIComponent(value)}` }),
-        "10.0.0.9",
-        proxyConfig,
+        clientAddress,
       ),
     ]);
     expect(new Set(resolved).size).toBe(1);
 
     const other = await identity.resolve(
       request({ cookie: sessionCookie(signed("AnotherSessionToken0123456789abcd")) }),
-      "10.0.0.9",
-      proxyConfig,
+      clientAddress,
     );
     expect(other).toMatch(/^session:/);
     expect(other).not.toBe(resolved[0]);
@@ -104,7 +101,7 @@ describe("RateLimitIdentity", () => {
   test("counts forged, tampered, and unsigned session values by client address", async () => {
     const identity = new RateLimitIdentity(rejectingVerifier(), new ServiceRegistry(), secret);
     const address = { "x-forwarded-for": "203.0.113.7" };
-    const anonymous = await identity.resolve(request(address), "10.0.0.9", proxyConfig);
+    const anonymous = await identity.resolve(request(address), clientAddress);
     expect(anonymous).toMatch(/^ip:[a-f0-9]{64}$/);
 
     const genuine = signed(sessionToken);
@@ -124,8 +121,7 @@ describe("RateLimitIdentity", () => {
       for (const headers of variants) {
         const value = await identity.resolve(
           request({ ...address, ...headers }),
-          "10.0.0.9",
-          proxyConfig,
+          clientAddress,
         );
         expect(value).toBe(anonymous);
       }
@@ -149,8 +145,7 @@ describe("RateLimitIdentity", () => {
     for (const raw of ["configured-valid", "external-valid"]) {
       const value = await identity.resolve(
         request({ "x-api-key": raw, cookie }),
-        "10.0.0.9",
-        proxyConfig,
+        clientAddress,
       );
       expect(value).toMatch(/^api-key:[a-f0-9]{64}$/);
       expect(value).not.toContain(raw);
@@ -158,8 +153,7 @@ describe("RateLimitIdentity", () => {
 
     const invalidKey = await identity.resolve(
       request({ "x-api-key": "invalid", cookie }),
-      "10.0.0.9",
-      proxyConfig,
+      clientAddress,
     );
     expect(invalidKey).toMatch(/^session:/);
   });
@@ -170,13 +164,12 @@ describe("RateLimitIdentity", () => {
     const identity = new RateLimitIdentity(rejectingVerifier(), new ServiceRegistry(), undefined);
     const value = await identity.resolve(
       request({ "x-forwarded-for": "203.0.113.7", cookie }),
-      "10.0.0.9",
-      proxyConfig,
+      clientAddress,
     );
     expect(value).toMatch(/^ip:[a-f0-9]{64}$/);
     expect(value).not.toContain("203.0.113.7");
     expect(
-      await identity.resolve(request({ "x-forwarded-for": "203.0.113.7" }), "10.0.0.9", proxyConfig),
+      await identity.resolve(request({ "x-forwarded-for": "203.0.113.7" }), clientAddress),
     ).toBe(value);
   });
 });
@@ -185,7 +178,7 @@ describe("RateLimitIdentity per user", () => {
   const otherToken = "AnotherSessionToken0123456789abcd";
   const thirdToken = "ThirdSessionToken0123456789abcdef";
   const resolveWith = (identity: RateLimitIdentity, headers: Record<string, string>): Promise<string> =>
-    identity.resolve(request({ "x-forwarded-for": "203.0.113.7", ...headers }), "10.0.0.9", proxyConfig);
+    identity.resolve(request({ "x-forwarded-for": "203.0.113.7", ...headers }), clientAddress);
 
   test("counts every session of a user under one counter once the API resolved them", async () => {
     let now = 1_000;

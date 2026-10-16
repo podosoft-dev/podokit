@@ -1,10 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type { ApiKeyVerifier } from "../api-key/api-key-verifier";
 import type { ServiceKey, ServiceRegistry } from "../core/services";
-import {
-  clientAddressFromProxy,
-  type RateLimitConfig,
-} from "./rate-limit.config";
 
 export abstract class RateLimitIdentityExtension {
   abstract validatedApiKeyId(
@@ -134,11 +130,8 @@ export class RateLimitIdentity {
     private readonly sessionUsers: SessionUsers = new SessionUsers(),
   ) {}
 
-  async resolve(
-    request: Request,
-    remoteAddress: string | undefined,
-    config: Pick<RateLimitConfig, "proxyHeader" | "trustedProxyHops">,
-  ): Promise<string> {
+  /** clientAddress is the address the API resolved behind its trusted proxies. */
+  async resolve(request: Request, clientAddress: string | undefined): Promise<string> {
     const rawApiKey = request.headers.get("x-api-key");
     if (rawApiKey) {
       if (this.configuredApiKeys.isValid(rawApiKey)) return tracker("api-key", rawApiKey);
@@ -153,8 +146,7 @@ export class RateLimitIdentity {
       return userId === undefined ? tracker("session", sessionToken) : tracker("user", userId);
     }
 
-    const clientAddress = clientAddressFromProxy(request.headers, remoteAddress, config);
-    return tracker("ip", clientAddress);
+    return tracker("ip", clientAddress ?? "unknown");
   }
 
   // Only the signature is checked: resolving the session would cost a database

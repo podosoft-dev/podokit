@@ -49,6 +49,12 @@ export const MANAGED_RUNTIME_CONFIG_KEYS = [
   "HOST_HEADER",
 ];
 
+/** Keys the generated API no longer reads; it refuses to start while they are set. */
+const RENAMED_RUNTIME_CONFIG_KEYS: Record<string, string> = {
+  RATE_LIMIT_TRUSTED_PROXY_HOPS: "TRUSTED_PROXY_HOPS",
+  RATE_LIMIT_PROXY_HEADER: "TRUSTED_PROXY_HEADER",
+};
+
 export function containsUrlCredentials(value: string): boolean {
   if (!value.includes("://")) return false;
   try {
@@ -229,6 +235,10 @@ export function parseRuntimeConfig(runtimeConfig: Record<string, unknown>): Reco
     }
     if (MANAGED_RUNTIME_CONFIG_KEYS.includes(key)) {
       throw new Error(`Deployment runtimeConfig key "${key}" is managed by PodoKit.`);
+    }
+    const renamed = RENAMED_RUNTIME_CONFIG_KEYS[key];
+    if (renamed) {
+      throw new Error(`Deployment runtimeConfig key "${key}" was renamed to "${renamed}".`);
     }
     if (typeof entry !== "string") {
       throw new Error(`Deployment runtimeConfig value "${key}" must be a string.`);

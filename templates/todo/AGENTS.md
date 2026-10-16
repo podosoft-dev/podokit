@@ -67,6 +67,11 @@ Merge added module settings from `.env.example` into an existing `.env`.
   with any longer `BACKEND_PROXY_TIMEOUT_MS` or `APP_PROXY_TIMEOUTS` entry, more
   than 4 above it, or set `0` when a route has no deadline. The proxy refuses to
   load when `CONNECTION_IDLE_TIMEOUT` cannot cover a deadline.
+- Read a caller's address in the API with `clientAddressOf(request.headers)` from
+  `apps/api/src/core/client-address.ts`, never from `X-Forwarded-For` directly. The
+  API resolves it once per request from `TRUSTED_PROXY_HOPS` (1: the web proxy) and
+  `TRUSTED_PROXY_HEADER`; Better Auth sessions, audit entries, and rate limits use
+  the same address.
 - `GET /healthz` (`apps/web/src/routes/healthz/+server.ts`) is the web server's own
   health route for the Kubernetes probes, the Compose healthcheck, and the image
   `HEALTHCHECK`. Keep it free of API calls, so an API outage does not take the web

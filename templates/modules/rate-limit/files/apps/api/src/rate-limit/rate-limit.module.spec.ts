@@ -13,8 +13,6 @@ const config = {
   authTtlSeconds: 60,
   authLimit: 20,
   runtimeLimit: 1000,
-  trustedProxyHops: 0,
-  proxyHeader: "x-forwarded-for",
   storageTimeoutMs: 100,
   unavailableRetryAfterSeconds: 1,
 };
@@ -28,7 +26,7 @@ function context(path: string, method = "GET"): {
     headers,
     value: {
       request: new Request(`http://localhost${path}`, { method }),
-      remoteAddress: "127.0.0.1",
+      clientAddress: "127.0.0.1",
       setHeader: (name, value) => { headers[name.toLowerCase()] = value; },
     },
   };
@@ -57,7 +55,7 @@ describe("RateLimiter per-user budgets", () => {
       const headers: Record<string, string> = {};
       await limiter.enforce({
         request: new Request("http://localhost/ordinary", { headers: { authorization: `Bearer ${signed(token)}` } }),
-        remoteAddress: "127.0.0.1",
+        clientAddress: "127.0.0.1",
         setHeader: (name, value) => { headers[name.toLowerCase()] = value; },
       });
       return headers["ratelimit-remaining"];

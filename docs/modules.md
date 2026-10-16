@@ -1036,7 +1036,9 @@ Auth hook records sign-in, sign-up, password, session, two-factor, and admin use
 actions (`auth.login`, `user.ban`, `user.role_change`, ...). Nothing else is
 recorded automatically: application code records its own semantic events with
 `AuditService.recordRequest()` or `recordAudit()`. Admins read entries at
-`/audit-logs`.
+`/audit-logs`. An entry's `ip` is the client address the API resolved for the
+request (see [client address](templates.md#client-address)), never a forwarded
+header as the caller sent it.
 
 On/off is an **admin toggle on the Settings page** (stored in the DB, applied
 live — no restart); `AUDIT_LOG_ENABLED` is only the fallback default until an
@@ -1110,7 +1112,8 @@ curl -b cookies.txt localhost:5002/audit-logs   # [{ action:"auth.login", actorE
 Rate limiting with a native Elysia request guard backed by the selected `CACHE`
 provider, with `auth` and `api-key-auth` added automatically. Counters
 are selected by a validated `X-API-Key` first, then the signed-in user (or the
-session, until the API has resolved it), then the trusted-proxy client address.
+session, until the API has resolved it), then the client address the API resolves
+behind its trusted proxies (see [client address](templates.md#client-address)).
 Every identity is domain-separated and SHA-256 hashed before it becomes a
 provider key. The limit holds across API replicas with Redis; memory counters
 require one API process.
@@ -1158,10 +1161,10 @@ bun run dev
 General requests default to 300 per 60 seconds, authentication mutations to 20
 per 60 seconds, and read-only session and public site-settings checks to 1000 per
 60 seconds.
-Configure these with `RATE_LIMIT_*`. Set `RATE_LIMIT_TRUSTED_PROXY_HOPS` to the
-exact number of proxies that replace or append the configured header; keep it at
-0 when the API accepts direct traffic. Malformed or incomplete forwarding chains
-fall back to the direct peer instead of trusting attacker input.
+Configure these with `RATE_LIMIT_*`. Requests are attributed to a client address
+by the API core's `TRUSTED_PROXY_HOPS` and `TRUSTED_PROXY_HEADER`, the same
+settings that audit entries and Better Auth sessions use; see
+[client address](templates.md#client-address).
 Set a distinct `RATE_LIMIT_KEY_PREFIX` for deployments that share the same Redis
 database so their counters remain isolated. The default is
 `podokit:rate-limit`.
