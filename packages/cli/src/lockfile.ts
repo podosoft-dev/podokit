@@ -166,6 +166,8 @@ export const DEFAULT_OWNED_GLOBS = [
   ".podokit/dev.json",
   // Optional application-owned Playwright device/browser projects.
   "tests/playwright.projects.cjs",
+  // Application screens the managed e2e specs visit.
+  "tests/helpers/app-paths.ts",
   // Project documents, ignore rules, environment examples, and example
   // manifests every application rewrites. PodoKit seeds them once, `podo add`
   // still appends module environment lines and wiring, and `podo update`

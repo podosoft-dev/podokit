@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { ADMIN } from "../helpers/accounts";
 import { ready } from "../helpers/hydration";
+import { paths } from "../helpers/paths";
 
 // admin storageState (project default)
 test("overview shows the signed-in admin @smoke", async ({ page }) => {
@@ -11,7 +12,8 @@ test("overview shows the signed-in admin @smoke", async ({ page }) => {
 });
 
 test("landing shows language, theme, and signed-in account actions", async ({ page }) => {
-  await ready(page, "/");
+  test.skip(paths.accountMenu === null, "no page renders the account menu (tests/helpers/app-paths.ts)");
+  await ready(page, paths.accountMenu ?? "/");
   const language = page.getByRole("button", { name: /^(Language|언어)$/ });
   const theme = page.getByRole("button", { name: /^(Toggle theme|테마 전환)$/ });
   await expect(language).toBeVisible();
@@ -33,7 +35,7 @@ test("sidebar navigates to sessions and account @smoke", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "User sessions" })).toBeVisible();
   // Account is reached from the user menu at the bottom of the sidebar, not the nav
   await expect(page.getByRole("link", { name: "Account" })).toHaveCount(0);
-  await page.getByRole("button", { name: /admin@example.com/ }).click();
+  await page.getByTestId("sidebar-user-menu").click();
   await page.getByRole("menuitem", { name: "Account" }).click();
   await expect(page).toHaveURL((url) => url.pathname === "/account");
   await expect(page.getByRole("heading", { name: "Account" })).toBeVisible();

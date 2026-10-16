@@ -283,6 +283,41 @@ The admin setup project seeds sessions through the API and stores ignored browse
 state under `tests/playwright/.auth`. Its cleanup project removes users created
 by the suite.
 
+## Application screens and accounts
+
+The managed specs test PodoKit's own components, such as the account page, the
+admin console, and the site footer. Where they have to visit an application
+page or sign in as a seeded account, they read it from two application-owned
+files that PodoKit creates once and never overwrites, so an application changes
+those files instead of editing or ejecting managed specs.
+
+`tests/helpers/app-paths.ts` overrides the screens described in the managed
+`tests/helpers/paths.ts`:
+
+| Entry | Default | Used by |
+| --- | --- | --- |
+| `home` | `/` | the smoke test and maintenance mode |
+| `homeReady(page)` | the page's `h1` | the smoke test and the sidebar's home link |
+| `indexable` | `["/"]` | public pages that must not carry `X-Robots-Tag` |
+| `footer` | `/login` | a public page that renders `SiteFooter` (`data-testid="site-footer"`); `null` skips the footer test |
+| `accountMenu` | `/` | a page that renders `LanguageSwitch`, `ThemeToggle`, and `AccountMenu`; `null` skips those checks |
+
+```ts
+import type { AppPaths } from "./paths";
+
+export const appPaths: Partial<AppPaths> = {
+  homeReady: (page) => page.getByTestId("workspace"),
+  indexable: [],
+  footer: null,
+};
+```
+
+With `admin-dashboard`, `tests/helpers/app-accounts.ts` names the seeded
+accounts when an application's differ from `admin@example.com` and
+`user@example.com`. `E2E_ADMIN_EMAIL`, `E2E_USER_EMAIL`, `E2E_ADMIN_PASSWORD`,
+and `E2E_USER_PASSWORD` win over it. The seed signs the accounts up, so list the
+administrator's address in the API's `ADMIN_EMAILS`.
+
 ## Sign-in budget
 
 Sign-ins and sign-ups from an anonymous client count against the per-address

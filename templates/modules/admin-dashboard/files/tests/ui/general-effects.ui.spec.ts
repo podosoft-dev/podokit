@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { anonState } from "../helpers/accounts";
 import { ready } from "../helpers/hydration";
+import { paths } from "../helpers/paths";
 
 // Verifies that the General settings actually take effect (not just persist).
 // The admin storageState (project default) drives the toggles; a fresh anonymous
@@ -43,6 +44,7 @@ test("general: empty locale displays the application default", { tag: "@exclusiv
 });
 
 test("general: footer text and links render on public pages", { tag: "@exclusive" }, async ({ page, browser }) => {
+  test.skip(paths.footer === null, "no public page renders the site footer (tests/helpers/app-paths.ts)");
   test.slow();
   await ready(page, "/admin/settings");
   const origin = new URL(page.url()).origin;
@@ -61,9 +63,10 @@ test("general: footer text and links render on public pages", { tag: "@exclusive
   try {
     const ctx = await browser.newContext({ storageState: anonState });
     const anon = await ctx.newPage();
-    await anon.goto(`${origin}/login`);
-    await expect(anon.getByText("© 2026 PodoKit Test")).toBeVisible();
-    await expect(anon.getByRole("link", { name: "Support" })).toHaveAttribute("href", "mailto:help@example.com");
+    await anon.goto(`${origin}${paths.footer}`);
+    const footerBlock = anon.getByTestId("site-footer");
+    await expect(footerBlock.getByText("© 2026 PodoKit Test")).toBeVisible();
+    await expect(footerBlock.getByRole("link", { name: "Support" })).toHaveAttribute("href", "mailto:help@example.com");
     await ctx.close();
   } finally {
     await ready(page, "/admin/settings");
@@ -87,7 +90,7 @@ test("general: maintenance mode holds non-admins on the maintenance page", { tag
   try {
     const ctx = await browser.newContext({ storageState: anonState });
     const anon = await ctx.newPage();
-    await anon.goto(`${origin}/`);
+    await anon.goto(`${origin}${paths.home}`);
     await expect(anon).toHaveURL(/\/maintenance$/);
     await expect(anon.getByRole("heading", { name: "Under maintenance" })).toBeVisible();
     await ctx.close();

@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Generated e2e suites read the application's own screens from the owned
+  `tests/helpers/app-paths.ts` (first screen and its locator, indexable public
+  pages, the page with the site footer, the page with the account menu) and,
+  with `admin-dashboard`, its seeded accounts from the owned
+  `tests/helpers/app-accounts.ts`, with `E2E_ADMIN_EMAIL` and `E2E_USER_EMAIL`
+  overrides. Managed specs no longer assume a `main` element and an `h1` on
+  `/`, an indexable landing page, the footer on the owned `/login`, or the
+  `admin@example.com` and `user@example.com` addresses, so an application
+  sets these instead of ejecting the specs. `SiteFooter` carries
+  `data-testid="site-footer"`.
 - Deployment profiles take `exposure.edgeProxies`, the number of reverse
   proxies in front of the deployment (new Kubernetes profiles 0, new Compose
   profiles 1), and PodoKit renders from it every setting that decides which
@@ -523,6 +533,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   apps, because the settings `+page.svelte` is application-owned; add
   `class="h-auto max-w-full flex-wrap justify-start"` to its `<Tabs.List>` if
   your tabs overflow on a phone.
+- Managed e2e specs now read the application's screens and seeded accounts
+  from `tests/helpers/app-paths.ts` and `tests/helpers/app-accounts.ts`, which
+  `podo update` creates. Put your first screen's locator, public pages, and
+  account addresses there, then run `podo restore <spec>` for every spec you
+  ejected or edited only to change those, such as `smoke.ui.spec.ts`,
+  `guards.ui.spec.ts`, `dashboard.ui.spec.ts`, `account.ui.spec.ts`, and
+  `tests/helpers/accounts.ts`. Keep tests of your own screens in specs of your
+  own.
 - The first `podo update` turns `README.md`, `tests/README.md`, `.gitignore`,
   `.env.example`, `.env.docker.example`, and `infra/k3s/**` into owned files
   without changing them; the plan shows them as `skip`, or `review` where the

@@ -16,6 +16,7 @@
     "apps/web/src/lib/i18n/catalogs/app/**",
     "apps/web/src/lib/server/public-paths.ts",
     "apps/web/src/lib/server/asset-paths.ts",
+    "tests/helpers/app-accounts.ts",
     "apps/web/src/lib/server/app-hooks.ts",
     "apps/web/src/lib/server/non-indexable-paths.ts",
     "apps/web/src/lib/admin/app-nav.ts",

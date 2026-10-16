@@ -106,7 +106,10 @@ Merge added module settings from `.env.example` into an existing `.env`.
   workers with `E2E_WORKERS=2`, never `--workers`. Tag a test `{ tag: "@exclusive" }` when
   it changes state other tests rely on (a server-wide setting, a seeded account's profile);
   tagged tests run alone after the rest. Give each test its own mail and SMS recipients and
-  never empty the shared Mailpit inbox or SMS sink. See `tests/README.md`.
+  never empty the shared Mailpit inbox or SMS sink. See `tests/README.md`. The managed specs
+  read the app's first screen, public pages, and seeded accounts from the owned
+  `tests/helpers/app-paths.ts` (and `app-accounts.ts` with admin-dashboard): change those
+  instead of editing or ejecting a managed spec, and test the app's own screens in specs of its own.
 - Playwright officially runs on Node, so `bunx playwright` respects its Node
   shebang. Node LTS is a test-tool dependency only; API, web, worker, migrations,
   builds, and unit tests run on Bun.
