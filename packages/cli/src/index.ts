@@ -7,7 +7,14 @@ import { templateListText } from "./templates";
 import { addModule, listModules } from "./add";
 import { removeModule } from "./remove";
 import { status, diff, doctor } from "./inspect";
-import { addedModuleReason, planUpdate, applyUpdate, summarize } from "./update";
+import {
+  addedModuleReason,
+  planUpdate,
+  applyUpdate,
+  summarize,
+  upstreamChanges,
+  type UpdatePlan,
+} from "./update";
 import { eject } from "./eject";
 import { restore, templateDiff } from "./template-files";
 import { runDevCommand } from "./dev";
@@ -260,6 +267,30 @@ export function parseArgs(argv: string[]): ParsedArgs {
   parsed.name = positionals[1];
   parsed.positionals = positionals;
   return parsed;
+}
+
+/** Explain owned files whose template changed, with the upstream diff when the previous templates are given. */
+function writeOwnedTemplateNotes(plan: UpdatePlan, templatesDir: string, from?: string): void {
+  if (plan.changes.some((change) => change.action === "review")) {
+    if (from) {
+      process.stdout.write("\nTemplate changes to files you own (not applied):\n");
+      for (const change of upstreamChanges(process.cwd(), templatesDir, plan, from)) {
+        process.stdout.write(change.diff || `${change.path}: new in this version's template.\n`);
+      }
+    } else {
+      process.stdout.write(
+        "\nreview: the template changed for a file you own. podo update never writes it; " +
+          "podo diff <path> compares it with the new template, and --from <previous templates> shows what changed upstream.\n",
+      );
+    }
+  }
+  if (plan.ownedWithoutTemplate.length) {
+    process.stdout.write(
+      `\n${plan.ownedWithoutTemplate.length} owned file(s) differ from this version's templates, and the lock does not record ` +
+        "the template they came from. podo diff <path> shows the difference; applying this update records the template " +
+        "so the next update reports only real template changes.\n",
+    );
+  }
 }
 
 function writeApiPaths(heading: string, result: ApiPathResult, verb: "add" | "remove"): void {
@@ -829,6 +860,14 @@ async function main(argv: string[]): Promise<void> {
               "\n",
           );
         }
+        if (result.review.length) {
+          process.stdout.write(
+            "\nThe template changed for these files you own; they were left as they are. " +
+              "Compare each with podo diff <path>:\n" +
+              result.review.map((f) => `  ${f}`).join("\n") +
+              "\n",
+          );
+        }
         return;
       }
       const plan = planUpdate(process.cwd(), templatesDir);
@@ -857,10 +896,11 @@ async function main(argv: string[]): Promise<void> {
         }
         process.stdout.write(
           `${shown.length ? "\n" : ""}${counts.update} update, ${counts.add} add, ${counts.move} move, ` +
-            `${counts.remove} remove, ${counts.conflict} conflict. ` +
+            `${counts.remove} remove, ${counts.conflict} conflict, ${counts.review} review. ` +
             `Dry-run — nothing was written. Re-run with --apply to write (use --from <dir> for a 3-way merge).\n`,
         );
       }
+      writeOwnedTemplateNotes(plan, templatesDir, args.from);
     } catch (err) {
       fail((err as Error).message);
     }

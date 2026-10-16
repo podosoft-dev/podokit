@@ -9,6 +9,7 @@ import {
   type VfsTree,
 } from "@podosoft/podokit-template-engine";
 import { assembleProject } from "./assemble";
+import { unifiedDiff } from "./text-diff";
 import {
   classifyTier,
   computeFilesLock,
@@ -19,6 +20,7 @@ import {
   podokitVersion,
   readFilesLock,
   readManifest,
+  recordedTemplateHash,
   writeFilesLock,
   writeManifest,
   type Tier,
@@ -51,6 +53,7 @@ import {
  */
 
 export type Action =
+  | "review"
   | "update"
   | "merge"
   | "conflict"
@@ -91,6 +94,12 @@ export interface UpdatePlan {
   changes: FileChange[];
   /** Direct API paths that modules newly declare, per configuration file. */
   apiPaths: ApiPathResult;
+  /**
+   * Owned files that differ from this version's template while the lock has no
+   * record of the template they came from, so PodoKit cannot tell whether the
+   * template changed. Applying the update records it for the next one.
+   */
+  ownedWithoutTemplate: string[];
 }
 
 function treeText(tree: VfsTree, path: string): string | null {
@@ -354,6 +363,7 @@ export function planUpdate(
       note: conflict,
     });
   }
+  const ownedWithoutTemplate: string[] = [];
   const movedSources = new Set(migrationPlan.moves.map((move) => move.from));
   const movedTargets = new Set(migrationPlan.moves.map((move) => move.to));
   const paths = new Set<string>([...newTree.keys(), ...Object.keys(lock.files)]);
@@ -393,6 +403,23 @@ export function planUpdate(
       if (!locked && disk === null && newText !== null) {
         changes.push({ path, tier, action: "add", note: "new owned seed in this version" });
         continue;
+      }
+      if (newText !== null && disk !== null) {
+        const newHash = hashContent(newText);
+        const recorded = recordedTemplateHash(locked);
+        if (hashContent(disk) !== newHash) {
+          if (recorded && recorded !== newHash) {
+            changes.push({
+              path,
+              tier,
+              action: "review",
+              note: `owned; the template changed, see podo diff ${path}`,
+            });
+            continue;
+          }
+          // The lock never records files under .podokit/, so only judge tracked files.
+          if (!recorded && locked) ownedWithoutTemplate.push(path);
+        }
       }
       const explicitlyOwned = ownedGlobs.some(
         (glob) => !glob.includes("*") && matchGlob(path, glob),
@@ -467,6 +494,7 @@ export function planUpdate(
     addedModules: added,
     changes,
     apiPaths,
+    ownedWithoutTemplate,
   };
 }
 
@@ -495,6 +523,8 @@ export interface ApplyResult {
   merged: string[];
   /** Files written with conflict markers for manual resolution. */
   conflicts: string[];
+  /** Owned files whose template changed; they are left as they are. */
+  review: string[];
   /** Direct API paths added to `.podokit/dev.json` and deployment profiles. */
   apiPaths: ApiPathResult;
 }
@@ -571,6 +601,70 @@ function previousExternalModules(
   return { root, cleanup: true };
 }
 
+/** The project as the templates of the version it is on generated it. */
+function previousTree(
+  projectRoot: string,
+  manifest: PodokitManifest,
+  oldTemplatesDir: string,
+  oldExternalModulesRoot?: string,
+): VfsTree {
+  const previousModules = previousExternalModules(
+    projectRoot,
+    oldTemplatesDir,
+    manifest.modules,
+    oldExternalModulesRoot,
+  );
+  try {
+    return assembleProject({
+      templatesDir: oldTemplatesDir,
+      template: manifest.template,
+      answers: manifestTemplateVars(manifest),
+      modules: manifest.modules,
+      projectRoot: previousModules.root,
+    });
+  } finally {
+    if (previousModules.cleanup) rmSync(previousModules.root, { recursive: true, force: true });
+  }
+}
+
+export interface UpstreamChange {
+  path: string;
+  /** Unified diff from the previous template to the new one; empty when the
+   *  previous templates did not generate the file. */
+  diff: string;
+}
+
+/**
+ * What the template changed between the project's version and this one for
+ * each owned file the plan marks for review, given the previous version's
+ * templates.
+ */
+export function upstreamChanges(
+  projectRoot: string,
+  templatesDir: string,
+  plan: UpdatePlan,
+  oldTemplatesDir: string,
+  oldExternalModulesRoot?: string,
+): UpstreamChange[] {
+  const review = plan.changes.filter((change) => change.action === "review");
+  if (!review.length) return [];
+  const target = targetProject(projectRoot, templatesDir);
+  const oldTree = previousTree(projectRoot, target.manifest, oldTemplatesDir, oldExternalModulesRoot);
+  return review.map((change) => {
+    const before = treeText(oldTree, change.path);
+    const after = treeText(target.tree, change.path) ?? "";
+    return {
+      path: change.path,
+      diff: before === null
+        ? ""
+        : unifiedDiff(before, after, {
+            fromLabel: `podokit-${plan.fromVersion}/${change.path}`,
+            toLabel: `podokit-${plan.toVersion}/${change.path}`,
+          }),
+    };
+  });
+}
+
 function writeFile(projectRoot: string, path: string, content: string): void {
   const abs = join(projectRoot, path);
   mkdirSync(dirname(abs), { recursive: true });
@@ -609,6 +703,7 @@ function updatedFilesLock(
         }
         entry.outHash = hashContent(newText);
       }
+      if (entry.tier === "owned") entry.templateHash = hashContent(newText);
       continue;
     }
 
@@ -708,23 +803,12 @@ export function applyUpdate(
   const needsMergeBase = plan.changes.some((change) => change.action === "conflict");
   let oldTree: VfsTree | null = null;
   if (options.oldTemplatesDir && needsMergeBase) {
-    const previousModules = previousExternalModules(
+    oldTree = previousTree(
       projectRoot,
+      manifest,
       options.oldTemplatesDir,
-      manifest.modules,
       options.oldExternalModulesRoot,
     );
-    try {
-      oldTree = assembleProject({
-        templatesDir: options.oldTemplatesDir,
-        template: manifest.template,
-        answers: manifestTemplateVars(manifest),
-        modules: manifest.modules,
-        projectRoot: previousModules.root,
-      });
-    } finally {
-      if (previousModules.cleanup) rmSync(previousModules.root, { recursive: true, force: true });
-    }
   }
 
   if (options.abortOnConflict) {
@@ -756,6 +840,7 @@ export function applyUpdate(
     removed: [],
     merged: [],
     conflicts: [],
+    review: plan.changes.filter((change) => change.action === "review").map((change) => change.path),
     apiPaths: { changed: [], skipped: [] },
   };
 
@@ -854,6 +939,7 @@ export function addedModuleReason(module: AddedModule): string {
 /** Count actions for a one-line summary. */
 export function summarize(plan: UpdatePlan): Record<Action, number> {
   const counts: Record<Action, number> = {
+    review: 0,
     update: 0,
     merge: 0,
     conflict: 0,

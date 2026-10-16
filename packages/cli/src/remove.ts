@@ -11,6 +11,7 @@ import {
 import { modulePackageOverlays, resolveModuleDir, type ModuleManifest } from "./add";
 import {
   computeFilesLock,
+  keepTemplateHashes,
   DEFAULT_OWNED_GLOBS,
   manifestTemplateVars,
   matchGlob,
@@ -204,7 +205,11 @@ export function removeModule(options: RemoveOptions): RemoveResult {
   writeManifest(projectRoot, manifest);
   writeFilesLock(
     projectRoot,
-    computeFilesLock(projectRoot, manifest.ownedGlobs, manifest.managedOverrides),
+    keepTemplateHashes(
+      computeFilesLock(projectRoot, manifest.ownedGlobs, manifest.managedOverrides),
+      lock,
+      [...unwired, ".env.example"],
+    ),
   );
 
   return { module, removed, keptEdited, keptShared, unwired, apiPaths };

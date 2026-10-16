@@ -44,6 +44,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   file is rewritten, leaves the manifest's owned paths, and is managed by
   updates again. It refuses routes and other files the template or a module
   declares owned, and a project on another PodoKit version than the CLI.
+- `podo update` lists owned files whose template changed since PodoKit last
+  rendered them as `review`, without writing them, such as a corrected
+  `.mcp.json`, `.devcontainer/devcontainer.json`, or route page. With `--from
+  <previous templates>` the dry run prints what changed upstream. The lock
+  records the template of each owned file at create, eject, and update; for a
+  lock written before, the plan counts the owned files that differ from the new
+  templates, and applying the update starts the record.
 - Generated apps run their Playwright suite on more than one worker with
   `E2E_WORKERS` (default 1), for example `E2E_WORKERS=2 bun run test:e2e`. A
   test that changes state the other tests rely on carries the `@exclusive` tag:

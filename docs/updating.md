@@ -84,6 +84,32 @@ During apply:
 - owned files are never modified; and
 - the manifest and lockfile advance only with the applied tree.
 
+### Owned files whose template changed
+
+PodoKit never writes an owned file after it seeds it, so an improvement to its
+template, such as a corrected `.mcp.json` or a newer `.devcontainer`, does not
+reach your copy by itself. The lock records which template content each owned
+file came from, and `podo update` lists every owned file whose template changed
+since then as `review`:
+
+```text
+  review    .mcp.json  (owned; the template changed, see podo diff .mcp.json)
+```
+
+`podo diff <path>` shows your file against the new template. Pass the previous
+version's templates with `--from` to see what changed upstream instead:
+
+```bash
+podo update --from ./previous-podokit/templates
+```
+
+Copy what you want by hand. `--apply` leaves these files as they are, lists them
+again, and records the new template, so the next update reports only later
+changes. A file you ejected is reported the same way. Locks written before this
+record existed cannot tell an edit from a template change; the plan counts the
+owned files that differ from the new templates, and applying the update starts
+the record.
+
 The target module graph is authoritative. If a module gains a requirement,
 PodoKit applies the dependency first so services, imports, package dependencies,
 environment examples, and tests arrive together. A new provider capability

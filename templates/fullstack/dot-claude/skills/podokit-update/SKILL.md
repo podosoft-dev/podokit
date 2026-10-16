@@ -21,7 +21,8 @@ podo restore <path>  # rewrite a managed file from the template; re-manages an e
 
 Rules to respect:
 - **owned** files (routes, your components, `AGENTS.md`, shadcn `ui/**`) are never
-  touched by `update`.
+  touched by `update`. When their template changes, the plan lists them as
+  `review`; compare with `podo diff <path>` and copy what the app needs.
 - **assembled** files are recomputed from the module set — keep edits **outside**
   the `// podokit:begin…end` fences.
 - Run `podo update` (dry-run) first and read the plan before `--apply`. Commit or

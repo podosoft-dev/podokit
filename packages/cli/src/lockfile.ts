@@ -76,6 +76,12 @@ export interface FileEntry {
   tier: Tier;
   /** Hash of the exact bytes PodoKit last wrote; user-edit detector. */
   outHash: string;
+  /**
+   * Owned files only: hash of what the template generated for the path when
+   * PodoKit last rendered it, so `podo update` can tell the application that
+   * the template changed without touching the file.
+   */
+  templateHash?: string;
 }
 
 export interface FilesLock {
@@ -329,6 +335,36 @@ export function computeFilesLock(
   return { schemaVersion: LOCK_SCHEMA_VERSION, files };
 }
 
+/**
+ * The template content an earlier lock knew for a path: the recorded template
+ * hash of an owned file, or the generated baseline of a managed one.
+ */
+export function recordedTemplateHash(entry: FileEntry | undefined): string | undefined {
+  if (!entry) return undefined;
+  return entry.tier === "owned" ? entry.templateHash : entry.outHash;
+}
+
+/**
+ * Carry the template hashes of an earlier lock into a recomputed one for files
+ * that are owned now. Paths in `changed` were just rewritten from a different
+ * template, such as the files a module added to or removed from, so their old
+ * hash would be wrong and is dropped.
+ */
+export function keepTemplateHashes(
+  next: FilesLock,
+  previous: FilesLock | null,
+  changed: Iterable<string> = [],
+): FilesLock {
+  if (!previous) return next;
+  const skip = new Set(changed);
+  for (const [path, entry] of Object.entries(next.files)) {
+    if (entry.tier !== "owned" || entry.templateHash || skip.has(path)) continue;
+    const templateHash = recordedTemplateHash(previous.files[path]);
+    if (templateHash) entry.templateHash = templateHash;
+  }
+  return next;
+}
+
 export function readFilesLock(projectRoot: string): FilesLock | null {
   const file = filesLockPath(projectRoot);
   if (!existsSync(file)) return null;
@@ -394,7 +430,12 @@ export function initLockfile(projectRoot: string, options: InitLockOptions): voi
     managedOverrides,
   };
   writeManifest(projectRoot, manifest);
-  writeFilesLock(projectRoot, computeFilesLock(projectRoot, ownedGlobs, managedOverrides));
+  const lock = computeFilesLock(projectRoot, ownedGlobs, managedOverrides);
+  // Create wrote every file straight from the template.
+  for (const entry of Object.values(lock.files)) {
+    if (entry.tier === "owned") entry.templateHash = entry.outHash;
+  }
+  writeFilesLock(projectRoot, lock);
 }
 
 /** Union two glob lists, preserving order and dropping duplicates. Used to fold
@@ -504,5 +545,12 @@ export function recordModules(
     files[path] = current;
   }
 
-  writeFilesLock(projectRoot, { schemaVersion: LOCK_SCHEMA_VERSION, files });
+  writeFilesLock(
+    projectRoot,
+    keepTemplateHashes(
+      { schemaVersion: LOCK_SCHEMA_VERSION, files },
+      lockSnapshot.previous,
+      modulePaths,
+    ),
+  );
 }
