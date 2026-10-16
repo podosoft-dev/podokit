@@ -184,8 +184,11 @@ to those systems, update runtime environment values such as `DATABASE_URL` and
 retiring the previous service.
 
 The previous provider module remains installed but inactive, which makes a
-configuration rollback possible. After the new provider and data have been
-verified, `podo remove <old-provider-module>` can remove unused code and package
+configuration rollback possible. It still type-checks: `PROVIDERS` in
+`apps/api/src/config/providers.ts` is typed with every provider name, so a
+module's check such as `PROVIDERS.cache !== "memory"` compiles whichever provider
+is selected. After the new provider and data have been verified,
+`podo remove <old-provider-module>` can remove unused code and package
 dependencies. Removal still preserves locally edited files and never deletes
 provider data.
 

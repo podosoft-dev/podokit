@@ -7,6 +7,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { PROVIDER_CAPABILITIES, PROVIDER_NAMES } from "@podosoft/podokit-runtime";
+import ts from "typescript";
 import { afterEach, describe, expect, it } from "vitest";
 import { create } from "./create";
 import { readFilesLock, readManifest } from "./lockfile";
@@ -14,10 +16,43 @@ import {
   applyProviderChange,
   listProviders,
   planProviderChange,
+  providerSource,
   PROVIDERS_SOURCE,
 } from "./provider";
 
 const REPO_TEMPLATES = resolve(process.cwd(), "..", "..", "templates");
+const RUNTIME_CONTRACTS = resolve(process.cwd(), "..", "runtime", "src", "contracts.ts");
+
+/**
+ * Type-checks the selection test every provider module makes, such as
+ * `PROVIDERS.cache !== "memory"`, against the project's providers source.
+ */
+function providerCheckErrors(root: string): string[] {
+  const checks = join(root, "apps/api/src/config/provider-checks.ts");
+  writeFileSync(
+    checks,
+    `import { PROVIDERS } from "./providers";\n` +
+      PROVIDER_CAPABILITIES.flatMap((capability) =>
+        PROVIDER_NAMES[capability].map(
+          (name) => `if (PROVIDERS[${JSON.stringify(capability)}] !== ${JSON.stringify(name)}) void 0;\n`,
+        )
+      ).join(""),
+  );
+  const program = ts.createProgram([checks], {
+    strict: true,
+    noEmit: true,
+    target: ts.ScriptTarget.ES2022,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    paths: { "@podosoft/podokit-runtime": [RUNTIME_CONTRACTS] },
+    types: [],
+  });
+  const source = program.getSourceFile(checks);
+  rmSync(checks);
+  return [...program.getSyntacticDiagnostics(source), ...program.getSemanticDiagnostics(source)].map(
+    (diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
+  );
+}
 const created: string[] = [];
 
 function project(): string {
@@ -52,6 +87,41 @@ describe("provider configuration", () => {
     applyProviderChange(root, "cache", "memory", { modulesDir });
     expect(readManifest(root)?.modules.map((module) => module.name)).toContain("cache-memory");
     expect(existsSync(join(root, "apps/api/src/cache-memory/cache-memory.module.ts"))).toBe(true);
+  });
+
+  it("keeps every installed provider module type-correct through each switch and back", () => {
+    const root = project();
+    const modulesDir = join(REPO_TEMPLATES, "modules");
+    const initial = readManifest(root)?.providers;
+    if (!initial) throw new Error("expected a manifest");
+    // The template and the switch write the same source.
+    expect(readFileSync(join(root, PROVIDERS_SOURCE), "utf8")).toBe(providerSource(initial));
+    expect(providerCheckErrors(root)).toEqual([]);
+
+    for (const capability of PROVIDER_CAPABILITIES) {
+      const other = PROVIDER_NAMES[capability].find((name) => name !== initial[capability]);
+      if (!other) throw new Error(`expected a second ${capability} provider`);
+      for (const provider of [other, initial[capability]]) {
+        applyProviderChange(root, capability, provider, { modulesDir });
+        const providers = readManifest(root)?.providers;
+        expect(providers?.[capability]).toBe(provider);
+        expect(readFileSync(join(root, PROVIDERS_SOURCE), "utf8")).toBe(providerSource(providers ?? initial));
+        expect(providerCheckErrors(root), `${capability} -> ${provider}`).toEqual([]);
+      }
+    }
+    // The previous implementations stay installed, inactive, for a rollback.
+    expect(readManifest(root)?.modules.map((module) => module.name)).toEqual(
+      expect.arrayContaining([
+        "redis",
+        "cache-memory",
+        "object-storage-s3",
+        "object-storage-local",
+        "events-redis",
+        "events-memory",
+        "bullmq",
+        "jobs-local",
+      ]),
+    );
   });
 
   it("applies source, manifest, and lockfile as one configuration change", () => {

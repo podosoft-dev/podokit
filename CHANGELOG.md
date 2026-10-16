@@ -106,6 +106,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   web server's `GET /healthz` route, the API timeouts, `apiServerOptions` and
   its environment fallbacks, and `podo dev`, including that `podo dev down` also
   stops `podo dev watch`.
+- After `podo provider set <capability> <provider> --apply`, the API type-checks
+  again. The generated `apps/api/src/config/providers.ts` declared `PROVIDERS` with
+  `as const`, so each field had the type of the selected provider only, and the
+  previous provider's module, which stays installed and inactive for a rollback,
+  failed `tsc` on its own check, such as `PROVIDERS.cache !== "memory"` in
+  `cache-memory.module.ts` after switching the cache to Redis (TS2367). This hit
+  every switch of the cache, object storage, events, and jobs providers, in both
+  directions. `PROVIDERS` is now typed `Readonly<ProviderSelections>`, with every
+  provider name of each capability.
 - The admin dashboard's table toolbar keeps its search box usable on a phone.
   The input could shrink to about 42 px wide at a 390 px viewport, squeezed
   between the search field select and the Search button on the users page; it
@@ -146,6 +155,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `API_IDLE_TIMEOUT`, so a Compose
   rollback to a revision applied before this version is refused, because it no
   longer renders byte for byte; roll forward with a new release instead.
+- `podo update --apply` rewrites the managed `apps/api/src/config/providers.ts`
+  with the new `PROVIDERS` type. If you ejected or edited that file, replace
+  `} as const satisfies ProviderSelections;` with `};` and declare
+  `export const PROVIDERS: Readonly<ProviderSelections> = {` yourself.
 - `AGENTS.md` is application-owned, so `podo update` does not add its new notes
   about `APP_PROXY_TIMEOUTS`, `CONNECTION_IDLE_TIMEOUT`, and `API_IDLE_TIMEOUT`;
   copy them from a newly generated app if your agents should know.
