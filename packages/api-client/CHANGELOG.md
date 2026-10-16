@@ -1,5 +1,15 @@
 # @podosoft/podokit-api-client
 
+## 0.9.0
+
+### Minor Changes
+
+- [#222](https://github.com/podosoft-dev/podokit/pull/222) [`b41f088`](https://github.com/podosoft-dev/podokit/commit/b41f0883ce9b02497097df2e849df73946c17791) Thanks [@korone00](https://github.com/korone00)! - Send binary and stream request bodies. `post`, `put`, and `patch` send a `Blob`, `ArrayBuffer`, typed array, or `ReadableStream` as the raw body (streams with `duplex: "half"`), with the content type from the new `contentType` option, the Blob's type, or `application/octet-stream`. Every call accepts `{ contentType, headers, signal }`; JSON and `FormData` bodies are unchanged. `ApiError.retryAfterSeconds` exposes the `Retry-After` delay of a failed response.
+
+### Patch Changes
+
+- [#222](https://github.com/podosoft-dev/podokit/pull/222) [`b41f088`](https://github.com/podosoft-dev/podokit/commit/b41f0883ce9b02497097df2e849df73946c17791) Thanks [@korone00](https://github.com/korone00)! - Report an error response whose body is not JSON, such as a gateway's 502 page or a plain-text 413, as an `ApiError` with code `HTTP_ERROR`, its status, and `retryAfterSeconds`, instead of throwing a `SyntaxError` while parsing it.
+
 ## 0.8.5
 
 ### Patch Changes
