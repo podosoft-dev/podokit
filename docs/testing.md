@@ -283,6 +283,15 @@ The admin setup project seeds sessions through the API and stores ignored browse
 state under `tests/playwright/.auth`. Its cleanup project removes users created
 by the suite.
 
+## Sign-in budget
+
+Sign-ins and sign-ups from an anonymous client count against the per-address
+authentication budget of the `rate-limit` module, which every spec shares. The
+specs that need many sessions or several new accounts make only their first
+authentication write anonymously and send the rest with that session's cookie,
+which the limiter counts against the session. A spec of your own that signs in
+in a loop can call `signInOnSeparateDevices` from `tests/helpers/devices.ts`.
+
 ## CI policy
 
 Fast CI runs package tests, type checks, and a Bun-generated application gate.

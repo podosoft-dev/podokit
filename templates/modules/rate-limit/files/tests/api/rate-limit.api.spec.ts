@@ -1,4 +1,10 @@
-import { expect, test, type APIResponse } from "@playwright/test";
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type APIResponse,
+  type PlaywrightWorkerArgs,
+} from "@playwright/test";
 
 const base = process.env.E2E_BASE_URL ?? "http://localhost:5001";
 const origin = { origin: base };
@@ -19,20 +25,42 @@ const limit = Number(process.env.RATE_LIMIT_MAX ?? 300);
 const authLimit = Number(process.env.RATE_LIMIT_AUTH_MAX ?? 20);
 const runtimeLimit = Number(process.env.RATE_LIMIT_RUNTIME_MAX ?? 1000);
 
-async function session(
-  playwright: import("@playwright/test").PlaywrightWorkerArgs["playwright"],
-) {
-  const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
-  const email = `rate-limit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
-  const signup = await ctx.post("/api/auth/sign-up/email", {
-    data: {
-      email,
-      password: "Podokit3e-Str0ng!pw",
-      name: "Rate Limit",
-    },
+type Playwright = PlaywrightWorkerArgs["playwright"];
+const password = "Podokit3e-Str0ng!pw";
+
+function uniqueEmail(): string {
+  return `rate-limit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
+}
+
+// Sign-ups and sign-ins are authentication writes. From an anonymous client the
+// limiter counts them against the per-address budget that the setup project's
+// and every other spec's sign-ins share. Only this worker's first one is
+// anonymous: the later ones carry its session cookie, so the limiter counts them
+// against that session instead.
+let carrier: string | undefined;
+
+/** Run one authentication write and return a context holding the session it set. */
+async function authenticated(
+  playwright: Playwright,
+  path: "/api/auth/sign-up/email" | "/api/auth/sign-in/email",
+  data: Record<string, string>,
+): Promise<APIRequestContext> {
+  const writer = await playwright.request.newContext({
+    baseURL: base,
+    extraHTTPHeaders: { ...origin, ...(carrier ? { cookie: carrier } : {}) },
   });
-  expect(signup.ok()).toBeTruthy();
-  return ctx;
+  const response = await writer.post(path, { data });
+  expect(response.ok(), `${path}: ${response.status()}`).toBeTruthy();
+  const storageState = await writer.storageState();
+  await writer.dispose();
+  const token = storageState.cookies.find((cookie) => cookie.name.endsWith("session_token"));
+  carrier ??= token ? `${token.name}=${token.value}` : undefined;
+  return playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin, storageState });
+}
+
+/** A new account, signed in. */
+async function session(playwright: Playwright, email = uniqueEmail()): Promise<APIRequestContext> {
+  return authenticated(playwright, "/api/auth/sign-up/email", { email, password, name: "Rate Limit" });
 }
 
 test("rate limit: health probes stay available while ordinary routes return 429 @smoke", async ({
@@ -73,10 +101,8 @@ test("rate limit: health probes stay available while ordinary routes return 429 
 test("rate limit: a user's sessions share one counter and forged sessions do not get one", async ({
   playwright,
 }) => {
-  const email = `rate-limit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
-  const password = "Podokit3e-Str0ng!pw";
-  const first = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
-  expect((await first.post("/api/auth/sign-up/email", { data: { email, password, name: "Rate Limit" } })).ok()).toBeTruthy();
+  const email = uniqueEmail();
+  const first = await session(playwright, email);
   const probe = await first.get("/api/cache/rate-limit-probe");
   test.skip(probe.status() >= 500, "throttler storage (redis) not reachable");
   const remaining = (response: APIResponse): number => Number(response.headers()["ratelimit-remaining"]);
@@ -86,8 +112,7 @@ test("rate limit: a user's sessions share one counter and forged sessions do not
   // session. The probe requires a session, so each request below resolves it; a
   // session counts under its user from the request after the API first resolves
   // it (or from that request when authentication runs before the limiter).
-  const second = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
-  expect((await second.post("/api/auth/sign-in/email", { data: { email, password } })).ok()).toBeTruthy();
+  const second = await authenticated(playwright, "/api/auth/sign-in/email", { email, password });
   const cookie = (await first.storageState()).cookies.find((c) => c.name.endsWith("session_token"));
   expect(cookie, "sign-up set a session cookie").toBeTruthy();
   const bearer = await playwright.request.newContext({

@@ -220,6 +220,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- The account sessions specs (API and UI) no longer spend the per-address
+  sign-in budget: each made 105 anonymous sign-ins, so a run with a raised
+  `RATE_LIMIT_AUTH_MAX` of 300 refused sign-ins of unrelated specs within the
+  same minute. Only the first sign-in is anonymous now; the others carry its
+  session, which the rate limiter counts on its own. The `rate-limit` spec signs
+  up its accounts the same way. They still prove more than 100 sessions and
+  that signing out the others removes them all.
 - The Silo and `mc` images of `compose.dev.yaml` and the `object-storage-s3`
   module's `infra/docker/minio.compose.yml` are pinned by digest, and their
   bucket setup runs with `sh -e` and `mc mb --ignore-existing`. `mc mb … ||
@@ -241,7 +248,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   the app edited the env files or overrode both values in `compose.dev.yaml`.
   `PODOKIT_DEV_AUTH_URL` switches `BETTER_AUTH_URL` to `publicUrl` for an OAuth
   round trip through a tunnel.
-
 - A Compose deployment behind a reverse proxy can trust `X-Forwarded-Proto` and
   `X-Forwarded-Host`: the guide told profiles to set `PROTOCOL_HEADER` and
   `HOST_HEADER`, which `runtimeConfig` refuses as managed keys, and the Compose
