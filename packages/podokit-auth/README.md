@@ -74,6 +74,19 @@ same object:
 const store = createConfigStore(repository, { defaults: { auditLog: true } });
 ```
 
+`AuthConfig.appName` is the name users see during sign-in, such as the TOTP
+issuer. It is `AUTH_APP_NAME` when set; otherwise the value of the app_setting
+key passed as `appNameSetting`, then `defaults.appName`, then `"PodoKit"`. A
+change to the setting changes the config version, so an auth instance built
+from it is rebuilt:
+
+```ts
+const store = createConfigStore(repository, {
+  defaults: { appName: "my-app" },
+  appNameSetting: "site.name",
+});
+```
+
 Set `sessionIdleTimeoutMinutes` to an integer from 5 through 10080 to build a
 sliding server-side session lifetime. `null` keeps better-auth's default
 seven-day lifetime. Generated applications expose this as **Automatic logout**

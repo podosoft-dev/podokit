@@ -59,7 +59,8 @@ export function buildAuth(config: AuthConfig) {
     featureGatePlugin(gateSettings),
     // "Sign out other sessions" revokes every other session, not only the first 100.
     revokeEveryOtherSession(),
-    twoFactor(),
+    // The issuer is the account name authenticator apps show.
+    twoFactor({ issuer: config.appName }),
     magicLink({
       sendMagicLink: async ({ email, url }: { email: string; url: string; token: string }) => {
         await sendMail({
@@ -95,8 +96,8 @@ export function buildAuth(config: AuthConfig) {
     apiKey(),
     // Passwordless sign-in with WebAuthn passkeys. The ceremony runs at the web
     // origin, so expected origins are the CORS origins and rpID is their host.
-    // Change rpName to your product name (shown in the browser passkey prompt).
-    passkey({ rpName: "PodoKit", rpID: new URL(webOrigins[0]).hostname, origin: webOrigins }),
+    // rpName is the name the browser shows in the passkey prompt.
+    passkey({ rpName: config.appName, rpID: new URL(webOrigins[0]).hostname, origin: webOrigins }),
     // Multi-tenant organizations: teams with members, roles, and email invitations.
     organization({
       // Custom member roles (adds "manager") and a parent-organization link so orgs
@@ -201,6 +202,7 @@ export function buildAuth(config: AuthConfig) {
   const session = sessionIdleOptions(config.sessionIdleTimeoutMinutes);
 
   return betterAuth({
+    appName: config.appName,
     database: authDatabase,
     emailAndPassword: {
       enabled: true,

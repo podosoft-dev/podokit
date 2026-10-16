@@ -91,6 +91,9 @@ export type AuthConfig = {
   /** Opaque version token; changes when config changes so the auth instance rebuilds.
    *  "env" means "no DB rows — using environment fallback" (identical to legacy behavior). */
   version: string;
+  /** The product name users see during sign-in: the TOTP issuer in authenticator
+   *  apps and the relying-party name in passkey prompts. */
+  appName: string;
   /** Configured social providers, keyed by provider id (google, github, apple, …).
    *  Dynamic: admins add/edit/remove providers from the Settings page. */
   social: Record<string, OAuthProviderConfig>;
@@ -114,7 +117,18 @@ export type AuthConfigDefaults = {
   /** Record the audit log while AUDIT_LOG_ENABLED is unset or empty. Apps with
    *  the audit-log module pass true; without it the toggle stays off. */
   auditLog?: boolean;
+  /** The app name when AUTH_APP_NAME and the app-name setting are unset.
+   *  Default "PodoKit". */
+  appName?: string;
 };
+
+/** The app name used when neither AUTH_APP_NAME, a setting, nor a default names one. */
+export const DEFAULT_AUTH_APP_NAME = "PodoKit";
+
+/** AUTH_APP_NAME, trimmed; undefined when unset or blank. */
+export function envAppName(): string | undefined {
+  return process.env.AUTH_APP_NAME?.trim() || undefined;
+}
 
 /** An unset or empty value takes `fallback`; any value other than "false" is on. */
 function envSwitch(value: string | undefined, fallback: boolean): boolean {
@@ -140,6 +154,7 @@ export function envAuthConfig(defaults: AuthConfigDefaults = {}): AuthConfig {
     : resolveSessionIdleTimeoutMinutes(configuredIdleTimeout, null);
   return {
     version: "env",
+    appName: envAppName() ?? (defaults.appName?.trim() || DEFAULT_AUTH_APP_NAME),
     social,
     requireEmailVerification: process.env.AUTH_EMAIL_VERIFICATION === "true",
     requireSignupApproval: process.env.AUTH_REQUIRE_SIGNUP_APPROVAL === "true",

@@ -3,6 +3,7 @@ import {
   type AuthConfig,
   type AuthConfigDefaults,
   type OAuthProviderConfig,
+  envAppName,
   envAuthConfig,
   resolveSessionIdleTimeoutMinutes,
   SUPPORTED_PROVIDER_IDS,
@@ -62,10 +63,13 @@ export type ConfigStoreOptions = {
   ttlMs?: number;
   /** Values used when neither a row nor the environment sets one; see envAuthConfig(). */
   defaults?: AuthConfigDefaults;
+  /** An app_setting key, such as "site.name", whose value names the app while
+   *  AUTH_APP_NAME is unset. A change to it changes the config version. */
+  appNameSetting?: string;
 };
 
 export interface ConfigStore {
-  /** Opaque token that changes whenever auth_config changes (drives auth rebuild). */
+  /** Opaque token that changes whenever auth_config or the app name changes (drives auth rebuild). */
   currentVersion(): Promise<string>;
   /** Full resolved config for buildAuth(): DB rows override env field-by-field.
    *  The same object is returned until auth_config changes; treat it as read-only. */
@@ -174,12 +178,20 @@ function socialFrom(rs: readonly AuthConfigRow[], env: AuthConfig): Record<strin
   return social;
 }
 
-function configFrom(rs: readonly AuthConfigRow[], version: string, defaults: AuthConfigDefaults): AuthConfig {
+function configFrom(
+  rs: readonly AuthConfigRow[],
+  version: string,
+  defaults: AuthConfigDefaults,
+  settingAppName: string | undefined,
+): AuthConfig {
   const env = envAuthConfig(defaults);
   const server = rs.find((r) => r.key === "server");
   const serverConfig = object(server?.config);
+  const appName = envAppName() ?? settingAppName ?? env.appName;
   return {
-    version,
+    // The name is built into the auth instance, so a new name needs a new version.
+    version: appName === env.appName ? version : `${version}|app:${appName}`,
+    appName,
     social: socialFrom(rs, env),
     requireEmailVerification: server ? bool(serverConfig.requireEmailVerification, env.requireEmailVerification) : env.requireEmailVerification,
     requireSignupApproval: server ? bool(serverConfig.requireSignupApproval, env.requireSignupApproval) : env.requireSignupApproval,
@@ -351,14 +363,26 @@ export function createConfigStore(
     settingsPart = { ...settingsPart, token: null };
   }
 
-  const config = memoize(() => auth.value, (rows) => configFrom(rows, versionOf(rows), defaults));
+  const settingAppName = memoize(() => settingsPart.value, (settings) =>
+    options.appNameSetting ? settings.get(options.appNameSetting)?.trim() || undefined : undefined);
+  let configKey: { rows: readonly AuthConfigRow[]; appName: string | undefined } | undefined;
+  let configValue: AuthConfig | undefined;
+  const config = (): AuthConfig => {
+    const rows = auth.value;
+    const appName = settingAppName();
+    if (!configKey || configKey.rows !== rows || configKey.appName !== appName || !configValue) {
+      configValue = configFrom(rows, versionOf(rows), defaults, appName);
+      configKey = { rows, appName };
+    }
+    return configValue;
+  };
   const capabilities = memoize(config, capabilitiesFrom);
   const smtp = memoize(() => auth.value, smtpFrom);
 
   return {
     async currentVersion(): Promise<string> {
       await sync();
-      return versionOf(auth.value);
+      return config().version;
     },
     async load(): Promise<AuthConfig> {
       await sync();

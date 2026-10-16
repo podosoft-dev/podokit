@@ -99,6 +99,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   and base styles. Override `:root` and `.dark` variables, add `@theme` entries,
   fonts, and base styles, or add `@source` for a package whose built components
   use Tailwind classes. `podo update` creates it once and never overwrites it.
+- The name users see during sign-in follows the app instead of the libraries.
+  Authenticator apps showed the TOTP issuer "Better Auth" and browsers showed
+  "PodoKit" in the passkey prompt. One name now feeds Better Auth's `appName`,
+  the TOTP issuer, and the passkey relying-party name: `AUTH_APP_NAME` when set,
+  otherwise the site name from the admin Settings, otherwise the project name
+  the app was generated with. A site name change applies without a restart.
+  `@podosoft/podokit-auth` resolves it as `AuthConfig.appName`, with the
+  `appNameSetting` and `defaults.appName` options of `createConfigStore()`.
 
 ### Removed
 
@@ -276,6 +284,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   log starts with the update.
 - An "audit log is off" warning at API startup means a saved setting or
   `AUDIT_LOG_ENABLED=false` keeps the log off; check that this is intended.
+- Authenticator entries enrolled before this update keep the "Better Auth"
+  label; new enrolments use the app name. Set `AUTH_APP_NAME` if neither the
+  site name nor the project name is the name your users know.
 
 ## [1.5.0] - 2026-10-16
 

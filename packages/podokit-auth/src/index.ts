@@ -20,6 +20,8 @@ export {
   resolveSessionIdleTimeoutMinutes,
   sessionIdleOptions,
   socialKey,
+  DEFAULT_AUTH_APP_NAME,
+  envAppName,
   envAuthConfig,
 } from "./auth-config";
 export {

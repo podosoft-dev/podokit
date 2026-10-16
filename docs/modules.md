@@ -245,6 +245,12 @@ migration Job before a rolling deployment.
   `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are required env vars; the rest are optional
   fallbacks/overrides that the DB config takes precedence over (handy for secrets-manager
   injection in production).
+- **The app name users see.** Authenticator apps show it as the TOTP issuer, browsers show it in
+  the passkey prompt, and Better Auth uses it as its `appName`. `AUTH_APP_NAME` sets it; unset, it
+  is the site name from the admin Settings (`site.name`, with `admin-dashboard`), then the project
+  name the app was generated with (`AUTH_CONFIG_DEFAULTS` in `apps/api/src/auth/auth-config-store.ts`).
+  A changed site name applies to new enrolments within the settings refresh, without a restart;
+  authenticator entries made before keep their old label.
 - **How settings changes reach every replica.** `auth_config` and `app_setting` share one
   in-process snapshot. The replica that handled a write applies it before responding. Other
   replicas run one version probe (row count and latest update time of both tables) at most every
