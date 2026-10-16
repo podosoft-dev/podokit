@@ -151,7 +151,9 @@ The application-owned profile is written to `.podokit/deploy/production.json`. R
 it before use: the target, the image repositories and accepted tag pattern, exposure,
 replicas and resources, dependency modes, the names (never the values) of the secrets
 it reads, an optional migration command, non-sensitive runtime configuration, and the
-public verification checks.
+public verification checks. Set `exposure.edgeProxies` to the number of reverse
+proxies in front of the deployment; it decides which forwarded headers web and API
+trust (see [client addresses](#client-addresses)).
 
 Initialization reads the manifest's active providers and installed modules. Auth
 and API-key modules add their required secret key names, distributed providers
@@ -220,6 +222,7 @@ while a `warn` reports a setting that deploys but probably not as intended:
 
 | Check | Result |
 | --- | --- |
+| `client-address` | `warn` when `exposure.edgeProxies`, `trustedProxyCidrs`, and the direct paths contradict each other, see [client addresses](#client-addresses) |
 | `idle-timeouts` | `FAIL` when the idle timeouts cannot be derived or `CONNECTION_IDLE_TIMEOUT` set in `runtimeConfig` cannot cover the longest `/api` proxy wait; `warn` when `API_IDLE_TIMEOUT` cannot, see [idle timeouts](#idle-timeouts) |
 | `database-connections` (with PostgreSQL) | `FAIL` when the API and worker processes can open more connections than PostgreSQL allows between rollouts, `warn` when a rollout or the migration can; see [database connections](#database-connections) |
 | `audit-log` (with the module installed) | `warn` when `runtimeConfig` lacks `AUDIT_LOG_ENABLED` or sets it to anything but `"true"`: the audit log then records nothing until an administrator turns it on, or depends on the API's built-in default |
@@ -376,21 +379,69 @@ untrusted hop and safely replaces spoofed forwarding headers from other peers. T
 gateway sends web and API that one address as `X-Forwarded-For`, never the chain
 with the proxy appended, so both record the client at one trusted hop. With an
 empty list the address is the gateway's peer: an external proxy in front then
-becomes every request's client address.
+becomes every request's client address. See [client addresses](#client-addresses)
+for what web and API trust.
 
-Kubernetes deployments configure the web server to trust the ingress-provided
-`x-forwarded-proto` and `x-forwarded-host` headers. This keeps SvelteKit's
-same-origin form protection correct for multipart uploads and other form content.
-For a Docker Compose deployment behind a trusted reverse proxy, first list that
-proxy's direct CIDR blocks in `trustedProxyCidrs`, then add matching
-`PROTOCOL_HEADER` and `HOST_HEADER` values to `runtimeConfig`. Do not enable those
-settings when untrusted clients can reach the container directly. A directly served
-plain-HTTP image can instead set its origin while building:
+A directly served plain-HTTP image, with no proxy in front to send
+`X-Forwarded-Proto` and `X-Forwarded-Host`, can set its public origin while
+building instead, which keeps SvelteKit's same-origin form protection correct:
 
 ```bash
 docker build --build-arg PODOKIT_BUILD_ORIGIN=https://example.com -f apps/web/Dockerfile -t example-web .
 ```
 
+## Client addresses
+
+Sessions, audit entries, and rate limits record the address the API resolves for
+each request, and the web server resolves its own for pages. Both read it from
+`X-Forwarded-For`, which only the proxies in front of them can vouch for, so a
+profile states one number and PodoKit renders every setting from it:
+`exposure.edgeProxies`, the reverse proxies you run in front of the deployment,
+such as a host Caddy or a load balancer that terminates TLS. Do not count the
+Ingress controller or the Compose gateway; PodoKit adds them itself. New
+Kubernetes profiles start at `0`, because the Ingress controller is the expected
+front door, and new Compose profiles at `1`, because the published port binds to
+loopback for a reverse proxy on the host.
+
+| Driver and exposure | Proxies the web server trusts (`XFF_DEPTH`) |
+| --- | --- |
+| `kubernetes-helm`, Ingress | `edgeProxies` + 1: the controller appends its peer, the client or the last edge proxy |
+| `kubernetes-helm`, NodePort | `edgeProxies` |
+| `docker-compose`, web published directly | `edgeProxies` |
+| `docker-compose` with the gateway | 1: the gateway sends one address, resolved with `trustedProxyCidrs` |
+
+Behind at least one proxy the web server also takes its public origin from
+`X-Forwarded-Proto` and `X-Forwarded-Host` (`PROTOCOL_HEADER`, `HOST_HEADER`),
+which keeps SvelteKit's same-origin form protection correct for uploads and other
+form posts; with none it trusts no forwarded header at all. A Compose gateway
+that does not trust the edge proxy in front writes its own plain-HTTP values, so
+then the web server keeps its default origin, `https` and the `Host` header. The web server sends
+the API the one address it resolved, so the API trusts one hop
+(`TRUSTED_PROXY_HOPS` 1) on every path. `runtimeConfig` refuses `ADDRESS_HEADER`,
+`XFF_DEPTH`, `TRUSTED_PROXY_HOPS`, and `TRUSTED_PROXY_HEADER` with a message that
+points at `edgeProxies`, and `PROTOCOL_HEADER` and `HOST_HEADER` as managed keys.
+
+Every counted proxy must pass the client's address on: a Traefik Ingress behind
+an edge proxy appends it only when `forwardedHeaders.trustedIPs` lists that
+proxy, and otherwise reports the proxy as the client. Count only proxies that
+every request passes through, and keep the deployment unreachable around them:
+a caller that reaches the web server past a counted proxy chooses its own
+address and origin.
+
+The doctor reports what it renders and warns when the profile contradicts itself:
+
+- Compose with the gateway and `edgeProxies` above 0 but no `trustedProxyCidrs`:
+  the gateway reports the nearest edge proxy as every client.
+- Compose with `trustedProxyCidrs` but `edgeProxies` 0.
+- Kubernetes with an Ingress, `edgeProxies` above 0, and WebSocket or direct API
+  paths: those requests skip the web server, so the API receives the edge
+  proxies' chain and, trusting one hop, records the nearest edge proxy for them.
+  An edge proxy that hands the connection to the Ingress controller with the
+  PROXY protocol, such as Caddy's `proxy_protocol` transport with Traefik's
+  `proxyProtocol.trustedIPs`, makes the client the controller's peer; count it
+  as 0 then.
+
+## Direct API paths
 ## Direct API paths
 
 By default every `/api/*` request goes through the web server, which proxies it
@@ -457,13 +508,9 @@ What changes for requests on these paths:
   `maxRequestBodySize`, 128 MiB unless the API sets another value. Enforce each
   route's size limit in its API handler.
 - The API reads the client address from the gateway's `X-Forwarded-For` header
-  instead of from the web server. `TRUSTED_PROXY_HOPS`, 1 in the rendered
-  configuration, applies to both paths, so both send one address: the web
-  server forwards the address it resolved, and the Compose gateway replaces the
-  header with the client address it derived from `trustedProxyCidrs`. A Traefik
-  Ingress sends one address only while it trusts no proxy in front of it; one
-  that trusts a proxy appends that proxy to the header, and the API then records
-  the proxy for requests on these paths.
+  instead of from the web server, with the same one trusted hop. The Compose
+  gateway sends the one address it resolved; an Ingress does so only with
+  `exposure.edgeProxies` 0 (see [client addresses](#client-addresses)).
 - Gateway timeouts still apply. Traefik v3 entry points close a request whose body
   takes longer than `respondingTimeouts.readTimeout`, 60 seconds by default; raise
   it on the ingress controller for slow uploads.

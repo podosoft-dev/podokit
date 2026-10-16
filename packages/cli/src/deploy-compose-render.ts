@@ -9,7 +9,7 @@ import {
   type DockerComposeProfileV1,
 } from "./deploy-compose-profile";
 import { readAppProxyTimeouts, type AppProxyTimeouts } from "./app-proxy-timeouts";
-import { idleTimeoutConfig, profilePath } from "./deploy-schema";
+import { idleTimeoutConfig, profilePath, proxyTrustConfig } from "./deploy-schema";
 import { readManifest } from "./lockfile";
 import {
   resolveToolchain,
@@ -74,6 +74,7 @@ export function derivedRuntimeConfig(
     PORT: String(CONTAINER_PORT),
     BACKEND_INTERNAL_URL: `http://${serviceName(profile, "api")}:${CONTAINER_PORT}`,
     ...idleTimeoutConfig(profile.runtimeConfig, proxyTimeouts),
+    ...composeProxyTrust(profile),
     ...profile.runtimeConfig,
   };
   if (profile.dependencies.postgres.mode === "managed") {
@@ -90,6 +91,19 @@ export function derivedRuntimeConfig(
     result.S3_FORCE_PATH_STYLE = "true";
   }
   return result;
+}
+
+/**
+ * The gateway replaces X-Forwarded-For with the one address it resolved. It keeps
+ * a trusted proxy's X-Forwarded-Proto and X-Forwarded-Host and otherwise writes its
+ * own, which name its plain-HTTP listener: behind an edge proxy it does not trust,
+ * the web server keeps its default origin (https and the Host header) instead.
+ */
+export function composeProxyTrust(profile: DockerComposeProfileV1): Record<string, string> {
+  const { edgeProxies, trustedProxyCidrs } = profile.exposure;
+  return composeHasGateway(profile)
+    ? proxyTrustConfig(1, edgeProxies === 0 || trustedProxyCidrs.length > 0)
+    : proxyTrustConfig(edgeProxies);
 }
 
 function sortedEnvironment(config: Record<string, string>): [string, string][] {

@@ -10,6 +10,7 @@ import {
   isRecord,
   optionalString,
   parseCommand,
+  parseEdgeProxies,
   parsePostgresBudget,
   parseRequiredKeys,
   parseRuntimeConfig,
@@ -91,6 +92,8 @@ export interface DeployProfileV1 {
     webSocketPaths: string[];
     /** Path prefixes under /api/ that the Ingress sends to the API with /api removed. */
     apiPaths: string[];
+    /** Reverse proxies in front of the Ingress controller or NodePort that append to X-Forwarded-For. */
+    edgeProxies: number;
   };
   workloads: {
     api: WorkloadProfile;
@@ -262,7 +265,7 @@ export function parseDeploymentProfile(value: unknown): DeployProfileV1 {
   );
   assertOnlyKeys(
     exposure,
-    ["mode", "host", "ingressClassName", "tlsSecretName", "webSocketPaths", "apiPaths"],
+    ["mode", "host", "ingressClassName", "tlsSecretName", "webSocketPaths", "apiPaths", "edgeProxies"],
     "exposure",
   );
   assertOnlyKeys(workloads, ["api", "web", "worker"], "workloads");
@@ -385,6 +388,7 @@ export function parseDeploymentProfile(value: unknown): DeployProfileV1 {
       tlsSecretName,
       webSocketPaths,
       apiPaths,
+      edgeProxies: parseEdgeProxies(exposure, 0),
     },
     workloads: {
       api: parseWorkload(requiredRecord(workloads, "api"), "workloads.api"),
@@ -503,6 +507,7 @@ export function initializeDeploymentProfile(
       tlsSecretName: null,
       webSocketPaths: [],
       apiPaths: installedApiPaths(manifest.modules),
+      edgeProxies: 0,
     },
     workloads: {
       api: {
@@ -571,10 +576,6 @@ export function initializeDeploymentProfile(
     runtimeConfig: {
       NODE_ENV: "production",
       CORS_ORIGIN: `https://${host}`,
-      ADDRESS_HEADER: "x-forwarded-for",
-      XFF_DEPTH: "1",
-      TRUSTED_PROXY_HOPS: "1",
-      TRUSTED_PROXY_HEADER: "x-forwarded-for",
       ...(usesAuth ? { BETTER_AUTH_URL: `https://${host}` } : {}),
       // The API's fallback until an administrator saves the setting.
       ...(modules.has("audit-log") ? { AUDIT_LOG_ENABLED: "true" } : {}),

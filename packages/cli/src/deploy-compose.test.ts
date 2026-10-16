@@ -74,8 +74,11 @@ describe("docker-compose profile", () => {
     }).profile;
     expect(profile.dependencies.objectStorage.image).toBe("pgsty/silo:RELEASE.2026-09-16T00-00-00Z");
     expect(profile.dependencies.objectStorage.clientImage).toBe("pgsty/mc:RELEASE.2026-09-16T00-00-00Z");
-    // The web server is the one proxy in front of the API.
-    expect(profile.runtimeConfig).toMatchObject({ TRUSTED_PROXY_HOPS: "1", TRUSTED_PROXY_HEADER: "x-forwarded-for" });
+    // A reverse proxy on the host is the expected front door; the proxy settings follow from it.
+    expect(profile.exposure.edgeProxies).toBe(1);
+    for (const key of ["ADDRESS_HEADER", "XFF_DEPTH", "TRUSTED_PROXY_HOPS", "TRUSTED_PROXY_HEADER"]) {
+      expect(profile.runtimeConfig).not.toHaveProperty(key);
+    }
   });
 
   it("turns the audit log on when the audit-log module is installed", () => {

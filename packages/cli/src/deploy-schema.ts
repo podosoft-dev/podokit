@@ -50,6 +50,44 @@ export const MANAGED_RUNTIME_CONFIG_KEYS = [
   "HOST_HEADER",
 ];
 
+/**
+ * Keys that decide which forwarded address web and API record. They follow from
+ * the proxies in front of the deployment, so a profile states that one number and
+ * PodoKit renders the four values that agree with it.
+ */
+export const CLIENT_ADDRESS_KEYS = ["ADDRESS_HEADER", "XFF_DEPTH", "TRUSTED_PROXY_HOPS", "TRUSTED_PROXY_HEADER"];
+/** Edge proxies are counted, not configured; more than this is a typo. */
+const MAX_EDGE_PROXIES = 8;
+
+export function parseEdgeProxies(exposure: Record<string, unknown>, fallback: number): number {
+  const value = exposure.edgeProxies ?? fallback;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > MAX_EDGE_PROXIES) {
+    throw new Error(`Deployment profile field "exposure.edgeProxies" must be an integer from 0 to ${MAX_EDGE_PROXIES}.`);
+  }
+  return value;
+}
+
+/**
+ * What the web server and the API trust, given how many proxies each request to
+ * the web server has passed. Behind at least one, the web server takes its origin
+ * from X-Forwarded-Proto and X-Forwarded-Host and the client from the
+ * X-Forwarded-For entry the outermost trusted proxy wrote (XFF_DEPTH); with none
+ * it trusts no forwarded header. It forwards that one address to the API, so the
+ * API always trusts one hop: the web proxy, the Compose gateway, or an Ingress
+ * that trusts no proxy in front of it.
+ */
+export function proxyTrustConfig(
+  webProxyHops: number,
+  trustForwardedOrigin = webProxyHops > 0,
+): Record<string, string> {
+  return {
+    ...(trustForwardedOrigin ? { PROTOCOL_HEADER: "x-forwarded-proto", HOST_HEADER: "x-forwarded-host" } : {}),
+    ...(webProxyHops > 0 ? { ADDRESS_HEADER: "x-forwarded-for", XFF_DEPTH: String(webProxyHops) } : {}),
+    TRUSTED_PROXY_HOPS: "1",
+    TRUSTED_PROXY_HEADER: "x-forwarded-for",
+  };
+}
+
 /** Keys the generated API no longer reads; it refuses to start while they are set. */
 const RENAMED_RUNTIME_CONFIG_KEYS: Record<string, string> = {
   RATE_LIMIT_TRUSTED_PROXY_HOPS: "TRUSTED_PROXY_HOPS",
@@ -236,6 +274,12 @@ export function parseRuntimeConfig(runtimeConfig: Record<string, unknown>): Reco
     }
     if (MANAGED_RUNTIME_CONFIG_KEYS.includes(key)) {
       throw new Error(`Deployment runtimeConfig key "${key}" is managed by PodoKit.`);
+    }
+    if (CLIENT_ADDRESS_KEYS.includes(key)) {
+      throw new Error(
+        `Deployment runtimeConfig key "${key}" is derived from exposure.edgeProxies, the number of reverse ` +
+          "proxies in front of the deployment; remove it and set exposure.edgeProxies instead.",
+      );
     }
     const renamed = RENAMED_RUNTIME_CONFIG_KEYS[key];
     if (renamed) {

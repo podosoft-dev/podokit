@@ -360,7 +360,7 @@ and the rate limiter.
 
 | Setting | Default | Effect |
 | --- | --- | --- |
-| `TRUSTED_PROXY_HOPS` | `0` in code; `1` in the generated `.env.example`, `.env.docker.example`, Kubernetes example, and deployment profiles | Reverse proxies in front of the API whose forwarded header is trusted. With `0` the address is the socket peer. With `n`, it is the entry `n` places left of the peer in the header, the one the outermost trusted proxy appended; entries further left were written by the caller and are ignored. A shorter chain or a malformed entry falls back to the peer. |
+| `TRUSTED_PROXY_HOPS` | `0` in code; `1` in the generated `.env.example`, `.env.docker.example`, Kubernetes example, and what `podo deploy` renders | Reverse proxies in front of the API whose forwarded header is trusted. With `0` the address is the socket peer. With `n`, it is the entry `n` places left of the peer in the header, the one the outermost trusted proxy appended; entries further left were written by the caller and are ignored. A shorter chain or a malformed entry falls back to the peer. |
 | `TRUSTED_PROXY_HEADER` | `x-forwarded-for` | The header the trusted proxies append the address to. |
 
 The web app's `/api` proxy and the deployment gateway are each one proxy, so the

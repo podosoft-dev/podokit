@@ -164,5 +164,6 @@ PodoKit [deployment guide](https://github.com/podosoft-dev/podokit/blob/main/doc
 For a Docker Compose deployment with API WebSockets, list their exact paths under
 `exposure.webSocketPaths`. The driver keeps one published port, routes those paths
 to API, and sends every other request to web. Large-upload routes listed under
-`exposure.apiPaths` reach the API the same way, with `/api` removed. If an external reverse proxy supplies
-forwarding headers, list only its direct CIDR blocks in `exposure.trustedProxyCidrs`.
+`exposure.apiPaths` reach the API the same way, with `/api` removed. Set `exposure.edgeProxies` to the
+number of reverse proxies in front of the deployment, and with the gateway list only their direct CIDR
+blocks in `exposure.trustedProxyCidrs`.

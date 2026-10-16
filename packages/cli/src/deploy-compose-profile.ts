@@ -11,6 +11,7 @@ import {
   assertOnlyKeys,
   isRecord,
   parseCommand,
+  parseEdgeProxies,
   parsePostgresBudget,
   parseReleaseProfile,
   parseRequiredKeys,
@@ -111,6 +112,8 @@ export interface DockerComposeProfileV1 {
     webSocketPaths: string[];
     /** Path prefixes under /api/ that the gateway sends to the API with /api removed. */
     apiPaths: string[];
+    /** Reverse proxies in front of the published port that append to X-Forwarded-For. */
+    edgeProxies: number;
     trustedProxyCidrs: string[];
     gatewayImage: string;
   };
@@ -338,6 +341,7 @@ export function parseComposeProfile(value: unknown): DockerComposeProfileV1 {
       "port",
       "webSocketPaths",
       "apiPaths",
+      "edgeProxies",
       "trustedProxyCidrs",
       "gatewayImage",
     ],
@@ -376,6 +380,8 @@ export function parseComposeProfile(value: unknown): DockerComposeProfileV1 {
     "exposure.webSocketPaths",
   );
   const apiPaths = parseApiPaths(exposure.apiPaths ?? [], "exposure.apiPaths", webSocketPaths);
+  // A reverse proxy on the host is the expected front door, as bindAddress assumes.
+  const edgeProxies = parseEdgeProxies(exposure, 1);
   const trustedProxyCidrs = parseTrustedProxyCidrs(
     exposure.trustedProxyCidrs ?? [],
     "exposure.trustedProxyCidrs",
@@ -437,6 +443,7 @@ export function parseComposeProfile(value: unknown): DockerComposeProfileV1 {
       port,
       webSocketPaths,
       apiPaths,
+      edgeProxies,
       trustedProxyCidrs,
       gatewayImage,
     },
@@ -515,6 +522,7 @@ export function buildDefaultComposeProfile(
       port: 8080,
       webSocketPaths: [],
       apiPaths: [],
+      edgeProxies: 1,
       trustedProxyCidrs: [],
       gatewayImage: "caddy:2.10-alpine",
     },
@@ -563,10 +571,6 @@ export function buildDefaultComposeProfile(
     runtimeConfig: {
       NODE_ENV: "production",
       CORS_ORIGIN: `https://${host}`,
-      ADDRESS_HEADER: "x-forwarded-for",
-      XFF_DEPTH: "1",
-      TRUSTED_PROXY_HOPS: "1",
-      TRUSTED_PROXY_HEADER: "x-forwarded-for",
     },
     verification: {
       baseUrl: `https://${host}`,

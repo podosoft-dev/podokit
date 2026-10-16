@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Deployment profiles take `exposure.edgeProxies`, the number of reverse
+  proxies in front of the deployment (new Kubernetes profiles 0, new Compose
+  profiles 1), and PodoKit renders from it every setting that decides which
+  forwarded headers web and API trust: `XFF_DEPTH` is `edgeProxies` + 1 behind a
+  Kubernetes Ingress, `edgeProxies` for a NodePort or a directly published
+  Compose web service, and 1 behind the Compose gateway; `ADDRESS_HEADER`,
+  `PROTOCOL_HEADER`, and `HOST_HEADER` are set only behind a proxy; and the API
+  always trusts one hop. `podo deploy doctor` warns when `edgeProxies`,
+  `trustedProxyCidrs`, and direct paths contradict each other, including a
+  Kubernetes Ingress behind an edge proxy with WebSocket or direct API paths,
+  where the API records the edge proxy for those requests.
 - `podo deploy doctor` and `podo deploy plan` count the PostgreSQL connections a
   deployment can open: every API and worker process with `DB_POOL_MAX` + 1 and,
   with `auth`, `DB_AUTH_POOL_MAX`, one surge pod per workload during a
@@ -50,6 +61,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- A Compose deployment behind a reverse proxy can trust `X-Forwarded-Proto` and
+  `X-Forwarded-Host`: the guide told profiles to set `PROTOCOL_HEADER` and
+  `HOST_HEADER`, which `runtimeConfig` refuses as managed keys, and the Compose
+  renderer never set them. They now follow `exposure.edgeProxies`. A Kubernetes
+  NodePort profile without edge proxies no longer trusts forwarded headers that
+  any client can send.
 - `podo deploy plan` and `render` derive `CONNECTION_IDLE_TIMEOUT` and
   `API_IDLE_TIMEOUT` from the application's `APP_PROXY_TIMEOUTS` as well as
   `BACKEND_PROXY_TIMEOUT_MS`: `0` when an entry has `timeoutMs: null`,
@@ -91,6 +108,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Upgrade notes
 
+- Deployment profiles refuse `ADDRESS_HEADER`, `XFF_DEPTH`,
+  `TRUSTED_PROXY_HOPS`, and `TRUSTED_PROXY_HEADER` in `runtimeConfig`. Remove
+  them and set `exposure.edgeProxies` instead: on Kubernetes with an Ingress to
+  your old `XFF_DEPTH` minus 1 (0 for the generated default), and on Compose to
+  the number of proxies in front of the published port (1 for the generated
+  default). With the Compose gateway, list those proxies' CIDRs in
+  `trustedProxyCidrs` too; the doctor warns until you do. A Kubernetes profile
+  with an edge proxy and WebSocket or direct API paths still records the edge
+  proxy for those requests, and the doctor says so.
 - `podo deploy doctor` now fails a profile whose API and worker processes can
   open more PostgreSQL connections than the server allows, which stops
   `podo deploy apply`. A Kubernetes profile with a BullMQ worker and the default
@@ -107,11 +133,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   the `runtimeConfig` of every existing deployment profile; `podo deploy doctor`
   warns until you do. `podo update` adds the line to the example
   `infra/k3s/configmap.yaml`, before a new `# podokit:end:runtime-config` marker.
-- A Compose deployment with WebSocket or direct API paths renders a new gateway
-  configuration, so a rollback to a revision applied before this version is
-  refused, because it no longer renders byte for byte; roll forward with a new
-  release instead. Sessions and audit entries created behind a trusted proxy
-  before the upgrade keep the proxy's address.
+- Every Compose deployment renders new proxy settings, and one with WebSocket or
+  direct API paths a new gateway configuration, so a rollback to a revision
+  applied before this version is refused, because it no longer renders byte for
+  byte; roll forward with a new release instead. Sessions and audit entries
+  created behind a trusted proxy before the upgrade keep the proxy's address.
 - A spec of your own that imports `../helpers/exclusive` fails after
   `podo update` removes the helper. Drop the `exclusive()` wrapper and tag the
   test instead: `test("…", { tag: "@exclusive" }, async (…) => { … })`. Tag any

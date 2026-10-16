@@ -10,7 +10,7 @@ import type {
 import { profilePath } from "./deploy-profile";
 import { API_PATH_PREFIX, apiPathBase } from "./api-paths";
 import { readAppProxyTimeouts, type AppProxyTimeouts } from "./app-proxy-timeouts";
-import { idleTimeoutConfig } from "./deploy-schema";
+import { idleTimeoutConfig, proxyTrustConfig } from "./deploy-schema";
 import { readManifest } from "./lockfile";
 import {
   resolveToolchain,
@@ -414,6 +414,11 @@ function dependencyManifest(
     .join("\n---\n");
 }
 
+/** The Ingress controller appends its peer: the client, or the last edge proxy. */
+export function kubernetesProxyTrust(profile: DeployProfileV1): Record<string, string> {
+  return proxyTrustConfig(profile.exposure.edgeProxies + (profile.exposure.mode === "ingress" ? 1 : 0));
+}
+
 function derivedRuntimeConfig(
   profile: DeployProfileV1,
   proxyTimeouts: AppProxyTimeouts,
@@ -421,9 +426,8 @@ function derivedRuntimeConfig(
   const result: Record<string, string> = {
     PORT: "3000",
     BACKEND_INTERNAL_URL: `http://${profile.target.release}-api:3000`,
-    PROTOCOL_HEADER: "x-forwarded-proto",
-    HOST_HEADER: "x-forwarded-host",
     ...idleTimeoutConfig(profile.runtimeConfig, proxyTimeouts),
+    ...kubernetesProxyTrust(profile),
     ...profile.runtimeConfig,
   };
   if (profile.dependencies.postgres.mode === "inCluster") {

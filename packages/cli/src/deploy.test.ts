@@ -153,9 +153,10 @@ describe("deployment profiles", () => {
       NODE_ENV: "production",
       BETTER_AUTH_URL: "https://app.example.com",
       RATE_LIMIT_AUTH_MAX: "20",
-      TRUSTED_PROXY_HOPS: "1",
-      TRUSTED_PROXY_HEADER: "x-forwarded-for",
     });
+    expect(profile.exposure.edgeProxies).toBe(0);
+    expect(profile.runtimeConfig).not.toHaveProperty("TRUSTED_PROXY_HOPS");
+    expect(profile.runtimeConfig).not.toHaveProperty("XFF_DEPTH");
     expect(profile.runtimeConfig).not.toHaveProperty("RATE_LIMIT_TRUSTED_PROXY_HOPS");
     expect(profile.runtimeConfig).not.toHaveProperty("AUDIT_LOG_ENABLED");
   });

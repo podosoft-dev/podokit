@@ -176,3 +176,143 @@ describe("PostgreSQL connection budget", () => {
     expect(composeDocument()).toContain('    command: ["-c", "max_connections=200"]\n');
   });
 });
+
+function renderedEnvironment(root: string): Record<string, string> {
+  const profile = loadAnyDeploymentProfile(root, "production");
+  if (profile.driver === "kubernetes-helm") {
+    const configMap = renderDeployment(root, "production", profile, "v1.2.3").applicationManifest.split("\n---\n")[0]!;
+    return Object.fromEntries(
+      [...configMap.matchAll(/^ {2}([A-Z_]+): "(.*)"$/gm)].map((match) => [match[1]!, match[2]!]),
+    );
+  }
+  const web =
+    renderComposeDeployment(root, "production", profile, "v1.2.3").composeDocument
+      .split("\n  example-app-web:\n")[1]
+      ?.split(/\n  \S/)[0] ?? "";
+  return Object.fromEntries([...web.matchAll(/^ {6}([A-Z_]+): "(.*)"$/gm)].map((match) => [match[1]!, match[2]!]));
+}
+
+function addressSettings(root: string): Record<string, string | undefined> {
+  const environment = renderedEnvironment(root);
+  return Object.fromEntries(
+    ["PROTOCOL_HEADER", "HOST_HEADER", "ADDRESS_HEADER", "XFF_DEPTH", "TRUSTED_PROXY_HOPS", "TRUSTED_PROXY_HEADER"].map(
+      (key) => [key, environment[key]],
+    ),
+  );
+}
+
+function addressFinding(root: string) {
+  return profileFindings(root, loadAnyDeploymentProfile(root, "production")).find(
+    (finding) => finding.code === "client-address",
+  );
+}
+
+const trusting = (depth: number) => ({
+  PROTOCOL_HEADER: "x-forwarded-proto",
+  HOST_HEADER: "x-forwarded-host",
+  ADDRESS_HEADER: "x-forwarded-for",
+  XFF_DEPTH: String(depth),
+  TRUSTED_PROXY_HOPS: "1",
+  TRUSTED_PROXY_HEADER: "x-forwarded-for",
+});
+// Without a proxy in front, every forwarded header is the client's own claim.
+const ignoring = {
+  PROTOCOL_HEADER: undefined,
+  HOST_HEADER: undefined,
+  ADDRESS_HEADER: undefined,
+  XFF_DEPTH: undefined,
+  TRUSTED_PROXY_HOPS: "1",
+  TRUSTED_PROXY_HEADER: "x-forwarded-for",
+};
+
+describe("client address settings", () => {
+  it("counts the Ingress controller on top of the edge proxies on Kubernetes", () => {
+    const root = project("kubernetes-helm", ["auth"]);
+    expect(addressSettings(root)).toEqual(trusting(1));
+    edit(root, (value) => {
+      value.exposure.edgeProxies = 1;
+    });
+    // Edge proxy, then Traefik: the web server reads the entry the edge proxy wrote.
+    expect(addressSettings(root)).toEqual(trusting(2));
+    expect(addressFinding(root)?.message).toContain("Traefik's forwardedHeaders.trustedIPs");
+    edit(root, (value) => {
+      value.exposure = { ...value.exposure, mode: "nodePort", edgeProxies: 0, apiPaths: [] };
+    });
+    expect(addressSettings(root)).toEqual(ignoring);
+    expect(addressFinding(root)?.message).toContain("takes the client address from the connection");
+  });
+
+  it("trusts the edge proxies in front of the published web port, and one gateway hop", () => {
+    const root = project("docker-compose", ["auth"]);
+    expect(addressSettings(root)).toEqual(trusting(1));
+    edit(root, (value) => {
+      value.exposure.edgeProxies = 2;
+    });
+    expect(addressSettings(root)).toEqual(trusting(2));
+    edit(root, (value) => {
+      value.exposure.edgeProxies = 0;
+    });
+    expect(addressSettings(root)).toEqual(ignoring);
+    edit(root, (value) => {
+      value.exposure = { ...value.exposure, edgeProxies: 2, apiPaths: ["/api/files/uploads/"], trustedProxyCidrs: ["10.0.0.0/8"] };
+    });
+    // The gateway sends the one address it resolved, whatever stands in front of it.
+    expect(addressSettings(root)).toEqual(trusting(1));
+    expect(addressFinding(root)).toMatchObject({ ok: true });
+    expect(addressFinding(root)?.warning).toBeUndefined();
+  });
+
+  it("warns when the trusted proxies contradict the topology", () => {
+    const compose = project("docker-compose", ["auth"]);
+    expect(addressFinding(compose)?.warning).toBeUndefined();
+    edit(compose, (value) => {
+      value.exposure.apiPaths = ["/api/files/uploads/"];
+    });
+    // A direct path starts the gateway, which trusts no proxy yet.
+    expect(addressFinding(compose)).toMatchObject({ ok: true, warning: true });
+    // It writes X-Forwarded-Proto for its own plain-HTTP listener then, so the web
+    // server keeps its default origin rather than taking http.
+    expect(addressSettings(compose)).toEqual({ ...trusting(1), PROTOCOL_HEADER: undefined, HOST_HEADER: undefined });
+    expect(addressFinding(compose)?.message).toContain("exposure.trustedProxyCidrs is empty");
+    edit(compose, (value) => {
+      value.exposure = { ...value.exposure, edgeProxies: 0, trustedProxyCidrs: ["192.0.2.3/32"] };
+    });
+    expect(addressFinding(compose)?.message).toContain("but exposure.edgeProxies is 0");
+
+    const kubernetes = project("kubernetes-helm", ["auth"]);
+    edit(kubernetes, (value) => {
+      value.exposure.apiPaths = ["/api/files/uploads/"];
+    });
+    expect(addressFinding(kubernetes)?.warning).toBeUndefined();
+    edit(kubernetes, (value) => {
+      value.exposure.edgeProxies = 1;
+    });
+    expect(addressFinding(kubernetes)).toMatchObject({ ok: true, warning: true });
+    expect(addressFinding(kubernetes)?.message).toContain(
+      "the Ingress forwards 2 addresses on /api/files/uploads/",
+    );
+  });
+
+  it.each(["ADDRESS_HEADER", "XFF_DEPTH", "TRUSTED_PROXY_HOPS", "TRUSTED_PROXY_HEADER"])(
+    "refuses %s in runtimeConfig and points at exposure.edgeProxies",
+    (key) => {
+      for (const driver of ["kubernetes-helm", "docker-compose"] as const) {
+        const root = project(driver, ["auth"]);
+        expect(() =>
+          edit(root, (value) => {
+            value.runtimeConfig[key] = "1";
+          }),
+        ).toThrow(`Deployment runtimeConfig key "${key}" is derived from exposure.edgeProxies`);
+      }
+    },
+  );
+
+  it.each([-1, 9, 1.5, "1"])("refuses edgeProxies %s", (edgeProxies) => {
+    const root = project("docker-compose", ["auth"]);
+    expect(() =>
+      edit(root, (value) => {
+        value.exposure.edgeProxies = edgeProxies;
+      }),
+    ).toThrow('"exposure.edgeProxies" must be an integer from 0 to 8');
+  });
+});

@@ -1,5 +1,8 @@
 import { readAppProxyTimeouts, type AppProxyTimeouts } from "./app-proxy-timeouts";
+import { composeHasGateway } from "./deploy-compose-profile";
+import { composeProxyTrust } from "./deploy-compose-render";
 import type { AnyDeployProfile } from "./deploy-driver";
+import { kubernetesProxyTrust } from "./deploy-render";
 import {
   IDLE_TIMEOUT_KEYS,
   MAX_IDLE_TIMEOUT_SECONDS,
@@ -244,9 +247,63 @@ function connectionBudgetFinding(profile: AnyDeployProfile, modules: Set<string>
   };
 }
 
+/**
+ * Whether the trusted chain the profile describes matches the topology PodoKit
+ * renders, so web and API record the client rather than a proxy in front.
+ */
+function clientAddressFinding(profile: AnyDeployProfile): DeployFinding {
+  const code = "client-address";
+  const edge = profile.exposure.edgeProxies;
+  const problems: string[] = [];
+  let rendered: Record<string, string>;
+  if (profile.driver === "docker-compose") {
+    rendered = composeProxyTrust(profile);
+    const cidrs = profile.exposure.trustedProxyCidrs;
+    if (composeHasGateway(profile) && edge > 0 && cidrs.length === 0) {
+      problems.push(
+        `exposure.edgeProxies is ${edge} but exposure.trustedProxyCidrs is empty, so the gateway sends the ` +
+          "nearest edge proxy's address as every request's client; list that proxy's CIDR.",
+      );
+    } else if (composeHasGateway(profile) && edge === 0 && cidrs.length > 0) {
+      problems.push(
+        "exposure.trustedProxyCidrs trusts forwarded headers from a proxy, but exposure.edgeProxies is 0; " +
+          "set it to the number of proxies in front of the published port.",
+      );
+    }
+  } else {
+    rendered = kubernetesProxyTrust(profile);
+    const direct = [...profile.exposure.webSocketPaths, ...profile.exposure.apiPaths];
+    if (profile.exposure.mode === "ingress" && edge > 0 && direct.length > 0) {
+      problems.push(
+        `With exposure.edgeProxies ${edge}, the Ingress forwards ${edge + 1} addresses on ${direct.join(", ")}, ` +
+          "where requests skip the web server, and the API, which trusts the one address the web server sends, " +
+          "records the nearest edge proxy for them. Pass the client address to the Ingress controller with " +
+          "the PROXY protocol instead, so the controller sees the client as its peer, and set edgeProxies to 0.",
+      );
+    }
+  }
+  const depth = rendered.XFF_DEPTH;
+  const defaultOrigin = "keeps its default origin, https and the Host header,";
+  const web = !depth
+    ? `trusts no forwarded header: it ${defaultOrigin} and takes the client address from the connection`
+    : `${rendered.PROTOCOL_HEADER ? "takes its origin from X-Forwarded-Proto and X-Forwarded-Host" : defaultOrigin} ` +
+      `and takes the client from the X-Forwarded-For entry ${depth === "1" ? "its peer wrote" : `${depth} hops away`} ` +
+      `(XFF_DEPTH ${depth})`;
+  const summary = `the web server ${web}, and the API trusts the one address the web server sends (TRUSTED_PROXY_HOPS 1)`;
+  if (problems.length) return { code, ok: true, warning: true, message: `${problems.join(" ")} Rendered: ${summary}.` };
+  const traefik =
+    profile.driver === "kubernetes-helm" && profile.exposure.mode === "ingress" && edge > 0
+      ? " The Ingress controller must trust the edge proxies' forwarded headers, such as Traefik's forwardedHeaders.trustedIPs."
+      : "";
+  return { code, ok: true, message: `With exposure.edgeProxies ${edge}, ${summary}.${traefik}` };
+}
+
 export function profileFindings(projectRoot: string, profile: AnyDeployProfile): DeployFinding[] {
   const modules = installedModules(projectRoot);
-  const findings: DeployFinding[] = [idleTimeoutFinding(profile.runtimeConfig, readAppProxyTimeouts(projectRoot))];
+  const findings: DeployFinding[] = [
+    clientAddressFinding(profile),
+    idleTimeoutFinding(profile.runtimeConfig, readAppProxyTimeouts(projectRoot)),
+  ];
   const budget = connectionBudgetFinding(profile, modules);
   if (budget) findings.push(budget);
   if (modules.has("audit-log")) findings.push(auditLogFinding(profile.runtimeConfig));
