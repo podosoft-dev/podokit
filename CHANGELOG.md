@@ -43,6 +43,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   longer `APP_PROXY_TIMEOUTS` deadline. The Compose and Kubernetes renderers
   derive `API_IDLE_TIMEOUT` from `BACKEND_PROXY_TIMEOUT_MS` the same way as
   `CONNECTION_IDLE_TIMEOUT`, and the reference Kubernetes config sets it.
+- The `todo` template's `AGENTS.md` gives the same guidance as the `fullstack`
+  one it extends, plus its todo example. It had fallen behind and left out the
+  web server's `GET /healthz` route, the API timeouts, `apiServerOptions` and
+  its environment fallbacks, and `podo dev`, including that `podo dev down` also
+  stops `podo dev watch`.
 
 ### Upgrade notes
 
