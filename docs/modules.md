@@ -1050,10 +1050,11 @@ request (see [client address](templates.md#client-address)), never a forwarded
 header as the caller sent it.
 
 On/off is an **admin toggle on the Settings page** (stored in the DB, applied
-live — no restart); `AUDIT_LOG_ENABLED` is only the fallback default until an
-admin sets it (leave it `true` so the trail is on out of the box). Every write
-path checks the toggle in `AuditService`, so turning it off stops Better Auth
-entries and application entries alike.
+live — no restart). Until an admin saves it, `AUDIT_LOG_ENABLED` decides, and
+with the module installed an unset or empty value means on; only `false` starts
+with the log off. Every write path checks the toggle in `AuditService`, so
+turning it off stops Better Auth entries and application entries alike, and the
+API logs one warning at startup while it is off.
 
 Writes are awaited by default, so a response waits for its audit INSERT. For
 high-volume events that are not security relevant, `recordAuditLater()` (or

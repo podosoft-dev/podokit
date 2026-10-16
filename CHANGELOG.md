@@ -166,6 +166,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   [route files and update tiers](docs/templates.md#route-files-and-update-tiers),
   and a repository test fails when a template's owned page starts reading a
   new field of such a load.
+- The audit log records again in apps that never set its toggle. Since 1.2.0
+  every write, including `recordAudit()` from application code, follows the
+  admin toggle, and the toggle fell back to `AUDIT_LOG_ENABLED === "true"`. A
+  deployment without that variable and without a saved admin setting recorded
+  nothing, without a warning. With the audit-log module installed, an unset or
+  empty `AUDIT_LOG_ENABLED` now means on, only `false` turns it off, and the
+  admin Settings toggle still overrides both. The API logs one warning at
+  startup while the audit log is off. `@podosoft/podokit-auth` takes these
+  defaults through a new `defaults` option of `createConfigStore()` and
+  `envAuthConfig()`; the auth module's `auth-config-store.ts` holds them in
+  `AUTH_CONFIG_DEFAULTS`, where the audit-log module adds `auditLog: true`.
 
 ### Upgrade notes
 
@@ -257,6 +268,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   styles, or `@source` lines, into `apps/web/src/app.extensions.css`, then take
   PodoKit's `app.css` when `podo update` reports a merge or conflict. A relative
   `@source` path keeps working because both files are in `apps/web/src`.
+- Apps with the audit-log module that never set `AUDIT_LOG_ENABLED` and never
+  saved the audit toggle on the admin Settings page start recording audit
+  entries after `podo update`. To keep the log off, set `AUDIT_LOG_ENABLED=false`
+  or turn the toggle off on the Settings page; a saved setting wins over the
+  environment. An app that wants the entries it missed cannot recover them; the
+  log starts with the update.
+- An "audit log is off" warning at API startup means a saved setting or
+  `AUDIT_LOG_ENABLED=false` keeps the log off; check that this is intended.
 
 ## [1.5.0] - 2026-10-16
 

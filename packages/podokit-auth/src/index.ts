@@ -8,6 +8,7 @@ export { encryptSecret, decryptSecret } from "./secret";
 export {
   type OAuthProviderConfig,
   type AuthConfig,
+  type AuthConfigDefaults,
   SUPPORTED_SOCIAL_PROVIDERS,
   SUPPORTED_PROVIDER_IDS,
   DEFAULT_SESSION_IDLE_TIMEOUT_MINUTES,

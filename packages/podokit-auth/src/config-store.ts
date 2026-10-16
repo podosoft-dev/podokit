@@ -1,6 +1,7 @@
 import { decryptSecret } from "./secret";
 import {
   type AuthConfig,
+  type AuthConfigDefaults,
   type OAuthProviderConfig,
   envAuthConfig,
   resolveSessionIdleTimeoutMinutes,
@@ -59,6 +60,8 @@ export type CapabilitiesSnapshot = {
 export type ConfigStoreOptions = {
   /** How long a snapshot is served before the next version probe. Default 3000 ms. */
   ttlMs?: number;
+  /** Values used when neither a row nor the environment sets one; see envAuthConfig(). */
+  defaults?: AuthConfigDefaults;
 };
 
 export interface ConfigStore {
@@ -157,7 +160,7 @@ function oauthFromRow(row: AuthConfigRow): OAuthProviderConfig {
 
 // Resolve the full social-provider map: every `social.<id>` DB row for a
 // supported provider, then env fallback for google/github when they have no row.
-function socialFrom(rs: readonly AuthConfigRow[]): Record<string, OAuthProviderConfig> {
+function socialFrom(rs: readonly AuthConfigRow[], env: AuthConfig): Record<string, OAuthProviderConfig> {
   const social: Record<string, OAuthProviderConfig> = {};
   for (const row of rs) {
     if (!row.key.startsWith("social.")) continue;
@@ -165,19 +168,19 @@ function socialFrom(rs: readonly AuthConfigRow[]): Record<string, OAuthProviderC
     if (!SUPPORTED_PROVIDER_IDS.has(id)) continue;
     social[id] = oauthFromRow(row);
   }
-  for (const [id, provider] of Object.entries(envAuthConfig().social)) {
+  for (const [id, provider] of Object.entries(env.social)) {
     if (!social[id]) social[id] = provider;
   }
   return social;
 }
 
-function configFrom(rs: readonly AuthConfigRow[], version: string): AuthConfig {
-  const env = envAuthConfig();
+function configFrom(rs: readonly AuthConfigRow[], version: string, defaults: AuthConfigDefaults): AuthConfig {
+  const env = envAuthConfig(defaults);
   const server = rs.find((r) => r.key === "server");
   const serverConfig = object(server?.config);
   return {
     version,
-    social: socialFrom(rs),
+    social: socialFrom(rs, env),
     requireEmailVerification: server ? bool(serverConfig.requireEmailVerification, env.requireEmailVerification) : env.requireEmailVerification,
     requireSignupApproval: server ? bool(serverConfig.requireSignupApproval, env.requireSignupApproval) : env.requireSignupApproval,
     allowDelete: server ? bool(serverConfig.allowDelete, env.allowDelete) : env.allowDelete,
@@ -250,6 +253,7 @@ export function createConfigStore(
 ): ConfigStore {
   const repository = isRepository(source) ? source : createQueryAuthConfigRepository(source);
   const ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
+  const defaults = options.defaults ?? {};
   let auth: Part<readonly AuthConfigRow[]> = { value: [], signature: "[]", token: null };
   let settingsPart: Part<ReadonlyMap<string, string>> = { value: NO_SETTINGS, signature: "[]", token: null };
   // Bumped whenever the auth_config content changes; the basis of currentVersion().
@@ -347,7 +351,7 @@ export function createConfigStore(
     settingsPart = { ...settingsPart, token: null };
   }
 
-  const config = memoize(() => auth.value, (rows) => configFrom(rows, versionOf(rows)));
+  const config = memoize(() => auth.value, (rows) => configFrom(rows, versionOf(rows), defaults));
   const capabilities = memoize(config, capabilitiesFrom);
   const smtp = memoize(() => auth.value, smtpFrom);
 

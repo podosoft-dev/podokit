@@ -108,11 +108,25 @@ export type AuthConfig = {
   sessionIdleTimeoutMinutes: number | null;
 };
 
-/** Build the config purely from environment variables — the backward-compatible
- *  default when the auth_config table is empty, and the boot-time bootstrap. Only
- *  Google/GitHub have env fallbacks (the historical env vars); other providers are
- *  DB-only. */
-export function envAuthConfig(): AuthConfig {
+/** What the application chooses when neither the database nor the environment
+ *  sets a value. */
+export type AuthConfigDefaults = {
+  /** Record the audit log while AUDIT_LOG_ENABLED is unset or empty. Apps with
+   *  the audit-log module pass true; without it the toggle stays off. */
+  auditLog?: boolean;
+};
+
+/** An unset or empty value takes `fallback`; any value other than "false" is on. */
+function envSwitch(value: string | undefined, fallback: boolean): boolean {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) return fallback;
+  return normalized !== "false";
+}
+
+/** Build the config purely from environment variables — the default when the
+ *  auth_config table is empty, and the boot-time bootstrap. Only Google/GitHub
+ *  have env fallbacks (the historical env vars); other providers are DB-only. */
+export function envAuthConfig(defaults: AuthConfigDefaults = {}): AuthConfig {
   const social: Record<string, OAuthProviderConfig> = {};
   if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     social.google = { enabled: true, clientId: process.env.GOOGLE_CLIENT_ID, clientSecret: process.env.GOOGLE_CLIENT_SECRET };
@@ -131,7 +145,7 @@ export function envAuthConfig(): AuthConfig {
     requireSignupApproval: process.env.AUTH_REQUIRE_SIGNUP_APPROVAL === "true",
     allowDelete: process.env.AUTH_ALLOW_DELETE === "true",
     hibp: process.env.AUTH_HIBP === "true",
-    auditLog: process.env.AUDIT_LOG_ENABLED === "true",
+    auditLog: envSwitch(process.env.AUDIT_LOG_ENABLED, defaults.auditLog ?? false),
     sessionIdleTimeoutMinutes,
   };
 }

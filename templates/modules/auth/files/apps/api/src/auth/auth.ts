@@ -4,7 +4,7 @@ import { twoFactor, haveIBeenPwned, magicLink, emailOTP, username, multiSession,
 import { actionEmail, sendMail } from "../mail/mailer";
 import { sendSms } from "../sms/sms";
 import { assertUserCreationAllowed, createFeatureGate, featureGatePlugin, readSignupOpen, type FeatureGateSettings } from "./feature-gate";
-import { featureFlags, isSignupOpen } from "./auth-config-store";
+import { AUTH_CONFIG_DEFAULTS, featureFlags, isSignupOpen } from "./auth-config-store";
 import { orgAc, orgRoles } from "./org-permissions";
 import { authDatabase } from "./db";
 import { type AuthConfig, envAuthConfig, sessionIdleOptions, SUPPORTED_PROVIDER_IDS } from "@podosoft/podokit-auth";
@@ -297,4 +297,4 @@ export function buildAuth(config: AuthConfig) {
 // Bootstrap instance from environment config. Used by the better-auth CLI
 // (`--config auth.ts`) and as the guaranteed last-good fallback. The runtime
 // mount (auth-provider.ts) rebuilds from DB config on top of this.
-export const auth = buildAuth(envAuthConfig());
+export const auth = buildAuth(envAuthConfig(AUTH_CONFIG_DEFAULTS));

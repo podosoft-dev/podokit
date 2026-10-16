@@ -64,6 +64,16 @@ Objects returned by `load()` and `smtpConfig()` are shared until the
 configuration changes; treat them as read-only. A failed read falls back to the
 environment configuration and empty settings, and is retried after the TTL.
 
+Pass `defaults` for values that neither a row nor the environment sets. With
+`{ auditLog: true }` the audit toggle is on while `AUDIT_LOG_ENABLED` is unset or
+empty; only `false` turns it off. Without it the toggle stays off, so an app
+without an audit log does not report one. `envAuthConfig(defaults)` takes the
+same object:
+
+```ts
+const store = createConfigStore(repository, { defaults: { auditLog: true } });
+```
+
 Set `sessionIdleTimeoutMinutes` to an integer from 5 through 10080 to build a
 sliding server-side session lifetime. `null` keeps better-auth's default
 seven-day lifetime. Generated applications expose this as **Automatic logout**

@@ -76,6 +76,48 @@ describe("auth-config helpers", () => {
     expect(sessionIdleOptions(null)).toBeUndefined();
     expect(sessionIdleOptions(30)).toEqual({ expiresIn: 1_800, updateAge: 60 });
   });
+  it("records the audit log by default only when the app asks for it", () => {
+    const previous = process.env.AUDIT_LOG_ENABLED;
+    try {
+      for (const unset of [undefined, "", "  "]) {
+        if (unset === undefined) delete process.env.AUDIT_LOG_ENABLED;
+        else process.env.AUDIT_LOG_ENABLED = unset;
+        expect(envAuthConfig().auditLog).toBe(false);
+        expect(envAuthConfig({ auditLog: true }).auditLog).toBe(true);
+      }
+      process.env.AUDIT_LOG_ENABLED = "false";
+      expect(envAuthConfig({ auditLog: true }).auditLog).toBe(false);
+      process.env.AUDIT_LOG_ENABLED = " FALSE ";
+      expect(envAuthConfig({ auditLog: true }).auditLog).toBe(false);
+      process.env.AUDIT_LOG_ENABLED = "true";
+      expect(envAuthConfig().auditLog).toBe(true);
+    } finally {
+      if (previous === undefined) delete process.env.AUDIT_LOG_ENABLED;
+      else process.env.AUDIT_LOG_ENABLED = previous;
+    }
+  });
+  it("applies the store defaults until a server row sets the audit toggle", async () => {
+    const previous = process.env.AUDIT_LOG_ENABLED;
+    delete process.env.AUDIT_LOG_ENABLED;
+    try {
+      const rows: AuthConfigRow[] = [];
+      const list = vi.fn(async (): Promise<readonly AuthConfigRow[]> => rows);
+      const store = createConfigStore({ list }, { defaults: { auditLog: true } });
+      expect((await store.capabilitiesSnapshot()).auditLog).toBe(true);
+      expect((await createConfigStore({ list }).capabilitiesSnapshot()).auditLog).toBe(false);
+
+      rows.push({ key: "server", enabled: true, config: { allowDelete: true }, secret: null, updatedAt: "2026-01-01T00:00:00Z" });
+      store.invalidate();
+      expect((await store.capabilitiesSnapshot()).auditLog).toBe(true);
+
+      rows[0] = { ...rows[0]!, config: { auditLog: false }, updatedAt: "2026-01-02T00:00:00Z" };
+      store.invalidate();
+      expect((await store.capabilitiesSnapshot()).auditLog).toBe(false);
+    } finally {
+      if (previous === undefined) delete process.env.AUDIT_LOG_ENABLED;
+      else process.env.AUDIT_LOG_ENABLED = previous;
+    }
+  });
   it("SUPPORTED_PROVIDER_IDS gates provider keys and socialKey formats", () => {
     expect(SUPPORTED_PROVIDER_IDS.has("google")).toBe(true);
     expect(socialKey("google")).toBe("social.google");
