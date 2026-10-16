@@ -8,6 +8,7 @@ import {
   createPhaseTimer,
   INSTALL_RETRY_DELAYS_MS,
   playwrightArguments,
+  playwrightWorkers,
   resolveE2eOptions,
   retryTransientInstall,
   transientInstallFailure,
@@ -74,6 +75,17 @@ test("builds Playwright arguments only for browser modes", () => {
     "account",
   ]);
   assert.throws(() => playwrightArguments({ mode: "package-smoke" }), /does not run Playwright/);
+});
+
+test("runs only the full suite on more than one worker", () => {
+  assert.equal(playwrightWorkers({ mode: "full" }, {}), "2");
+  assert.equal(playwrightWorkers({ mode: "smoke" }, {}), "1");
+  assert.equal(playwrightWorkers({ mode: "full", grep: "account" }, {}), "1");
+  assert.equal(playwrightWorkers({ mode: "smoke" }, { E2E_WORKERS: "3" }), "3");
+
+  const source = readFileSync(join(repoRoot, "scripts/e2e-ci.mjs"), "utf8");
+  assert.match(source, /const workers = playwrightWorkers\(options\);/);
+  assert.match(source, /E2E_WORKERS: workers,/);
 });
 
 test("tags every spec test that changes server-wide settings @exclusive", () => {
