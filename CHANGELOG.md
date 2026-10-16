@@ -220,6 +220,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- `podo dev` sets `CORS_ORIGIN` and `BETTER_AUTH_URL` for the web and API
+  containers from `.podokit/dev.json`, and the generated
+  `.env.docker.example`, `tests/README.md`, and `README.md` render its hostname.
+  A project that changed the hostname in `dev.json` still got the project-name
+  hostname from `.env.docker`, so sign-in failed with an invalid origin until
+  the app edited the env files or overrode both values in `compose.dev.yaml`.
+  `PODOKIT_DEV_AUTH_URL` switches `BETTER_AUTH_URL` to `publicUrl` for an OAuth
+  round trip through a tunnel.
+
 - A Compose deployment behind a reverse proxy can trust `X-Forwarded-Proto` and
   `X-Forwarded-Host`: the guide told profiles to set `PROTOCOL_HEADER` and
   `HOST_HEADER`, which `runtimeConfig` refuses as managed keys, and the Compose
@@ -494,6 +503,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   without changing them; the plan shows them as `skip`, or `review` where the
   template changed. Copy what you want from `podo diff <path>`, for example a
   new `.gitignore` rule or a module's environment line.
+- Remove `CORS_ORIGIN` and `BETTER_AUTH_URL` overrides you added to the web and
+  api services of `compose.dev.yaml` for a renamed development host; `podo dev`
+  sets both from `.podokit/dev.json` and wins over `compose.dev.yaml` and
+  `.env.docker`. Use `PODOKIT_DEV_AUTH_URL=<publicUrl> podo dev watch` instead of
+  a variable of your own for the OAuth tunnel.
 - `podo update` replaces unedited `podokit-*` skills and merges edited ones
   (pass `--from` with the previous templates; without it an edited skill is
   listed as a conflict and left as it is). To keep your own copy of one, add

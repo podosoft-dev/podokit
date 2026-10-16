@@ -55,8 +55,9 @@ cp .env.example .env
 ```
 
 Open the URL printed by the command; a new project defaults to
-**http://{{projectName}}.localhost**. The committed `.podokit/dev.json` is the
-source of truth if you change the hostname. The first running PodoKit project starts
+**http://{{devHostname}}**. The committed `.podokit/dev.json` is the
+source of truth if you change the hostname: `podo dev` sets `CORS_ORIGIN` and
+`BETTER_AUTH_URL` for the web and API containers from it. The first running PodoKit project starts
 one user-level Traefik gateway on `127.0.0.1:80`; additional projects reuse it and
 route by that hostname. Even a single app uses
 the same topology, with one route and no project-specific host port.

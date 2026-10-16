@@ -111,7 +111,13 @@ copy any shared values you added to `.env.docker` into the example and commit
 it.
 
 The shared loopback Traefik gateway routes each committed
-`.podokit/dev.json` hostname to its web container. SvelteKit proxies
+`.podokit/dev.json` hostname to its web container. `podo dev` also sets
+`CORS_ORIGIN` (the hostname, `publicUrl` when declared, and `http://localhost`)
+and `BETTER_AUTH_URL` (`http://<hostname>`) for the web and API containers from
+the same file, overriding `.env.docker`, so renaming the host is a one-file
+change. The two values in `.env.docker.example` serve `compose.dev.yaml` run
+without `podo dev`, such as from the devcontainer, and are rendered from
+`.podokit/dev.json` too. SvelteKit proxies
 `/api/*` internally to Elysia, so browsers use one origin.
 
 If the API exposes a WebSocket endpoint, add its exact path to the same file:

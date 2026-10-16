@@ -10,6 +10,7 @@ import {
 } from "@podosoft/podokit-template-engine";
 import { modulePackageOverlays, readModuleManifest, resolveModule } from "./add";
 import type { ManifestModule } from "./lockfile";
+import { devTemplateVars } from "./dev";
 
 /**
  * Reconstruct a generated project in memory (no disk writes) from a template
@@ -100,7 +101,12 @@ function preserveExternalPackageDependency(
 
 /** Assemble the project tree for a template + ordered modules, in memory. */
 export function assembleProject(options: AssembleOptions): VfsTree {
-  const tree = renderProjectTemplate(options.templatesDir, options.template, options.answers);
+  const tree = renderProjectTemplate(
+    options.templatesDir,
+    options.template,
+    options.answers,
+    options.projectRoot,
+  );
   for (const mod of options.modules) {
     const name = typeof mod === "string" ? mod : (mod.packageName ?? mod.name);
     const resolved = resolveModule(
@@ -123,12 +129,20 @@ export function assembleProject(options: AssembleOptions): VfsTree {
   return tree;
 }
 
-/** Render a Bun-native project template. */
+/**
+ * Render a Bun-native project template. Files that name the development host
+ * render it from the project's `.podokit/dev.json` when there is one.
+ */
 export function renderProjectTemplate(
   templatesDir: string,
   template: string,
-  answers: TemplateVars,
+  projectAnswers: TemplateVars,
+  projectRoot?: string,
 ): VfsTree {
+  const answers: TemplateVars = {
+    ...projectAnswers,
+    ...devTemplateVars(projectAnswers.projectName ?? "app", projectRoot),
+  };
   const tree = template === "todo"
     ? renderTemplate(join(templatesDir, "fullstack"), answers)
     : renderTemplate(join(templatesDir, template), answers);

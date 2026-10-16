@@ -17,7 +17,7 @@ import { addModule } from "./add";
 import { assembleProject } from "./assemble";
 import { eject } from "./eject";
 import { removeModule } from "./remove";
-import { planUpdate, applyUpdate, summarize } from "./update";
+import { planUpdate, applyUpdate, summarize, targetProject } from "./update";
 import {
   computeFilesLock,
   DEFAULT_MANAGED_OVERRIDES,
@@ -1719,5 +1719,26 @@ describe("project files applications rewrite", () => {
     expect(readManifest(dir)?.ownedGlobs).toEqual(expect.arrayContaining(SEEDS));
     expect(planUpdate(dir, REPO_TEMPLATES).changes.filter((entry) => entry.action !== "up-to-date" && entry.action !== "skip"))
       .toEqual([]);
+  });
+});
+
+describe("development hostname in rendered files", () => {
+  it("follows .podokit/dev.json instead of the project name", () => {
+    const dir = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: REPO_TEMPLATES, targetDir: dir });
+    expect(readFileSync(join(dir, ".env.docker.example"), "utf8")).toContain(
+      "CORS_ORIGIN=http://app.localhost,http://localhost\n",
+    );
+    writeFileSync(
+      join(dir, ".podokit/dev.json"),
+      `${JSON.stringify({ schemaVersion: 1, hostname: "shop.localhost", webSocketPaths: [], apiPaths: [] }, null, 2)}\n`,
+    );
+
+    const { tree } = targetProject(dir, REPO_TEMPLATES);
+    const text = (path: string): string => String(tree.get(path)?.content);
+    expect(text(".env.docker.example")).toContain("CORS_ORIGIN=http://shop.localhost,http://localhost\n");
+    expect(text(".env.docker.example")).toContain("BETTER_AUTH_URL=http://shop.localhost\n");
+    expect(text("tests/README.md")).toContain("E2E_BASE_URL=http://shop.localhost ");
+    expect(text(".podokit/dev.json")).toBe(readFileSync(join(dir, ".podokit/dev.json"), "utf8"));
   });
 });
