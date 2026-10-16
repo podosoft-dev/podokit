@@ -73,6 +73,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `CORS_ORIGIN` lists that origin; a caller's own forwarded headers are still
   dropped. An API route that builds links for the browser can pick the origin a
   visitor used among its configured origins.
+- `tests/ui/same-origin-requests.ui.spec.ts` (admin-dashboard) sends a
+  `FormData` upload, a form-encoded body, and `POST` and `DELETE` requests
+  without a body from the browser through the `/api` proxy, and checks that each
+  carries the page's `Origin` and reaches the API. It passes on the built web
+  server, where SvelteKit checks the origin, and through the `podo dev` gateway.
+  When a deployment answers such requests with 403 "Cross-site POST form
+  submissions are forbidden", the web server resolved another origin than the
+  browser; see
+  [the deployment guide](docs/deployment.md#uploads-answer-403-cross-site-post-form-submissions-are-forbidden).
 
 ### Removed
 
@@ -219,6 +228,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   owned `routes/account/+page.svelte`; they no longer render anything. If you
   reverted the managed load or edited `tests/ui/impersonation.ui.spec.ts` to make
   it pass, take PodoKit's versions of both.
+- A client-side workaround for that 403, such as sending uploads as
+  `application/octet-stream` with the multipart type in another header or adding
+  `content-type: application/json` to requests without a body, can be removed
+  once `tests/ui/same-origin-requests.ui.spec.ts` passes against the deployment
+  without it. Fix the forwarded scheme in the ingress first if it does not.
 
 ## [1.5.0] - 2026-10-16
 
