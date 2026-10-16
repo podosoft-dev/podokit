@@ -721,17 +721,20 @@ function updatedFilesLock(
     }
   }
 
-  // Keep a tombstone for an owned seed that the application deleted or moved.
-  // Without the previous entry, the next update would mistake the missing path
-  // for a newly introduced seed and recreate it.
+  // Keep a tombstone for an owned seed that the application deleted or moved,
+  // including a file this update turns from managed into owned. Without the
+  // entry, the next update would mistake the missing path for a newly
+  // introduced seed and recreate it.
   for (const [path, entry] of Object.entries(previous.files)) {
-    if (entry.tier !== "owned" || next.files[path]) continue;
+    if (next.files[path]) continue;
     const newText = treeText(newTree, path);
     if (
       newText !== null &&
       classifyTier(path, newText, ownedGlobs, managedOverrides) === "owned"
     ) {
-      next.files[path] = entry;
+      next.files[path] = entry.tier === "owned"
+        ? entry
+        : { tier: "owned", outHash: entry.outHash, templateHash: hashContent(newText) };
     }
   }
 

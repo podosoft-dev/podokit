@@ -1598,7 +1598,7 @@ describe("committed container environment example", () => {
     return dir;
   }
 
-  it("adds the example and its Git exception while keeping the app's .env.docker", () => {
+  it("adds the example, reports the owned .gitignore, and keeps the app's .env.docker", () => {
     const oldTemplates = templatesWithIgnoredContainerEnv();
     const project = join(tmp(), "app");
     create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: project });
@@ -1612,7 +1612,9 @@ describe("committed container environment example", () => {
 
     expect(result.conflicts).toEqual([]);
     expect(readFileSync(join(project, ".env.docker.example"), "utf8")).toMatch(/^BETTER_AUTH_SECRET=$/m);
-    expect(readFileSync(join(project, ".gitignore"), "utf8")).toContain(".env.*\n!.env.example\n!.env.docker.example\n");
+    // .gitignore is owned: the update names it instead of adding the exception.
+    expect(result.review).toEqual([".gitignore"]);
+    expect(readFileSync(join(project, ".gitignore"), "utf8")).not.toContain("!.env.docker.example");
     expect(readFileSync(join(project, ".env.docker"), "utf8")).toBe(localEnv);
   });
 });
@@ -1663,5 +1665,59 @@ describe("local env files in the lock", () => {
     expect(files).toEqual(Object.keys(raw.files));
     expect(files).not.toContain(".env");
     expect(files).not.toContain(".env.docker");
+  });
+});
+
+describe("project files applications rewrite", () => {
+  const SEEDS = ["README.md", "tests/README.md", ".gitignore", ".env.example", ".env.docker.example", "infra/k3s/**"];
+
+  // Projects generated before these files were owned seeds recorded them as managed.
+  function withManagedProjectFiles(dir: string): void {
+    const manifest = readManifest(dir)!;
+    const ownedGlobs = manifest.ownedGlobs.filter((glob) => !SEEDS.includes(glob));
+    writeManifest(dir, { ...manifest, ownedGlobs });
+    const lock = computeFilesLock(dir, ownedGlobs, manifest.managedOverrides ?? []);
+    writeFilesLock(dir, lock);
+  }
+
+  it("turns them into owned seeds without merging the app's edits", () => {
+    const oldTemplates = join(tmp(), "old-templates");
+    cpSync(REPO_TEMPLATES, oldTemplates, { recursive: true });
+    const configMap = join(oldTemplates, "fullstack/infra/k3s/configmap.yaml");
+    writeFileSync(configMap, readFileSync(configMap, "utf8").replace(/\n$/, "\n# an earlier version\n"));
+    const dir = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: dir });
+    withManagedProjectFiles(dir);
+    expect(readFilesLock(dir)?.files["README.md"]?.tier).toBe("managed");
+
+    const edits: Record<string, string> = {
+      "README.md": "# My product\n",
+      "tests/README.md": "# How we test\n",
+      ".gitignore": `${readFileSync(join(dir, ".gitignore"), "utf8")}dist-cjs/\n`,
+      ".env.example": readFileSync(join(dir, ".env.example"), "utf8").replace("PORT=5002", "PORT=6002"),
+      "infra/k3s/api-deployment.yaml": "# hand-managed\n",
+    };
+    for (const [path, content] of Object.entries(edits)) writeFileSync(join(dir, path), content);
+    rmSync(join(dir, "infra/k3s/ingress.yaml"));
+
+    const plan = planUpdate(dir, REPO_TEMPLATES);
+    const change = (path: string) => plan.changes.find((entry) => entry.path === path);
+    for (const path of Object.keys(edits)) {
+      expect(change(path)).toMatchObject({ tier: "owned", action: "skip" });
+    }
+    expect(change("infra/k3s/configmap.yaml")).toMatchObject({ tier: "owned", action: "review" });
+    expect(change("infra/k3s/ingress.yaml")).toMatchObject({ tier: "owned", action: "skip" });
+    expect(plan.changes.filter((entry) => entry.action === "conflict")).toEqual([]);
+
+    const result = applyUpdate(dir, REPO_TEMPLATES);
+    expect(result.review).toEqual(["infra/k3s/configmap.yaml"]);
+    for (const [path, content] of Object.entries(edits)) {
+      expect(readFileSync(join(dir, path), "utf8")).toBe(content);
+      expect(readFilesLock(dir)?.files[path]?.tier).toBe("owned");
+    }
+    expect(existsSync(join(dir, "infra/k3s/ingress.yaml"))).toBe(false);
+    expect(readManifest(dir)?.ownedGlobs).toEqual(expect.arrayContaining(SEEDS));
+    expect(planUpdate(dir, REPO_TEMPLATES).changes.filter((entry) => entry.action !== "up-to-date" && entry.action !== "skip"))
+      .toEqual([]);
   });
 });

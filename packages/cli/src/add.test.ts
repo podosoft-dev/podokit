@@ -24,6 +24,7 @@ import {
 import { applyProviderChange } from "./provider";
 import { removeModule } from "./remove";
 import { planUpdate } from "./update";
+import { templateDiff } from "./template-files";
 
 const REPO_TEMPLATES = resolve(process.cwd(), "..", "..", "templates");
 const MODULES = join(REPO_TEMPLATES, "modules");
@@ -1111,9 +1112,8 @@ describe("provider ordering", () => {
       .toEqual(recordedModules(project).map((_, index) => index));
     // The written wiring matches what update assembles for the same module order.
     const plan = planUpdate(project, REPO_TEMPLATES);
-    for (const path of ["apps/api/src/app.ts", ".env.example"]) {
-      expect(plan.changes.find((change) => change.path === path)?.action).toBe("up-to-date");
-    }
+    expect(plan.changes.find((change) => change.path === "apps/api/src/app.ts")?.action).toBe("up-to-date");
+    expect(templateDiff(project, REPO_TEMPLATES, [".env.example"]).files[0]?.status).toBe("same");
   });
 
   it("adds the missing provider first when a dependent module is added again", () => {

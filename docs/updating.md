@@ -19,6 +19,16 @@ Every generated project commits:
 | assembled | PodoKit rebuilds fenced registrations from the module set | `apps/api/src/app.ts`, `auth/auth.ts` |
 | owned | Application code; PodoKit never overwrites it | routes, UI primitives, `app.extensions.ts` |
 
+The project files every application rewrites are owned seeds too: `README.md`,
+`tests/README.md`, `.gitignore`, `.env.example`, `.env.docker.example`, and the
+example manifests in `infra/k3s/`. PodoKit writes them once. `podo add` and
+`podo remove` still add and take out a module's environment lines and wiring
+markers in them, such as the `audit-log` entry in `infra/k3s/configmap.yaml`,
+but `podo update` only [reports their template changes](#owned-files-whose-template-changed).
+An update from a version that managed them changes their tier without touching
+their content, and a file among them that you deleted, such as `infra/k3s/`
+when you deploy with `podo deploy`, stays deleted.
+
 Agent guidance under `.claude/`, `.agents/`, and `.cursor/` is owned, except
 PodoKit's own `podokit-*` skills in `.claude/skills/` and `.agents/skills/`,
 which stay managed so their commands and APIs follow the installed version. An

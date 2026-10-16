@@ -195,6 +195,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- `README.md`, `tests/README.md`, `.gitignore`, `.env.example`,
+  `.env.docker.example`, and the example manifests in `infra/k3s/` are owned
+  seeds. Applications rewrite them, so as managed files they showed up as
+  edited forever and every update merged or conflicted there. `podo add` and
+  `podo remove` still write a module's environment lines and wiring into them,
+  `podo update` lists their template changes for review, and a deleted
+  `infra/k3s/` is no longer restored. `app.css` keeps its application styles in
+  the owned `app.extensions.css`.
 - PodoKit's own agent skills, `.claude/skills/podokit-*` and
   `.agents/skills/podokit-*`, are managed. They were owned like the rest of
   `.claude/**` and `.agents/**`, so an update never brought their corrected
@@ -481,6 +489,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   apps, because the settings `+page.svelte` is application-owned; add
   `class="h-auto max-w-full flex-wrap justify-start"` to its `<Tabs.List>` if
   your tabs overflow on a phone.
+- The first `podo update` turns `README.md`, `tests/README.md`, `.gitignore`,
+  `.env.example`, `.env.docker.example`, and `infra/k3s/**` into owned files
+  without changing them; the plan shows them as `skip`, or `review` where the
+  template changed. Copy what you want from `podo diff <path>`, for example a
+  new `.gitignore` rule or a module's environment line.
 - `podo update` replaces unedited `podokit-*` skills and merges edited ones
   (pass `--from` with the previous templates; without it an edited skill is
   listed as a conflict and left as it is). To keep your own copy of one, add
