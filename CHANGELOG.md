@@ -86,6 +86,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   web server's `GET /healthz` route, the API timeouts, `apiServerOptions` and
   its environment fallbacks, and `podo dev`, including that `podo dev down` also
   stops `podo dev watch`.
+- The admin dashboard's table toolbar keeps its search box usable on a phone.
+  The input could shrink to about 42 px wide at a 390 px viewport, squeezed
+  between the search field select and the Search button on the users page; it
+  now keeps at least 192 px and wraps to its own row with the button, about
+  242 px wide there. Desktop layouts are unchanged.
 
 ### Upgrade notes
 
