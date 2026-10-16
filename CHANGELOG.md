@@ -75,6 +75,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   such as a tunnel set as `publicUrl` in `.podokit/dev.json` that answers with an
   access login page. The spec now checks that `jwks_uri` has the issuer's origin
   and requests its path from the tested app.
+- The admin dashboard's `request-budget.ui.spec.ts` reads each `__data.json`
+  body through `page.route` instead of `response.text()`. Chromium can report
+  that fetch as aborted (`net::ERR_ABORTED`) once SvelteKit has consumed the
+  body and then keeps no body, so the spec failed with "No data found for
+  resource" even though the page had its data.
 
 
 ## [1.4.1] - 2026-10-16
