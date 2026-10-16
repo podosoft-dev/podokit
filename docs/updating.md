@@ -181,6 +181,17 @@ creates each of them once in an existing app. An app that edited the managed
 owned file and take PodoKit's version of the managed one.
 
 ### Extending the web proxy
+### API extension files
+
+Each of these application-owned files starts empty, is imported by a managed
+file, and is created once by `podo update` in an existing app and never
+overwritten afterwards. Use them instead of editing the managed file.
+
+| File | Export | Use it instead of editing |
+| --- | --- | --- |
+| `apps/api/src/config/env.extensions.ts` | `appEnvShape` (zod fields) and `refineAppEnv(env, context)` | `config/env.validation.ts`: application variables are validated at startup and typed on `AppEnv`; redefining a PodoKit variable fails |
+
+## Extending the web proxy
 
 The SvelteKit `/api` proxy, `apps/web/src/lib/server/backend-proxy.ts`, is
 managed. Instead of adding header names to its lists, put them in the

@@ -156,6 +156,14 @@ describe("create (integration against templates)", () => {
     expect(apiMain).toContain("...apiServerOptions(env)");
     expect(readFileSync(join(target, "apps/api/src/app.extensions.ts"), "utf8"))
       .toContain("export const apiServerOptions: ApiServerOptionsSource = {};");
+    // Application-owned API seams that managed files import, seeded empty.
+    const apiSeams: ReadonlyArray<readonly [string, string]> = [
+      ["apps/api/src/config/env.extensions.ts", "export const appEnvShape = {} satisfies z.ZodRawShape;"],
+    ];
+    for (const [path, seed] of apiSeams) {
+      expect(readFileSync(join(target, path), "utf8")).toContain(seed);
+      expect(readFilesLock(target)?.files[path]?.tier).toBe("owned");
+    }
     const landingPage = readFileSync(join(target, "apps/web/src/routes/+page.svelte"), "utf8");
     expect(landingPage).toContain("Your PodoKit application is ready.");
     expect(landingPage).not.toMatch(/\b(?:Bun|Elysia|SvelteKit)\b/);

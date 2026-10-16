@@ -114,6 +114,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   SQLite file when `DATABASE_URL` is unset (default `./data/podokit.sqlite`), so
   an app that binds to loopback or keeps its database elsewhere, such as a
   desktop shell, no longer edits `main.ts` or `database.ts`.
+- `apps/api/src/config/env.extensions.ts` is an application-owned extension of
+  the validated API environment. Its `appEnvShape` fields are validated with
+  PodoKit's at startup and typed on `AppEnv`, and `refineAppEnv(env, context)`
+  adds checks across variables, such as one production requires. Redefining a
+  PodoKit variable fails at startup. `podo update` creates the file once in
+  existing apps and never overwrites it.
 
 ### Removed
 
@@ -334,6 +340,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   built with the new `scripts/build.mjs`, and its `/health/ready` stays `503`
   until `migrate:all` has applied the image's migrations, so keep the migration
   job ahead of the rollout.
+- Move application variables you added to the managed
+  `apps/api/src/config/env.validation.ts` into `appEnvShape` in
+  `apps/api/src/config/env.extensions.ts`, and a `superRefine` of yours into
+  `refineAppEnv`; `podo update` reports the old edit as a conflict. Production
+  checks of `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are not needed there: the
+  auth module makes them, and since this release they also run in the built API.
 
 ## [1.5.0] - 2026-10-16
 

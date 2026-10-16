@@ -122,6 +122,8 @@ export const DEFAULT_OWNED_GLOBS = [
   "apps/web/src/lib/i18n/catalogs/app/**",
   // Owned Elysia extension slot — register application services and plugins here.
   "apps/api/src/app.extensions.ts",
+  // Owned application environment variables, validated with PodoKit's.
+  "apps/api/src/config/env.extensions.ts",
   // Owned additions to the managed /api proxy's header lists, body limits, and
   // response deadlines.
   "apps/web/src/lib/server/proxy-headers.ts",
