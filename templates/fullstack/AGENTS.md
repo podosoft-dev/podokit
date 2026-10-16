@@ -58,7 +58,9 @@ Merge added module settings from `.env.example` into an existing `.env`.
 - `apps/web/vite.config.ts` is managed. Put Vite options (warmup, `optimizeDeps`,
   `define`, plugins, allowed hosts) in `appViteConfig` and SvelteKit options
   (`alias`, `csrf`) in `appSvelteKitConfig` of the app-owned
-  `apps/web/vite.extensions.ts`.
+  `apps/web/vite.extensions.ts`. `bun run dev` proxies the exact
+  `webSocketPaths` of `.podokit/dev.json` to the API like the `podo dev` gateway,
+  so do not add a WebSocket proxy of your own.
 - Server-side API calls (`serverApiClient`) give up after `BACKEND_TIMEOUT_MS`
   (2000), and the proxy answers 504 `BACKEND_TIMEOUT` when the API sends no
   response headers within `BACKEND_PROXY_TIMEOUT_MS` (30000). Once the API's

@@ -63,6 +63,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   with `X-Robots-Tag: noindex, nofollow`. `podo update` creates each file once
   in an existing app and never overwrites it. See
   [web extension points](docs/templates.md#web-extension-points).
+- `bun run dev` proxies the exact `webSocketPaths` of `.podokit/dev.json`, with
+  or without a query string, from the Vite dev server to `BACKEND_INTERNAL_URL`.
+  A WebSocket endpoint on the API now works in host development the way it does
+  behind the `podo dev` gateway and a deployment's edge.
 
 ### Removed
 
@@ -186,6 +190,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `- { action: sync+restart, path: ./apps/web/vite.extensions.ts, target: /app/apps/web/vite.extensions.ts }`
   under the web service's `develop.watch` to restart the web container when the
   file changes.
+- Remove a WebSocket proxy you added to `vite.config.ts` for a path that
+  `.podokit/dev.json` lists; the managed configuration proxies it now.
 
 ## [1.5.0] - 2026-10-16
 

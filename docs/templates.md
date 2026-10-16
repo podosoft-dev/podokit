@@ -449,6 +449,17 @@ A function receives Vite's `{ command, mode }`. `PODOKIT_BUILD_ORIGIN` still set
 `paths.origin` at build time. The generated `compose.dev.yaml` restarts the web
 container when the file changes.
 
+#### WebSocket paths in host development
+
+A SvelteKit route cannot answer a WebSocket upgrade. The `podo dev` gateway and a
+deployment's edge send the exact paths listed in `webSocketPaths` of
+`.podokit/dev.json` straight to the API (see
+[containerized development](development.md#containerized-development)). For
+`bun run dev`, the managed `vite.config.ts` reads the same list and proxies each
+exact path, with or without a query string, to `BACKEND_INTERNAL_URL`, so a
+WebSocket feature works the same way in both setups without a proxy entry of
+your own. The API must authenticate each upgrade itself.
+
 ## `todo`
 
 The Todo template adds:
