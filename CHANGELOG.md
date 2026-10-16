@@ -82,6 +82,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   submissions are forbidden", the web server resolved another origin than the
   browser; see
   [the deployment guide](docs/deployment.md#uploads-answer-403-cross-site-post-form-submissions-are-forbidden).
+- `DataTableColumn` takes a `head` snippet that replaces the column's label and
+  sort button in the header, for example a select-all checkbox. Give the
+  control its own accessible name.
 
 ### Removed
 

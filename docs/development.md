@@ -332,6 +332,18 @@ responsive column behavior is needed. Give each table an `ariaLabel` when a
 page or dialog can contain more than one table; tests should scope pagination
 and row assertions to that table.
 
+A column's `head` snippet replaces its label and sort button in the header, for
+example a select-all checkbox for bulk actions. Give the control its own
+accessible name:
+
+```svelte
+{#snippet selectAll()}
+  <Checkbox aria-label="Select all rows" checked={allSelected} onCheckedChange={toggleAll} />
+{/snippet}
+
+<DataTable columns={[{ key: "select", label: "Selected", head: selectAll, class: "w-10" }, ...columns]} {rows} {row} />
+```
+
 Two modes:
 
 - **Client (default)** — pass all `rows`; sorting and paging happen in the
