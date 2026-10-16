@@ -231,6 +231,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   the user back in. It ignored the sign-out response and relied on the owned
   login page to redirect a browser that was still signed in; on an app whose
   login page shows the form anyway, the browser reached `/` without the passkey.
+- The users-admin spec removes the account if the forbidden create-user request
+  succeeds.
 - The Silo and `mc` images of `compose.dev.yaml` and the `object-storage-s3`
   module's `infra/docker/minio.compose.yml` are pinned by digest, and their
   bucket setup runs with `sh -e` and `mc mb --ignore-existing`. `mc mb … ||
