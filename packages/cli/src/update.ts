@@ -12,6 +12,7 @@ import { assembleProject } from "./assemble";
 import {
   classifyTier,
   computeFilesLock,
+  DEFAULT_MANAGED_OVERRIDES,
   DEFAULT_OWNED_GLOBS,
   matchGlob,
   manifestTemplateVars,
@@ -215,7 +216,7 @@ function targetManagedOverrides(
   modules: { name: string; packageName?: string }[],
   current: string[] = [],
 ): string[] {
-  const overrides = new Set(current);
+  const overrides = new Set([...DEFAULT_MANAGED_OVERRIDES, ...current]);
   const modulesDir = join(templatesDir, "modules");
   for (const module of modules) {
     const resolved = resolveModule(module.packageName ?? module.name, modulesDir, projectRoot);

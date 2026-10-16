@@ -162,6 +162,16 @@ export const DEFAULT_OWNED_GLOBS = [
   "tests/playwright.projects.cjs",
 ];
 
+/**
+ * PodoKit's own agent skills stay managed inside the owned `.claude/**` and
+ * `.agents/**` trees, so updates keep their commands and APIs current. Skills an
+ * application adds under other names stay owned.
+ */
+export const DEFAULT_MANAGED_OVERRIDES = [
+  ".claude/skills/podokit-*/**",
+  ".agents/skills/podokit-*/**",
+];
+
 const TEXT_EXT = /\.(json|md|ts|tsx|js|mjs|cjs|css|html|yml|yaml|txt|env|svelte|gitignore|example)$/i;
 
 function podokitDir(projectRoot: string): string {
@@ -370,6 +380,7 @@ export interface InitLockOptions {
 /** Write the initial `.podokit/` lockfile for a freshly created project. */
 export function initLockfile(projectRoot: string, options: InitLockOptions): void {
   const ownedGlobs = options.ownedGlobs ?? DEFAULT_OWNED_GLOBS;
+  const managedOverrides = [...DEFAULT_MANAGED_OVERRIDES];
   const providers = resolveProviderSelections(options.providers ?? SERVER_PROVIDER_SELECTIONS);
   const manifest: PodokitManifest = {
     schemaVersion: LOCK_SCHEMA_VERSION,
@@ -380,10 +391,10 @@ export function initLockfile(projectRoot: string, options: InitLockOptions): voi
     providers,
     modules: [],
     ownedGlobs,
-    managedOverrides: [],
+    managedOverrides,
   };
   writeManifest(projectRoot, manifest);
-  writeFilesLock(projectRoot, computeFilesLock(projectRoot, ownedGlobs));
+  writeFilesLock(projectRoot, computeFilesLock(projectRoot, ownedGlobs, managedOverrides));
 }
 
 /** Union two glob lists, preserving order and dropping duplicates. Used to fold

@@ -18,7 +18,14 @@ import { assembleProject } from "./assemble";
 import { eject } from "./eject";
 import { removeModule } from "./remove";
 import { planUpdate, applyUpdate, summarize } from "./update";
-import { readFilesLock, readManifest, writeManifest } from "./lockfile";
+import {
+  computeFilesLock,
+  DEFAULT_MANAGED_OVERRIDES,
+  readFilesLock,
+  readManifest,
+  writeFilesLock,
+  writeManifest,
+} from "./lockfile";
 
 const REPO_TEMPLATES = resolve(process.cwd(), "..", "..", "templates");
 const ADMIN_DASHBOARD_MANAGED_ROUTE_LOADERS = [
@@ -269,6 +276,22 @@ describe("applyUpdate", () => {
     mkdirSync(dir, { recursive: true });
     cpSync(REPO_TEMPLATES, dir, { recursive: true });
     return dir;
+  }
+
+  // Projects generated before PodoKit's own skills were managed recorded no
+  // default managed overrides, so every skill was owned.
+  function withoutDefaultManagedOverrides(dir: string): void {
+    const manifest = readManifest(dir)!;
+    const managedOverrides = (manifest.managedOverrides ?? []).filter(
+      (glob) => !DEFAULT_MANAGED_OVERRIDES.includes(glob),
+    );
+    writeManifest(dir, { ...manifest, managedOverrides });
+    const lock = readFilesLock(dir)!;
+    for (const [path, entry] of Object.entries(computeFilesLock(dir, manifest.ownedGlobs, managedOverrides).files)) {
+      const previous = lock.files[path];
+      if (previous) previous.tier = entry.tier;
+    }
+    writeFilesLock(dir, lock);
   }
 
   function legacyAdminTemplatesCopy(): string {
@@ -694,6 +717,7 @@ describe("applyUpdate", () => {
     const dir = join(tmp(), "app");
     create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: dir });
     addModule({ projectRoot: dir, module: "auth", modulesDir: join(oldTemplates, "modules") });
+    withoutDefaultManagedOverrides(dir);
     const skill = ".claude/skills/podokit-configure-auth/SKILL.md";
     expect(readFilesLock(dir)?.files[skill]?.tier).toBe("owned");
 
@@ -716,6 +740,53 @@ describe("applyUpdate", () => {
     expect(manifest.managedOverrides).toContain(
       ".claude/skills/podokit-configure-auth/**",
     );
+  });
+
+  it("promotes PodoKit's own skills to managed and leaves the app's skills owned", () => {
+    const oldTemplates = oldTemplatesCopy();
+    const updateSkill = ".claude/skills/podokit-update/SKILL.md";
+    const deploySkill = ".agents/skills/podokit-deploy/SKILL.md";
+    const routeSkill = ".claude/skills/podokit-sveltekit-route/SKILL.md";
+    const appSkill = ".claude/skills/release-notes/SKILL.md";
+    writeFileSync(
+      join(oldTemplates, "fullstack/dot-claude/skills/podokit-update/SKILL.md"),
+      "---\nname: podokit-update\ndescription: Old skill.\n---\n\n# Old skill\n",
+    );
+    const dir = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: dir });
+    withoutDefaultManagedOverrides(dir);
+    mkdirSync(join(dir, ".claude/skills/release-notes"), { recursive: true });
+    writeFileSync(join(dir, appSkill), "# The app's own skill\n");
+    writeFileSync(join(dir, deploySkill), `${readFileSync(join(dir, deploySkill), "utf8")}\nLocal note.\n`);
+    // An app that wants to keep its own copy of a PodoKit skill lists it as owned.
+    const manifest = readManifest(dir)!;
+    writeManifest(dir, { ...manifest, ownedGlobs: [...manifest.ownedGlobs, routeSkill] });
+    writeFileSync(join(dir, routeSkill), "# Kept by the app\n");
+    expect(readFilesLock(dir)?.files[updateSkill]?.tier).toBe("owned");
+
+    const plan = planUpdate(dir, REPO_TEMPLATES);
+    const action = (path: string): string | undefined =>
+      plan.changes.find((change) => change.path === path)?.action;
+    expect(action(updateSkill)).toBe("update");
+    expect(action(deploySkill)).toBe("conflict");
+    expect(action(routeSkill)).toBe("skip");
+    expect(action(appSkill)).toBeUndefined();
+
+    const result = applyUpdate(dir, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+    expect(result.written).toContain(updateSkill);
+    expect(result.merged).toContain(deploySkill);
+    expect(readFileSync(join(dir, updateSkill), "utf8")).toBe(
+      readFileSync(join(REPO_TEMPLATES, "fullstack/dot-claude/skills/podokit-update/SKILL.md"), "utf8"),
+    );
+    expect(readFileSync(join(dir, deploySkill), "utf8")).toContain("Local note.");
+    expect(readFileSync(join(dir, routeSkill), "utf8")).toBe("# Kept by the app\n");
+    expect(readFileSync(join(dir, appSkill), "utf8")).toBe("# The app's own skill\n");
+    const lock = readFilesLock(dir)!;
+    expect(lock.files[updateSkill]?.tier).toBe("managed");
+    expect(lock.files[deploySkill]?.tier).toBe("managed");
+    expect(lock.files[routeSkill]?.tier).toBe("owned");
+    expect(lock.files[appSkill]?.tier).toBe("owned");
+    expect(readManifest(dir)?.managedOverrides).toEqual(expect.arrayContaining(DEFAULT_MANAGED_OVERRIDES));
   });
 
   it("promotes pristine module route loaders from owned to managed", () => {

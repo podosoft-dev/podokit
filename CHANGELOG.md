@@ -44,7 +44,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   file is rewritten, leaves the manifest's owned paths, and is managed by
   updates again. It refuses routes and other files the template or a module
   declares owned, and a project on another PodoKit version than the CLI.
-
 - Generated apps run their Playwright suite on more than one worker with
   `E2E_WORKERS` (default 1), for example `E2E_WORKERS=2 bun run test:e2e`. A
   test that changes state the other tests rely on carries the `@exclusive` tag:
@@ -186,6 +185,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   hidden while the list is empty. `podo update` creates the file once and never
   overwrites it. The settings page's tab list now wraps instead of reaching
   into the page margin on narrow screens.
+
+### Changed
+
+- PodoKit's own agent skills, `.claude/skills/podokit-*` and
+  `.agents/skills/podokit-*`, are managed. They were owned like the rest of
+  `.claude/**` and `.agents/**`, so an update never brought their corrected
+  commands and APIs, such as a data table skill that still used an old `$lib`
+  path. Skills under other names stay owned.
 
 ### Removed
 
@@ -467,6 +474,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   apps, because the settings `+page.svelte` is application-owned; add
   `class="h-auto max-w-full flex-wrap justify-start"` to its `<Tabs.List>` if
   your tabs overflow on a phone.
+- `podo update` replaces unedited `podokit-*` skills and merges edited ones
+  (pass `--from` with the previous templates; without it an edited skill is
+  listed as a conflict and left as it is). To keep your own copy of one, add
+  its exact path to `ownedGlobs` in `.podokit/manifest.json` before applying.
 
 ## [1.5.0] - 2026-10-16
 

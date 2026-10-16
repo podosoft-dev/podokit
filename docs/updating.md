@@ -19,6 +19,14 @@ Every generated project commits:
 | assembled | PodoKit rebuilds fenced registrations from the module set | `apps/api/src/app.ts`, `auth/auth.ts` |
 | owned | Application code; PodoKit never overwrites it | routes, UI primitives, `app.extensions.ts` |
 
+Agent guidance under `.claude/`, `.agents/`, and `.cursor/` is owned, except
+PodoKit's own `podokit-*` skills in `.claude/skills/` and `.agents/skills/`,
+which stay managed so their commands and APIs follow the installed version. An
+update from a version that still recorded them as owned updates the unedited
+ones and merges or reports the edited ones like any managed file. To keep your
+own version of one, add its path to `ownedGlobs` in `.podokit/manifest.json` or
+run `podo eject <path>`; a skill under another name is never touched.
+
 ## Inspect before updating
 
 ```bash

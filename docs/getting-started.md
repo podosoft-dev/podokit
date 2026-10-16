@@ -247,7 +247,9 @@ Kubernetes cluster. See [Deployment](deployment.md).
 Generated repositories include `AGENTS.md`, `CLAUDE.md`, editor pointers, and
 skills for Elysia, SvelteKit, modules, updates, and deployment. `.mcp.json`
 configures `@podosoft/podokit-mcp` so compatible agents can inspect and manage
-the project without guessing its conventions.
+the project without guessing its conventions. `AGENTS.md`, `CLAUDE.md`, and
+skills you add are yours; the `podokit-*` skills under `.claude/skills/` and
+`.agents/skills/` stay managed, so `podo update` keeps their commands current.
 
 Next, read [Development](development.md), [Testing](testing.md), and
 [Modules](modules.md).
