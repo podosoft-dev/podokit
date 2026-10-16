@@ -158,6 +158,33 @@ build and tests: hop-by-hop headers (`connection`, `transfer-encoding`,
 get the file empty; `podo update` creates it once in an existing app and never
 overwrites it.
 
+### Proxy path rules
+
+`APP_BODY_LIMITS` and `APP_PROXY_TIMEOUTS` below select `/api` routes by
+`pathPrefix`, and the rate-limit module's
+[route profiles](modules.md#route-profiles) select API routes the same way:
+
+- A prefix covers its path and every path below it, by whole segments:
+  `/api/files` covers `/api/files` and `/api/files/1`, not `/api/files-old`. A
+  trailing slash makes no difference.
+- A `:name` segment matches exactly one non-empty path segment:
+  `/api/hosts/:hostId/file-transfers` covers `/api/hosts/h1/file-transfers` and
+  the paths below it, but neither `/api/hosts/file-transfers` nor
+  `/api/hosts/h1/file-transfers-old`. The name is a letter or `_` followed by
+  letters, digits, or `_`, and only documents the segment.
+- When several prefixes cover a path, the most specific wins: the one with more
+  segments; at equal length, compare segments from the left, and the first
+  place where one has a literal segment and the other a parameter decides for
+  the literal. So `/api/hosts/local/:section` wins over
+  `/api/hosts/:hostId/files` for `/api/hosts/local/files`. The web lists reject
+  two prefixes that cover the same paths, such as `/api/a/:x` and `/api/a/:y`;
+  rate-limit routes fall back to the method and the latest registration.
+- The web lists match the decoded request path, so an encoded segment such as
+  `%66iles` cannot step around a prefix. Prefixes there start with `/api/` and
+  use URL path characters; empty, `.`, and `..` segments, wildcards such as `*`,
+  and malformed parameters fail when the web server loads the proxy and in the
+  web tests.
+
 ### Request body limits
 
 `BODY_SIZE_LIMIT` (3 MiB in the generated `.env.example`, web Dockerfile, and
@@ -174,17 +201,17 @@ Below that ceiling, cap individual `/api` routes in the application-owned
 ```ts
 export const APP_BODY_LIMITS: ReadonlyArray<{ pathPrefix: string; maxBytes: number }> = [
   { pathPrefix: "/api/feedback/", maxBytes: 64 * 1024 },
+  { pathPrefix: "/api/hosts/:hostId/file-transfers", maxBytes: 1024 * 1024 + 64 * 1024 },
 ];
 ```
 
-An entry covers its path and every path below it, matched on the decoded
-request path, and the longest matching prefix wins. The proxy rejects a declared
+Entries select routes by the [proxy path rules](#proxy-path-rules). The proxy rejects a declared
 `Content-Length` above the limit at once and otherwise counts the body as it
 streams in, stopping at the limit without buffering the rest. Either way it
 answers 413 with the standard envelope, code `PAYLOAD_TOO_LARGE` and
 `details.maxBytes`, without contacting the API. Routes without an entry keep the
-server-wide ceiling. An invalid prefix (not a static path under `/api/`) or a
-`maxBytes` that is not a positive whole number fails the web build and tests.
+server-wide ceiling. An invalid prefix or a `maxBytes` that is not a positive
+whole number fails the web build and tests.
 
 These limits can only lower the ceiling: a `maxBytes` above `BODY_SIZE_LIMIT`
 has no effect, because Bun rejects the body first. Raising `BODY_SIZE_LIMIT`
@@ -266,22 +293,20 @@ the managed proxy:
 ```ts
 export const APP_PROXY_TIMEOUTS: ReadonlyArray<{ pathPrefix: string; timeoutMs: number | null }> = [
   { pathPrefix: "/api/exports/", timeoutMs: 120_000 },
-  { pathPrefix: "/api/file-transfers/", timeoutMs: null },
+  { pathPrefix: "/api/hosts/:hostId/file-transfers", timeoutMs: null },
 ];
 ```
 
-An entry covers its path and every path below it, matched on the decoded
-request path, and the longest matching prefix wins; other routes keep
-`BACKEND_PROXY_TIMEOUT_MS`. `timeoutMs` is how long the proxy waits for the
+Entries select routes by the [proxy path rules](#proxy-path-rules); other
+routes keep `BACKEND_PROXY_TIMEOUT_MS`. `timeoutMs` is how long the proxy waits for the
 response headers before it answers `504` `BACKEND_TIMEOUT`, and `null` waits as
 long as the API takes. The health checks keep running while a request waits, so
 a route without a deadline still answers `503` `BACKEND_UNAVAILABLE` once the
 API's `GET /health` stops answering, and the wait also ends when the browser
 disconnects. The deadline ends when the headers arrive, so it never cuts off
-the body. A prefix that is not a static path under `/api/`, a prefix listed
-twice, or a `timeoutMs` that is neither `null` nor a whole number of
-milliseconds from 1 to 2147483647 fails the web tests and the web server when it
-loads the proxy.
+the body. An invalid prefix, two prefixes that cover the same paths, or a
+`timeoutMs` that is neither `null` nor a whole number of milliseconds from 1 to
+2147483647 fails the web tests and the web server when it loads the proxy.
 
 The proxy's deadline is one of three limits on such a request, and the other
 two have to be raised with it. Bun runs both the API and the built web server and

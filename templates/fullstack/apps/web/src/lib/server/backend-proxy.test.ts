@@ -553,21 +553,67 @@ describe("backend proxy application body limits", () => {
     expect(bodyLimitFor("/other", limits)).toBeUndefined();
   });
 
+  it("matches :name parameters against one non-empty segment, most specific rule first", () => {
+    const limits = sortedBodyLimits([
+      { pathPrefix: "/api/hosts", maxBytes: 100 },
+      { pathPrefix: "/api/hosts/:hostId/file-transfers", maxBytes: 1_048_576 },
+      { pathPrefix: "/api/hosts/local/:section", maxBytes: 10 },
+      { pathPrefix: "/api/hosts/:hostId/:section/:item", maxBytes: 20 },
+    ]);
+
+    expect(bodyLimitFor("/api/hosts/h1/file-transfers", limits)).toBe(1_048_576);
+    expect(bodyLimitFor("/api/hosts/h%31/file-transfers", limits)).toBe(1_048_576);
+    // More segments win, then a literal segment over a parameter from the left.
+    expect(bodyLimitFor("/api/hosts/h1/file-transfers/t1/chunk", limits)).toBe(20);
+    expect(bodyLimitFor("/api/hosts/local/file-transfers", limits)).toBe(10);
+    expect(bodyLimitFor("/api/hosts/h1/file-transfers-old", limits)).toBe(100);
+    expect(bodyLimitFor("/api/hosts/file-transfers", limits)).toBe(100);
+    expect(bodyLimitFor("/api/hosts//file-transfers", limits)).toBe(100);
+    expect(bodyLimitFor("/api/other", limits)).toBeUndefined();
+  });
+
+  it("caps the body of a route with a path parameter", async () => {
+    const proxy = await proxyWithBodyLimits([{ pathPrefix: "/api/hosts/:hostId/file-transfers", maxBytes: 8 }]);
+    const record = recordingFetch();
+
+    const capped = await proxy(
+      new Request("http://app.localhost/api/hosts/h1/file-transfers/t1/chunk", { method: "POST", body: "0123456789" }),
+      "http://api:5002/hosts/h1/file-transfers/t1/chunk",
+    );
+    const other = await proxy(
+      new Request("http://app.localhost/api/hosts/h1/notes", { method: "POST", body: "0123456789" }),
+      "http://api:5002/hosts/h1/notes",
+    );
+
+    expect(capped.status).toBe(413);
+    expect(other.status).toBe(204);
+    expect(record.bodies.map((body) => body.byteLength)).toEqual([10]);
+  });
+
   it.each<[{ pathPrefix: string; maxBytes: number }[], string]>([
-    [[{ pathPrefix: "/feedback/", maxBytes: 10 }], "must be a static path under /api/"],
-    [[{ pathPrefix: "/api/files/*", maxBytes: 10 }], "must be a static path under /api/"],
-    [[{ pathPrefix: "/api//files", maxBytes: 10 }], "must be a static path under /api/"],
-    [[{ pathPrefix: "/api/files/../admin", maxBytes: 10 }], "must be a static path under /api/"],
+    [[{ pathPrefix: "/feedback/", maxBytes: 10 }], "must be a path under /api/"],
+    [[{ pathPrefix: "/api/files/*", maxBytes: 10 }], "must be a path under /api/"],
+    [[{ pathPrefix: "/api//files", maxBytes: 10 }], "must be a path under /api/"],
+    [[{ pathPrefix: "/api/files/../admin", maxBytes: 10 }], "must be a path under /api/"],
     [[{ pathPrefix: "/api/files", maxBytes: 0 }], "positive whole number"],
     [[{ pathPrefix: "/api/files", maxBytes: 1.5 }], "positive whole number"],
-    [[{ pathPrefix: "/api/files", maxBytes: 10 }, { pathPrefix: "/api/files/", maxBytes: 20 }], "more than once"],
+    [[{ pathPrefix: "/apix/files", maxBytes: 10 }], "must be a path under /api/"],
+    [[{ pathPrefix: "/api/files/:", maxBytes: 10 }], "must be a path under /api/"],
+    [[{ pathPrefix: "/api/files/:1st", maxBytes: 10 }], "must be a path under /api/"],
+    [[{ pathPrefix: "/api/files/:file-id", maxBytes: 10 }], "must be a path under /api/"],
+    [[{ pathPrefix: "/api/files/:a:b", maxBytes: 10 }], "must be a path under /api/"],
+    [[{ pathPrefix: "/api/files", maxBytes: 10 }, { pathPrefix: "/api/files/", maxBytes: 20 }], "lists the same paths twice"],
+    [
+      [{ pathPrefix: "/api/hosts/:hostId", maxBytes: 10 }, { pathPrefix: "/api/hosts/:id/", maxBytes: 20 }],
+      'lists the same paths twice: "/api/hosts/:hostId" and "/api/hosts/:id/"',
+    ],
   ])("rejects an invalid body limit list %#", (limits, message) => {
     expect(() => sortedBodyLimits(limits)).toThrow(message);
   });
 
   it("refuses to load with an invalid application body limit", async () => {
     await expect(proxyWithBodyLimits([{ pathPrefix: "/upload", maxBytes: 10 }])).rejects.toThrow(
-      "APP_BODY_LIMITS pathPrefix must be a static path under /api/",
+      "APP_BODY_LIMITS pathPrefix must be a path under /api/",
     );
   });
 });
@@ -840,6 +886,21 @@ describe("backend proxy application timeouts", () => {
     expect(checks).toBeGreaterThanOrEqual(3);
   });
 
+  it("waits without a deadline on a route with a path parameter", async () => {
+    vi.stubEnv("BACKEND_PROXY_TIMEOUT_MS", "20");
+    const proxy = await proxyWithTimeouts([{ pathPrefix: "/api/hosts/:hostId/file-transfers", timeoutMs: null }]);
+    stubApi(async () => new Response("ok"), answerAfter(80));
+
+    const commit = await proxy(
+      new Request("http://app.localhost/api/hosts/h1/file-transfers/t1/commit", { method: "POST", body: "{}" }),
+      "http://api:5002/hosts/h1/file-transfers/t1/commit",
+    );
+    const other = await proxy(new Request("http://app.localhost/api/hosts/h1/notes"), "http://api:5002/hosts/h1/notes");
+
+    expect(commit.status).toBe(200);
+    expect(other.status).toBe(504);
+  });
+
   it("applies the longest matching prefix on the decoded path and the default elsewhere", () => {
     vi.stubEnv("BACKEND_PROXY_TIMEOUT_MS", "1234");
     const timeouts = sortedProxyTimeouts([
@@ -855,16 +916,26 @@ describe("backend proxy application timeouts", () => {
     expect(proxyTimeoutFor("/api/file-transfers-old/7", timeouts)).toBe(5_000);
     expect(proxyTimeoutFor("/api/auth/get-session", sortedProxyTimeouts([]))).toBe(1234);
     expect(proxyTimeoutFor("/other", timeouts)).toBe(1234);
+
+    const byHost = sortedProxyTimeouts([
+      { pathPrefix: "/api/hosts/:hostId/file-transfers", timeoutMs: null },
+      { pathPrefix: "/api/hosts/local/file-transfers", timeoutMs: 60_000 },
+    ]);
+    expect(proxyTimeoutFor("/api/hosts/h1/file-transfers/t1/commit", byHost)).toBeNull();
+    expect(proxyTimeoutFor("/api/hosts/local/file-transfers/t1/commit", byHost)).toBe(60_000);
+    expect(proxyTimeoutFor("/api/hosts/file-transfers", byHost)).toBe(1234);
   });
 
   it.each<[{ pathPrefix: string; timeoutMs: number | null }[], string]>([
-    [[{ pathPrefix: "/exports/", timeoutMs: 10 }], "must be a static path under /api/"],
-    [[{ pathPrefix: "/api/exports/*", timeoutMs: 10 }], "must be a static path under /api/"],
-    [[{ pathPrefix: "/api/exports/../auth", timeoutMs: 10 }], "must be a static path under /api/"],
+    [[{ pathPrefix: "/exports/", timeoutMs: 10 }], "must be a path under /api/"],
+    [[{ pathPrefix: "/api/exports/*", timeoutMs: 10 }], "must be a path under /api/"],
+    [[{ pathPrefix: "/api/exports/../auth", timeoutMs: 10 }], "must be a path under /api/"],
     [[{ pathPrefix: "/api/exports", timeoutMs: 0 }], "must be null or a whole number of milliseconds"],
     [[{ pathPrefix: "/api/exports", timeoutMs: 1.5 }], "must be null or a whole number of milliseconds"],
     [[{ pathPrefix: "/api/exports", timeoutMs: 2_147_483_648 }], "must be null or a whole number of milliseconds"],
-    [[{ pathPrefix: "/api/exports", timeoutMs: null }, { pathPrefix: "/api/exports/", timeoutMs: 10 }], "more than once"],
+    [[{ pathPrefix: "/api/exports/:", timeoutMs: 10 }], "must be a path under /api/"],
+    [[{ pathPrefix: "/api/exports", timeoutMs: null }, { pathPrefix: "/api/exports/", timeoutMs: 10 }], "lists the same paths twice"],
+    [[{ pathPrefix: "/api/:a/x", timeoutMs: null }, { pathPrefix: "/api/:b/x", timeoutMs: 10 }], "lists the same paths twice"],
   ])("rejects an invalid timeout list %#", (timeouts, message) => {
     expect(() => sortedProxyTimeouts(timeouts)).toThrow(message);
   });

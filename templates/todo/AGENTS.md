@@ -53,7 +53,9 @@ Merge added module settings from `.env.example` into an existing `.env`.
   uploads larger than it must use a direct API path (`apiPaths`) instead. Give a
   route a longer, shorter, or no response deadline in the app-owned
   `apps/web/src/lib/server/proxy-timeouts.ts` (`APP_PROXY_TIMEOUTS`, `null` for
-  none); never edit the managed deadline.
+  none); never edit the managed deadline. Both lists take path prefixes with
+  `:name` parameters, such as `/api/hosts/:hostId/file-transfers`, and the most
+  specific prefix wins.
 - Server-side API calls (`serverApiClient`) give up after `BACKEND_TIMEOUT_MS`
   (2000), and the proxy answers 504 `BACKEND_TIMEOUT` when the API sends no
   response headers within `BACKEND_PROXY_TIMEOUT_MS` (30000). Once the API's

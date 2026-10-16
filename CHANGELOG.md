@@ -11,13 +11,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `apps/web/src/lib/server/proxy-timeouts.ts` is an application-owned
   `APP_PROXY_TIMEOUTS` list of `{ pathPrefix, timeoutMs }` entries for `/api`
   routes. An entry replaces `BACKEND_PROXY_TIMEOUT_MS` for its path and the paths
-  below it, matched like `APP_BODY_LIMITS` with the longest prefix winning, and
+  below it, matched by the same path rules as `APP_BODY_LIMITS`, and
   `timeoutMs: null` waits as long as the API takes. The proxy now also repeats
   its `GET /health` check every `BACKEND_TIMEOUT_MS` while it waits for response
   headers, so a request on such a route still ends with `503`
   `BACKEND_UNAVAILABLE` when the API stops answering partway through the wait.
   An invalid prefix or timeout fails when the web server loads the proxy.
   `podo update` creates the file once in existing apps and never overwrites it.
+- Path prefixes take `:name` parameters in the rate-limit module's route
+  profiles (`RATE_LIMIT_ROUTES`), `APP_BODY_LIMITS`, and `APP_PROXY_TIMEOUTS`. A
+  parameter matches exactly one non-empty path segment, matching still covers
+  whole segments and the paths below them, and the most specific prefix wins:
+  more segments, then, from the left, a literal segment over a parameter, then
+  the earlier tie-breakers (for rate limits, a route with a method, then the
+  latest registration). Routes keyed by an id in the middle of the path no longer
+  need edits to the managed `backend-proxy.ts`. For example, to give transfers
+  under every host their own request budget, a body cap for 1 MiB chunks, and no
+  proxy deadline:
+
+  ```ts
+  // apps/api/src/app.extensions.ts
+  import { RATE_LIMIT_ROUTES } from "@podosoft/podokit-runtime";
+
+  export function configureServices(services: ServiceRegistry): void {
+    services.tryResolve(RATE_LIMIT_ROUTES)?.register({
+      pathPrefix: "/hosts/:hostId/file-transfers",
+      profile: { name: "file-transfers", limit: 3000 },
+    });
+  }
+
+  // apps/web/src/lib/server/body-limits.ts
+  export const APP_BODY_LIMITS: ReadonlyArray<{ pathPrefix: string; maxBytes: number }> = [
+    { pathPrefix: "/api/hosts/:hostId/file-transfers", maxBytes: 1024 * 1024 + 64 * 1024 },
+  ];
+
+  // apps/web/src/lib/server/proxy-timeouts.ts
+  export const APP_PROXY_TIMEOUTS: ReadonlyArray<{ pathPrefix: string; timeoutMs: number | null }> = [
+    { pathPrefix: "/api/hosts/:hostId/file-transfers", timeoutMs: null },
+  ];
+  ```
+
+  A route without a deadline also needs `API_IDLE_TIMEOUT=0` and
+  `CONNECTION_IDLE_TIMEOUT=0`. Parameter names are a letter or `_` followed by
+  letters, digits, or `_`; wildcards such as `*`, `.` or `..` segments, and
+  malformed parameters are rejected, and the web lists also reject two prefixes
+  that cover the same paths, such as `/api/a/:x` and `/api/a/:y`.
 
 ### Fixed
 
@@ -52,10 +90,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Upgrade notes
 
 - If you edited `apps/web/src/lib/server/backend-proxy.ts` to give some routes a
-  longer deadline or none, `podo update` reports a conflict where the new proxy
-  picks the deadline. Take the new version, list those routes in
-  `APP_PROXY_TIMEOUTS` in `apps/web/src/lib/server/proxy-timeouts.ts`, and keep
-  the managed file unchanged so later updates stay clean.
+  longer deadline or none, or a body limit of their own, `podo update` reports a
+  conflict where the new proxy picks them. Take the new version, list those
+  routes in `APP_PROXY_TIMEOUTS` and `APP_BODY_LIMITS`, with `:name` for an id in
+  the path, and keep the managed file unchanged so later updates stay clean.
 - A route that calls Bun's `server.timeout(request, 0)` through `platform.server`
   to keep a long request open gets no longer timeout behind an HTTPS gateway:
   adapter-bun rewrites the request onto the public origin there, and Bun ignores

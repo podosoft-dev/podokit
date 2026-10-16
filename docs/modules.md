@@ -1184,11 +1184,18 @@ services.tryResolve(RATE_LIMIT_ROUTES)?.register({
 ```
 
 - `pathPrefix` matches that path and the paths below it by whole segments
-  (`/uploads` covers `/uploads/1/parts/2`, not `/uploads-old`). Use the path the
-  API receives: `/uploads`, not the `/api/uploads` the browser calls through the
-  web proxy. Better Auth routes keep `/api/auth`.
-- The most specific route wins: the longest prefix, then a route with a method
-  over one without, then the latest registration.
+  (`/uploads` covers `/uploads/1/parts/2`, not `/uploads-old`), and a `:name`
+  segment matches exactly one non-empty segment (`/hosts/:hostId/file-transfers`
+  covers `/hosts/h1/file-transfers/t1`, not `/hosts/file-transfers`). Use the
+  path the API receives: `/uploads`, not the `/api/uploads` the browser calls
+  through the web proxy. Better Auth routes keep `/api/auth`. Wildcards such as
+  `*`, `.` or `..` segments, and malformed parameter names are rejected when the
+  route is registered.
+- The most specific route wins: the prefix with more segments; at equal length,
+  the first segment from the left where one route has a literal and the other a
+  parameter decides for the literal; then a route with a method over one
+  without; then the latest registration. The web proxy's own lists use the same
+  [path rules](templates.md#proxy-path-rules).
 - `name` (1-64 letters, digits, `_`, or `-`) names the counter. Routes that
   share a name share one budget and must give the same `limit` and
   `ttlSeconds`; `ttlSeconds` defaults to `RATE_LIMIT_TTL`. Counters are per

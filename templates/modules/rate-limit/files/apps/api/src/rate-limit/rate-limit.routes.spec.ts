@@ -50,11 +50,49 @@ describe("RateLimitRoutes", () => {
     expect(routes.resolve("GET", "/other")).toBeUndefined();
   });
 
+  test("matches a :name parameter against exactly one non-empty segment", () => {
+    const routes = new RateLimitRoutes(60);
+    const transfers = { name: "file-transfers", limit: 600 };
+    routes.register({ pathPrefix: "/hosts/:hostId/file-transfers", profile: transfers });
+
+    expect(routes.resolve("PUT", "/hosts/h1/file-transfers/t1/chunks/3")).toMatchObject(transfers);
+    expect(routes.resolve("GET", "/hosts/h1/file-transfers")).toMatchObject(transfers);
+    expect(routes.resolve("GET", "/hosts/h1/file-transfers/")).toMatchObject(transfers);
+    expect(routes.resolve("GET", "/hosts/h1/file-transfers-old")).toBeUndefined();
+    expect(routes.resolve("GET", "/hosts/file-transfers")).toBeUndefined();
+    expect(routes.resolve("GET", "/hosts//file-transfers")).toBeUndefined();
+    expect(routes.resolve("GET", "/hosts/h1/h2/file-transfers")).toBeUndefined();
+  });
+
+  test("prefers more segments, then a literal segment over a parameter from the left", () => {
+    const routes = new RateLimitRoutes(60);
+    routes.register({ pathPrefix: "/hosts/:hostId/:section/:id", profile: { name: "deep", limit: 1 } });
+    routes.register({ pathPrefix: "/hosts/:hostId/files", profile: { name: "files", limit: 2 } });
+    routes.register({ pathPrefix: "/hosts/local/:section", profile: { name: "local", limit: 3 } });
+    routes.register({ pathPrefix: "/hosts", profile: { name: "hosts", limit: 4 } });
+
+    expect(routes.resolve("GET", "/hosts/local/files/1")).toMatchObject({ name: "deep" });
+    expect(routes.resolve("GET", "/hosts/local/files")).toMatchObject({ name: "local" });
+    expect(routes.resolve("GET", "/hosts/h2/files")).toMatchObject({ name: "files" });
+    expect(routes.resolve("GET", "/hosts/h2/logs")).toMatchObject({ name: "hosts" });
+
+    // Equal specificity falls back to the method, then the latest registration.
+    routes.register({ method: "GET", pathPrefix: "/hosts/:a/logs", profile: "exempt" });
+    routes.register({ pathPrefix: "/hosts/:b/logs", profile: { name: "logs", limit: 5 } });
+    expect(routes.resolve("GET", "/hosts/h2/logs")).toBe("exempt");
+    expect(routes.resolve("POST", "/hosts/h2/logs")).toMatchObject({ name: "logs" });
+  });
+
   test("rejects invalid routes and conflicting budgets under one name", () => {
     const routes = new RateLimitRoutes(60);
     expect(() => routes.register({ pathPrefix: "uploads", profile: "exempt" })).toThrow("absolute path");
     expect(() => routes.register({ pathPrefix: "/a?b", profile: "exempt" })).toThrow("absolute path");
     expect(() => routes.register({ pathPrefix: "/a//b", profile: "exempt" })).toThrow("absolute path");
+    expect(() => routes.register({ pathPrefix: "/a/../b", profile: "exempt" })).toThrow('".." segments');
+    expect(() => routes.register({ pathPrefix: "/a/*", profile: "exempt" })).toThrow("not wildcards");
+    for (const parameter of [":", ":1st", ":host-id", ":a:b"]) {
+      expect(() => routes.register({ pathPrefix: `/hosts/${parameter}/x`, profile: "exempt" })).toThrow("parameter");
+    }
     expect(() => routes.register({ method: "GET /", pathPrefix: "/a", profile: "exempt" })).toThrow("method");
     expect(() => routes.register({ pathPrefix: "/a", profile: { name: "a:b", limit: 1 } })).toThrow("name");
     expect(() => routes.register({ pathPrefix: "/a", profile: { name: "a", limit: 0 } })).toThrow("limit");

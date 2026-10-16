@@ -119,49 +119,104 @@ export interface BodyLimit {
   maxBytes: number;
 }
 
-const API_PATH_PREFIX = /^\/api(?:\/[A-Za-z0-9._~!$&'()+,;=:@-]+)*\/?$/;
+/** A literal path segment, or null for a `:name` parameter. */
+type PathSegment = string | null;
+
+/** An application path rule with its prefix split into segments. */
+export type PathRule<T extends { pathPrefix: string }> = T & { readonly segments: readonly PathSegment[] };
+
+const LITERAL_SEGMENT = /^[A-Za-z0-9._~!$&'()+,;=:@-]+$/;
+const PARAMETER_SEGMENT = /^:[A-Za-z_][A-Za-z0-9_]*$/;
+
+/** The segments of a prefix under /api/, or undefined when it is not one. */
+function parsePathPrefix(pathPrefix: string): PathSegment[] | undefined {
+  const base = pathPrefix.endsWith("/") ? pathPrefix.slice(0, -1) : pathPrefix;
+  const [root, ...segments] = base.split("/");
+  if (root !== "" || segments[0] !== "api") return undefined;
+  const parsed: PathSegment[] = [];
+  for (const segment of segments) {
+    if (PARAMETER_SEGMENT.test(segment)) {
+      parsed.push(null);
+    } else if (LITERAL_SEGMENT.test(segment) && !segment.startsWith(":") && segment !== "." && segment !== "..") {
+      parsed.push(segment);
+    } else {
+      return undefined;
+    }
+  }
+  return parsed;
+}
+
+/**
+ * Below zero when `a` is more specific: more segments, then, from the left, a
+ * literal segment before a parameter.
+ */
+function compareSpecificity(a: readonly PathSegment[], b: readonly PathSegment[]): number {
+  if (a.length !== b.length) return b.length - a.length;
+  for (let index = 0; index < a.length; index += 1) {
+    const literal = a[index] !== null;
+    if (literal !== (b[index] !== null)) return literal ? -1 : 1;
+  }
+  return 0;
+}
 
 /** Validate an application list of /api path prefixes and order it so the
- *  longest prefix matches first. Prefixes are stored without a trailing slash. */
+ *  most specific prefix matches first. Prefixes are stored without a trailing
+ *  slash. */
 function sortedByPrefix<T extends { pathPrefix: string }>(
   entries: ReadonlyArray<T>,
   listName: string,
   example: string,
   check: (entry: T) => void,
-): T[] {
-  const seen = new Set<string>();
-  const sorted = entries.map((entry) => {
+): PathRule<T>[] {
+  const seen = new Map<string, string>();
+  const rules = entries.map((entry) => {
     const { pathPrefix } = entry;
-    if (
-      !API_PATH_PREFIX.test(pathPrefix) ||
-      pathPrefix.split("/").some((segment) => segment === "." || segment === "..")
-    ) {
+    const segments = parsePathPrefix(pathPrefix);
+    if (!segments) {
       throw new Error(
-        `${listName} pathPrefix must be a static path under /api/, such as "${example}": ${JSON.stringify(pathPrefix)}`,
+        `${listName} pathPrefix must be a path under /api/ made of literal segments and ":name" parameters, ` +
+          `such as "${example}": ${JSON.stringify(pathPrefix)}`,
       );
     }
     check(entry);
-    const base = pathPrefix.endsWith("/") ? pathPrefix.slice(0, -1) : pathPrefix;
-    if (seen.has(base)) throw new Error(`${listName} lists ${pathPrefix} more than once.`);
-    seen.add(base);
-    return { ...entry, pathPrefix: base };
+    // Parameter names do not change which paths a prefix covers.
+    const key = segments.map((segment) => segment ?? ":").join("/");
+    const listed = seen.get(key);
+    if (listed !== undefined) {
+      throw new Error(
+        `${listName} lists the same paths twice: ${JSON.stringify(listed)} and ${JSON.stringify(pathPrefix)}.`,
+      );
+    }
+    seen.set(key, pathPrefix);
+    return { ...entry, pathPrefix: pathPrefix.endsWith("/") ? pathPrefix.slice(0, -1) : pathPrefix, segments };
   });
-  return sorted.sort((left, right) => right.pathPrefix.length - left.pathPrefix.length);
+  return rules.sort((left, right) => compareSpecificity(left.segments, right.segments));
 }
 
-/** The entry for a request path, matched on the decoded path so an encoded
- *  segment cannot step around a prefix. */
-function entryFor<T extends { pathPrefix: string }>(pathname: string, entries: readonly T[]): T | undefined {
+/** The most specific rule for a request path. Prefixes match whole segments of
+ *  the decoded path, so an encoded segment cannot step around them, and a
+ *  parameter matches exactly one non-empty segment. */
+function entryFor<T extends { pathPrefix: string }>(
+  pathname: string,
+  rules: readonly PathRule<T>[],
+): PathRule<T> | undefined {
   let path = pathname;
   try {
     path = decodeURIComponent(pathname);
   } catch {
     // Keep the raw path when it holds a malformed escape.
   }
-  return entries.find(({ pathPrefix }) => path === pathPrefix || path.startsWith(`${pathPrefix}/`));
+  const segments = path.split("/").slice(1);
+  return rules.find(
+    (rule) =>
+      rule.segments.length <= segments.length &&
+      rule.segments.every((segment, index) =>
+        segment === null ? segments[index] !== "" : segment === segments[index],
+      ),
+  );
 }
 
-export function sortedBodyLimits(limits: ReadonlyArray<BodyLimit>): BodyLimit[] {
+export function sortedBodyLimits(limits: ReadonlyArray<BodyLimit>): PathRule<BodyLimit>[] {
   return sortedByPrefix(limits, "APP_BODY_LIMITS", "/api/feedback/", ({ pathPrefix, maxBytes }) => {
     if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
       throw new Error(`APP_BODY_LIMITS maxBytes for ${pathPrefix} must be a positive whole number of bytes.`);
@@ -171,7 +226,7 @@ export function sortedBodyLimits(limits: ReadonlyArray<BodyLimit>): BodyLimit[] 
 
 const bodyLimits = sortedBodyLimits(APP_BODY_LIMITS);
 
-export function bodyLimitFor(pathname: string, limits: readonly BodyLimit[] = bodyLimits): number | undefined {
+export function bodyLimitFor(pathname: string, limits: readonly PathRule<BodyLimit>[] = bodyLimits): number | undefined {
   return entryFor(pathname, limits)?.maxBytes;
 }
 
@@ -282,7 +337,7 @@ export interface ProxyTimeout {
   timeoutMs: number | null;
 }
 
-export function sortedProxyTimeouts(timeouts: ReadonlyArray<ProxyTimeout>): ProxyTimeout[] {
+export function sortedProxyTimeouts(timeouts: ReadonlyArray<ProxyTimeout>): PathRule<ProxyTimeout>[] {
   return sortedByPrefix(timeouts, "APP_PROXY_TIMEOUTS", "/api/exports/", ({ pathPrefix, timeoutMs }) => {
     if (timeoutMs !== null && (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > MAX_TIMER_MS)) {
       throw new Error(
@@ -295,7 +350,10 @@ export function sortedProxyTimeouts(timeouts: ReadonlyArray<ProxyTimeout>): Prox
 const proxyTimeouts = sortedProxyTimeouts(APP_PROXY_TIMEOUTS);
 
 /** How long the proxy waits for response headers on a request path, or null for no deadline. */
-export function proxyTimeoutFor(pathname: string, timeouts: readonly ProxyTimeout[] = proxyTimeouts): number | null {
+export function proxyTimeoutFor(
+  pathname: string,
+  timeouts: readonly PathRule<ProxyTimeout>[] = proxyTimeouts,
+): number | null {
   const entry = entryFor(pathname, timeouts);
   return entry ? entry.timeoutMs : backendProxyTimeoutMs();
 }

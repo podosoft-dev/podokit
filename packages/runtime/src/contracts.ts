@@ -287,9 +287,13 @@ export interface RateLimitRoute {
   method?: string;
   /**
    * Matches this path and the paths below it, by whole segments: `/uploads`
-   * covers `/uploads` and `/uploads/1`, not `/uploads-old`. Use the path the
-   * API receives, such as `/uploads`, not `/api/uploads` as called through the
-   * web proxy; Better Auth routes keep their `/api/auth` prefix.
+   * covers `/uploads` and `/uploads/1`, not `/uploads-old`. A `:name` segment
+   * matches exactly one non-empty segment, so `/hosts/:hostId/files` covers
+   * `/hosts/h1/files/2` but not `/hosts/files`. Names are a letter or `_`
+   * followed by letters, digits, or `_`; other wildcard syntax and `.` or `..`
+   * segments are rejected. Use the path the API receives, such as `/uploads`,
+   * not `/api/uploads` as called through the web proxy; Better Auth routes keep
+   * their `/api/auth` prefix.
    */
   pathPrefix: string;
   /** A budget of its own, or "exempt" to skip request limiting. */
@@ -298,8 +302,10 @@ export interface RateLimitRoute {
 
 /**
  * Gives routes their own request budget or exempts them. The most specific
- * matching route wins: the longest prefix, then a route with a method over
- * one without, then the latest registration.
+ * matching route wins: the prefix with more segments; at equal length, the
+ * first segment from the left where one is literal and the other a parameter
+ * decides for the literal; then a route with a method over one without; then
+ * the latest registration.
  */
 export interface RateLimitRouteRegistry {
   register(route: RateLimitRoute): void;
