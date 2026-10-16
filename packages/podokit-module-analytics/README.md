@@ -12,7 +12,7 @@ It does not store raw visitor events in the application database.
 bun add --dev @podosoft/podokit-module-analytics
 podo add analytics
 bun install
-bun run --cwd apps/api migration:run
+bun run --cwd apps/api migrate:all
 ```
 
 The module uses the shadcn-svelte `textarea` from the application's

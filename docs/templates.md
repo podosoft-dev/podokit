@@ -52,6 +52,7 @@ apps/
       health/              # GET /health and /health/ready
       common/              # AppException and standard error envelope
     scripts/build.mjs      # Bun.build API, worker, and migrations
+    scripts/run-migrations.mjs # migrate:all: source in development, dist in production
     Dockerfile             # oven/bun:1.4.0-alpine
   web/
     src/routes/            # SvelteKit pages and API proxy
@@ -66,7 +67,15 @@ bun.lock
 ```
 
 The request path uses Elysia and Bun.SQL with PostgreSQL or SQLite. TypeORM
-executes PostgreSQL migrations; SQLite uses the local migration runner. Other
+executes PostgreSQL migrations; SQLite uses the local migration runner.
+`bun run --cwd apps/api migrate:all` is the one migration command for setup,
+after adding a module, and for the deployment migration job. It runs the source
+in development and the compiled output in a production image, and with the
+`auth` module installed it applies the Better Auth schema before the application
+migrations. `migration:run` and `migration:revert` work on the application
+migrations alone, so `migration:run` never creates Better Auth tables, and a
+module migration that needs one, such as the admin dashboard's session index,
+stops and names `migrate:all`. Other
 infrastructure is selected
 through the contracts described in [Runtime providers](providers.md). The merged
 OpenAPI document at `/api-docs-json` includes
@@ -185,6 +194,20 @@ upload route in `apiPaths` so the gateway sends it straight to the API; see
 [direct API paths](deployment.md#direct-api-paths). An app that splits uploads
 into chunks small enough for the web proxy can send larger parts that way.
 
+### Fallback error page
+
+When the root layout or a server hook fails, for example with 503 because the
+API is down, SvelteKit cannot render the app's pages and serves
+`apps/web/src/error.html` instead. The generated page is self-contained HTML
+with inline styles that follow the light or dark color scheme. It shows only the
+status and the error message, so it needs no translations. Customize it freely:
+it is application-owned, and `podo update` creates it once in an existing app and
+never overwrites it, including an `error.html` the app already has. SvelteKit
+fills in only `%sveltekit.status%` and the HTML-escaped
+`%sveltekit.error.message%`. It cannot use components, app CSS, scripts, or
+assets, because SvelteKit sends it as a plain template outside the app's
+rendering and build.
+
 ### API server options
 
 `main.ts` is managed, so applications set Bun server options through the
@@ -227,7 +250,7 @@ npx @podosoft/podokit create podokit --template todo --database sqlite
 cd podokit
 bun install
 cp .env.example .env
-bun run --cwd apps/api migration:run
+bun run --cwd apps/api migrate:all
 bun run dev
 ```
 

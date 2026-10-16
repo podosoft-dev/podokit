@@ -1016,6 +1016,75 @@ describe("provider requirements introduced by target templates", () => {
   });
 });
 
+describe("migrate:all launcher", () => {
+  const LAUNCHER = "apps/api/scripts/run-migrations.mjs";
+  const API_PACKAGE = "apps/api/package.json";
+
+  // Before the base template owned the launcher, base apps ran only compiled
+  // migrations and the auth module shipped its own launcher.
+  function templatesWithAuthLauncher(): string {
+    const dir = join(tmp(), "old-templates");
+    cpSync(REPO_TEMPLATES, dir, { recursive: true });
+    const base = join(dir, "fullstack");
+    const launcher = readFileSync(join(base, LAUNCHER), "utf8");
+    rmSync(join(base, LAUNCHER));
+    mkdirSync(join(dir, "modules/auth/files/apps/api/scripts"), { recursive: true });
+    writeFileSync(join(dir, "modules/auth/files", LAUNCHER), `${launcher}// auth copy\n`);
+    const packagePath = join(base, API_PACKAGE);
+    writeFileSync(
+      packagePath,
+      readFileSync(packagePath, "utf8").replace(
+        '"migrate:all": "bun scripts/run-migrations.mjs"',
+        '"migrate:all": "bun dist/database/migrate.js"',
+      ),
+    );
+    const manifestPath = join(dir, "modules/auth/module.manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { scripts: Record<string, string> };
+    manifest.scripts = { "migrate:all": "bun scripts/run-migrations.mjs", ...manifest.scripts };
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    return dir;
+  }
+
+  function migrateScript(project: string): string | undefined {
+    const pkg = JSON.parse(readFileSync(join(project, API_PACKAGE), "utf8")) as { scripts: Record<string, string> };
+    return pkg.scripts["migrate:all"];
+  }
+
+  it("gives an existing app without auth the launcher and the source-capable script", () => {
+    const oldTemplates = templatesWithAuthLauncher();
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: project });
+    expect(existsSync(join(project, LAUNCHER))).toBe(false);
+    expect(migrateScript(project)).toBe("bun dist/database/migrate.js");
+
+    const result = applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+
+    expect(result.conflicts).toEqual([]);
+    expect(readFileSync(join(project, LAUNCHER), "utf8")).toBe(
+      readFileSync(join(REPO_TEMPLATES, "fullstack", LAUNCHER), "utf8"),
+    );
+    expect(migrateScript(project)).toBe("bun scripts/run-migrations.mjs");
+  });
+
+  it("replaces the auth module's launcher in place and keeps the script", () => {
+    const oldTemplates = templatesWithAuthLauncher();
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: project });
+    addModule({ projectRoot: project, module: "auth", modulesDir: join(oldTemplates, "modules") });
+    expect(readFileSync(join(project, LAUNCHER), "utf8")).toContain("// auth copy");
+
+    const result = applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+
+    expect(result.conflicts).toEqual([]);
+    expect(readFileSync(join(project, LAUNCHER), "utf8")).toBe(
+      readFileSync(join(REPO_TEMPLATES, "fullstack", LAUNCHER), "utf8"),
+    );
+    expect(migrateScript(project)).toBe("bun scripts/run-migrations.mjs");
+    expect(planUpdate(project, REPO_TEMPLATES).changes.find((change) => change.path === LAUNCHER)?.action)
+      .toBe("up-to-date");
+  });
+});
+
 describe("app-owned public paths", () => {
   const SEED = "apps/web/src/lib/server/public-paths.ts";
   const GUARDS = "apps/web/src/lib/server/guards.ts";
@@ -1188,6 +1257,58 @@ describe("app-owned proxy headers", () => {
     writeFileSync(join(project, PROXY), readFileSync(join(REPO_TEMPLATES, "fullstack", PROXY), "utf8"));
     expect(planUpdate(project, REPO_TEMPLATES).changes.find((change) => change.path === PROXY)?.action)
       .toBe("up-to-date");
+  });
+});
+
+describe("app-owned error page", () => {
+  const SEED = "apps/web/src/error.html";
+
+  function oldApp(): { project: string; oldTemplates: string } {
+    const oldTemplates = join(tmp(), "old-templates");
+    cpSync(REPO_TEMPLATES, oldTemplates, { recursive: true });
+    rmSync(join(oldTemplates, "fullstack", SEED));
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: project });
+    const manifest = readManifest(project);
+    if (!manifest) throw new Error("expected manifest");
+    writeManifest(project, { ...manifest, ownedGlobs: manifest.ownedGlobs.filter((glob) => glob !== SEED) });
+    expect(existsSync(join(project, SEED))).toBe(false);
+    return { project, oldTemplates };
+  }
+
+  it("creates the page once for an existing app and never overwrites it", () => {
+    const { project, oldTemplates } = oldApp();
+
+    expect(planUpdate(project, REPO_TEMPLATES).changes.find((change) => change.path === SEED)).toMatchObject({
+      action: "add",
+      tier: "owned",
+    });
+    const result = applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+
+    expect(result.conflicts).toEqual([]);
+    expect(readFileSync(join(project, SEED), "utf8")).toBe(
+      readFileSync(join(REPO_TEMPLATES, "fullstack", SEED), "utf8"),
+    );
+    expect(readFilesLock(project)?.files[SEED]?.tier).toBe("owned");
+
+    const own = "<!doctype html><title>%sveltekit.status%</title><p>%sveltekit.error.message%</p>\n";
+    writeFileSync(join(project, SEED), own);
+    expect(planUpdate(project, REPO_TEMPLATES).changes.find((change) => change.path === SEED)?.action).toBe("skip");
+    applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+    expect(readFileSync(join(project, SEED), "utf8")).toBe(own);
+  });
+
+  it("keeps an error page the app added before updating", () => {
+    const { project, oldTemplates } = oldApp();
+    const own = "<!doctype html><h1>%sveltekit.status% %sveltekit.error.message%</h1>\n";
+    writeFileSync(join(project, SEED), own);
+
+    expect(planUpdate(project, REPO_TEMPLATES).changes.find((change) => change.path === SEED)?.action).toBe("skip");
+    const result = applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+
+    expect(result.conflicts).toEqual([]);
+    expect(readFileSync(join(project, SEED), "utf8")).toBe(own);
+    expect(readFilesLock(project)?.files[SEED]?.tier).toBe("owned");
   });
 });
 

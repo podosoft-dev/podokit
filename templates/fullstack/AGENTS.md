@@ -27,7 +27,7 @@ Provider selection does not migrate or delete existing data.
 ```bash
 {{packageManager}} install
 cp .env.example .env
-{{apiRun}} migration:run
+{{apiRun}} migrate:all
 {{rootRun}} dev        # api on http://localhost:5002, web on http://localhost:5001
 ```
 
@@ -50,10 +50,17 @@ Merge added module settings from `.env.example` into an existing `.env`.
   `apps/web/src/lib/server/body-limits.ts` (`APP_BODY_LIMITS`, 413
   `PAYLOAD_TOO_LARGE`). `BODY_SIZE_LIMIT` is the ceiling for every web route, so
   uploads larger than it must use a direct API path (`apiPaths`) instead.
+- When the root layout or a server hook fails, such as with 503 while the API is
+  down, SvelteKit serves the app-owned `apps/web/src/error.html`. It is plain HTML
+  with inline styles: no components, app CSS, scripts, or assets, and only the
+  `%sveltekit.status%` and `%sveltekit.error.message%` placeholders.
 - Build: `{{rootRun}} build`  ·  Type-check/lint: `{{rootRun}} lint`  ·  Unit tests: `{{rootRun}} test`
 - Per workspace: `{{apiRun}} build` / `{{webRun}} build`.
-- Application migrations (PostgreSQL or SQLite): `{{apiRun}} migration:run`.
-- When `auth` is installed, run `{{apiRun}} migrate:all` for Better Auth and application tables.
+- Set up the database and apply later migrations, including after adding a module, with
+  `{{apiRun}} migrate:all` (PostgreSQL or SQLite). With `auth` installed it applies the
+  Better Auth schema before the application migrations. `{{apiRun}} migration:run` runs
+  only the application migrations and never creates Better Auth tables;
+  `{{apiRun}} migration:revert` reverts the latest application migration.
 - e2e (Playwright, ships in `tests/`): `{{rootRun}} test:e2e`.
 - Playwright officially runs on Node, so `bunx playwright` respects its Node
   shebang. Node LTS is a test-tool dependency only; API, web, worker, migrations,

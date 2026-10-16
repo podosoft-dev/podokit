@@ -100,7 +100,7 @@ its first publication time and public list position.
 bun add --dev @podosoft/podokit-module-blog
 podo add blog
 bun install
-bun run --cwd apps/api migration:run
+bun run --cwd apps/api migrate:all
 ```
 
 The module keeps `apps/api/src/blog/**`, reusable `#lib/blog/**`, and its tests
@@ -132,7 +132,7 @@ stores raw visitor events in the application database.
 bun add --dev @podosoft/podokit-module-analytics
 podo add analytics
 bun install
-bun run --cwd apps/api migration:run
+bun run --cwd apps/api migrate:all
 ```
 
 Administrators enter a GA4 measurement ID, numeric property ID, and a
@@ -573,7 +573,7 @@ sweeping expired sessions at the same time never abort the same upload twice.
 Run the migration after adding the module:
 
 ```bash
-bun run --cwd apps/api migration:run   # or migrate:all with the auth module
+bun run --cwd apps/api migrate:all
 ```
 
 In the browser, use the managed helper `$lib/uploads`:

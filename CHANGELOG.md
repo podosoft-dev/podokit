@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- The generated `apps/api/src/database/pool-guard.spec.ts` declares the row
+  types of two awaited queries, so `bun run lint` passes with every
+  `@types/bun` version the template allows. With 1.3.9 through 1.4.2, the
+  `expect()` overload for a missing value made TypeScript infer those rows as
+  `undefined`.
+- `migrate:all` is the one migration command for every generated app. On a new
+  database, `migration:run` failed at `IndexSessionCreatedAt1792060000000` with
+  `relation "session" does not exist`, because only `migrate:all` creates
+  Better Auth's tables. The admin dashboard's session index migration and the
+  blog module's migration now stop with a message that names
+  `bun run --cwd apps/api migrate:all` instead; the blog migration no longer
+  skips its author foreign keys without the `user` table. The base template
+  owns the `apps/api/scripts/run-migrations.mjs` launcher, which runs the
+  source in development and the compiled output in a production image and
+  prefers the auth module's entry, so apps without auth can run `migrate:all`
+  before a build. READMEs, AGENTS.md, module instructions, and the docs set up
+  with `migrate:all`; `podo update` adds the launcher to existing apps.
+- The file-upload module's `chunked-uploads.api.spec.ts` passes on a
+  containerized dev stack. Like the S3 storage spec, it downloads the completed
+  object through the presigned URL and checks its SHA-256 only when the runner
+  has `S3_ENDPOINT`, because the API signs the URL for an in-network host such
+  as `minio` that a host-side runner cannot resolve. It always downloads the
+  signed API path that local storage returns.
+- Generated web apps have an application-owned `apps/web/src/error.html`, the
+  page SvelteKit serves when the root layout or a server hook fails, such as
+  with 503 while the API is down. It is self-contained HTML with inline styles
+  for light and dark color schemes and shows only the status and the error
+  message, so it needs no translations. `podo update` creates it once in
+  existing apps and never overwrites it, including an `error.html` an app
+  already has.
+
 ## [1.4.0] - 2026-10-16
 
 ### Added

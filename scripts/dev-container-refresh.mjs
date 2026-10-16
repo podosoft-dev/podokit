@@ -59,7 +59,6 @@ const capture = (cmd, cmdArgs, opts = {}) =>
 // 1) modules (installed + --add), keeping external package identity/version
 const manifest = JSON.parse(readFileSync(join(appDir, ".podokit/manifest.json"), "utf8"));
 const { bundledModules, externalModules } = planRefreshModules(manifest.modules, addFlag);
-const hasAuth = bundledModules.includes("auth") || externalModules.some((module) => module.name === "auth");
 console.log(`Bundled modules: ${bundledModules.join(", ")}`);
 if (externalModules.length) {
   console.log(`External modules: ${externalModules.map((module) => externalPackageSpec(module)).join(", ")}`);
@@ -132,21 +131,13 @@ const waitApi = async () => {
   return false;
 };
 await waitApi();
-if (hasAuth) {
-  try {
-    sh("docker", [
-      "compose", "-f", compose, "exec", "-T", "api",
-      "bun", "run", "--cwd", "apps/api", "migrate:all",
-    ], { cwd: appDir });
-  } catch {
-    console.warn("! application migrations failed (check api logs and rerun manually)");
-  }
-} else {
-  try {
-    sh("docker", ["compose", "-f", compose, "exec", "-T", "api", "bun", "run", "--cwd", "apps/api", "migration:run"], { cwd: appDir });
-  } catch {
-    console.warn("! migration:run failed (may be up to date or need manual run)");
-  }
+try {
+  sh("docker", [
+    "compose", "-f", compose, "exec", "-T", "api",
+    "bun", "run", "--cwd", "apps/api", "migrate:all",
+  ], { cwd: appDir });
+} catch {
+  console.warn("! migrations failed (check api logs and rerun manually)");
 }
 
 // 8) health check via Traefik

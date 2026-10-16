@@ -137,7 +137,10 @@ worker plus the SvelteKit server, and runs the shipped Playwright suite.
 
 Optional Mailpit, SMS, Redis, and Silo tests run only when the harness explicitly
 configures those services. When `S3_ENDPOINT` is configured, storage failures fail
-the smoke test; it also downloads the object through its presigned URL.
+the smoke test, and the storage and chunked upload specs also download their
+objects through the presigned URL. Without it, they skip that download, because a
+containerized dev stack signs URLs for an in-network host that the runner cannot
+resolve. Local storage returns a signed API path, which is always downloaded.
 `KEEP=1` preserves the generated app for inspection.
 Ports and backing-service credentials can be overridden with the documented
 `E2E_*`, `POSTGRES_*`, Redis, and S3 environment variables. The shared suite's

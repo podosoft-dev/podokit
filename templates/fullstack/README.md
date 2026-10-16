@@ -82,7 +82,7 @@ Run lifecycle and container commands from a second terminal:
 {{packageExecutor}} @podosoft/podokit dev up -d # detached stack without source watching
 {{packageExecutor}} @podosoft/podokit dev ps
 {{packageExecutor}} @podosoft/podokit dev logs
-{{packageExecutor}} @podosoft/podokit dev exec api {{apiRun}} migration:run
+{{packageExecutor}} @podosoft/podokit dev exec api {{apiRun}} migrate:all
 {{packageExecutor}} @podosoft/podokit dev down
 ```
 
@@ -113,7 +113,7 @@ web and API processes on the host. Prepare the project first:
 ```bash
 {{packageManager}} install
 cp .env.example .env
-{{apiRun}} migration:run
+{{apiRun}} migrate:all
 ```
 
 For PostgreSQL, start `docker compose -f infra/docker/docker-compose.yml up -d`
@@ -140,12 +140,15 @@ runs PostgreSQL migrations; SQLite uses the local migration runner. Add a
 numbered migration under `apps/api/src/migrations`, then run it:
 
 ```bash
-{{apiRun}} migration:run
+{{apiRun}} migrate:all        # set up the database and apply new migrations
+{{apiRun}} migration:revert   # roll back the last application migration
 ```
 
-When `auth` is installed, use `{{apiRun}} migrate:all` to create or update both
-Better Auth and application tables. Set the module's required environment
-values before migrating.
+`migrate:all` is the one command for setup, after adding a module, and in
+production. When `auth` is installed, it applies the Better Auth schema before
+the application migrations, so set the module's required environment values
+first. `{{apiRun}} migration:run` runs only the application migrations and
+never creates Better Auth tables.
 
 Want a worked example? Generate the `todo` template instead:
 `{{packageExecutor}} @podosoft/podokit create my-app --template todo`.

@@ -7,10 +7,17 @@ import {
   TableIndex,
 } from "typeorm";
 
+// The author columns reference Better Auth's "user" table, which `migrate:all`
+// creates before the application migrations; `migration:run` does not.
+const MISSING_USER_TABLE =
+  'Better Auth has not created the "user" table yet. Run "bun run --cwd apps/api migrate:all", ' +
+  "which applies the Better Auth schema before the application migrations.";
+
 export class InitBlogModule1740000000000 implements MigrationInterface {
   name = "InitBlogModule1740000000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
+    if (!(await queryRunner.hasTable("user"))) throw new Error(MISSING_USER_TABLE);
     await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS "pgcrypto"`);
     if (!(await queryRunner.hasTable("blog_posts"))) {
       await queryRunner.createTable(
@@ -110,7 +117,6 @@ export class InitBlogModule1740000000000 implements MigrationInterface {
     columnName: string,
     name: string,
   ): Promise<void> {
-    if (!(await queryRunner.hasTable("user"))) return;
     const table = await queryRunner.getTable(tableName);
     if (!table || table.foreignKeys.some((foreignKey) => foreignKey.name === name)) return;
     await queryRunner.createForeignKey(

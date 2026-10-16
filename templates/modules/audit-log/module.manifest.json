@@ -34,7 +34,7 @@
     }
   ],
   "instructions": [
-    "Run migrations to create the audit_logs table: {{apiRun}} migration:run{{apiWorkspaceArg}}",
+    "Run migrations to create the audit_logs table: {{apiRun}} migrate:all{{apiWorkspaceArg}}",
     "Auth/admin actions are recorded by a Better Auth hook. Record semantic application events with AuditService.recordRequest() or recordAudit(); use recordAuditLater() only for high-volume, non-security events.",
     "List entries newest first (admin session required): curl -i -b cookies.txt 'localhost:5002/audit-logs?limit=50' and pass the X-Next-Cursor header back as ?cursor= for the next page"
   ],

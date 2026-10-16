@@ -70,7 +70,7 @@ Use a second terminal for lifecycle operations:
 bunx --bun @podosoft/podokit dev url
 bunx --bun @podosoft/podokit dev ps
 bunx --bun @podosoft/podokit dev logs
-bunx --bun @podosoft/podokit dev exec api bun run --cwd apps/api migration:run
+bunx --bun @podosoft/podokit dev exec api bun run --cwd apps/api migrate:all
 bunx --bun @podosoft/podokit dev down
 ```
 
@@ -78,7 +78,7 @@ For host processes instead of Compose Watch:
 
 ```bash
 docker compose -f infra/docker/docker-compose.yml up -d
-bun run --cwd apps/api migration:run
+bun run --cwd apps/api migrate:all
 bun run dev
 ```
 
@@ -105,7 +105,7 @@ bunx --bun @podosoft/podokit provider set jobs local --apply
 bunx --bun @podosoft/podokit provider list
 bun install
 cp .env.example .env
-bun run --cwd apps/api migration:run
+bun run --cwd apps/api migrate:all
 ```
 
 `--database sqlite` changes only the database. The other selections otherwise

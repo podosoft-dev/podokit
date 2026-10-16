@@ -53,7 +53,7 @@ podo provider set jobs local --apply
 ```
 
 Then run `bun install`, copy `.env.example` to `.env`, and run
-`bun run --cwd apps/api migration:run`. Use host API/web processes to avoid
+`bun run --cwd apps/api migrate:all`. Use host API/web processes to avoid
 Docker; the containerized `podo dev watch` workflow still needs it. A full
 copyable example is in
 [Getting Started](getting-started.md#small-app-with-local-providers).

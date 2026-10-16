@@ -70,10 +70,7 @@ For PostgreSQL-backed development:
 cd /tmp/myapp
 docker compose -f infra/docker/docker-compose.yml up -d
 docker compose -f infra/docker/docker-compose.yml --profile dev up -d
-
-# When auth is installed:
 bun run --cwd apps/api migrate:all
-
 bun run dev
 ```
 
@@ -91,7 +88,7 @@ podo dev watch
 # or use a detached stack:
 podo dev up -d
 
-# Run migrations inside the API container when auth/modules require them:
+# Set up the database, and migrate again after adding a module:
 podo dev exec api bun run --cwd apps/api migrate:all
 ```
 
