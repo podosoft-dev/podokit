@@ -1,5 +1,5 @@
 ---
-"@podosoft/podokit": patch
+"@podosoft/podokit": minor
 "@podosoft/podokit-runtime": patch
 ---
 
