@@ -1,5 +1,6 @@
 import { expect, test } from "../helpers/disposable-users";
 import { ADMIN, USER } from "../helpers/accounts";
+import { signInOnSeparateDevices } from "../helpers/devices";
 
 const base = process.env.E2E_BASE_URL ?? "http://localhost:5001";
 const origin = { origin: base };
@@ -134,13 +135,9 @@ test("revokeOtherSessions removes every other session, past Better Auth's page o
   const password = "Podokit3e-Str0ng!pw";
   await disposableUsers.create({ email, password, name: "Many sessions" });
 
-  const others = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
-  for (let index = 0; index < 105; index += 1) {
-    const signIn = await others.post("/api/auth/sign-in/email", { data: { email, password } });
-    test.skip(signIn.status() === 429, "needs an authentication rate limit above 105 sign-ins per window");
-    expect(signIn.ok(), `sign-in ${index + 1}`).toBeTruthy();
-  }
-  await others.dispose();
+  const statuses = await signInOnSeparateDevices(email, password, 105);
+  test.skip(statuses.includes(429), "needs an authentication rate limit above 105 sign-ins per window");
+  expect(statuses.every((status) => status === 200)).toBe(true);
 
   const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   expect((await ctx.post("/api/auth/sign-in/email", { data: { email, password } })).ok()).toBeTruthy();

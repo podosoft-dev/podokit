@@ -1,3 +1,4 @@
+import { signInOnSeparateDevices } from "../helpers/devices";
 import { expect, test } from "../helpers/disposable-users";
 
 const base = process.env.E2E_BASE_URL ?? "http://localhost:5001";
@@ -14,10 +15,7 @@ test("account sessions page the user's own sessions and revoke one by id", async
   const email = `api-account-sessions-${Date.now()}@example.com`;
   const password = "Podokit3e-Str0ng!pw";
   await disposableUsers.create({ email, password, name: "Account sessions" });
-  const others = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
-  for (let index = 0; index < 4; index += 1) {
-    expect((await others.post("/api/auth/sign-in/email", { data: { email, password } })).ok()).toBeTruthy();
-  }
+  expect(await signInOnSeparateDevices(email, password, 4)).toEqual([200, 200, 200, 200]);
   const ctx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
   expect((await ctx.post("/api/auth/sign-in/email", { data: { email, password } })).ok()).toBeTruthy();
   const current = (await (await ctx.get("/api/auth/get-session")).json()) as { session: { id: string } };
@@ -30,12 +28,13 @@ test("account sessions page the user's own sessions and revoke one by id", async
   expect(page1.current?.id).toBe(current.session.id);
   expect(page1.total).toBe(5);
   expect(page1.items).toHaveLength(2);
+  expect(page1.nextCursor).toBeTruthy();
   const page2 = (await (await ctx.get(`/api/account/sessions?limit=2&cursor=${encodeURIComponent(page1.nextCursor ?? "")}`)).json()) as Page;
-  const page3 = (await (await ctx.get(`/api/account/sessions?limit=2&cursor=${encodeURIComponent(page2.nextCursor ?? "")}`)).json()) as Page;
-  const ids = [...page1.items, ...page2.items, ...page3.items].map((item) => item.id);
+  expect(page2.current?.id).toBe(current.session.id);
+  expect(page2.nextCursor).toBeNull();
+  const ids = [...page1.items, ...page2.items].map((item) => item.id);
   expect(new Set(ids).size).toBe(4);
   expect(ids).not.toContain(current.session.id);
-  expect(page3.nextCursor).toBeNull();
 
   // Another user's session cannot be revoked through this endpoint.
   const otherEmail = `api-account-sessions-other-${Date.now()}@example.com`;
@@ -52,6 +51,5 @@ test("account sessions page the user's own sessions and revoke one by id", async
   const revoked = await ctx.delete(`/api/account/sessions/${encodeURIComponent(ids[0] ?? "")}`);
   expect(revoked.status()).toBe(204);
   expect(((await (await ctx.get("/api/account/sessions?limit=2")).json()) as Page).total).toBe(4);
-  await others.dispose();
   await ctx.dispose();
 });

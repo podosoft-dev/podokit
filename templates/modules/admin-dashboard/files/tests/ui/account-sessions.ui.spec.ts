@@ -1,3 +1,4 @@
+import { signInOnSeparateDevices } from "../helpers/devices";
 import { expect, test } from "../helpers/disposable-users";
 import { ready } from "../helpers/hydration";
 
@@ -16,13 +17,9 @@ test("sessions tab shows the current session and signs out every other one past 
   const email = `ui-many-sessions-${Date.now()}@example.com`;
   const password = "Podokit3e-Str0ng!pw";
   await disposableUsers.create({ email, password, name: "Many sessions" });
-  const others = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
-  for (let index = 0; index < 105; index += 1) {
-    const signIn = await others.post("/api/auth/sign-in/email", { data: { email, password } });
-    test.skip(signIn.status() === 429, "needs an authentication rate limit above 105 sign-ins per window");
-    expect(signIn.ok(), `sign-in ${index + 1}`).toBeTruthy();
-  }
-  await others.dispose();
+  const statuses = await signInOnSeparateDevices(email, password, 105);
+  test.skip(statuses.includes(429), "needs an authentication rate limit above 105 sign-ins per window");
+  expect(statuses.every((status) => status === 200)).toBe(true);
 
   // Sign the browser in last, so its session is the 106th.
   const signIn = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
