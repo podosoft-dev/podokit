@@ -6,8 +6,11 @@ import test from "node:test";
 import {
   assertCleanMigrationOutput,
   createPhaseTimer,
+  INSTALL_RETRY_DELAYS_MS,
   playwrightArguments,
   resolveE2eOptions,
+  retryTransientInstall,
+  transientInstallFailure,
 } from "./e2e-ci-lib.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -227,4 +230,106 @@ test("fails a migration run that reports a Better Auth schema mismatch", () => {
   const source = readFileSync(join(repoRoot, "scripts/e2e-ci.mjs"), "utf8");
   assert.match(source, /spawnSync\("bun", \["run", "--cwd", "apps\/api", "migrate:all"\]/);
   assert.match(source, /assertCleanMigrationOutput\(`\$\{migration\.stdout\}\$\{migration\.stderr\}`\)/);
+});
+
+// Bun 1.4 output from failed installs against the local registry.
+const uplinkMiss = [
+  "Resolved, downloaded and extracted [207]",
+  "error: GET http://localhost:4873/json-bigint - 404",
+  "error: json-bigint@^1.0.0 failed to resolve",
+].join("\n");
+const uplinkOffline = [
+  "error: GET http://localhost:4873/protobufjs - 404",
+  "",
+  "error: GET http://localhost:4873/node-fetch - 404",
+  "error: duplexify@^4.1.3 failed to resolve",
+  "error: node-fetch@^3.3.2 failed to resolve",
+].join("\n");
+const missingLocalPackage = [
+  "error: GET http://localhost:4873/@podosoft%2fpodokit-runtime - 404",
+  "error: @podosoft/podokit-runtime@^0.4.1 failed to resolve",
+].join("\n");
+const missingVersion = [
+  'error: No version matching "^9.0.0" found for specifier "@podosoft/podokit-runtime" (but package exists)',
+  "error: @podosoft/podokit-runtime@^9.0.0 failed to resolve",
+].join("\n");
+
+test("retries installs only after registry or network failures", () => {
+  assert.equal(transientInstallFailure(uplinkMiss), "error: GET http://localhost:4873/json-bigint - 404");
+  assert.equal(transientInstallFailure(uplinkOffline), "error: GET http://localhost:4873/protobufjs - 404");
+  assert.ok(transientInstallFailure("error: GET http://localhost:4873/zod - 503"));
+  assert.ok(transientInstallFailure("error: GET http://localhost:4873/zod - 429"));
+  for (const name of ["ConnectionRefused", "ConnectionClosed", "DNSResolveFailed"]) {
+    assert.ok(transientInstallFailure(`error: ${name} downloading package manifest zod`), name);
+  }
+  assert.ok(transientInstallFailure("error: ConnectionClosed downloading tarball zod@4.1.0"));
+
+  assert.equal(transientInstallFailure(missingLocalPackage), null);
+  assert.equal(transientInstallFailure(missingVersion), null);
+  assert.equal(transientInstallFailure(`${uplinkMiss}\n${missingVersion}`), null);
+  assert.equal(transientInstallFailure(`${uplinkMiss}\n${missingLocalPackage}`), null);
+  assert.equal(transientInstallFailure("error: GET http://localhost:4873/zod - 401"), null);
+  assert.equal(transientInstallFailure("error: workspace dependency \"web\" not found"), null);
+  assert.equal(transientInstallFailure(""), null);
+});
+
+test("retries a transient install failure a bounded number of times", async () => {
+  const waits = [];
+  const logs = [];
+  const results = [
+    { status: 1, output: uplinkMiss },
+    { status: 1, output: uplinkOffline },
+    { status: 0, output: "1013 packages installed" },
+  ];
+  let attempts = 0;
+  await retryTransientInstall(() => results[attempts++], {
+    label: "bun install",
+    sleep: async (ms) => waits.push(ms),
+    log: (line) => logs.push(line),
+  });
+
+  assert.equal(attempts, 3);
+  assert.deepEqual(waits, INSTALL_RETRY_DELAYS_MS);
+  assert.match(logs[0], /bun install hit a registry error \(error: GET http:\/\/localhost:4873\/json-bigint - 404\); retrying in 10s \(retry 1 of 2\)/);
+
+  attempts = 0;
+  await assert.rejects(
+    retryTransientInstall(() => (attempts++, { status: 1, output: uplinkMiss }), {
+      label: "bun install",
+      sleep: async () => {},
+      log: () => {},
+    }),
+    /bun install exited with status 1 after 3 attempts/,
+  );
+  assert.equal(attempts, 3);
+});
+
+test("does not retry an install that failed to resolve a real dependency", async () => {
+  let attempts = 0;
+  await assert.rejects(
+    retryTransientInstall(() => (attempts++, { status: 1, output: missingVersion }), {
+      label: "bun install",
+      sleep: async () => assert.fail("must not wait"),
+      log: () => {},
+    }),
+    /^Error: bun install exited with status 1$/,
+  );
+  assert.equal(attempts, 1);
+});
+
+test("installs the faithful app through the retrying Bun runner", () => {
+  const source = readFileSync(join(repoRoot, "scripts/e2e-ci.mjs"), "utf8");
+
+  assert.match(source, /await bunInstallWithRetries\(\["install", "--cache-dir", bunCacheDir\]/);
+  assert.match(source, /await bunInstallWithRetries\(\s*\[\s*"add",\s*"--dev",\s*external\.packageName/);
+  assert.doesNotMatch(source, /run\("bun", \["install"/);
+  assert.doesNotMatch(source, /run\(\s*"bun",\s*\[\s*"add"/);
+});
+
+test("lets Verdaccio ask npm again before the first install retry", () => {
+  const config = readFileSync(join(repoRoot, "scripts/verdaccio.yaml"), "utf8");
+  const failTimeout = /^\s+fail_timeout: (\d+)s$/m.exec(config);
+
+  assert.ok(failTimeout, "the npm uplink sets fail_timeout in seconds");
+  assert.ok(Number(failTimeout[1]) * 1000 < INSTALL_RETRY_DELAYS_MS[0]);
 });

@@ -4,6 +4,10 @@ uplinks:
   npmjs:
     url: https://registry.npmjs.org/
     cache: false
+    # After two failed npm requests Verdaccio answers 404 without asking npm for
+    # fail_timeout (5m by default). Keep it shorter than the first install retry
+    # delay in e2e-ci-lib.mjs, so a retried install reaches npm again.
+    fail_timeout: 5s
 packages:
   "@podosoft/*":
     access: $all

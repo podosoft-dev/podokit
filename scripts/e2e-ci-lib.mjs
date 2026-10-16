@@ -80,3 +80,79 @@ export function assertCleanMigrationOutput(output) {
     throw new Error("migrate:all reported a Better Auth schema mismatch before migrating");
   }
 }
+
+// Waits before each retry of an install that failed on a registry or network
+// error. The first wait outlasts the uplink fail_timeout in verdaccio.yaml, so
+// Verdaccio asks npm again instead of answering from its offline state.
+export const INSTALL_RETRY_DELAYS_MS = [10_000, 30_000];
+
+const BUN_GET_FAILURE = /^error: GET (\S+) - (\d{3})\b/;
+const BUN_DOWNLOAD_FAILURE = /^error: (\w+) downloading (?:package manifest|tarball) (\S+)/;
+const BUN_NO_MATCHING_VERSION = /^error: No version matching /;
+
+function packageNameFromUrl(url) {
+  try {
+    return decodeURIComponent(new URL(url).pathname.slice(1));
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * The reason a failed `bun install` or `bun add` is worth retrying, or null.
+ * A 404 for a package outside the local scopes means the local registry could
+ * not reach npm, because Verdaccio answers 404 when its uplink fails; registry
+ * 5xx/408/429 answers and connection or DNS failures are transient too. A
+ * missing local package or version is a real resolution error, and any real
+ * error in the output rules out a retry. A public package that truly does not
+ * exist is retried and still fails after the bounded attempts.
+ */
+export function transientInstallFailure(output, localScopes = ["@podosoft/"]) {
+  let transient = null;
+  for (const raw of output.split("\n")) {
+    const line = raw.trim();
+    if (BUN_NO_MATCHING_VERSION.test(line)) return null;
+    const get = BUN_GET_FAILURE.exec(line);
+    if (get) {
+      const status = Number(get[2]);
+      if (status === 404) {
+        const name = packageNameFromUrl(get[1]);
+        if (localScopes.some((scope) => name.startsWith(scope))) return null;
+      } else if (status !== 408 && status !== 429 && status < 500) {
+        return null;
+      }
+      transient ??= line;
+      continue;
+    }
+    if (BUN_DOWNLOAD_FAILURE.test(line)) transient ??= line;
+  }
+  return transient;
+}
+
+/**
+ * Run `attempt` (which returns `{ status, output }`) until it succeeds, it fails
+ * for a reason that is not transient, or the retries in `delaysMs` run out.
+ */
+export async function retryTransientInstall(
+  attempt,
+  {
+    label,
+    delaysMs = INSTALL_RETRY_DELAYS_MS,
+    sleep = (ms) => new Promise((settle) => setTimeout(settle, ms)),
+    log = console.log,
+  },
+) {
+  for (let retry = 0; ; retry += 1) {
+    const { status, output } = attempt();
+    if (status === 0) return;
+    const reason = transientInstallFailure(output);
+    if (!reason || retry >= delaysMs.length) {
+      throw new Error(`${label} exited with status ${status}${reason ? ` after ${retry + 1} attempts` : ""}`);
+    }
+    log(
+      `   ${label} hit a registry error (${reason}); retrying in ${delaysMs[retry] / 1000}s ` +
+        `(retry ${retry + 1} of ${delaysMs.length})`,
+    );
+    await sleep(delaysMs[retry]);
+  }
+}

@@ -27,6 +27,22 @@ npm run lint
 npm test
 ```
 
+## Long-running steps
+
+A development or verification step that takes about 10 minutes or more is a
+problem to investigate, not a wait to accept:
+
+- Time each of its phases (`scripts/dev-app.mjs` and `scripts/e2e-ci.mjs` print
+  phase timings), find what dominates, and make that phase faster or fix it.
+- A step that prints nothing for minutes is usually blocked rather than slow.
+  Find what it waits for, such as a background process that keeps the caller's
+  output open, before raising a timeout or rerunning it.
+- Record the numbers before and after the change, each with the date it was
+  measured, in [Measured durations](docs/testing.md#measured-durations).
+- Document a wait that cannot be shortened, such as npm showing a new version
+  a few minutes after it is published, in the same place, and poll it in the
+  background instead of rerunning anything.
+
 ## Commit conventions
 
 - Use [Conventional Commits](https://www.conventionalcommits.org/): `feat`, `fix`, `docs`, `refactor`, `style`, `test`, `chore`.

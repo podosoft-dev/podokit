@@ -20,6 +20,7 @@ import {
   createPhaseTimer,
   playwrightArguments,
   resolveE2eOptions,
+  retryTransientInstall,
 } from "./e2e-ci-lib.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -97,6 +98,19 @@ function stop(child) {
       /* already stopped */
     }
   }
+}
+// Bun resolves every public package through Verdaccio's npm uplink, so a
+// transient npm or network failure would otherwise fail the whole run here.
+async function bunInstallWithRetries(bunArgs, opts) {
+  await retryTransientInstall(
+    () => {
+      const result = spawnSync("bun", bunArgs, { ...opts, encoding: "utf8" });
+      process.stdout.write(result.stdout ?? "");
+      process.stderr.write(result.stderr ?? "");
+      return { status: result.status ?? 1, output: `${result.stdout ?? ""}${result.stderr ?? ""}` };
+    },
+    { label: `bun ${bunArgs.join(" ")}` },
+  );
 }
 async function waitFor(url, label, tries = 60) {
   for (let i = 0; i < tries; i += 1) {
@@ -183,8 +197,7 @@ async function main() {
     `registry=${registry}\n//localhost:${env.REGISTRY_PORT}/:_authToken=e2e\n`,
   );
   for (const external of EXTERNAL_MODULES) {
-    run(
-      "bun",
+    await bunInstallWithRetries(
       [
         "add",
         "--dev",
@@ -203,7 +216,7 @@ async function main() {
   }
 
   step("install (resolving @podosoft/* from the registry)");
-  run("bun", ["install", "--cache-dir", bunCacheDir], { cwd: target });
+  await bunInstallWithRetries(["install", "--cache-dir", bunCacheDir], { cwd: target });
 
   step("write .env");
   writeFileSync(
