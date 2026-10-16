@@ -1542,7 +1542,10 @@ if (!success) throw new AppException("PERMISSION_DENIED", "Permission denied.", 
 app issues tokens to registered clients — other apps can "Sign in with this app". It's
 built on `@better-auth/oauth-provider` and signs id_tokens with the `jwt` plugin's keys
 (exposed at the discovery `jwks_uri`). Discovery is at
-`GET /api/auth/.well-known/openid-configuration` (404 while disabled).
+`GET /api/auth/.well-known/openid-configuration` and
+`GET /api/auth/.well-known/oauth-authorization-server`. While the provider is off,
+the discovery documents and every `/api/auth/oauth2/*` endpoint answer 404; the
+`jwt` plugin's `/api/auth/jwks` and `/api/auth/token` stay available.
 Session reads do not attach a `set-auth-jwt` header, so they never pay for a JWT
 signature. A client that needs a JWT for the signed-in session requests one from
 `GET /api/auth/token` and verifies it against `GET /api/auth/jwks`.

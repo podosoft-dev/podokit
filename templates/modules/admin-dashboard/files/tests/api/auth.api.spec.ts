@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { createPublicKey, verify, type JsonWebKey } from "node:crypto";
 import { ADMIN, USER } from "../helpers/accounts";
+import { exclusive } from "../helpers/exclusive";
 import { clearSms, smsSinkReachable, waitForSmsOtp } from "../helpers/sms";
 import { totpCode } from "../helpers/totp";
 
@@ -380,9 +381,39 @@ test("an organization can have a parent and manager members", async ({ playwrigh
   await ctx.dispose();
 });
 
-// OIDC discovery + the enabled/disabled behaviour is covered by the front-channel
-// test in tests/ui/oidc.ui.spec.ts (which owns toggling the oidcProvider flag), and
-// the server-side gate is covered generically by the feature-toggle test above.
+test("the OIDC provider's discovery and endpoints follow its setting", async ({ playwright }) => {
+  // The provider's metadata is answered before endpoint hooks run, so it needs its
+  // own check that "off" hides it. The lock keeps tests/ui/oidc.ui.spec.ts, which
+  // also toggles the provider, from running at the same time.
+  test.setTimeout(60_000);
+  const admin = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
+  await admin.post("/api/auth/sign-in/email", { data: { email: ADMIN.email, password: ADMIN.password } });
+  const status = (path: string): Promise<number> => admin.get(path).then((r) => r.status());
+  const discovery = [
+    "/api/auth/.well-known/openid-configuration",
+    "/api/auth/.well-known/oauth-authorization-server",
+  ];
+  const allStatuses = (): Promise<number[]> =>
+    Promise.all([...discovery, "/api/auth/oauth2/authorize?client_id=probe"].map(status));
+
+  await exclusive("oidc-provider", async () => {
+    try {
+      expect((await admin.put("/api/account/settings", { data: { oidcProvider: false } })).ok()).toBeTruthy();
+      await expect.poll(allStatuses, { timeout: 8000 }).toEqual([404, 404, 404]);
+      // The jwt plugin's keys and session tokens are not part of the provider.
+      expect(await status("/api/auth/jwks")).toBe(200);
+
+      expect((await admin.put("/api/account/settings", { data: { oidcProvider: true } })).ok()).toBeTruthy();
+      await expect.poll(() => Promise.all(discovery.map(status)), { timeout: 8000 }).toEqual([200, 200]);
+      const metadata = await (await admin.get(discovery[0]!)).json();
+      expect(metadata.authorization_endpoint).toContain("/api/auth/oauth2/authorize");
+    } finally {
+      expect((await admin.put("/api/account/settings", { data: { oidcProvider: false } })).ok()).toBeTruthy();
+    }
+    await expect.poll(allStatuses, { timeout: 8000 }).toEqual([404, 404, 404]);
+  });
+  await admin.dispose();
+});
 
 test("only admins can change settings @smoke", async ({ playwright }) => {
   const userCtx = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
