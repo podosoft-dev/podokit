@@ -85,6 +85,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `DataTableColumn` takes a `head` snippet that replaces the column's label and
   sort button in the header, for example a select-all checkbox. Give the
   control its own accessible name.
+- `<html>` carries the `light` class in light mode as it carries `dark` in dark
+  mode, from the first paint. Component libraries that follow a `.dark` or
+  `.light` class and fall back to the system setting without one now match the
+  theme the visitor chose instead of painting their dark palette on a light page
+  when the system is dark.
 
 ### Removed
 
@@ -236,6 +241,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `content-type: application/json` to requests without a body, can be removed
   once `tests/ui/same-origin-requests.ui.spec.ts` passes against the deployment
   without it. Fix the forwarded scheme in the ingress first if it does not.
+- If you added `lightClassNames` to the managed `site-runtime.svelte`, take
+  PodoKit's version. A rule of your own for a `.light` class now also matches
+  `<html>` in light mode; scope it if it was meant for one element.
 
 ## [1.5.0] - 2026-10-16
 

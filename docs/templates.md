@@ -551,6 +551,9 @@ shipped ones.
 
 Application components should wrap the vendored primitives rather than editing
 `src/lib/components/ui/**`. Colors and radius are CSS variables in `app.css`.
+mode-watcher puts `dark` on `<html>` in dark mode and `light` in light mode, so a
+component library that follows either class, and falls back to the system
+setting without one, matches the theme the visitor chose.
 
 ## Dotfile convention
 

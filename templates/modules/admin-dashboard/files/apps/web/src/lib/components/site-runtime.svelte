@@ -44,7 +44,9 @@
   {/if}
 </svelte:head>
 
-<ModeWatcher />
+<!-- `.light` on <html> in light mode lets component libraries that follow a `.dark`
+     or `.light` class, and fall back to the OS setting otherwise, match the theme. -->
+<ModeWatcher lightClassNames={["light"]} />
 <SessionIdleTimeout timeoutMinutes={sessionIdleTimeoutMinutes} />
 <!-- podokit:begin:site-runtime-components -->
 <!-- podokit:end:site-runtime-components -->
