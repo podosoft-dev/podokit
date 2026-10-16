@@ -135,6 +135,17 @@ installs the generated workspace with Bun 1.4.0, runs Better Auth and TypeORM
 migrations, verifies the OpenAPI contract, builds and starts the Bun API and
 worker plus the SvelteKit server, and runs the shipped Playwright suite.
 
+Verdaccio serves the published `@podosoft/*` packages and fetches every other
+package from npm. When that fetch fails, Verdaccio answers `404`, and after two
+failures it stops asking npm for `fail_timeout`, which
+[`scripts/verdaccio.yaml`](../scripts/verdaccio.yaml) shortens to 5 seconds. The
+harness therefore retries `bun add` and `bun install` up to twice, after 10 and
+30 seconds, when Bun reports a `404` for a package outside `@podosoft`, a
+registry `5xx`, `408`, or `429`, or a connection or DNS failure while
+downloading. A missing `@podosoft/*` package or version, a `No version matching`
+error, or any other status fails at once. A public package that really does not
+exist fails after the third attempt.
+
 Optional Mailpit, SMS, Redis, and Silo tests run only when the harness explicitly
 configures those services. When `S3_ENDPOINT` is configured, storage failures fail
 the smoke test, and the storage and chunked upload specs also download their
