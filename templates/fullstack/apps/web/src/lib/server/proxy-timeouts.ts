@@ -10,7 +10,8 @@
  * headers before it answers 504 BACKEND_TIMEOUT; null waits as long as the API
  * takes. Either way the proxy answers 503 BACKEND_UNAVAILABLE once the API's
  * GET /health stops answering, and the deadline ends when the response headers
- * arrive.
+ * arrive. For null or 300 seconds and more, the proxy also turns off Bun's fetch
+ * idle timeout, which would otherwise end a silent wait after 300 seconds.
  *
  * Bun closes a silent connection up to 4 seconds before its idle timeout, so a
  * longer wait also needs the API's API_IDLE_TIMEOUT and the web server's

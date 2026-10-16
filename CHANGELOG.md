@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- The `/api` proxy no longer cuts a route listed in `APP_PROXY_TIMEOUTS` with
+  `timeoutMs: null` after 300 seconds. Bun's `fetch` gives up on a connection
+  that sends nothing for its idle timeout (300 seconds unless
+  `BUN_CONFIG_HTTP_IDLE_TIMEOUT` sets another), even while the proxy still waits
+  for response headers, so a request whose API legitimately took longer got
+  `503` `BACKEND_UNAVAILABLE` although the API was up. The proxy now turns that
+  timeout off for a request without a deadline and for a deadline of 300 seconds
+  or more, from `APP_PROXY_TIMEOUTS` or `BACKEND_PROXY_TIMEOUT_MS`, so only the
+  deadline, the `GET /health` checks, and the browser end the wait. Shorter
+  deadlines keep Bun's default. Apps that raised `BUN_CONFIG_HTTP_IDLE_TIMEOUT`
+  in the web image to work around this can remove it.
+
 ## [1.5.0] - 2026-10-16
 
 ### Added
