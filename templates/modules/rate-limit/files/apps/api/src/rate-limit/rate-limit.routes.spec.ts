@@ -119,6 +119,28 @@ describe("RateLimitRoutes", () => {
 });
 
 describe("RateLimiter route profiles", () => {
+  test("advertises the built-in budget of each default route", async () => {
+    const limiter = new RateLimiter(
+      config,
+      { resolve: async () => "session:test" } as unknown as RateLimitIdentity,
+      { increment: async () => ({ count: 1, retryAfterSeconds: 60 }) },
+    );
+    const ceiling = async (path: string, method = "GET"): Promise<string | undefined> => {
+      const request = context(path, method);
+      await limiter.enforce(request.value);
+      return request.headers["ratelimit-limit"];
+    };
+
+    expect(await ceiling("/api/auth/get-session")).toBe("1000");
+    expect(await ceiling("/site/settings")).toBe("1000");
+    expect(await ceiling("/api/auth/admin/list-users")).toBe("300");
+    expect(await ceiling("/api/auth/admin/ban-user", "POST")).toBe("20");
+    expect(await ceiling("/api/auth/sign-out", "POST")).toBe("20");
+    expect(await ceiling("/api/auth/sign-in/email", "POST")).toBe("20");
+    expect(await ceiling("/site/settings", "PUT")).toBe("300");
+    expect(await ceiling("/account/capabilities")).toBe("300");
+  });
+
   test("counts a registered route in its own bucket and skips exempt routes", async () => {
     const increment = mock(async (_key: string, _ttlSeconds: number) => ({ count: 1, retryAfterSeconds: 30 }));
     const limiter = new RateLimiter(

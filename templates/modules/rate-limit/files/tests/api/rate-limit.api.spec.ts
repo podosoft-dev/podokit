@@ -129,6 +129,7 @@ test("rate limit: a user's sessions share one counter and forged sessions do not
 test("rate limit: session reads do not consume the strict authentication budget", async ({
   playwright,
 }) => {
+  test.skip(authLimit > 1000, "the authentication budget is too large to exhaust here");
   const ctx = await session(playwright);
   for (let i = 0; i < authLimit + 5; i++) {
     const response = await ctx.get("/api/auth/get-session");

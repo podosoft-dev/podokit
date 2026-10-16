@@ -430,7 +430,10 @@ async function main() {
       ...process.env,
       E2E_BASE_URL: webURL,
       E2E_API_URL: `http://localhost:${env.API_PORT}`,
+      // The rate-limit spec compares each budget with the limits the API runs with.
       RATE_LIMIT_MAX: pgEnv.RATE_LIMIT_MAX,
+      RATE_LIMIT_AUTH_MAX: pgEnv.RATE_LIMIT_AUTH_MAX,
+      RATE_LIMIT_RUNTIME_MAX: pgEnv.RATE_LIMIT_RUNTIME_MAX,
       ...(hasRedis
         ? { E2E_SECONDARY_API_URL: `http://localhost:${env.SECONDARY_API_PORT}` }
         : {}),
