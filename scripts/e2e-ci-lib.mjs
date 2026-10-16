@@ -164,3 +164,19 @@ export async function retryTransientInstall(
     await sleep(delaysMs[retry]);
   }
 }
+
+/**
+ * Environment for npm and npx commands that publish to or install from the
+ * local Verdaccio registry. npx caches a package by its spec, not by its
+ * registry, so a local build of `@podosoft/podokit@<version>` installed through
+ * the user's npm cache is what a later `npx @podosoft/podokit@<version>` runs,
+ * as if it were the release. These commands therefore get a cache of their own.
+ */
+export function localRegistryEnvironment({ registry, userconfig, cacheDir }, base = process.env) {
+  return {
+    ...base,
+    npm_config_registry: registry,
+    npm_config_userconfig: userconfig,
+    npm_config_cache: cacheDir,
+  };
+}

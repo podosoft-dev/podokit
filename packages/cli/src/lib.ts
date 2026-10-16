@@ -33,6 +33,8 @@ export { describeApiPaths } from "./module-api-paths";
 export { status, diff, doctor, SUPPORTED_FRAMEWORKS } from "./inspect";
 export type { StatusReport, DoctorFinding } from "./inspect";
 export { addedModuleReason, planUpdate, summarize } from "./update";
+export { restore, templateDiff } from "./template-files";
+export type { RestoreResult, TemplateDiffResult, TemplateFileDiff } from "./template-files";
 export type { AddedModule, UpdatePlan, FileChange } from "./update";
 export { readDevConfig, renderRoute, renderRuntimeCompose, resolveDevRuntime, runDevCommand } from "./dev";
 export type { CommandRunner, DevConfig, DevRuntime } from "./dev";

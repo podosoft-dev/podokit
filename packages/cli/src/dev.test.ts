@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { initLockfile, readManifest, writeManifest } from "./lockfile";
 import {
+  devTemplateVars,
   installedDevProfiles,
   readDevConfig,
   renderRoute,
@@ -617,5 +618,61 @@ describe("PodoKit development gateway", () => {
 
     expect(() => runDevCommand(root, "down", [], runner)).toThrow("exited with status 1");
     expect(existsSync(registration)).toBe(true);
+  });
+});
+
+describe("development origins from .podokit/dev.json", () => {
+  const originalAuthUrl = process.env.PODOKIT_DEV_AUTH_URL;
+  afterEach(() => {
+    if (originalAuthUrl === undefined) delete process.env.PODOKIT_DEV_AUTH_URL;
+    else process.env.PODOKIT_DEV_AUTH_URL = originalAuthUrl;
+  });
+
+  function renamed(): string {
+    const root = project();
+    writeFileSync(
+      join(root, ".podokit", "dev.json"),
+      JSON.stringify({ schemaVersion: 1, hostname: "shop.localhost", publicUrl: "https://shop-dev.example.com" }),
+    );
+    return root;
+  }
+
+  it("sets CORS_ORIGIN and BETTER_AUTH_URL for web and api in the overlay", () => {
+    delete process.env.PODOKIT_DEV_AUTH_URL;
+    const compose = renderRuntimeCompose(resolveDevRuntime(renamed()));
+    const environment =
+      '    environment:\n' +
+      '      CORS_ORIGIN: "http://shop.localhost,https://shop-dev.example.com,http://localhost"\n' +
+      '      BETTER_AUTH_URL: "http://shop.localhost"\n';
+    expect(compose).toContain(`  web:\n${environment}`);
+    expect(compose).toContain(`  api:\n${environment}`);
+  });
+
+  it("uses the public origin for BETTER_AUTH_URL when PODOKIT_DEV_AUTH_URL names it", () => {
+    process.env.PODOKIT_DEV_AUTH_URL = "https://shop-dev.example.com";
+    expect(renderRuntimeCompose(resolveDevRuntime(renamed()))).toContain(
+      'BETTER_AUTH_URL: "https://shop-dev.example.com"',
+    );
+    process.env.PODOKIT_DEV_AUTH_URL = "https://elsewhere.example.com";
+    expect(() => resolveDevRuntime(renamed())).toThrow(
+      "PODOKIT_DEV_AUTH_URL must be http://shop.localhost or https://shop-dev.example.com",
+    );
+  });
+
+  it("renders the container environment example from the declared hostname", () => {
+    const root = renamed();
+    const vars = devTemplateVars("example-app", root);
+    expect(vars).toEqual({
+      devHostname: "shop.localhost",
+      devCorsOrigin: "http://shop.localhost,https://shop-dev.example.com,http://localhost",
+      devAuthUrl: "http://shop.localhost",
+    });
+    expect(devTemplateVars("example-app")).toEqual({
+      devHostname: "example-app.localhost",
+      devCorsOrigin: "http://example-app.localhost,http://localhost",
+      devAuthUrl: "http://example-app.localhost",
+    });
+    writeFileSync(join(root, ".podokit", "dev.json"), "{ not json");
+    expect(devTemplateVars("example-app", root).devHostname).toBe("example-app.localhost");
   });
 });

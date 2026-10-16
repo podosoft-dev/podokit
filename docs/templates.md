@@ -473,7 +473,9 @@ ships it, and never overwritten.
 | `apps/web/src/lib/admin/app-flags.ts` (admin-dashboard) | `APP_FLAG_SETTINGS` | [Application settings](modules.md#application-settings) |
 
 Route pages are owned too; see [route files and update tiers](#route-files-and-update-tiers)
-for the pages whose server load PodoKit manages.
+for the pages whose server load PodoKit manages. So are the project's
+`README.md`, `tests/README.md`, `.gitignore`, `.env.example`,
+`.env.docker.example`, and `infra/k3s/**`; see [updating](updating.md#project-metadata).
 
 #### Vite and SvelteKit options
 

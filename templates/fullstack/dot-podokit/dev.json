@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "hostname": "{{projectName}}.localhost",
+  "hostname": "{{devHostname}}",
   "webSocketPaths": [],
   "apiPaths": []
 }

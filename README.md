@@ -101,11 +101,12 @@ Options:
 | `podo remove <module>` | Remove a module while preserving local edits |
 | `podo provider <command>` | Inspect or switch runtime providers with a dry-run-first workflow |
 | `podo status` | Show version, modules, file tiers, and local edits |
-| `podo diff` | List edited managed files |
+| `podo diff [path…]` | List edited managed files, or diff a file against its template |
 | `podo doctor` | Check Elysia, Svelte, and Better Auth ranges |
 | `podo locale <command>` | Manage JSON locales |
 | `podo update [--apply]` | Preview or apply a v1 update |
 | `podo eject <path…>` | Take ownership of a managed file |
+| `podo restore <path…>` | Rewrite a managed or ejected file from its template |
 | `podo dev <action>` | Manage container development through the shared gateway |
 | `podo deploy <action>` | Plan, apply, verify, or roll back an exact-image release |
 

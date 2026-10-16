@@ -14,6 +14,7 @@ import {
   readFilesLock,
   writeFilesLock,
   isLocalEnvFile,
+  DEFAULT_MANAGED_OVERRIDES,
   DEFAULT_OWNED_GLOBS,
   type FilesLock,
 } from "./lockfile";
@@ -131,6 +132,9 @@ describe("initLockfile + computeFilesLock", () => {
     write(root, "apps/api/src/main.ts", "bootstrap()");
     write(root, "apps/api/src/app.ts", "// podokit:module-imports");
     write(root, "apps/web/src/routes/+page.svelte", "<h1/>");
+    write(root, ".claude/skills/podokit-update/SKILL.md", "# PodoKit skill");
+    write(root, ".agents/skills/podokit-deploy/SKILL.md", "# PodoKit skill");
+    write(root, ".claude/skills/release-notes/SKILL.md", "# The app's skill");
 
     initLockfile(root, {
       template: "fullstack",
@@ -143,7 +147,7 @@ describe("initLockfile + computeFilesLock", () => {
     expect(manifest?.template).toBe("fullstack");
     expect(manifest?.modules).toEqual([]);
     expect(manifest?.ownedGlobs).toEqual(DEFAULT_OWNED_GLOBS);
-    expect(manifest?.managedOverrides).toEqual([]);
+    expect(manifest?.managedOverrides).toEqual(DEFAULT_MANAGED_OVERRIDES);
     expect(manifest?.providers).toEqual({
       database: "postgres",
       cache: "redis",
@@ -157,6 +161,9 @@ describe("initLockfile + computeFilesLock", () => {
     expect(lock.files["apps/api/src/app.ts"].tier).toBe("assembled");
     expect(lock.files["apps/web/src/routes/+page.svelte"].tier).toBe("owned");
     expect(lock.files["apps/api/src/main.ts"].outHash).toMatch(/^sha256:/);
+    expect(lock.files[".claude/skills/podokit-update/SKILL.md"].tier).toBe("managed");
+    expect(lock.files[".agents/skills/podokit-deploy/SKILL.md"].tier).toBe("managed");
+    expect(lock.files[".claude/skills/release-notes/SKILL.md"].tier).toBe("owned");
   });
 
   it("rejects a PodoKit v0 schema with a pinning instruction", () => {

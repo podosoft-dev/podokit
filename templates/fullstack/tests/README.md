@@ -13,7 +13,7 @@ The suite runs against a live stack (web on `E2E_BASE_URL`, proxying `/api/*` to
 the API). With the recommended containerized loop, start `podo dev watch` and run:
 
 ```bash
-E2E_BASE_URL=http://{{projectName}}.localhost {{rootRun}} test:e2e
+E2E_BASE_URL=http://{{devHostname}} {{rootRun}} test:e2e
 ```
 
 The default `http://localhost:5001` is for the alternative `{{rootRun}} dev`

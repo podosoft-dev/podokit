@@ -19,8 +19,10 @@ import {
   computeDrift,
   computeFilesLock,
   filesLockPath,
+  keepTemplateHashes,
   manifestPath,
   providerTemplateVars,
+  readFilesLock,
   readManifest,
   writeFilesLock,
   writeManifest,
@@ -190,6 +192,7 @@ export function applyProviderChange(
     [manifestFile, readFileSync(manifestFile, "utf8")],
     [lockFile, existsSync(lockFile) ? readFileSync(lockFile, "utf8") : null],
   ]);
+  const previousLock = readFilesLock(projectRoot);
   const temporary = `${sourcePath}.podokit-provider-${process.pid}`;
 
   try {
@@ -200,7 +203,10 @@ export function applyProviderChange(
     writeManifest(projectRoot, manifest);
     writeFilesLock(
       projectRoot,
-      computeFilesLock(projectRoot, manifest.ownedGlobs, manifest.managedOverrides ?? []),
+      keepTemplateHashes(
+        computeFilesLock(projectRoot, manifest.ownedGlobs, manifest.managedOverrides ?? []),
+        previousLock,
+      ),
     );
   } catch (error) {
     rmSync(temporary, { force: true });

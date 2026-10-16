@@ -24,6 +24,7 @@ import {
 import { applyProviderChange } from "./provider";
 import { removeModule } from "./remove";
 import { planUpdate } from "./update";
+import { templateDiff } from "./template-files";
 
 const REPO_TEMPLATES = resolve(process.cwd(), "..", "..", "templates");
 const MODULES = join(REPO_TEMPLATES, "modules");
@@ -586,6 +587,9 @@ describe("addModule (auth / better-auth)", () => {
     const storageCompose = readFileSync(join(project, "infra/docker/minio.compose.yml"), "utf8");
     expect(storageCompose).toContain("pgsty/silo:RELEASE.2026-09-16T00-00-00Z@sha256:635197cb9f36d01bee221d34d1c7d7960f6a95c48b0b6c01d99cd13bdae51a46");
     expect(storageCompose).toContain("pgsty/mc:RELEASE.2026-09-16T00-00-00Z@sha256:cfc83108c3abb371f8fb84d99c1fdc88f8c237e022409b0081fb7c0a3be634dd");
+    expect(storageCompose).toContain('/bin/sh -ec "');
+    expect(storageCompose).toContain("mc mb --ignore-existing local/${S3_BUCKET:-podokit};");
+    expect(storageCompose).not.toContain("exit 0");
     const apiPkg = JSON.parse(readFileSync(join(project, "apps/api/package.json"), "utf8")) as {
       dependencies: Record<string, string>;
     };
@@ -1111,9 +1115,8 @@ describe("provider ordering", () => {
       .toEqual(recordedModules(project).map((_, index) => index));
     // The written wiring matches what update assembles for the same module order.
     const plan = planUpdate(project, REPO_TEMPLATES);
-    for (const path of ["apps/api/src/app.ts", ".env.example"]) {
-      expect(plan.changes.find((change) => change.path === path)?.action).toBe("up-to-date");
-    }
+    expect(plan.changes.find((change) => change.path === "apps/api/src/app.ts")?.action).toBe("up-to-date");
+    expect(templateDiff(project, REPO_TEMPLATES, [".env.example"]).files[0]?.status).toBe("same");
   });
 
   it("adds the missing provider first when a dependent module is added again", () => {

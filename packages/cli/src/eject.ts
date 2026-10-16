@@ -25,6 +25,8 @@ export function eject(projectRoot: string, paths: string[]): EjectResult {
       continue;
     }
     if (entry.tier !== "owned") {
+      // A managed file's baseline is what the template generated.
+      entry.templateHash = entry.outHash;
       entry.tier = "owned";
       result.ejected.push(path);
     }

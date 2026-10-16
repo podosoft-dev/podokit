@@ -18,11 +18,14 @@ TRUSTED_PROXY_HOPS=1
 # response headers.
 # BACKEND_TIMEOUT_MS=2000
 # BACKEND_PROXY_TIMEOUT_MS=30000
-CORS_ORIGIN=http://{{projectName}}.localhost,http://localhost
+# podo dev sets CORS_ORIGIN and BETTER_AUTH_URL for web and api from
+# .podokit/dev.json. These two serve compose.dev.yaml run without podo dev,
+# such as from the devcontainer.
+CORS_ORIGIN={{devCorsOrigin}}
 REDIS_HOST=redis
 REDIS_PORT=6379
 BETTER_AUTH_SECRET=
-BETTER_AUTH_URL=http://{{projectName}}.localhost
+BETTER_AUTH_URL={{devAuthUrl}}
 ADMIN_EMAILS=admin@example.com
 AUDIT_LOG_ENABLED=true
 RATE_LIMIT_TTL=60

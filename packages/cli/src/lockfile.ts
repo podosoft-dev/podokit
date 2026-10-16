@@ -76,6 +76,12 @@ export interface FileEntry {
   tier: Tier;
   /** Hash of the exact bytes PodoKit last wrote; user-edit detector. */
   outHash: string;
+  /**
+   * Owned files only: hash of what the template generated for the path when
+   * PodoKit last rendered it, so `podo update` can tell the application that
+   * the template changed without touching the file.
+   */
+  templateHash?: string;
 }
 
 export interface FilesLock {
@@ -160,6 +166,28 @@ export const DEFAULT_OWNED_GLOBS = [
   ".podokit/dev.json",
   // Optional application-owned Playwright device/browser projects.
   "tests/playwright.projects.cjs",
+  // Application screens the managed e2e specs visit.
+  "tests/helpers/app-paths.ts",
+  // Project documents, ignore rules, environment examples, and example
+  // manifests every application rewrites. PodoKit seeds them once, `podo add`
+  // still appends module environment lines and wiring, and `podo update`
+  // reports their template changes for review instead of merging them.
+  "README.md",
+  "tests/README.md",
+  ".gitignore",
+  ".env.example",
+  ".env.docker.example",
+  "infra/k3s/**",
+];
+
+/**
+ * PodoKit's own agent skills stay managed inside the owned `.claude/**` and
+ * `.agents/**` trees, so updates keep their commands and APIs current. Skills an
+ * application adds under other names stay owned.
+ */
+export const DEFAULT_MANAGED_OVERRIDES = [
+  ".claude/skills/podokit-*/**",
+  ".agents/skills/podokit-*/**",
 ];
 
 const TEXT_EXT = /\.(json|md|ts|tsx|js|mjs|cjs|css|html|yml|yaml|txt|env|svelte|gitignore|example)$/i;
@@ -319,6 +347,36 @@ export function computeFilesLock(
   return { schemaVersion: LOCK_SCHEMA_VERSION, files };
 }
 
+/**
+ * The template content an earlier lock knew for a path: the recorded template
+ * hash of an owned file, or the generated baseline of a managed one.
+ */
+export function recordedTemplateHash(entry: FileEntry | undefined): string | undefined {
+  if (!entry) return undefined;
+  return entry.tier === "owned" ? entry.templateHash : entry.outHash;
+}
+
+/**
+ * Carry the template hashes of an earlier lock into a recomputed one for files
+ * that are owned now. Paths in `changed` were just rewritten from a different
+ * template, such as the files a module added to or removed from, so their old
+ * hash would be wrong and is dropped.
+ */
+export function keepTemplateHashes(
+  next: FilesLock,
+  previous: FilesLock | null,
+  changed: Iterable<string> = [],
+): FilesLock {
+  if (!previous) return next;
+  const skip = new Set(changed);
+  for (const [path, entry] of Object.entries(next.files)) {
+    if (entry.tier !== "owned" || entry.templateHash || skip.has(path)) continue;
+    const templateHash = recordedTemplateHash(previous.files[path]);
+    if (templateHash) entry.templateHash = templateHash;
+  }
+  return next;
+}
+
 export function readFilesLock(projectRoot: string): FilesLock | null {
   const file = filesLockPath(projectRoot);
   if (!existsSync(file)) return null;
@@ -370,6 +428,7 @@ export interface InitLockOptions {
 /** Write the initial `.podokit/` lockfile for a freshly created project. */
 export function initLockfile(projectRoot: string, options: InitLockOptions): void {
   const ownedGlobs = options.ownedGlobs ?? DEFAULT_OWNED_GLOBS;
+  const managedOverrides = [...DEFAULT_MANAGED_OVERRIDES];
   const providers = resolveProviderSelections(options.providers ?? SERVER_PROVIDER_SELECTIONS);
   const manifest: PodokitManifest = {
     schemaVersion: LOCK_SCHEMA_VERSION,
@@ -380,10 +439,15 @@ export function initLockfile(projectRoot: string, options: InitLockOptions): voi
     providers,
     modules: [],
     ownedGlobs,
-    managedOverrides: [],
+    managedOverrides,
   };
   writeManifest(projectRoot, manifest);
-  writeFilesLock(projectRoot, computeFilesLock(projectRoot, ownedGlobs));
+  const lock = computeFilesLock(projectRoot, ownedGlobs, managedOverrides);
+  // Create wrote every file straight from the template.
+  for (const entry of Object.values(lock.files)) {
+    if (entry.tier === "owned") entry.templateHash = entry.outHash;
+  }
+  writeFilesLock(projectRoot, lock);
 }
 
 /** Union two glob lists, preserving order and dropping duplicates. Used to fold
@@ -493,5 +557,12 @@ export function recordModules(
     files[path] = current;
   }
 
-  writeFilesLock(projectRoot, { schemaVersion: LOCK_SCHEMA_VERSION, files });
+  writeFilesLock(
+    projectRoot,
+    keepTemplateHashes(
+      { schemaVersion: LOCK_SCHEMA_VERSION, files },
+      lockSnapshot.previous,
+      modulePaths,
+    ),
+  );
 }

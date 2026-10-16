@@ -17,8 +17,16 @@ import { addModule } from "./add";
 import { assembleProject } from "./assemble";
 import { eject } from "./eject";
 import { removeModule } from "./remove";
-import { planUpdate, applyUpdate, summarize } from "./update";
-import { readFilesLock, readManifest, writeManifest } from "./lockfile";
+import { planUpdate, applyUpdate, compareVersions, summarize, targetProject } from "./update";
+import {
+  computeDrift,
+  computeFilesLock,
+  DEFAULT_MANAGED_OVERRIDES,
+  readFilesLock,
+  readManifest,
+  writeFilesLock,
+  writeManifest,
+} from "./lockfile";
 
 const REPO_TEMPLATES = resolve(process.cwd(), "..", "..", "templates");
 const ADMIN_DASHBOARD_MANAGED_ROUTE_LOADERS = [
@@ -213,6 +221,87 @@ describe("external module updates", () => {
     expect(after.modules.find((module) => module.name === "blog")?.moduleVersion).toBe("0.2.0");
   });
 
+  it("keeps the root package.json clean when the package manager sorts external modules", () => {
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: REPO_TEMPLATES, targetDir: project });
+    const rootPackagePath = join(project, "package.json");
+    const install = (name: string): void => {
+      const packageName = `@podosoft/podokit-module-${name}`;
+      const packageDir = join(project, "node_modules", packageName);
+      mkdirSync(join(packageDir, "files"), { recursive: true });
+      writeFileSync(join(packageDir, "package.json"), JSON.stringify({ name: packageName, version: "1.1.1" }));
+      writeFileSync(
+        join(packageDir, "module.manifest.json"),
+        JSON.stringify({ manifestVersion: 1, name, description: "test", targetApp: "api" }),
+      );
+      // Like `bun add -d`, which writes the section sorted by name.
+      const rootPackage = JSON.parse(readFileSync(rootPackagePath, "utf8")) as {
+        devDependencies?: Record<string, string>;
+      };
+      const devDependencies = { ...rootPackage.devDependencies, [packageName]: "1.1.1" };
+      rootPackage.devDependencies = Object.fromEntries(
+        Object.entries(devDependencies).sort(([a], [b]) => a.localeCompare(b)),
+      );
+      writeFileSync(rootPackagePath, `${JSON.stringify(rootPackage, null, 2)}\n`);
+      addModule({ projectRoot: project, module: name, modulesDir: join(REPO_TEMPLATES, "modules") });
+    };
+    install("blog");
+    install("analytics");
+    expect(Object.keys(JSON.parse(readFileSync(rootPackagePath, "utf8")).devDependencies)).toEqual([
+      "@podosoft/podokit-module-analytics",
+      "@podosoft/podokit-module-blog",
+    ]);
+
+    expect(planUpdate(project, REPO_TEMPLATES).changes.find((change) => change.path === "package.json")?.action)
+      .toBe("up-to-date");
+    applyUpdate(project, REPO_TEMPLATES);
+    expect(computeDrift(project).drifted).not.toContain("package.json");
+  });
+
+  it("refuses to apply an older installed external module than the project applied", () => {
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: REPO_TEMPLATES, targetDir: project });
+    const packageDir = join(project, "node_modules/@podosoft/podokit-module-blog");
+    const fileRel = "apps/api/src/blog/external.ts";
+    const publish = (version: string): void => {
+      mkdirSync(join(packageDir, "files/apps/api/src/blog"), { recursive: true });
+      writeFileSync(
+        join(packageDir, "package.json"),
+        JSON.stringify({ name: "@podosoft/podokit-module-blog", version }),
+      );
+      writeFileSync(
+        join(packageDir, "module.manifest.json"),
+        JSON.stringify({ manifestVersion: 1, name: "blog", description: "test", targetApp: "api" }),
+      );
+      writeFileSync(join(packageDir, "files", fileRel), `export const version = "${version}";\n`);
+    };
+    publish("1.2.0");
+    addModule({ projectRoot: project, module: "blog", modulesDir: join(REPO_TEMPLATES, "modules") });
+    publish("1.1.9");
+    const manifestBefore = readFileSync(join(project, ".podokit/manifest.json"), "utf8");
+
+    const plan = planUpdate(project, REPO_TEMPLATES);
+    expect(plan.moduleDowngrades).toEqual([
+      { name: "blog", packageName: "@podosoft/podokit-module-blog", recorded: "1.2.0", installed: "1.1.9" },
+    ]);
+    expect(() => applyUpdate(project, REPO_TEMPLATES)).toThrow(
+      "@podosoft/podokit-module-blog 1.1.9 is installed; the project applied 1.2.0",
+    );
+    expect(readFileSync(join(project, fileRel), "utf8")).toContain('"1.2.0"');
+    expect(readFileSync(join(project, ".podokit/manifest.json"), "utf8")).toBe(manifestBefore);
+
+    publish("1.10.0");
+    expect(planUpdate(project, REPO_TEMPLATES).moduleDowngrades).toEqual([]);
+  });
+
+  it("orders module versions by semantic version", () => {
+    expect(compareVersions("1.10.0", "1.9.0")).toBeGreaterThan(0);
+    expect(compareVersions("1.1.1", "1.1.1")).toBe(0);
+    expect(compareVersions("2.0.0-beta.2", "2.0.0")).toBeLessThan(0);
+    expect(compareVersions("2.0.0-beta.10", "2.0.0-beta.2")).toBeGreaterThan(0);
+    expect(compareVersions("0.9.0", "1.0.0")).toBeLessThan(0);
+  });
+
   it("replays the recorded external module version for the merge base", () => {
     const project = join(tmp(), "app");
     create({ name: "app", template: "fullstack", templatesDir: REPO_TEMPLATES, targetDir: project });
@@ -269,6 +358,22 @@ describe("applyUpdate", () => {
     mkdirSync(dir, { recursive: true });
     cpSync(REPO_TEMPLATES, dir, { recursive: true });
     return dir;
+  }
+
+  // Projects generated before PodoKit's own skills were managed recorded no
+  // default managed overrides, so every skill was owned.
+  function withoutDefaultManagedOverrides(dir: string): void {
+    const manifest = readManifest(dir)!;
+    const managedOverrides = (manifest.managedOverrides ?? []).filter(
+      (glob) => !DEFAULT_MANAGED_OVERRIDES.includes(glob),
+    );
+    writeManifest(dir, { ...manifest, managedOverrides });
+    const lock = readFilesLock(dir)!;
+    for (const [path, entry] of Object.entries(computeFilesLock(dir, manifest.ownedGlobs, managedOverrides).files)) {
+      const previous = lock.files[path];
+      if (previous) previous.tier = entry.tier;
+    }
+    writeFilesLock(dir, lock);
   }
 
   function legacyAdminTemplatesCopy(): string {
@@ -694,6 +799,7 @@ describe("applyUpdate", () => {
     const dir = join(tmp(), "app");
     create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: dir });
     addModule({ projectRoot: dir, module: "auth", modulesDir: join(oldTemplates, "modules") });
+    withoutDefaultManagedOverrides(dir);
     const skill = ".claude/skills/podokit-configure-auth/SKILL.md";
     expect(readFilesLock(dir)?.files[skill]?.tier).toBe("owned");
 
@@ -716,6 +822,53 @@ describe("applyUpdate", () => {
     expect(manifest.managedOverrides).toContain(
       ".claude/skills/podokit-configure-auth/**",
     );
+  });
+
+  it("promotes PodoKit's own skills to managed and leaves the app's skills owned", () => {
+    const oldTemplates = oldTemplatesCopy();
+    const updateSkill = ".claude/skills/podokit-update/SKILL.md";
+    const deploySkill = ".agents/skills/podokit-deploy/SKILL.md";
+    const routeSkill = ".claude/skills/podokit-sveltekit-route/SKILL.md";
+    const appSkill = ".claude/skills/release-notes/SKILL.md";
+    writeFileSync(
+      join(oldTemplates, "fullstack/dot-claude/skills/podokit-update/SKILL.md"),
+      "---\nname: podokit-update\ndescription: Old skill.\n---\n\n# Old skill\n",
+    );
+    const dir = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: dir });
+    withoutDefaultManagedOverrides(dir);
+    mkdirSync(join(dir, ".claude/skills/release-notes"), { recursive: true });
+    writeFileSync(join(dir, appSkill), "# The app's own skill\n");
+    writeFileSync(join(dir, deploySkill), `${readFileSync(join(dir, deploySkill), "utf8")}\nLocal note.\n`);
+    // An app that wants to keep its own copy of a PodoKit skill lists it as owned.
+    const manifest = readManifest(dir)!;
+    writeManifest(dir, { ...manifest, ownedGlobs: [...manifest.ownedGlobs, routeSkill] });
+    writeFileSync(join(dir, routeSkill), "# Kept by the app\n");
+    expect(readFilesLock(dir)?.files[updateSkill]?.tier).toBe("owned");
+
+    const plan = planUpdate(dir, REPO_TEMPLATES);
+    const action = (path: string): string | undefined =>
+      plan.changes.find((change) => change.path === path)?.action;
+    expect(action(updateSkill)).toBe("update");
+    expect(action(deploySkill)).toBe("conflict");
+    expect(action(routeSkill)).toBe("skip");
+    expect(action(appSkill)).toBeUndefined();
+
+    const result = applyUpdate(dir, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+    expect(result.written).toContain(updateSkill);
+    expect(result.merged).toContain(deploySkill);
+    expect(readFileSync(join(dir, updateSkill), "utf8")).toBe(
+      readFileSync(join(REPO_TEMPLATES, "fullstack/dot-claude/skills/podokit-update/SKILL.md"), "utf8"),
+    );
+    expect(readFileSync(join(dir, deploySkill), "utf8")).toContain("Local note.");
+    expect(readFileSync(join(dir, routeSkill), "utf8")).toBe("# Kept by the app\n");
+    expect(readFileSync(join(dir, appSkill), "utf8")).toBe("# The app's own skill\n");
+    const lock = readFilesLock(dir)!;
+    expect(lock.files[updateSkill]?.tier).toBe("managed");
+    expect(lock.files[deploySkill]?.tier).toBe("managed");
+    expect(lock.files[routeSkill]?.tier).toBe("owned");
+    expect(lock.files[appSkill]?.tier).toBe("owned");
+    expect(readManifest(dir)?.managedOverrides).toEqual(expect.arrayContaining(DEFAULT_MANAGED_OVERRIDES));
   });
 
   it("promotes pristine module route loaders from owned to managed", () => {
@@ -1527,7 +1680,7 @@ describe("committed container environment example", () => {
     return dir;
   }
 
-  it("adds the example and its Git exception while keeping the app's .env.docker", () => {
+  it("adds the example, reports the owned .gitignore, and keeps the app's .env.docker", () => {
     const oldTemplates = templatesWithIgnoredContainerEnv();
     const project = join(tmp(), "app");
     create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: project });
@@ -1541,7 +1694,9 @@ describe("committed container environment example", () => {
 
     expect(result.conflicts).toEqual([]);
     expect(readFileSync(join(project, ".env.docker.example"), "utf8")).toMatch(/^BETTER_AUTH_SECRET=$/m);
-    expect(readFileSync(join(project, ".gitignore"), "utf8")).toContain(".env.*\n!.env.example\n!.env.docker.example\n");
+    // .gitignore is owned: the update names it instead of adding the exception.
+    expect(result.review).toEqual([".gitignore"]);
+    expect(readFileSync(join(project, ".gitignore"), "utf8")).not.toContain("!.env.docker.example");
     expect(readFileSync(join(project, ".env.docker"), "utf8")).toBe(localEnv);
   });
 });
@@ -1592,5 +1747,80 @@ describe("local env files in the lock", () => {
     expect(files).toEqual(Object.keys(raw.files));
     expect(files).not.toContain(".env");
     expect(files).not.toContain(".env.docker");
+  });
+});
+
+describe("project files applications rewrite", () => {
+  const SEEDS = ["README.md", "tests/README.md", ".gitignore", ".env.example", ".env.docker.example", "infra/k3s/**"];
+
+  // Projects generated before these files were owned seeds recorded them as managed.
+  function withManagedProjectFiles(dir: string): void {
+    const manifest = readManifest(dir)!;
+    const ownedGlobs = manifest.ownedGlobs.filter((glob) => !SEEDS.includes(glob));
+    writeManifest(dir, { ...manifest, ownedGlobs });
+    const lock = computeFilesLock(dir, ownedGlobs, manifest.managedOverrides ?? []);
+    writeFilesLock(dir, lock);
+  }
+
+  it("turns them into owned seeds without merging the app's edits", () => {
+    const oldTemplates = join(tmp(), "old-templates");
+    cpSync(REPO_TEMPLATES, oldTemplates, { recursive: true });
+    const configMap = join(oldTemplates, "fullstack/infra/k3s/configmap.yaml");
+    writeFileSync(configMap, readFileSync(configMap, "utf8").replace(/\n$/, "\n# an earlier version\n"));
+    const dir = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: dir });
+    withManagedProjectFiles(dir);
+    expect(readFilesLock(dir)?.files["README.md"]?.tier).toBe("managed");
+
+    const edits: Record<string, string> = {
+      "README.md": "# My product\n",
+      "tests/README.md": "# How we test\n",
+      ".gitignore": `${readFileSync(join(dir, ".gitignore"), "utf8")}dist-cjs/\n`,
+      ".env.example": readFileSync(join(dir, ".env.example"), "utf8").replace("PORT=5002", "PORT=6002"),
+      "infra/k3s/api-deployment.yaml": "# hand-managed\n",
+    };
+    for (const [path, content] of Object.entries(edits)) writeFileSync(join(dir, path), content);
+    rmSync(join(dir, "infra/k3s/ingress.yaml"));
+
+    const plan = planUpdate(dir, REPO_TEMPLATES);
+    const change = (path: string) => plan.changes.find((entry) => entry.path === path);
+    for (const path of Object.keys(edits)) {
+      expect(change(path)).toMatchObject({ tier: "owned", action: "skip" });
+    }
+    expect(change("infra/k3s/configmap.yaml")).toMatchObject({ tier: "owned", action: "review" });
+    expect(change("infra/k3s/ingress.yaml")).toMatchObject({ tier: "owned", action: "skip" });
+    expect(plan.changes.filter((entry) => entry.action === "conflict")).toEqual([]);
+
+    const result = applyUpdate(dir, REPO_TEMPLATES);
+    expect(result.review).toEqual(["infra/k3s/configmap.yaml"]);
+    for (const [path, content] of Object.entries(edits)) {
+      expect(readFileSync(join(dir, path), "utf8")).toBe(content);
+      expect(readFilesLock(dir)?.files[path]?.tier).toBe("owned");
+    }
+    expect(existsSync(join(dir, "infra/k3s/ingress.yaml"))).toBe(false);
+    expect(readManifest(dir)?.ownedGlobs).toEqual(expect.arrayContaining(SEEDS));
+    expect(planUpdate(dir, REPO_TEMPLATES).changes.filter((entry) => entry.action !== "up-to-date" && entry.action !== "skip"))
+      .toEqual([]);
+  });
+});
+
+describe("development hostname in rendered files", () => {
+  it("follows .podokit/dev.json instead of the project name", () => {
+    const dir = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: REPO_TEMPLATES, targetDir: dir });
+    expect(readFileSync(join(dir, ".env.docker.example"), "utf8")).toContain(
+      "CORS_ORIGIN=http://app.localhost,http://localhost\n",
+    );
+    writeFileSync(
+      join(dir, ".podokit/dev.json"),
+      `${JSON.stringify({ schemaVersion: 1, hostname: "shop.localhost", webSocketPaths: [], apiPaths: [] }, null, 2)}\n`,
+    );
+
+    const { tree } = targetProject(dir, REPO_TEMPLATES);
+    const text = (path: string): string => String(tree.get(path)?.content);
+    expect(text(".env.docker.example")).toContain("CORS_ORIGIN=http://shop.localhost,http://localhost\n");
+    expect(text(".env.docker.example")).toContain("BETTER_AUTH_URL=http://shop.localhost\n");
+    expect(text("tests/README.md")).toContain("E2E_BASE_URL=http://shop.localhost ");
+    expect(text(".podokit/dev.json")).toBe(readFileSync(join(dir, ".podokit/dev.json"), "utf8"));
   });
 });

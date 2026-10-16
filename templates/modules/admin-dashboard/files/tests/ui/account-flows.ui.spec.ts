@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { anonState } from "../helpers/accounts";
+import { ADMIN, anonState } from "../helpers/accounts";
 import { ready } from "../helpers/hydration";
 import { smsSinkReachable, waitForSmsOtp } from "../helpers/sms";
 
@@ -48,7 +48,7 @@ test("account: change email address", async ({ page, playwright }) => {
 
 test("account: delete my own account", { tag: "@exclusive" }, async ({ page, playwright }) => {
   const admin = await playwright.request.newContext({ baseURL: base, extraHTTPHeaders: origin });
-  await admin.post("/api/auth/sign-in/email", { data: { email: "admin@example.com", password: PW } });
+  await admin.post("/api/auth/sign-in/email", { data: { email: ADMIN.email, password: ADMIN.password } });
   try {
     // Account deletion is a server toggle (off by default) — enable it, then poll
     // until the capability is live (config store has a short TTL).

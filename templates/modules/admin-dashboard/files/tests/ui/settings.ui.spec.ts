@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ready } from "../helpers/hydration";
+import { paths } from "../helpers/paths";
 
 // admin storageState (project default)
 
@@ -58,8 +59,8 @@ test("sidebar: back-to-home link returns to the landing page", async ({ page }) 
   // the home link lives in the sidebar footer, above the user menu
   await page.getByRole("link", { name: "Back to home" }).click();
   await expect(page).toHaveURL(/\/$/);
-  // Landing routes are app-owned, so only verify the shared page shell.
-  await expect(page.locator("main").first()).toBeVisible();
+  // The landing page is app-owned; tests/helpers/app-paths.ts says what shows it rendered.
+  await expect(paths.homeReady(page)).toBeVisible();
 });
 
 test("settings is reachable from the sidebar", async ({ page }) => {

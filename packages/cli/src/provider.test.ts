@@ -122,7 +122,9 @@ describe("provider configuration", () => {
         "jobs-local",
       ]),
     );
-  });
+    // Ten provider switches, each a full update; about 3 s alone and twice that
+    // while the other test files share the CPU.
+  }, 20_000);
 
   it("applies source, manifest, and lockfile as one configuration change", () => {
     const root = project();

@@ -177,6 +177,16 @@ installs the generated workspace with Bun 1.4.0, runs Better Auth and TypeORM
 migrations, verifies the OpenAPI contract, builds and starts the Bun API and
 worker plus the SvelteKit server, and runs the shipped Playwright suite.
 
+The packages it publishes carry the versions of the released ones. npx caches a
+package by name and version, not by registry, so the harness runs every npm and
+npx command against Verdaccio with an npm cache of its own, `.npm-cache` in the
+run's app directory, and Bun with `.bun-cache` beside it. Outer must never leave
+a Verdaccio build in the user's `~/.npm/_npx`, where a later
+`npx @podosoft/podokit@<version>` would run it as the release. Earlier versions
+of the harness installed through that cache and deleted `~/.npm/_npx` at the
+start of every run; find an entry they left with
+`grep -l "localhost:4873" ~/.npm/_npx/*/package-lock.json` and remove it.
+
 Verdaccio serves the published `@podosoft/*` packages and fetches every other
 package from npm. When that fetch fails, Verdaccio answers `404`, and after two
 failures it stops asking npm for `fail_timeout`, which
@@ -282,6 +292,50 @@ For an app without `admin-dashboard`, omit `dependencies` and
 The admin setup project seeds sessions through the API and stores ignored browser
 state under `tests/playwright/.auth`. Its cleanup project removes users created
 by the suite.
+
+## Application screens and accounts
+
+The managed specs test PodoKit's own components, such as the account page, the
+admin console, and the site footer. Where they have to visit an application
+page or sign in as a seeded account, they read it from two application-owned
+files that PodoKit creates once and never overwrites, so an application changes
+those files instead of editing or ejecting managed specs.
+
+`tests/helpers/app-paths.ts` overrides the screens described in the managed
+`tests/helpers/paths.ts`:
+
+| Entry | Default | Used by |
+| --- | --- | --- |
+| `home` | `/` | the smoke test and maintenance mode |
+| `homeReady(page)` | the page's `h1` | the smoke test and the sidebar's home link |
+| `indexable` | `["/"]` | public pages that must not carry `X-Robots-Tag` |
+| `footer` | `/login` | a public page that renders `SiteFooter` (`data-testid="site-footer"`); `null` skips the footer test |
+| `accountMenu` | `/` | a page that renders `LanguageSwitch`, `ThemeToggle`, and `AccountMenu`; `null` skips those checks |
+
+```ts
+import type { AppPaths } from "./paths";
+
+export const appPaths: Partial<AppPaths> = {
+  homeReady: (page) => page.getByTestId("workspace"),
+  indexable: [],
+  footer: null,
+};
+```
+
+With `admin-dashboard`, `tests/helpers/app-accounts.ts` names the seeded
+accounts when an application's differ from `admin@example.com` and
+`user@example.com`. `E2E_ADMIN_EMAIL`, `E2E_USER_EMAIL`, `E2E_ADMIN_PASSWORD`,
+and `E2E_USER_PASSWORD` win over it. The seed signs the accounts up, so list the
+administrator's address in the API's `ADMIN_EMAILS`.
+
+## Sign-in budget
+
+Sign-ins and sign-ups from an anonymous client count against the per-address
+authentication budget of the `rate-limit` module, which every spec shares. The
+specs that need many sessions or several new accounts make only their first
+authentication write anonymously and send the rest with that session's cookie,
+which the limiter counts against the session. A spec of your own that signs in
+in a loop can call `signInOnSeparateDevices` from `tests/helpers/devices.ts`.
 
 ## CI policy
 

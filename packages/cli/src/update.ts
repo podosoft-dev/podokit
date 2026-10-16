@@ -9,20 +9,24 @@ import {
   type VfsTree,
 } from "@podosoft/podokit-template-engine";
 import { assembleProject } from "./assemble";
+import { unifiedDiff } from "./text-diff";
 import {
   classifyTier,
   computeFilesLock,
+  DEFAULT_MANAGED_OVERRIDES,
   DEFAULT_OWNED_GLOBS,
   matchGlob,
   manifestTemplateVars,
   podokitVersion,
   readFilesLock,
   readManifest,
+  recordedTemplateHash,
   writeFilesLock,
   writeManifest,
   type Tier,
   type FilesLock,
   type ManifestModule,
+  type PodokitManifest,
 } from "./lockfile";
 import type { ProviderCapability, ProviderSelections } from "@podosoft/podokit-runtime";
 import type { Toolchain } from "./toolchain";
@@ -49,6 +53,7 @@ import {
  */
 
 export type Action =
+  | "review"
   | "update"
   | "merge"
   | "conflict"
@@ -86,9 +91,21 @@ export interface UpdatePlan {
   modules: string[];
   /** Modules the update adds, ordered ahead of the modules that need them. */
   addedModules: AddedModule[];
+  /**
+   * External modules whose installed package is older than the version the
+   * project last applied. Applying would write the older module's files, so
+   * `applyUpdate` refuses while this is not empty.
+   */
+  moduleDowngrades: ModuleDowngrade[];
   changes: FileChange[];
   /** Direct API paths that modules newly declare, per configuration file. */
   apiPaths: ApiPathResult;
+  /**
+   * Owned files that differ from this version's template while the lock has no
+   * record of the template they came from, so PodoKit cannot tell whether the
+   * template changed. Applying the update records it for the next one.
+   */
+  ownedWithoutTemplate: string[];
 }
 
 function treeText(tree: VfsTree, path: string): string | null {
@@ -102,9 +119,43 @@ function diskContent(projectRoot: string, path: string): Buffer | null {
   return existsSync(abs) ? readFileSync(abs) : null;
 }
 
+/** An external module installed at an older version than the project last applied. */
+export interface ModuleDowngrade {
+  name: string;
+  packageName: string;
+  /** Version recorded in the manifest. */
+  recorded: string;
+  /** Version installed in node_modules. */
+  installed: string;
+}
+
 interface TargetModules {
   modules: ManifestModule[];
   added: AddedModule[];
+  downgrades: ModuleDowngrade[];
+}
+
+function versionParts(version: string): { core: number[]; prerelease: string | null } {
+  const [withoutBuild = ""] = version.split("+");
+  const dash = withoutBuild.indexOf("-");
+  const core = (dash === -1 ? withoutBuild : withoutBuild.slice(0, dash))
+    .split(".")
+    .map((part) => Number.parseInt(part, 10) || 0);
+  return { core, prerelease: dash === -1 ? null : withoutBuild.slice(dash + 1) };
+}
+
+/** Semantic version order of two exact versions: negative when `a` is older. */
+export function compareVersions(a: string, b: string): number {
+  const left = versionParts(a);
+  const right = versionParts(b);
+  for (let index = 0; index < Math.max(left.core.length, right.core.length); index += 1) {
+    const difference = (left.core[index] ?? 0) - (right.core[index] ?? 0);
+    if (difference !== 0) return difference;
+  }
+  if (left.prerelease === right.prerelease) return 0;
+  if (left.prerelease === null) return 1;
+  if (right.prerelease === null) return -1;
+  return left.prerelease.localeCompare(right.prerelease, "en", { numeric: true });
 }
 
 /**
@@ -126,6 +177,7 @@ function targetModules(
   const recorded = new Map(modules.map((module) => [module.name, module]));
   const ordered: ManifestModule[] = [];
   const added: AddedModule[] = [];
+  const downgrades: ModuleDowngrade[] = [];
   const visiting = new Set<string>();
   const visited = new Set<string>();
 
@@ -145,6 +197,19 @@ function targetModules(
       );
     }
 
+    if (
+      existing?.moduleVersion &&
+      resolved.packageName &&
+      resolved.moduleVersion &&
+      compareVersions(resolved.moduleVersion, existing.moduleVersion) < 0
+    ) {
+      downgrades.push({
+        name: resolved.name,
+        packageName: resolved.packageName,
+        recorded: existing.moduleVersion,
+        installed: resolved.moduleVersion,
+      });
+    }
     visiting.add(name);
     const moduleManifest = readModuleManifest(resolved.dir);
     for (const required of moduleManifest.requires ?? []) visit(required, name);
@@ -181,7 +246,7 @@ function targetModules(
   for (const module of [...modules].sort((a, b) => a.order - b.order)) {
     visit(module.name);
   }
-  return { modules: ordered, added };
+  return { modules: ordered, added, downgrades };
 }
 
 interface TargetApiPaths {
@@ -214,7 +279,7 @@ function targetManagedOverrides(
   modules: { name: string; packageName?: string }[],
   current: string[] = [],
 ): string[] {
-  const overrides = new Set(current);
+  const overrides = new Set([...DEFAULT_MANAGED_OVERRIDES, ...current]);
   const modulesDir = join(templatesDir, "modules");
   for (const module of modules) {
     const resolved = resolveModule(module.packageName ?? module.name, modulesDir, projectRoot);
@@ -240,6 +305,15 @@ function targetOwnedGlobs(
   return [...owned];
 }
 
+/** Owned paths the template and the installed modules declare, without the app's own. */
+export function declaredOwnedGlobs(
+  projectRoot: string,
+  templatesDir: string,
+  modules: { name: string; packageName?: string }[],
+): string[] {
+  return targetOwnedGlobs(projectRoot, templatesDir, modules, []);
+}
+
 /**
  * Build the update plan. `templatesDir` is the installed CLI's template set (the
  * new version); the lock records what PodoKit last wrote (to detect user edits).
@@ -253,35 +327,73 @@ export interface PlanOptions {
   onlyPaths?: string[];
 }
 
-export function planUpdate(
+/** The project as the installed CLI's templates would generate it. */
+export interface TargetProject {
+  manifest: PodokitManifest;
+  lock: FilesLock;
+  /** Recorded modules plus any the target version requires, in configure order. */
+  modules: ManifestModule[];
+  addedModules: AddedModule[];
+  /** External modules installed at an older version than the project applied. */
+  moduleDowngrades: ModuleDowngrade[];
+  tree: VfsTree;
+  ownedGlobs: string[];
+  managedOverrides: string[];
+}
+
+export function targetProject(
   projectRoot: string,
   templatesDir: string,
-  options: PlanOptions = {},
-): UpdatePlan {
+  targetAnswers?: TemplateVars,
+): TargetProject {
   const manifest = readManifest(projectRoot);
   const lock = readFilesLock(projectRoot);
   if (!manifest || !lock) throw new NotAProjectError();
-  const { modules, added } = targetModules(
+  const { modules, added, downgrades } = targetModules(
     projectRoot,
     templatesDir,
     manifest.modules,
     manifest.providers,
   );
-
-  const newTree = assembleProject({
+  const tree = assembleProject({
     templatesDir,
     template: manifest.template,
-    answers: options.targetAnswers ?? manifestTemplateVars(manifest),
+    answers: targetAnswers ?? manifestTemplateVars(manifest),
     modules,
     projectRoot,
   });
-  const managedOverrides = targetManagedOverrides(
-    projectRoot,
-    templatesDir,
+  return {
+    manifest,
+    lock,
     modules,
-    manifest.managedOverrides,
-  );
-  const ownedGlobs = targetOwnedGlobs(projectRoot, templatesDir, modules, manifest.ownedGlobs);
+    addedModules: added,
+    moduleDowngrades: downgrades,
+    tree,
+    ownedGlobs: targetOwnedGlobs(projectRoot, templatesDir, modules, manifest.ownedGlobs),
+    managedOverrides: targetManagedOverrides(
+      projectRoot,
+      templatesDir,
+      modules,
+      manifest.managedOverrides,
+    ),
+  };
+}
+
+export function planUpdate(
+  projectRoot: string,
+  templatesDir: string,
+  options: PlanOptions = {},
+): UpdatePlan {
+  const {
+    manifest,
+    lock,
+    modules,
+    addedModules: added,
+    moduleDowngrades,
+    tree: newTree,
+    ownedGlobs,
+    managedOverrides,
+  } = targetProject(projectRoot, templatesDir, options.targetAnswers);
   const pendingMigrations = collectPendingMigrations(
     projectRoot,
     templatesDir,
@@ -309,6 +421,7 @@ export function planUpdate(
       note: conflict,
     });
   }
+  const ownedWithoutTemplate: string[] = [];
   const movedSources = new Set(migrationPlan.moves.map((move) => move.from));
   const movedTargets = new Set(migrationPlan.moves.map((move) => move.to));
   const paths = new Set<string>([...newTree.keys(), ...Object.keys(lock.files)]);
@@ -348,6 +461,23 @@ export function planUpdate(
       if (!locked && disk === null && newText !== null) {
         changes.push({ path, tier, action: "add", note: "new owned seed in this version" });
         continue;
+      }
+      if (newText !== null && disk !== null) {
+        const newHash = hashContent(newText);
+        const recorded = recordedTemplateHash(locked);
+        if (hashContent(disk) !== newHash) {
+          if (recorded && recorded !== newHash) {
+            changes.push({
+              path,
+              tier,
+              action: "review",
+              note: `owned; the template changed, see podo diff ${path}`,
+            });
+            continue;
+          }
+          // The lock never records files under .podokit/, so only judge tracked files.
+          if (!recorded && locked) ownedWithoutTemplate.push(path);
+        }
       }
       const explicitlyOwned = ownedGlobs.some(
         (glob) => !glob.includes("*") && matchGlob(path, glob),
@@ -420,8 +550,10 @@ export function planUpdate(
     template: manifest.template,
     modules: modules.map((module) => module.name),
     addedModules: added,
+    moduleDowngrades,
     changes,
     apiPaths,
+    ownedWithoutTemplate,
   };
 }
 
@@ -450,6 +582,8 @@ export interface ApplyResult {
   merged: string[];
   /** Files written with conflict markers for manual resolution. */
   conflicts: string[];
+  /** Owned files whose template changed; they are left as they are. */
+  review: string[];
   /** Direct API paths added to `.podokit/dev.json` and deployment profiles. */
   apiPaths: ApiPathResult;
 }
@@ -526,6 +660,70 @@ function previousExternalModules(
   return { root, cleanup: true };
 }
 
+/** The project as the templates of the version it is on generated it. */
+function previousTree(
+  projectRoot: string,
+  manifest: PodokitManifest,
+  oldTemplatesDir: string,
+  oldExternalModulesRoot?: string,
+): VfsTree {
+  const previousModules = previousExternalModules(
+    projectRoot,
+    oldTemplatesDir,
+    manifest.modules,
+    oldExternalModulesRoot,
+  );
+  try {
+    return assembleProject({
+      templatesDir: oldTemplatesDir,
+      template: manifest.template,
+      answers: manifestTemplateVars(manifest),
+      modules: manifest.modules,
+      projectRoot: previousModules.root,
+    });
+  } finally {
+    if (previousModules.cleanup) rmSync(previousModules.root, { recursive: true, force: true });
+  }
+}
+
+export interface UpstreamChange {
+  path: string;
+  /** Unified diff from the previous template to the new one; empty when the
+   *  previous templates did not generate the file. */
+  diff: string;
+}
+
+/**
+ * What the template changed between the project's version and this one for
+ * each owned file the plan marks for review, given the previous version's
+ * templates.
+ */
+export function upstreamChanges(
+  projectRoot: string,
+  templatesDir: string,
+  plan: UpdatePlan,
+  oldTemplatesDir: string,
+  oldExternalModulesRoot?: string,
+): UpstreamChange[] {
+  const review = plan.changes.filter((change) => change.action === "review");
+  if (!review.length) return [];
+  const target = targetProject(projectRoot, templatesDir);
+  const oldTree = previousTree(projectRoot, target.manifest, oldTemplatesDir, oldExternalModulesRoot);
+  return review.map((change) => {
+    const before = treeText(oldTree, change.path);
+    const after = treeText(target.tree, change.path) ?? "";
+    return {
+      path: change.path,
+      diff: before === null
+        ? ""
+        : unifiedDiff(before, after, {
+            fromLabel: `podokit-${plan.fromVersion}/${change.path}`,
+            toLabel: `podokit-${plan.toVersion}/${change.path}`,
+          }),
+    };
+  });
+}
+
 function writeFile(projectRoot: string, path: string, content: string): void {
   const abs = join(projectRoot, path);
   mkdirSync(dirname(abs), { recursive: true });
@@ -564,6 +762,7 @@ function updatedFilesLock(
         }
         entry.outHash = hashContent(newText);
       }
+      if (entry.tier === "owned") entry.templateHash = hashContent(newText);
       continue;
     }
 
@@ -581,17 +780,20 @@ function updatedFilesLock(
     }
   }
 
-  // Keep a tombstone for an owned seed that the application deleted or moved.
-  // Without the previous entry, the next update would mistake the missing path
-  // for a newly introduced seed and recreate it.
+  // Keep a tombstone for an owned seed that the application deleted or moved,
+  // including a file this update turns from managed into owned. Without the
+  // entry, the next update would mistake the missing path for a newly
+  // introduced seed and recreate it.
   for (const [path, entry] of Object.entries(previous.files)) {
-    if (entry.tier !== "owned" || next.files[path]) continue;
+    if (next.files[path]) continue;
     const newText = treeText(newTree, path);
     if (
       newText !== null &&
       classifyTier(path, newText, ownedGlobs, managedOverrides) === "owned"
     ) {
-      next.files[path] = entry;
+      next.files[path] = entry.tier === "owned"
+        ? entry
+        : { tier: "owned", outHash: entry.outHash, templateHash: hashContent(newText) };
     }
   }
 
@@ -618,6 +820,12 @@ export function applyUpdate(
     forceManagedPaths: options.forceManagedPaths,
     onlyPaths: options.onlyPaths,
   });
+  if (plan.moduleDowngrades.length) {
+    throw new Error(
+      `Refusing to downgrade external modules:\n${describeDowngrades(plan.moduleDowngrades)}\n` +
+        "Install at least the recorded version (for example bun install), then run podo update again.",
+    );
+  }
   const { modules } = targetModules(
     projectRoot,
     templatesDir,
@@ -663,23 +871,12 @@ export function applyUpdate(
   const needsMergeBase = plan.changes.some((change) => change.action === "conflict");
   let oldTree: VfsTree | null = null;
   if (options.oldTemplatesDir && needsMergeBase) {
-    const previousModules = previousExternalModules(
+    oldTree = previousTree(
       projectRoot,
+      manifest,
       options.oldTemplatesDir,
-      manifest.modules,
       options.oldExternalModulesRoot,
     );
-    try {
-      oldTree = assembleProject({
-        templatesDir: options.oldTemplatesDir,
-        template: manifest.template,
-        answers: manifestTemplateVars(manifest),
-        modules: manifest.modules,
-        projectRoot: previousModules.root,
-      });
-    } finally {
-      if (previousModules.cleanup) rmSync(previousModules.root, { recursive: true, force: true });
-    }
   }
 
   if (options.abortOnConflict) {
@@ -711,6 +908,7 @@ export function applyUpdate(
     removed: [],
     merged: [],
     conflicts: [],
+    review: plan.changes.filter((change) => change.action === "review").map((change) => change.path),
     apiPaths: { changed: [], skipped: [] },
   };
 
@@ -799,6 +997,13 @@ export function applyUpdate(
   return result;
 }
 
+/** One line per external module installed at an older version than recorded. */
+export function describeDowngrades(downgrades: ModuleDowngrade[]): string {
+  return downgrades
+    .map((entry) => `  ${entry.packageName} ${entry.installed} is installed; the project applied ${entry.recorded}`)
+    .join("\n");
+}
+
 /** Why an update adds a module, for the plan report. */
 export function addedModuleReason(module: AddedModule): string {
   return module.capability
@@ -809,6 +1014,7 @@ export function addedModuleReason(module: AddedModule): string {
 /** Count actions for a one-line summary. */
 export function summarize(plan: UpdatePlan): Record<Action, number> {
   const counts: Record<Action, number> = {
+    review: 0,
     update: 0,
     merge: 0,
     conflict: 0,

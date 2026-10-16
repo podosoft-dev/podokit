@@ -40,6 +40,18 @@ Add both the local and HTTPS origins to the API's `CORS_ORIGIN` and set
 origin and return on another because state cookies are scoped to the origin that
 created them.
 
+With `podo dev`, declaring `publicUrl` in `.podokit/dev.json` (below) adds it to
+`CORS_ORIGIN`. `BETTER_AUTH_URL` stays on the local hostname; start the stack
+with `PODOKIT_DEV_AUTH_URL` set to the public origin for an OAuth round trip
+through the tunnel:
+
+```bash
+PODOKIT_DEV_AUTH_URL=https://myapp-dev.example.com podo dev watch
+```
+
+`podo dev` refuses any other value, and it ignores these two keys in
+`.env.docker`.
+
 When the tunnel targets the shared loopback gateway, also declare the stable origin
 in `.podokit/dev.json` so its public `Host` header matches the generated route:
 
