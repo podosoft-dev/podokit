@@ -4,11 +4,13 @@ import { join } from "node:path";
 import { readManifest } from "./lockfile";
 import {
   MigrationProfile,
+  PostgresBudgetProfile,
   VerificationCheckProfile,
   assertOnlyKeys,
   isRecord,
   optionalString,
   parseCommand,
+  parsePostgresBudget,
   parseRequiredKeys,
   parseRuntimeConfig,
   parseVerification,
@@ -53,6 +55,8 @@ export interface StatefulDependencyProfile {
 
 export type RedisDependencyProfile = StatefulDependencyProfile;
 
+export interface PostgresDependencyProfile extends StatefulDependencyProfile, PostgresBudgetProfile {}
+
 export interface ObjectStorageDependencyProfile extends StatefulDependencyProfile {
   bucket: string;
   clientImage: string;
@@ -94,7 +98,7 @@ export interface DeployProfileV1 {
     worker: WorkloadProfile | null;
   };
   dependencies: {
-    postgres: StatefulDependencyProfile;
+    postgres: PostgresDependencyProfile;
     redis: RedisDependencyProfile;
     objectStorage: ObjectStorageDependencyProfile;
   };
@@ -321,10 +325,12 @@ export function parseDeploymentProfile(value: unknown): DeployProfileV1 {
     throw new Error("Deployment exposure.apiPaths requires exposure.mode ingress.");
   }
 
-  const postgres = parseStatefulDependency(
-    requiredRecord(dependencies, "postgres"),
-    "dependencies.postgres",
-  );
+  const parsedConfig = parseRuntimeConfig(runtimeConfig);
+  const postgresRecord = requiredRecord(dependencies, "postgres");
+  const postgres: PostgresDependencyProfile = {
+    ...parseStatefulDependency(postgresRecord, "dependencies.postgres", ["maxConnections", "appPools"]),
+    ...parsePostgresBudget(postgresRecord, "dependencies.postgres", parsedConfig),
+  };
   const redis = parseRedisDependency(
     requiredRecord(dependencies, "redis"),
     "dependencies.redis",
@@ -355,7 +361,6 @@ export function parseDeploymentProfile(value: unknown): DeployProfileV1 {
   validateDnsLabel(objectStorage.bucket, "dependencies.objectStorage.bucket");
   validateImage(objectStorage.clientImage, "dependencies.objectStorage.clientImage");
 
-  const parsedConfig = parseRuntimeConfig(runtimeConfig);
   const { baseUrl, checks } = parseVerification(verification);
   const profile: DeployProfileV1 = {
     schemaVersion: 1,

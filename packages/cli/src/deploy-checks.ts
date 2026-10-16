@@ -109,9 +109,146 @@ function idleTimeoutFinding(
   };
 }
 
+/** PostgreSQL's default max_connections, which a profile can change. */
+export const DEFAULT_MAX_CONNECTIONS = 100;
+/** PostgreSQL's default superuser_reserved_connections, unavailable to the application. */
+const RESERVED_CONNECTIONS = 3;
+/** The migration process: Better Auth's schema check, then the application migrations. */
+const MIGRATION_CONNECTIONS = 2;
+
+export interface ConnectionBudget {
+  maxConnections: number;
+  available: number;
+  /** Connections one API or worker process can hold, and what they are. */
+  perProcess: number;
+  perProcessTerms: string[];
+  steadyProcesses: number;
+  steady: number;
+  /** Processes and connections while a rollout runs old and new pods side by side. */
+  rolloutProcesses: number;
+  rollout: number;
+  migration: number;
+  peak: number;
+}
+
+function poolSize(runtimeConfig: Record<string, string>, key: string, fallback: number): number {
+  const value = runtimeConfig[key];
+  if (value === undefined) return fallback;
+  if (!/^[1-9][0-9]*$/.test(value)) throw new Error(`${key} "${value}" is not a positive integer.`);
+  return Number(value);
+}
+
+/**
+ * The most PostgreSQL connections the deployment can open: every API and worker
+ * process with each pool full, the Kubernetes rollout's surge pod per workload
+ * (the rendered strategy allows one), and the migration that runs beside the
+ * release still serving. Compose replaces containers without a surge. Null when
+ * the deployment uses no PostgreSQL.
+ */
+export function connectionBudget(profile: AnyDeployProfile, modules: Set<string>): ConnectionBudget | null {
+  const postgres = profile.dependencies.postgres;
+  if (postgres.mode === "disabled") return null;
+  const config = profile.runtimeConfig;
+  const queryPool = poolSize(config, "DB_POOL_MAX", 20);
+  // The Bun SQL pool opens one more connection to check a server that stopped answering.
+  const perProcessTerms = [`DB_POOL_MAX ${queryPool} + 1`];
+  let perProcess = queryPool + 1;
+  if (modules.has("auth")) {
+    const authPool = poolSize(config, "DB_AUTH_POOL_MAX", 10);
+    perProcessTerms.push(`DB_AUTH_POOL_MAX ${authPool}`);
+    perProcess += authPool;
+  }
+  for (const pool of postgres.appPools ?? []) {
+    const size = poolSize(config, pool.sizeKey, 0);
+    perProcessTerms.push(`${pool.sizeKey} ${size}${pool.extraConnections ? ` + ${pool.extraConnections}` : ""}`);
+    perProcess += size + pool.extraConnections;
+  }
+  const worker = profile.workloads.worker;
+  const steadyProcesses = profile.workloads.api.replicas + (worker?.replicas ?? 0);
+  const rolloutProcesses = steadyProcesses + (profile.driver === "kubernetes-helm" ? 1 + (worker ? 1 : 0) : 0);
+  const maxConnections = postgres.maxConnections ?? DEFAULT_MAX_CONNECTIONS;
+  const steady = steadyProcesses * perProcess;
+  const rollout = rolloutProcesses * perProcess;
+  return {
+    maxConnections,
+    available: maxConnections - RESERVED_CONNECTIONS,
+    perProcess,
+    perProcessTerms,
+    steadyProcesses,
+    steady,
+    rolloutProcesses,
+    rollout,
+    migration: MIGRATION_CONNECTIONS,
+    peak: Math.max(rollout, steady + MIGRATION_CONNECTIONS),
+  };
+}
+
+function budgetSummary(budget: ConnectionBudget): string {
+  return (
+    `each API or worker process holds up to ${budget.perProcess} (${budget.perProcessTerms.join(" + ")}); ` +
+    `${budget.steadyProcesses} process(es) hold ${budget.steady}` +
+    (budget.rolloutProcesses > budget.steadyProcesses
+      ? `, ${budget.rolloutProcesses} during a rollout hold ${budget.rollout}`
+      : "") +
+    `, and the migration adds ${budget.migration} to the ${budget.steady}`
+  );
+}
+
+const BUDGET_FIX =
+  "Lower DB_POOL_MAX or DB_AUTH_POOL_MAX in runtimeConfig, run fewer replicas, or raise dependencies.postgres.maxConnections.";
+
+/** The plan warning for a budget over the limit, or null. */
+export function connectionBudgetWarning(profile: AnyDeployProfile, modules: Set<string>): string | null {
+  let budget: ConnectionBudget | null;
+  try {
+    budget = connectionBudget(profile, modules);
+  } catch (error) {
+    return `Cannot count PostgreSQL connections: ${(error as Error).message}`;
+  }
+  if (!budget || budget.peak <= budget.available) return null;
+  return (
+    `PostgreSQL connections can reach ${budget.peak}, above the ${budget.available} that max_connections ` +
+    `${budget.maxConnections} leaves after ${RESERVED_CONNECTIONS} reserved: ${budgetSummary(budget)}. ${BUDGET_FIX}`
+  );
+}
+
+function connectionBudgetFinding(profile: AnyDeployProfile, modules: Set<string>): DeployFinding | null {
+  const code = "database-connections";
+  let budget: ConnectionBudget | null;
+  try {
+    budget = connectionBudget(profile, modules);
+  } catch (error) {
+    return { code, ok: false, message: `Cannot count PostgreSQL connections: ${(error as Error).message}` };
+  }
+  if (!budget) return null;
+  const limit = `max_connections ${budget.maxConnections} leaves ${budget.available} after ${RESERVED_CONNECTIONS} reserved`;
+  if (budget.steady > budget.available) {
+    return {
+      code,
+      ok: false,
+      message: `PostgreSQL connections exceed the limit even between rollouts: ${limit}, and ${budgetSummary(budget)}. ${BUDGET_FIX}`,
+    };
+  }
+  if (budget.peak > budget.available) {
+    return {
+      code,
+      ok: true,
+      warning: true,
+      message: `PostgreSQL connections can reach ${budget.peak} during a deployment: ${limit}, and ${budgetSummary(budget)}. ${BUDGET_FIX}`,
+    };
+  }
+  return {
+    code,
+    ok: true,
+    message: `PostgreSQL connections stay within the limit, at most ${budget.peak}: ${limit}, and ${budgetSummary(budget)}.`,
+  };
+}
+
 export function profileFindings(projectRoot: string, profile: AnyDeployProfile): DeployFinding[] {
   const modules = installedModules(projectRoot);
   const findings: DeployFinding[] = [idleTimeoutFinding(profile.runtimeConfig, readAppProxyTimeouts(projectRoot))];
+  const budget = connectionBudgetFinding(profile, modules);
+  if (budget) findings.push(budget);
   if (modules.has("audit-log")) findings.push(auditLogFinding(profile.runtimeConfig));
   return findings;
 }

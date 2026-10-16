@@ -567,6 +567,25 @@ describe("compose plan", () => {
     expect(plan.planHash).not.toBe(first.planHash);
   });
 
+  it("warns when the deployment can open more PostgreSQL connections than the server allows", () => {
+    const root = initialized(["auth", "bullmq"]);
+    expect(planComposeDeployment(root, "production", "v1.2.3", scriptedRunner()).warnings.join(" ")).not.toContain(
+      "PostgreSQL connections",
+    );
+    const file = profilePath(root, "production");
+    const value = JSON.parse(readFileSync(file, "utf8")) as {
+      dependencies: { postgres: { maxConnections?: number } };
+    };
+    value.dependencies.postgres.maxConnections = 97;
+    writeFileSync(file, JSON.stringify(value));
+    expect(planComposeDeployment(root, "production", "v1.2.3", scriptedRunner()).warnings).toContain(
+      "PostgreSQL connections can reach 95, above the 94 that max_connections 97 leaves after 3 reserved: " +
+        "each API or worker process holds up to 31 (DB_POOL_MAX 20 + 1 + DB_AUTH_POOL_MAX 10); 3 process(es) hold 93, " +
+        "and the migration adds 2 to the 93. Lower DB_POOL_MAX or DB_AUTH_POOL_MAX in runtimeConfig, run fewer replicas, " +
+        "or raise dependencies.postgres.maxConnections.",
+    );
+  });
+
   it("rejects a release tag that is not a stable SemVer tag", () => {
     const root = initialized();
     expect(() => planComposeDeployment(root, "production", "latest", scriptedRunner())).toThrow(

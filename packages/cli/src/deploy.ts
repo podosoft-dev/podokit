@@ -5,7 +5,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { directApiRoutes } from "./api-paths";
 import { readAppProxyTimeouts } from "./app-proxy-timeouts";
-import { profileFindings, type DeployFinding } from "./deploy-checks";
+import {
+  connectionBudgetWarning,
+  installedModules,
+  profileFindings,
+  type DeployFinding,
+} from "./deploy-checks";
 import type { CommandRunner } from "./dev";
 import {
   assertReleaseTag,
@@ -737,6 +742,9 @@ export function planDeployment(
     warnings: [
       "Application rollback does not reverse database migrations.",
       "PersistentVolumeClaims and Kubernetes Secrets are never deleted by apply or rollback.",
+      ...[connectionBudgetWarning(profile, installedModules(projectRoot))].filter(
+        (warning): warning is string => warning !== null,
+      ),
     ],
   };
   const temporaryRoot = mkdtempSync(join(tmpdir(), "podokit-deploy-plan-"));

@@ -26,7 +26,10 @@ Review these fields before planning:
   and `podo add` fill in the paths installed modules declare (file-upload:
   `/api/files/uploads/`); keep them.
 - `workloads`: API/web replicas and resources plus an optional worker
-- `dependencies`: PostgreSQL, Redis, and object storage mode, image, Secret name, and storage
+- `dependencies`: PostgreSQL, Redis, and object storage mode, image, Secret name, and storage.
+  PostgreSQL also takes `maxConnections` (default 100) and `appPools` for pools the
+  application opens itself; the doctor and the plan check the connection budget
+  against them, so lower `DB_POOL_MAX`/`DB_AUTH_POOL_MAX` or replicas when they warn.
 - `secrets`: API/optional web Secret names and required key names, plus image-pull Secret
 - `runtimeConfig`: non-sensitive environment values only
 - `verification`: HTTPS origin and checks with exact statuses and optional JSON fields

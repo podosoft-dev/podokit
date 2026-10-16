@@ -665,7 +665,9 @@ async function main(argv: string[]): Promise<void> {
         process.stdout.write(
           args.json
             ? `${JSON.stringify(plan, null, 2)}\n`
-            : `${plan.actions.map((entry) => `${entry.order}. ${entry.description}`).join("\n")}\nPlan hash: ${plan.planHash}\n`,
+            : `${plan.actions.map((entry) => `${entry.order}. ${entry.description}`).join("\n")}\n` +
+                `${plan.warnings.map((warning) => `warning: ${warning}`).join("\n")}\n` +
+                `Plan hash: ${plan.planHash}\n`,
         );
         return;
       }

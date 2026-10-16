@@ -5,11 +5,13 @@ import { readManifest } from "./lockfile";
 import {
   DNS_LABEL,
   MigrationProfile,
+  PostgresBudgetProfile,
   ReleaseProfile,
   VerificationProfile,
   assertOnlyKeys,
   isRecord,
   parseCommand,
+  parsePostgresBudget,
   parseReleaseProfile,
   parseRequiredKeys,
   parseRuntimeConfig,
@@ -65,6 +67,8 @@ export interface ComposeDependencyProfile {
   volume: string;
 }
 
+export interface ComposePostgresProfile extends ComposeDependencyProfile, PostgresBudgetProfile {}
+
 export interface ComposeObjectStorageProfile extends ComposeDependencyProfile {
   bucket: string;
   clientImage: string;
@@ -116,7 +120,7 @@ export interface DockerComposeProfileV1 {
     worker: ComposeWorkloadProfile | null;
   };
   dependencies: {
-    postgres: ComposeDependencyProfile;
+    postgres: ComposePostgresProfile;
     redis: ComposeDependencyProfile;
     objectStorage: ComposeObjectStorageProfile;
   };
@@ -414,6 +418,13 @@ export function parseComposeProfile(value: unknown): DockerComposeProfileV1 {
     throw new Error("Deployment secrets.registryLogin must be a boolean.");
   }
 
+  const runtimeConfig = parseRuntimeConfig(requiredRecord(value, "runtimeConfig"));
+  const postgresRecord = requiredRecord(dependencies, "postgres");
+  const postgres: ComposePostgresProfile = {
+    ...parseComposeDependency(postgresRecord, "dependencies.postgres", ["maxConnections", "appPools"]),
+    ...parsePostgresBudget(postgresRecord, "dependencies.postgres", runtimeConfig),
+  };
+
   const profile: DockerComposeProfileV1 = {
     schemaVersion: 1,
     driver: "docker-compose",
@@ -438,10 +449,7 @@ export function parseComposeProfile(value: unknown): DockerComposeProfileV1 {
           : parseComposeWorkload(requiredRecord(workloads, "worker"), "workloads.worker"),
     },
     dependencies: {
-      postgres: parseComposeDependency(
-        requiredRecord(dependencies, "postgres"),
-        "dependencies.postgres",
-      ),
+      postgres,
       redis: parseComposeDependency(requiredRecord(dependencies, "redis"), "dependencies.redis"),
       objectStorage,
     },
@@ -454,7 +462,7 @@ export function parseComposeProfile(value: unknown): DockerComposeProfileV1 {
       ? { migration: { command: parseCommand(migration.command, "migration.command") } }
       : {}),
     ...(sync ? { sync: parseSyncProfile(sync, "sync") } : {}),
-    runtimeConfig: parseRuntimeConfig(requiredRecord(value, "runtimeConfig")),
+    runtimeConfig,
     verification: parseVerification(requiredRecord(value, "verification")),
   };
   return profile;

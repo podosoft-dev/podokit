@@ -155,7 +155,7 @@ ${labels(name, 8)}    spec:
         - name: postgres
           image: ${quote(image ?? dependency.image)}
           imagePullPolicy: IfNotPresent
-          env:
+${dependency.maxConnections === undefined ? "" : `          args: ["-c", ${quote(`max_connections=${dependency.maxConnections}`)}]\n`}          env:
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef: { name: ${dependency.secretName}, key: POSTGRES_USER }

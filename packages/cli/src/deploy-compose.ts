@@ -2,7 +2,12 @@ import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { directApiRoutes } from "./api-paths";
 import { readAppProxyTimeouts } from "./app-proxy-timeouts";
-import { profileFindings, type DeployFinding } from "./deploy-checks";
+import {
+  connectionBudgetWarning,
+  installedModules,
+  profileFindings,
+  type DeployFinding,
+} from "./deploy-checks";
 import type { CommandRunner } from "./dev";
 import { loadComposeProfile } from "./deploy-driver";
 import {
@@ -610,6 +615,8 @@ export function planComposeDeployment(
   warnings.push(
     "The migration runs before the new containers start, so it must be compatible with the release currently serving traffic.",
   );
+  const budgetWarning = connectionBudgetWarning(profile, installedModules(projectRoot));
+  if (budgetWarning) warnings.push(budgetWarning);
 
   const profileDigest = composeProfileDigest(profile);
   const planHash = digest([

@@ -254,6 +254,81 @@ export function parseRuntimeConfig(runtimeConfig: Record<string, unknown>): Reco
   return parsed;
 }
 
+/**
+ * An application-owned PostgreSQL pool each API or worker process opens beside
+ * PodoKit's own: `sizeKey` names the runtimeConfig key that caps it, and
+ * `extraConnections` counts connections it opens beyond that cap, such as one to
+ * check a server that stopped answering.
+ */
+export interface AppConnectionPool {
+  sizeKey: string;
+  extraConnections: number;
+}
+
+/** What the connection budget needs to know about the database, beyond its mode. */
+export interface PostgresBudgetProfile {
+  /** The server's max_connections; PodoKit sets it on a database it runs. */
+  maxConnections?: number;
+  appPools?: AppConnectionPool[];
+}
+
+/** PostgreSQL's own ceiling for max_connections. */
+const MAX_POSTGRES_CONNECTIONS = 262_143;
+/** Pools whose sizes the connection budget already reads. */
+const PODOKIT_POOL_KEYS = ["DB_POOL_MAX", "DB_AUTH_POOL_MAX"];
+
+export function parsePostgresBudget(
+  value: Record<string, unknown>,
+  field: string,
+  runtimeConfig: Record<string, string>,
+): PostgresBudgetProfile {
+  const parsed: PostgresBudgetProfile = {};
+  if (value.maxConnections !== undefined) {
+    const maxConnections = value.maxConnections;
+    if (
+      typeof maxConnections !== "number" ||
+      !Number.isInteger(maxConnections) ||
+      maxConnections < 4 ||
+      maxConnections > MAX_POSTGRES_CONNECTIONS
+    ) {
+      throw new Error(
+        `Deployment profile field "${field}.maxConnections" must be an integer from 4 to ${MAX_POSTGRES_CONNECTIONS}.`,
+      );
+    }
+    parsed.maxConnections = maxConnections;
+  }
+  if (value.appPools !== undefined) {
+    if (!Array.isArray(value.appPools)) {
+      throw new Error(`Deployment profile field "${field}.appPools" must be an array.`);
+    }
+    const seen = new Set<string>();
+    parsed.appPools = value.appPools.map((entry, index): AppConnectionPool => {
+      const entryField = `${field}.appPools[${index}]`;
+      if (!isRecord(entry)) throw new Error(`Deployment profile field "${entryField}" must be an object.`);
+      assertOnlyKeys(entry, ["sizeKey", "extraConnections"], entryField);
+      const sizeKey = requiredString(entry, "sizeKey");
+      if (!/^[A-Z][A-Z0-9_]*$/.test(sizeKey) || PODOKIT_POOL_KEYS.includes(sizeKey) || seen.has(sizeKey)) {
+        throw new Error(
+          `Deployment profile field "${entryField}.sizeKey" must name another pool's runtimeConfig key, once; ` +
+            `${PODOKIT_POOL_KEYS.join(" and ")} are counted already.`,
+        );
+      }
+      seen.add(sizeKey);
+      if (!/^[1-9][0-9]*$/.test(runtimeConfig[sizeKey] ?? "")) {
+        throw new Error(
+          `Deployment profile field "${entryField}.sizeKey" names ${sizeKey}, which runtimeConfig must set to a positive integer.`,
+        );
+      }
+      const extraConnections = entry.extraConnections ?? 0;
+      if (typeof extraConnections !== "number" || !Number.isInteger(extraConnections) || extraConnections < 0) {
+        throw new Error(`Deployment profile field "${entryField}.extraConnections" must be a non-negative integer.`);
+      }
+      return { sizeKey, extraConnections };
+    });
+  }
+  return parsed;
+}
+
 /** Bun closes silent connections on a 4-second tick, up to 4 seconds before their idle timeout. */
 export const IDLE_TICK_SECONDS = 4;
 export const MAX_IDLE_TIMEOUT_SECONDS = 255;

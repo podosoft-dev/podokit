@@ -188,8 +188,13 @@ function dependencyService(
 }
 
 function postgresService(profile: DockerComposeProfileV1, image: string): string {
+  const { maxConnections } = profile.dependencies.postgres;
   return dependencyService(profile, "postgres", profile.dependencies.postgres, image, {
     dataPath: "/var/lib/postgresql/data",
+    // The image's entry point runs postgres with arguments that start with "-".
+    ...(maxConnections === undefined
+      ? {}
+      : { command: `["-c", ${quote(`max_connections=${maxConnections}`)}]` }),
     healthcheck:
       `    healthcheck:\n` +
       `      test: ["CMD-SHELL", "pg_isready -U \\"$$POSTGRES_USER\\" -d \\"$$POSTGRES_DB\\""]\n` +

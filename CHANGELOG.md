@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- `podo deploy doctor` and `podo deploy plan` count the PostgreSQL connections a
+  deployment can open: every API and worker process with `DB_POOL_MAX` + 1 and,
+  with `auth`, `DB_AUTH_POOL_MAX`, one surge pod per workload during a
+  Kubernetes rollout, and the migration. The doctor fails when the processes
+  alone exceed `max_connections` minus the 3 reserved connections, and both warn
+  when a deployment can. `dependencies.postgres.maxConnections` (default 100)
+  states the server's limit and is rendered as `-c max_connections` for a
+  PostgreSQL server PodoKit runs, and `dependencies.postgres.appPools` lists the
+  application's own pools by the `runtimeConfig` key that caps them. The
+  Kubernetes `plan` prints its warnings too.
 - `podo deploy doctor` checks the profile against the application before it
   contacts the target, and reports a setting that deploys but probably not as
   intended as a `warn` line, which does not stop `podo deploy apply`. With the
@@ -81,6 +91,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Upgrade notes
 
+- `podo deploy doctor` now fails a profile whose API and worker processes can
+  open more PostgreSQL connections than the server allows, which stops
+  `podo deploy apply`. A Kubernetes profile with a BullMQ worker and the default
+  pools warns. Lower `DB_POOL_MAX` and `DB_AUTH_POOL_MAX` in `runtimeConfig`,
+  set `dependencies.postgres.maxConnections` to the server's real limit, and
+  list pools the application opens itself in `dependencies.postgres.appPools`.
 - A deployment profile that sets `CONNECTION_IDLE_TIMEOUT` or
   `API_IDLE_TIMEOUT` only to cover an `APP_PROXY_TIMEOUTS` entry can drop them;
   the plan now derives both. An app with an entry of `timeoutMs: null` that kept

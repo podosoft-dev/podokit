@@ -221,6 +221,7 @@ while a `warn` reports a setting that deploys but probably not as intended:
 | Check | Result |
 | --- | --- |
 | `idle-timeouts` | `FAIL` when the idle timeouts cannot be derived or `CONNECTION_IDLE_TIMEOUT` set in `runtimeConfig` cannot cover the longest `/api` proxy wait; `warn` when `API_IDLE_TIMEOUT` cannot, see [idle timeouts](#idle-timeouts) |
+| `database-connections` (with PostgreSQL) | `FAIL` when the API and worker processes can open more connections than PostgreSQL allows between rollouts, `warn` when a rollout or the migration can; see [database connections](#database-connections) |
 | `audit-log` (with the module installed) | `warn` when `runtimeConfig` lacks `AUDIT_LOG_ENABLED` or sets it to anything but `"true"`: the audit log then records nothing until an administrator turns it on, or depends on the API's built-in default |
 
 The plan resolves every image tag to an immutable registry digest and binds those
@@ -265,6 +266,50 @@ Application upgrades retain automatic rollback through Helm 3's
 External object storage, unchanged live and recorded managed server images in a
 deployed release, and new installations keep the existing Helm behavior. This execution safeguard
 does not change the rendered manifests or the plan confirmation hash.
+
+### Database connections
+
+Every API and worker process keeps its own PostgreSQL pools, and PostgreSQL
+refuses connections past `max_connections`. The doctor and the plan add up the
+most connections the deployment can open and compare them with what the server
+allows: `dependencies.postgres.maxConnections` (100, PostgreSQL's default, when
+unset) minus the 3 it reserves for superusers. The doctor fails when the
+processes alone can exceed it, and the doctor and the plan warn when they can
+exceed it during a deployment.
+
+| Term | Connections |
+| --- | --- |
+| One API or worker process | `DB_POOL_MAX` (20) + 1 that the query pool opens to check a stalled server, `DB_AUTH_POOL_MAX` (10) with the `auth` module, and each pool in `dependencies.postgres.appPools`; each from `runtimeConfig`, else the default in parentheses |
+| Between rollouts | API replicas + worker replicas, times one process |
+| A Kubernetes rollout | one surge pod more for the API and one for a worker, which the rendered `maxSurge: 1` allows; Compose replaces containers without a surge |
+| The migration | 2, beside the processes of the release still serving |
+
+With the defaults and `auth`, two API replicas hold 62 and a Kubernetes rollout
+93 of 97. A BullMQ worker on Kubernetes makes that 155 during a rollout, so lower
+the pools, for example `"DB_POOL_MAX": "10"` and `"DB_AUTH_POOL_MAX": "8"`, or
+raise the limit. Behind a connection pooler such as PgBouncer, set
+`maxConnections` to the pooler's client limit instead.
+
+An application that opens a pool of its own lists it, with the `runtimeConfig`
+key that caps it and any connections it opens beyond the cap:
+
+```json
+{
+  "runtimeConfig": { "REPORTS_DB_POOL_MAX": "10" },
+  "dependencies": {
+    "postgres": {
+      "mode": "inCluster",
+      "maxConnections": 200,
+      "appPools": [{ "sizeKey": "REPORTS_DB_POOL_MAX", "extraConnections": 1 }]
+    }
+  }
+}
+```
+
+The profile fails to load when `runtimeConfig` does not set that key to a
+positive integer. On a PostgreSQL server PodoKit runs, `maxConnections` is also
+rendered as `-c max_connections=<n>`, which recreates the database container or
+pod once; for an `external` server it only records the server's setting.
 
 ### ⚠ The migration runs against the release that is still serving
 

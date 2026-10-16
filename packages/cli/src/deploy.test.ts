@@ -469,6 +469,14 @@ describe("deployment rendering and planning", () => {
     expect(() => planDeployment(root, "production", "latest", runner)).toThrow(
       "does not match deployment tag pattern",
     );
+    expect(routed.warnings.join(" ")).not.toContain("PostgreSQL connections");
+    const crowded = JSON.parse(readFileSync(path, "utf8")) as { workloads: { api: { replicas: number } } };
+    crowded.workloads.api.replicas = 4;
+    writeFileSync(path, JSON.stringify(crowded));
+    // Four API pods and a surge pod, each with DB_POOL_MAX 20 + 1 connections.
+    expect(planDeployment(root, "production", "v1.2.3", runner).warnings.join(" ")).toContain(
+      "PostgreSQL connections can reach 105, above the 97",
+    );
   });
 
   it("binds rollback confirmation to the target and current revision", () => {
