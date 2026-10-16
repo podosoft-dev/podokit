@@ -99,6 +99,9 @@ Merge added module settings from `.env.example` into an existing `.env`.
   Better Auth schema before the application migrations. `{{apiRun}} migration:run` runs
   only the application migrations and never creates Better Auth tables;
   `{{apiRun}} migration:revert` reverts the latest application migration.
+- Name a migration `apps/api/src/migrations/<timestamp>-<Name>.ts` with exactly one exported
+  migration class. The build lists compiled migrations in `dist/migrations/migrations.json` and
+  fails when one is lost; `{{apiRun}} migrate:list` prints what a build would run.
 - e2e (Playwright, ships in `tests/`): `{{rootRun}} test:e2e`. Run the whole suite on more
   workers with `E2E_WORKERS=2`, never `--workers`. Tag a test `{ tag: "@exclusive" }` when
   it changes state other tests rely on (a server-wide setting, a seeded account's profile);

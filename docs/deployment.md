@@ -620,7 +620,10 @@ app's `BODY_SIZE_LIMIT` and any ingress, apply their own limits.
 The API serves two health endpoints. `GET /health` reports that the process is
 running. `GET /health/ready` runs `SELECT 1` against the database and every
 readiness check that installed modules register, such as Redis, the event bus,
-the BullMQ producer, and the object storage bucket. It answers `503` with the `READINESS_FAILED` error code
+the BullMQ producer, and the object storage bucket. In production it also checks
+that every migration of the image's `dist/migrations/migrations.json` is in the
+database (`migrations`), so a new image is not ready until the migration job has
+run. It answers `503` with the `READINESS_FAILED` error code
 when any of them is down, and its message names them, for example
 `One or more dependencies are unavailable: redis, events`.
 

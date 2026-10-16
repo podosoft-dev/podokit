@@ -1,20 +1,17 @@
 import "dotenv/config";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { DataSource, type DataSourceOptions } from "typeorm";
 import type { DatabaseProviderName } from "@podosoft/podokit-runtime";
 import { PROVIDERS } from "../config/providers";
 import { validateEnv } from "../config/env.validation";
 import { databaseUrl, sqliteDatabasePath } from "./database";
+import { migrationPaths, migrationSet } from "./migration-files";
 
-const compiledMigrations = join(process.cwd(), "dist", "migrations");
-const migrations = existsSync(compiledMigrations)
-  ? [join(compiledMigrations, "[0-9]*.js")]
-  : [join(process.cwd(), "src", "migrations", "[0-9]*.ts")];
+/** The migrations the data source loads; compare them with `assertMigrationsLoaded`. */
+export const appMigrations = migrationSet();
 
 const commonOptions = {
   entities: [],
-  migrations,
+  migrations: migrationPaths(appMigrations),
   // One transaction per migration, so a migration can set `transaction = false`
   // for statements such as CREATE INDEX CONCURRENTLY.
   migrationsTransactionMode: "each" as const,

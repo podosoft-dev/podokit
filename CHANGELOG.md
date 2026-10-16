@@ -107,6 +107,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   the app was generated with. A site name change applies without a restart.
   `@podosoft/podokit-auth` resolves it as `AuthConfig.appName`, with the
   `appNameSetting` and `defaults.appName` options of `createConfigStore()`.
+- `bun run --cwd apps/api migrate:list` prints the name of every migration the
+  current build would run, without a database; in an image,
+  `docker run --rm <api-image> bun run migrate:list`.
 
 ### Removed
 
@@ -195,6 +198,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   Better Auth took their development branches. `scripts/build.mjs` now defines
   `process.env.NODE_ENV` as itself for the API, worker, and migration bundles,
   and the logging module reads the validated `NODE_ENV`.
+- Migrations can no longer be lost between the build and the database without
+  an error. The API build emitted the compiled migrations wherever `Bun.build`
+  chose, and the data source loaded `dist/migrations/[0-9]*.js`, so an image
+  whose migrations landed in `dist/migrations/src/migrations` ran none and
+  `migrate:all` still succeeded. The build now pins the output to
+  `dist/migrations/<file>.js`, removes the previous build's migrations, fails
+  unless the output matches `src/migrations` and each file exports exactly one
+  migration class, and writes `dist/migrations/migrations.json` with every file
+  and migration name. In production the migrators run exactly the listed files
+  and refuse to run without the list or a listed file; both migrators fail when
+  they load fewer migrations than they expected. In production the API refuses
+  to start without the list, and `GET /health/ready` reports a `migrations` check
+  that stays down while a listed migration is missing from the database.
 
 ### Upgrade notes
 
@@ -304,6 +320,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `define: { "process.env.NODE_ENV": JSON.stringify("production") }` to
   `scripts/build.mjs` can drop it; `podo update` reports the edit as a conflict,
   so take the new file.
+- `podo update` replaces `scripts/build.mjs`, `src/database/data-source.ts`, and
+  `src/database/migrate.ts`. Apps that pinned `root: "src/migrations"` in the
+  build or added their own migration count check (for example an
+  `assertMigrationsLoaded` call or a static migration registry) can drop those
+  edits. A migration file that exports more than one class, such as a helper
+  class next to the migration, now fails the build; move the helper to another
+  file. After the update a production API image refuses to start unless it was
+  built with the new `scripts/build.mjs`, and its `/health/ready` stays `503`
+  until `migrate:all` has applied the image's migrations, so keep the migration
+  job ahead of the rollout.
 
 ## [1.5.0] - 2026-10-16
 

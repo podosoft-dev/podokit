@@ -51,7 +51,7 @@ apps/
       database/            # provider-aware Bun.SQL connection and migrations
       health/              # GET /health and /health/ready
       common/              # AppException and standard error envelope
-    scripts/build.mjs      # Bun.build API, worker, and migrations
+    scripts/build.mjs      # Bun.build API, worker, and migrations (+ migrations.json)
     scripts/run-migrations.mjs # migrate:all: source in development, dist in production
     Dockerfile             # oven/bun:1.4.0-alpine
   web/
@@ -68,11 +68,6 @@ bun.lock
 
 The request path uses Elysia and Bun.SQL with PostgreSQL or SQLite. TypeORM
 executes PostgreSQL migrations; SQLite uses the local migration runner.
-
-`scripts/build.mjs` keeps `process.env.NODE_ENV` a read of the runtime
-environment in every bundle. Left to its default, `Bun.build` replaces it with
-`"development"`, so the built API, its dependencies included, would skip every
-production branch even with `NODE_ENV=production` set.
 `bun run --cwd apps/api migrate:all` is the one migration command for setup,
 after adding a module, and for the deployment migration job. It runs the source
 in development and the compiled output in a production image, and with the
@@ -80,8 +75,31 @@ in development and the compiled output in a production image, and with the
 migrations. `migration:run` and `migration:revert` work on the application
 migrations alone, so `migration:run` never creates Better Auth tables, and a
 module migration that needs one, such as the admin dashboard's session index,
-stops and names `migrate:all`. Other
-infrastructure is selected
+stops and names `migrate:all`.
+
+`scripts/build.mjs` keeps `process.env.NODE_ENV` a read of the runtime
+environment in every bundle. Left to its default, `Bun.build` replaces it with
+`"development"`, so the built API, its dependencies included, would skip every
+production branch even with `NODE_ENV=production` set. The build also compiles
+each `src/migrations/<timestamp>-<name>.ts` to `dist/migrations/<timestamp>-<name>.js`
+and lists them with their names in `dist/migrations/migrations.json`. It fails
+when a migration lands anywhere else, when a file does not export exactly one
+migration class, or when the output does not match the sources, and it removes
+the compiled migrations of an earlier build first. In production
+(`NODE_ENV=production` with a `dist` directory) the migrators run the listed
+files and nothing else, and refuse to run when the list or a listed file is
+missing. Both migrators also fail when they load fewer migrations than the list
+or the source directory holds, because TypeORM loads nothing, without an error,
+from a path that matches no file.
+
+`bun run --cwd apps/api migrate:list` prints the name of every migration the
+current build would run, without a database, for example to inspect an image:
+`docker run --rm <api-image> bun run migrate:list`. In production the API
+refuses to start without the list, and `GET /health/ready` reports a
+`migrations` check that stays down while the database lacks a listed migration,
+so an orchestrator holds traffic until the migration job has run.
+
+Other infrastructure is selected
 through the contracts described in [Runtime providers](providers.md). The merged
 OpenAPI document at `/api-docs-json` includes
 Elysia, module, and Better Auth routes. `bun run --cwd apps/api contract`
