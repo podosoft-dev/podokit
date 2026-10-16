@@ -161,6 +161,7 @@ describe("create (integration against templates)", () => {
       ["apps/api/src/config/env.extensions.ts", "export const appEnvShape = {} satisfies z.ZodRawShape;"],
       ["apps/api/src/database/entities.ts", "export const APP_ENTITIES: AppEntities = [];"],
       ["apps/api/src/core/api-contract.extensions.ts", "export const APP_DOCUMENTED_ROUTES: readonly string[] = [];"],
+      ["apps/api/scripts/build.extensions.mjs", "export const appBuildTargets = [];"],
     ];
     for (const [path, seed] of apiSeams) {
       expect(readFileSync(join(target, path), "utf8")).toContain(seed);

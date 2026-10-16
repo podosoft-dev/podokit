@@ -128,6 +128,8 @@ export const DEFAULT_OWNED_GLOBS = [
   "apps/api/src/database/entities.ts",
   // Owned application operations that `bun run contract` requires.
   "apps/api/src/core/api-contract.extensions.ts",
+  // Owned entry points the API build bundles next to PodoKit's.
+  "apps/api/scripts/build.extensions.mjs",
   // Owned additions to the managed /api proxy's header lists, body limits, and
   // response deadlines.
   "apps/web/src/lib/server/proxy-headers.ts",

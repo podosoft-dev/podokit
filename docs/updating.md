@@ -195,6 +195,7 @@ overwritten afterwards. Use them instead of editing the managed file.
 | `apps/api/src/core/api-contract.extensions.ts` | `APP_DOCUMENTED_ROUTES` (`"GET /reports/{id}"` or `"GET /reports/:id"`) | `scripts/verify-api-contract.ts` and `core/api-contract.ts`: `bun run contract` fails when one is not registered or not in the OpenAPI document |
 | `apps/api/src/settings/app-flags.ts` (auth module) | `APP_FLAG_DEFAULTS` (`{ reportsEnabled: true }`) | `settings/flag-defaults.ts`, `auth/auth.module.ts`, and a migration seeding a row: the flags are stored with PodoKit's, set with `PUT /account/settings`, read with `SettingsService.getBool()`, and returned as `appFlags` by `GET /account/capabilities` |
 | `apps/api/src/worker.extensions.ts` (bullmq module) | `configureWorkers(setup)` returning `{ queue, processor, options? }[]` | `jobs/worker.module.ts` and `main-worker.ts`: the worker process consumes these queues and runs `setup.onClose` after its workers stop |
+| `apps/api/scripts/build.extensions.mjs` | `appBuildTargets` (`{ entrypoint, outdir }[]`) | `scripts/build.mjs`: the API build bundles these entry points too, and fails when one does not exist |
 | `apps/api/src/config/env.extensions.ts` | `appEnvShape` (zod fields) and `refineAppEnv(env, context)` | `config/env.validation.ts`: application variables are validated at startup and typed on `AppEnv`; redefining a PodoKit variable fails |
 
 ## Extending the web proxy

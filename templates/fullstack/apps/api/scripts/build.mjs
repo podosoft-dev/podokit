@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { appBuildTargets } from "./build.extensions.mjs";
 
 // Bun inlines process.env.NODE_ENV as "development" unless told otherwise, which
 // would make every production check in the bundle, its dependencies included,
@@ -14,6 +15,14 @@ const targets = [
   { entrypoint: "src/main-worker.ts", outdir: "dist" },
   { entrypoint: "src/bootstrap-admin-runtime.ts", outdir: "dist" },
 ].filter((target) => existsSync(target.entrypoint));
+
+for (const target of appBuildTargets) {
+  if (!existsSync(target.entrypoint)) {
+    process.stderr.write(`Build failed: ${target.entrypoint} from build.extensions.mjs does not exist\n`);
+    process.exit(1);
+  }
+  targets.push(target);
+}
 
 for (const target of targets) {
   const result = await Bun.build({

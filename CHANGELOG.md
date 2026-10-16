@@ -155,6 +155,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   module is not installed, fails startup. `config/providers.ts` passes the
   project's selection through `providersFromEnvironment()` from the new
   `config/provider-selection.ts`, and `podo provider set` writes it that way.
+- `apps/api/scripts/build.extensions.mjs` is an application-owned list,
+  `appBuildTargets`, of entry points the API build bundles next to PodoKit's,
+  such as a maintenance command run from the image. A missing entry point fails
+  the build. `podo update` creates the file once and never overwrites it.
 
 ### Removed
 
@@ -415,6 +419,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   your own variables, set the `<CAPABILITY>_PROVIDER` variables instead and take
   the new file; `podo update` reports the edit as a conflict. Check that none of
   those five names is already in your environment for another purpose.
+- Move build targets you added to the managed `apps/api/scripts/build.mjs` into
+  `appBuildTargets` in `apps/api/scripts/build.extensions.mjs`; `podo update`
+  reports the edit as a conflict.
 
 ## [1.5.0] - 2026-10-16
 

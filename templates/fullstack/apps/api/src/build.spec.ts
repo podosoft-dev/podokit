@@ -4,12 +4,14 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 const BUILD = join(__dirname, "../scripts/build.mjs");
+const EXTENSIONS = join(__dirname, "../scripts/build.extensions.mjs");
 
 /** Builds an API layout made of `files` with the app's build script. */
 async function build(files: Record<string, string>): Promise<{ root: string; code: number; stderr: string }> {
   const root = mkdtempSync(join(tmpdir(), "api-build-"));
   mkdirSync(join(root, "scripts"));
   cpSync(BUILD, join(root, "scripts/build.mjs"));
+  cpSync(EXTENSIONS, join(root, "scripts/build.extensions.mjs"));
   for (const [path, content] of Object.entries(files)) {
     mkdirSync(dirname(join(root, path)), { recursive: true });
     writeFileSync(join(root, path), content);
@@ -83,6 +85,32 @@ describe("API build", () => {
       expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
       expect(await run(root, "dist/main.js", { NODE_ENV: "production" })).toBe("production");
       expect(await run(root, "dist/main.js", { NODE_ENV: "test" })).toBe("test");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("bundles the application's entry points from build.extensions.mjs", async () => {
+    const { root, code, stderr } = await build({
+      "scripts/build.extensions.mjs":
+        'export const appBuildTargets = [{ entrypoint: "scripts/repair.ts", outdir: "dist/scripts" }];\n',
+      "scripts/repair.ts": 'console.log("repaired", process.env.NODE_ENV);\n',
+    });
+    try {
+      expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
+      expect(await run(root, "dist/scripts/repair.js", { NODE_ENV: "production" })).toBe("repaired production");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails on an application entry point that does not exist", async () => {
+    const { root, code, stderr } = await build({
+      "scripts/build.extensions.mjs": 'export const appBuildTargets = [{ entrypoint: "scripts/gone.ts", outdir: "dist" }];\n',
+    });
+    try {
+      expect(code).toBe(1);
+      expect(stderr).toContain("scripts/gone.ts from build.extensions.mjs does not exist");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
