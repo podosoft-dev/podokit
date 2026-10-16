@@ -190,7 +190,8 @@ files listed under [web extension points](templates.md#web-extension-points):
 Vite and SvelteKit options in `apps/web/vite.extensions.ts`, styles in
 `apps/web/src/app.extensions.css`, and with
 `admin-dashboard` a request hook in `apps/web/src/lib/server/app-hooks.ts`,
-admin sidebar entries in `apps/web/src/lib/admin/app-nav.ts`, and private page
+admin sidebar entries in `apps/web/src/lib/admin/app-nav.ts`, Settings switches
+for the API's application flags in `apps/web/src/lib/admin/app-flags.ts`, and private page
 prefixes in `apps/web/src/lib/server/non-indexable-paths.ts`. `podo update`
 creates each of them once in an existing app. An app that edited the managed
 `vite.config.ts`, `app.css`, `hooks.server.ts`, `admin-sidebar.svelte`, or

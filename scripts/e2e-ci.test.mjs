@@ -110,7 +110,7 @@ test("tags every spec test that changes server-wide settings @exclusive", () => 
   }
 
   assert.deepEqual(untagged, []);
-  assert.equal(tagged, 35);
+  assert.equal(tagged, 36);
 });
 
 test("publishes and installs external modules in the faithful generated app", () => {

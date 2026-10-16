@@ -470,6 +470,7 @@ ships it, and never overwritten.
 | `apps/web/src/lib/server/asset-paths.ts` (admin-dashboard) | `APP_ASSET_PATHS` | [Endpoints without the session](modules.md#admin-dashboard) |
 | `apps/web/src/lib/server/non-indexable-paths.ts` (admin-dashboard) | `APP_NON_INDEXABLE_PATHS` | [Search indexing](modules.md#search-indexing) |
 | `apps/web/src/lib/admin/app-nav.ts` (admin-dashboard) | `APP_ADMIN_NAV` | [Admin navigation](modules.md#admin-navigation) |
+| `apps/web/src/lib/admin/app-flags.ts` (admin-dashboard) | `APP_FLAG_SETTINGS` | [Application settings](modules.md#application-settings) |
 
 Route pages are owned too; see [route files and update tiers](#route-files-and-update-tiers)
 for the pages whose server load PodoKit manages.

@@ -264,7 +264,9 @@ migration Job before a rolling deployment.
   `PUT /account/settings` (`{ "reportsEnabled": false }`), read with
   `SettingsService.getBool("reportsEnabled")`, and returned to every caller as
   `appFlags` by `GET /account/capabilities`, so keep secrets out of them. A missing row keeps
-  the default, so no migration is needed; a name PodoKit already uses fails at startup.
+  the default, so no migration is needed; a name PodoKit already uses fails at startup. With
+  `admin-dashboard`, list them in `APP_FLAG_SETTINGS` to give each a switch on the Settings
+  page (see [application settings](#application-settings)).
 - **How settings changes reach every replica.** `auth_config` and `app_setting` share one
   in-process snapshot. The replica that handled a write applies it before responding. Other
   replicas run one version probe (row count and latest update time of both tables) at most every
@@ -1899,6 +1901,29 @@ export const APP_ADMIN_NAV: readonly AdminNavEntry[] = [
 
 Put the label in the app-owned `i18n/catalogs/app/*.json` files. `adminOnly`
 hides an entry from users whose role is not `admin`.
+
+### Application settings
+
+The API's application flags (`APP_FLAG_DEFAULTS`, see [auth](#auth-better-auth))
+get one switch each on an **Application** tab of the admin Settings page when
+`APP_FLAG_SETTINGS` in the application-owned `apps/web/src/lib/admin/app-flags.ts`
+lists them. The tab follows PodoKit's and the modules' tabs and is hidden while
+the list is empty:
+
+```ts
+import type { AppFlagSetting } from "./registry.svelte.js";
+
+export const APP_FLAG_SETTINGS: readonly AppFlagSetting[] = [
+  { flag: "reportsEnabled", label: (t) => t.reports.flag, description: (t) => t.reports.flagDescription },
+];
+```
+
+Put the label and description in the app-owned `i18n/catalogs/app/*.json`
+files. A switch saves through `PUT /account/settings`, so it needs an
+administrator and applies at once, like the feature switches on the
+Authentication tab; neither writes an audit entry. A listed flag the API does not
+report shows as not available. The managed `tests/ui/app-flags.ui.spec.ts`
+checks the tab against the list and, with `@exclusive`, saves the first flag.
 
 ### Module entries
 

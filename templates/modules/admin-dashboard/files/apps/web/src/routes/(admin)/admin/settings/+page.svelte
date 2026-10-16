@@ -294,7 +294,7 @@
   </div>
 
   <Tabs.Root value="general">
-    <Tabs.List>
+    <Tabs.List class="h-auto max-w-full flex-wrap justify-start">
       <Tabs.Trigger value="general">{i18n.t.general.tab}</Tabs.Trigger>
       <Tabs.Trigger value="appearance">{i18n.t.general.appearanceTitle}</Tabs.Trigger>
       <Tabs.Trigger value="auth">{i18n.t.settings.tab}</Tabs.Trigger>

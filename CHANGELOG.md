@@ -168,6 +168,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   restored, `schedule()` resolves while the backend is down, and an invalid
   schedule rejects. `@podosoft/podokit-runtime` exports `RepeatOptions`,
   `assertRepeatOptions()`, and `MIN_REPEAT_INTERVAL_MS`.
+- The admin Settings page shows the application's flags. Each flag listed in
+  `APP_FLAG_SETTINGS` of the application-owned
+  `apps/web/src/lib/admin/app-flags.ts` (admin-dashboard) gets a switch on an
+  Application tab, labelled from the app's own catalog, that saves through
+  `PUT /account/settings` like the Authentication tab's switches. The tab is
+  hidden while the list is empty. `podo update` creates the file once and never
+  overwrites it. The settings page's tab list now wraps instead of reaching
+  into the page margin on narrow screens.
 
 ### Removed
 
@@ -441,6 +449,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - A `JobQueue` implementation of your own, including a test fake, must add
   `schedule()` and `unschedule()`. An app that ran its own repeating scheduler
   beside the jobs provider can move it to `schedule()`.
+- To show an application flag on the Settings page, add it to
+  `APP_FLAG_SETTINGS` in `apps/web/src/lib/admin/app-flags.ts` with labels in
+  `i18n/catalogs/app/*.json`, and drop what you added for it to the managed
+  settings `+page.server.ts` and the admin-dashboard catalogs; `podo update`
+  reports those edits as conflicts. The tab list's wrapping reaches only new
+  apps, because the settings `+page.svelte` is application-owned; add
+  `class="h-auto max-w-full flex-wrap justify-start"` to its `<Tabs.List>` if
+  your tabs overflow on a phone.
 
 ## [1.5.0] - 2026-10-16
 
