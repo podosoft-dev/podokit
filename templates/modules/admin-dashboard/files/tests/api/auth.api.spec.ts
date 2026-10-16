@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { createPublicKey, verify, type JsonWebKey } from "node:crypto";
 import { ADMIN, USER } from "../helpers/accounts";
 import { exclusive } from "../helpers/exclusive";
-import { clearSms, smsSinkReachable, waitForSmsOtp } from "../helpers/sms";
+import { smsSinkReachable, waitForSmsOtp } from "../helpers/sms";
 import { totpCode } from "../helpers/totp";
 
 const base = process.env.E2E_BASE_URL ?? "http://localhost:5001";
@@ -32,7 +32,6 @@ test("phone number: verify with the code delivered to the SMS sink", async ({ pl
   const caps = await (await ctx.get("/api/account/capabilities")).json();
   test.skip(!caps?.phoneNumber, "phone number not enabled");
   test.skip(!(await smsSinkReachable()), "SMS sink not reachable");
-  await clearSms();
   const email = `phone-${Date.now()}@example.com`;
   await ctx.post("/api/auth/sign-up/email", { data: { email, password: "Podokit3e-Str0ng!pw", name: "Phone" } });
   // Unique number per run so the "phone already exists" guard never trips.

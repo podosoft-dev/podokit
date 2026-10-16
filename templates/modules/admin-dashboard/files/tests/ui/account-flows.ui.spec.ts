@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { anonState } from "../helpers/accounts";
 import { ready } from "../helpers/hydration";
-import { smsSinkReachable, clearSms, waitForSmsOtp } from "../helpers/sms";
+import { smsSinkReachable, waitForSmsOtp } from "../helpers/sms";
 
 // Each test drives a fresh disposable account (via a real UI login) so the shared
 // admin/user sessions are never mutated.
@@ -31,7 +31,6 @@ test("account: register and verify a phone number", async ({ page, playwright })
   test.skip((await phoneInput.count()) === 0, "phone number feature disabled");
 
   const phone = `+1555${String(Date.now()).slice(-7)}`;
-  await clearSms();
   await phoneInput.fill(phone);
   await page.getByRole("button", { name: "Send code" }).click();
   const code = await waitForSmsOtp(phone);

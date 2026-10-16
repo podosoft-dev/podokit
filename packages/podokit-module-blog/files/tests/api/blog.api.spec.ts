@@ -264,17 +264,28 @@ test("blog validation rejects oversized page requests and empty comments", async
   request,
 }) => {
   expect((await request.get("/api/blog?pageSize=1000")).status()).toBe(400);
+  // A post of its own: tests on other workers delete theirs while this one runs.
   const user = await signedIn(playwright, USER);
-  const page = await user.get("/api/blog?pageSize=1");
-  const first = (await page.json()).items[0] as { slug?: string } | undefined;
-  if (first?.slug) {
+  const created = await user.post("/api/blog", {
+    data: {
+      title: `Comment validation ${Date.now()}`,
+      body: "body",
+      tags: [],
+      status: "published",
+    },
+  });
+  expect(created.ok()).toBeTruthy();
+  const post = (await created.json()) as { id: string; slug: string };
+  try {
     expect(
       (
-        await user.post(`/api/blog/${first.slug}/comments`, {
+        await user.post(`/api/blog/${post.slug}/comments`, {
           data: { body: "" },
         })
       ).status(),
     ).toBe(400);
+  } finally {
+    await user.delete(`/api/blog/${post.id}`);
+    await user.dispose();
   }
-  await user.dispose();
 });

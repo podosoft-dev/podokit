@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Removed
+
+- `clearMailpit()` and `clearSms()` from the generated e2e helpers. They emptied
+  the Mailpit inbox and SMS sink that every test reads, so a test running at the
+  same time lost its message. Each test already sends to recipients of its own.
+
 ### Fixed
 
 - The `/api` proxy no longer cuts a route listed in `APP_PROXY_TIMEOUTS` with
@@ -19,6 +25,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   deadline, the `GET /health` checks, and the browser end the wait. Shorter
   deadlines keep Bun's default. Apps that raised `BUN_CONFIG_HTTP_IDLE_TIMEOUT`
   in the web image to work around this can remove it.
+- Generated e2e specs no longer depend on data other tests change at the same
+  time: the organization spec picks the seeded user as a manager instead of the
+  first user listed, and the blog comment validation spec posts to a post of its
+  own instead of the newest published one.
+
+### Upgrade notes
+
+- A spec of your own that calls `clearMailpit()` or `clearSms()` fails after
+  `podo update` removes them. Send to an address or phone number of the test's
+  own instead, and drop the call.
 
 ## [1.5.0] - 2026-10-16
 
