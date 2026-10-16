@@ -18,6 +18,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   dashboard's API tests toggle the provider and check both states. The `jwt`
   plugin's `/api/auth/jwks` and `/api/auth/token` stay available.
 
+- `isDatabaseUnavailable` also recognizes a database host that does not
+  resolve (`ENOTFOUND`) or whose lookup times out (`ETIMEOUT` in Bun,
+  `EAI_AGAIN` in Node), pg's "Connection terminated", "Client was closed and is
+  not queryable" and "Client has encountered a connection error and is not
+  queryable", the per-address errors of an `AggregateError` (a connection to
+  `localhost` that tried IPv6 and IPv4), and the `driverError` of TypeORM's
+  `QueryFailedError`. Those failures answer 503 `DATABASE_UNAVAILABLE` instead
+  of 500, so applications no longer need their own translation.
+
 ## [1.4.1] - 2026-10-16
 
 ### Fixed
