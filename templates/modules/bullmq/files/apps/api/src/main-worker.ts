@@ -6,16 +6,18 @@ if (PROVIDERS.jobs !== "bullmq") {
   throw new Error("The BullMQ worker cannot start unless jobs=bullmq is selected");
 }
 
-const workers = startWorkers();
+const runtime = startWorkers();
 
-for (const worker of workers) {
-  worker.on("failed", (job, error) => {
-    process.stderr.write(`Process job failed: ${job?.id ?? "unknown"} ${error.message}\n`);
-  });
-}
+void runtime.then(({ workers }) => {
+  for (const worker of workers) {
+    worker.on("failed", (job, error) => {
+      process.stderr.write(`Process job failed: ${job?.id ?? "unknown"} ${error.message}\n`);
+    });
+  }
+});
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {
-    void Promise.all(workers.map((worker) => worker.close())).finally(() => process.exit(0));
+    void runtime.then((started) => started.close()).finally(() => process.exit(0));
   });
 }

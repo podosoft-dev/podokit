@@ -99,6 +99,83 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   and base styles. Override `:root` and `.dark` variables, add `@theme` entries,
   fonts, and base styles, or add `@source` for a package whose built components
   use Tailwind classes. `podo update` creates it once and never overwrites it.
+- The name users see during sign-in follows the app instead of the libraries.
+  Authenticator apps showed the TOTP issuer "Better Auth" and browsers showed
+  "PodoKit" in the passkey prompt. One name now feeds Better Auth's `appName`,
+  the TOTP issuer, and the passkey relying-party name: `AUTH_APP_NAME` when set,
+  otherwise the site name from the admin Settings, otherwise the project name
+  the app was generated with. A site name change applies without a restart.
+  `@podosoft/podokit-auth` resolves it as `AuthConfig.appName`, with the
+  `appNameSetting` and `defaults.appName` options of `createConfigStore()`.
+- `bun run --cwd apps/api migrate:list` prints the name of every migration the
+  current build would run, without a database; in an image,
+  `docker run --rm <api-image> bun run migrate:list`.
+- The API listens on `HOST` (default `0.0.0.0`), and `SQLITE_PATH` sets the
+  SQLite file when `DATABASE_URL` is unset (default `./data/podokit.sqlite`), so
+  an app that binds to loopback or keeps its database elsewhere, such as a
+  desktop shell, no longer edits `main.ts` or `database.ts`.
+- `apps/api/src/config/env.extensions.ts` is an application-owned extension of
+  the validated API environment. Its `appEnvShape` fields are validated with
+  PodoKit's at startup and typed on `AppEnv`, and `refineAppEnv(env, context)`
+  adds checks across variables, such as one production requires. Redefining a
+  PodoKit variable fails at startup. `podo update` creates the file once in
+  existing apps and never overwrites it.
+- `apps/api/src/database/entities.ts` is an application-owned list of TypeORM
+  entities, `APP_ENTITIES`, that the migration data source loads, and the API's
+  `tsconfig.json` enables `experimentalDecorators` and `emitDecoratorMetadata`
+  for them. `podo update` creates the file once and never overwrites it.
+- `AppException` takes optional `details` as its fourth argument, and the API
+  returns them as `error.details` in the error envelope, for example the fields
+  a request failed on: `throw new AppException("SIGNUP_INVALID", "Invalid
+  sign-up", 422, { fields })`. Apps no longer subclass it or edit `app.ts`.
+- `apps/api/src/core/api-contract.extensions.ts` is an application-owned list,
+  `APP_DOCUMENTED_ROUTES`, of the operations the app's own API must serve, such
+  as `"GET /reports/{id}"` (`:id` works too). `bun run contract` fails when one
+  is not registered or missing from the OpenAPI document. `podo update` creates
+  the file once and never overwrites it.
+- The auth module's `apps/api/src/settings/app-flags.ts` is an
+  application-owned list of on/off settings with their defaults,
+  `APP_FLAG_DEFAULTS`. They are stored with the feature flags, changed with
+  `PUT /account/settings`, read with `SettingsService.getBool()`, and returned
+  as `appFlags` by `GET /account/capabilities` (`Capabilities.appFlags` in
+  `@podosoft/podokit-contracts`). A missing row keeps the default, and a name
+  PodoKit already uses fails at startup. `podo update` creates the file once
+  and never overwrites it.
+- The bullmq module's `apps/api/src/worker.extensions.ts` is an
+  application-owned `configureWorkers(setup)` that returns the queues the
+  worker process consumes next to the demo queue, with optional BullMQ worker
+  options. Resources it opens are released with `setup.onClose` after the
+  workers stop, and two workers for one queue fail at startup.
+  `startWorkers()` is now asynchronous and returns `{ workers, close }`.
+  `podo update` creates the file once and never overwrites it.
+- `DATABASE_PROVIDER`, `CACHE_PROVIDER`, `OBJECT_STORAGE_PROVIDER`,
+  `EVENTS_PROVIDER`, and `JOBS_PROVIDER` replace the project's provider for one
+  capability when the API starts, so one build can run on PostgreSQL on a
+  server and SQLite in a desktop shell. An unknown value, or a provider whose
+  module is not installed, fails startup. `config/providers.ts` passes the
+  project's selection through `providersFromEnvironment()` from the new
+  `config/provider-selection.ts`, and `podo provider set` writes it that way.
+- `apps/api/scripts/build.extensions.mjs` is an application-owned list,
+  `appBuildTargets`, of entry points the API build bundles next to PodoKit's,
+  such as a maintenance command run from the image. A missing entry point fails
+  the build. `podo update` creates the file once and never overwrites it.
+- The jobs contract repeats jobs. `JobQueue.schedule(id, name, payload,
+  { cron | everyMs, timezone? })` adds a `name` job on a cron expression or a
+  fixed interval and replaces an earlier schedule with the same id, and
+  `unschedule(id)` stops it. The BullMQ provider stores them as Redis job
+  schedulers, and the local provider adds the jobs from a timer, once per time.
+  Both keep their schedules and apply them again when the connection is
+  restored, `schedule()` resolves while the backend is down, and an invalid
+  schedule rejects. `@podosoft/podokit-runtime` exports `RepeatOptions`,
+  `assertRepeatOptions()`, and `MIN_REPEAT_INTERVAL_MS`.
+- The admin Settings page shows the application's flags. Each flag listed in
+  `APP_FLAG_SETTINGS` of the application-owned
+  `apps/web/src/lib/admin/app-flags.ts` (admin-dashboard) gets a switch on an
+  Application tab, labelled from the app's own catalog, that saves through
+  `PUT /account/settings` like the Authentication tab's switches. The tab is
+  hidden while the list is empty. `podo update` creates the file once and never
+  overwrites it. The settings page's tab list now wraps instead of reaching
+  into the page margin on narrow screens.
 
 ### Removed
 
@@ -166,6 +243,55 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   [route files and update tiers](docs/templates.md#route-files-and-update-tiers),
   and a repository test fails when a template's owned page starts reading a
   new field of such a load.
+- The audit log records again in apps that never set its toggle. Since 1.2.0
+  every write, including `recordAudit()` from application code, follows the
+  admin toggle, and the toggle fell back to `AUDIT_LOG_ENABLED === "true"`. A
+  deployment without that variable and without a saved admin setting recorded
+  nothing, without a warning. With the audit-log module installed, an unset or
+  empty `AUDIT_LOG_ENABLED` now means on, only `false` turns it off, and the
+  admin Settings toggle still overrides both. The API logs one warning at
+  startup while the audit log is off. `@podosoft/podokit-auth` takes these
+  defaults through a new `defaults` option of `createConfigStore()` and
+  `envAuthConfig()`; the auth module's `auth-config-store.ts` holds them in
+  `AUTH_CONFIG_DEFAULTS`, where the audit-log module adds `auditLog: true`.
+- The built API reads `NODE_ENV` when it runs. `Bun.build` replaced
+  `process.env.NODE_ENV` with `"development"` in every bundle, so a production
+  image ignored `NODE_ENV=production` wherever code read it directly: the logging
+  module loaded the development-only `pino-pretty` transport and the API exited
+  at startup when it was missing, the auth module accepted a placeholder
+  `BETTER_AUTH_SECRET` and an `http:` `BETTER_AUTH_URL`, the SQLite migration
+  runner looked for source migrations and ran none, and dependencies such as
+  Better Auth took their development branches. `scripts/build.mjs` now defines
+  `process.env.NODE_ENV` as itself for the API, worker, and migration bundles,
+  and the logging module reads the validated `NODE_ENV`.
+- Migrations can no longer be lost between the build and the database without
+  an error. The API build emitted the compiled migrations wherever `Bun.build`
+  chose, and the data source loaded `dist/migrations/[0-9]*.js`, so an image
+  whose migrations landed in `dist/migrations/src/migrations` ran none and
+  `migrate:all` still succeeded. The build now pins the output to
+  `dist/migrations/<file>.js`, removes the previous build's migrations, fails
+  unless the output matches `src/migrations` and each file exports exactly one
+  migration class, and writes `dist/migrations/migrations.json` with every file
+  and migration name. In production the migrators run exactly the listed files
+  and refuse to run without the list or a listed file; both migrators fail when
+  they load fewer migrations than they expected. In production the API refuses
+  to start without the list, and `GET /health/ready` reports a `migrations` check
+  that stays down while a listed migration is missing from the database.
+- `bun run --cwd apps/api migration:generate src/migrations/<Name>` works. The
+  TypeORM CLI ran on Node through ts-node, which cannot load the data source's
+  Bun SQL import, and under Bun it rejected the data source file's two exports.
+  The `typeorm` script runs the CLI on Bun, `data-source.ts` exports only
+  `appDataSource`, and the unused `ts-node` development dependency is gone.
+- In production the auth module accepts an `http:` `BETTER_AUTH_URL` on a
+  loopback address (`localhost`, `127.0.0.0/8`, `[::1]`), such as an API a
+  desktop shell runs on `127.0.0.1`; every other address still needs `https:`.
+- Sign-in works once `migrate:all` has run, even when the API started before
+  it. Better Auth keeps a schema mismatch it found until a migration run by the
+  same process clears it, so an API that started on an empty database, as the
+  container development stack can, answered every sign-in with `500` until it
+  restarted. While the auth instance holds a mismatch, the auth module rebuilds
+  it at most every 2 seconds on a request, and the new instance checks the
+  database again.
 
 ### Upgrade notes
 
@@ -257,6 +383,80 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   styles, or `@source` lines, into `apps/web/src/app.extensions.css`, then take
   PodoKit's `app.css` when `podo update` reports a merge or conflict. A relative
   `@source` path keeps working because both files are in `apps/web/src`.
+- Apps with the audit-log module that never set `AUDIT_LOG_ENABLED` and never
+  saved the audit toggle on the admin Settings page start recording audit
+  entries after `podo update`. To keep the log off, set `AUDIT_LOG_ENABLED=false`
+  or turn the toggle off on the Settings page; a saved setting wins over the
+  environment. An app that wants the entries it missed cannot recover them; the
+  log starts with the update.
+- An "audit log is off" warning at API startup means a saved setting or
+  `AUDIT_LOG_ENABLED=false` keeps the log off; check that this is intended.
+- Authenticator entries enrolled before this update keep the "Better Auth"
+  label; new enrolments use the app name. Set `AUTH_APP_NAME` if neither the
+  site name nor the project name is the name your users know.
+- A production API image built after this update enforces the production
+  checks it skipped before: it refuses to start with an unset or placeholder
+  `BETTER_AUTH_SECRET` or a `BETTER_AUTH_URL` that is not `https:`. Fix the
+  deployment's environment before you roll the image out. An app that added
+  `define: { "process.env.NODE_ENV": JSON.stringify("production") }` to
+  `scripts/build.mjs` can drop it; `podo update` reports the edit as a conflict,
+  so take the new file.
+- `podo update` replaces `scripts/build.mjs`, `src/database/data-source.ts`, and
+  `src/database/migrate.ts`. Apps that pinned `root: "src/migrations"` in the
+  build or added their own migration count check (for example an
+  `assertMigrationsLoaded` call or a static migration registry) can drop those
+  edits. A migration file that exports more than one class, such as a helper
+  class next to the migration, now fails the build; move the helper to another
+  file. After the update a production API image refuses to start unless it was
+  built with the new `scripts/build.mjs`, and its `/health/ready` stays `503`
+  until `migrate:all` has applied the image's migrations, so keep the migration
+  job ahead of the rollout.
+- Move application variables you added to the managed
+  `apps/api/src/config/env.validation.ts` into `appEnvShape` in
+  `apps/api/src/config/env.extensions.ts`, and a `superRefine` of yours into
+  `refineAppEnv`; `podo update` reports the old edit as a conflict. Production
+  checks of `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are not needed there: the
+  auth module makes them, and since this release they also run in the built API.
+- Move entities you listed in the managed `apps/api/src/database/data-source.ts`
+  into `APP_ENTITIES` in `apps/api/src/database/entities.ts`, and drop the
+  decorator settings you added to `apps/api/tsconfig.json`; `podo update`
+  reports those edits as conflicts. Import `appDataSource` by name: the default
+  export of `data-source.ts` is gone.
+- If you subclassed `AppException` to carry `details` and edited `app.ts` to
+  return them, drop both and pass `details` to `AppException` from
+  `@podosoft/podokit-contracts`; `podo update` reports the `app.ts` and
+  `common/app-exception.ts` edits as conflicts.
+- Move route lists you check in the managed `scripts/verify-api-contract.ts` or
+  `src/core/api-contract.ts` into `APP_DOCUMENTED_ROUTES`; `podo update`
+  reports those edits as conflicts.
+- Move flags you added to the managed `apps/api/src/settings/flag-defaults.ts`
+  into `APP_FLAG_DEFAULTS` in `apps/api/src/settings/app-flags.ts`, and read
+  them from `appFlags` of `GET /account/capabilities` instead of a route of your
+  own in `auth.module.ts`; `podo update` reports those edits as conflicts. A
+  stored row keeps its value, so a migration that seeded one can stay.
+- Move queues you added to the managed `apps/api/src/jobs/worker.module.ts`,
+  and setup you added to `main-worker.ts`, into `configureWorkers()` in
+  `apps/api/src/worker.extensions.ts`; `podo update` reports those edits as
+  conflicts. Code of yours that calls `startWorkers()` awaits it now and stops
+  the workers with the returned `close()`.
+- If you edited `apps/api/src/config/providers.ts` to choose providers from
+  your own variables, set the `<CAPABILITY>_PROVIDER` variables instead and take
+  the new file; `podo update` reports the edit as a conflict. Check that none of
+  those five names is already in your environment for another purpose.
+- Move build targets you added to the managed `apps/api/scripts/build.mjs` into
+  `appBuildTargets` in `apps/api/scripts/build.extensions.mjs`; `podo update`
+  reports the edit as a conflict.
+- A `JobQueue` implementation of your own, including a test fake, must add
+  `schedule()` and `unschedule()`. An app that ran its own repeating scheduler
+  beside the jobs provider can move it to `schedule()`.
+- To show an application flag on the Settings page, add it to
+  `APP_FLAG_SETTINGS` in `apps/web/src/lib/admin/app-flags.ts` with labels in
+  `i18n/catalogs/app/*.json`, and drop what you added for it to the managed
+  settings `+page.server.ts` and the admin-dashboard catalogs; `podo update`
+  reports those edits as conflicts. The tab list's wrapping reaches only new
+  apps, because the settings `+page.svelte` is application-owned; add
+  `class="h-auto max-w-full flex-wrap justify-start"` to its `<Tabs.List>` if
+  your tabs overflow on a phone.
 
 ## [1.5.0] - 2026-10-16
 

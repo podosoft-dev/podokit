@@ -10,6 +10,7 @@ import {
   migrateSqliteLegacyAccountIssuers,
   postgresAccountIssuerMigrationDatabase,
 } from "./auth/account-issuer-migration";
+import { assertMigrationsLoaded } from "./database/migration-files";
 import { runSqliteMigrations } from "./database/sqlite-migrator";
 
 async function runMigrations(): Promise<void> {
@@ -24,9 +25,10 @@ async function runMigrations(): Promise<void> {
   if (sqliteDatabase) {
     await runSqliteMigrations(sqliteDatabase);
   } else {
-    const { appDataSource: dataSource } = await import("./database/data-source.js");
+    const { appDataSource: dataSource, appMigrations } = await import("./database/data-source.js");
     await dataSource.initialize();
     try {
+      assertMigrationsLoaded(dataSource.migrations, appMigrations);
       await dataSource.runMigrations();
     } finally {
       await dataSource.destroy();

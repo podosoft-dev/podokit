@@ -76,6 +76,95 @@ describe("auth-config helpers", () => {
     expect(sessionIdleOptions(null)).toBeUndefined();
     expect(sessionIdleOptions(30)).toEqual({ expiresIn: 1_800, updateAge: 60 });
   });
+  it("records the audit log by default only when the app asks for it", () => {
+    const previous = process.env.AUDIT_LOG_ENABLED;
+    try {
+      for (const unset of [undefined, "", "  "]) {
+        if (unset === undefined) delete process.env.AUDIT_LOG_ENABLED;
+        else process.env.AUDIT_LOG_ENABLED = unset;
+        expect(envAuthConfig().auditLog).toBe(false);
+        expect(envAuthConfig({ auditLog: true }).auditLog).toBe(true);
+      }
+      process.env.AUDIT_LOG_ENABLED = "false";
+      expect(envAuthConfig({ auditLog: true }).auditLog).toBe(false);
+      process.env.AUDIT_LOG_ENABLED = " FALSE ";
+      expect(envAuthConfig({ auditLog: true }).auditLog).toBe(false);
+      process.env.AUDIT_LOG_ENABLED = "true";
+      expect(envAuthConfig().auditLog).toBe(true);
+    } finally {
+      if (previous === undefined) delete process.env.AUDIT_LOG_ENABLED;
+      else process.env.AUDIT_LOG_ENABLED = previous;
+    }
+  });
+  it("applies the store defaults until a server row sets the audit toggle", async () => {
+    const previous = process.env.AUDIT_LOG_ENABLED;
+    delete process.env.AUDIT_LOG_ENABLED;
+    try {
+      const rows: AuthConfigRow[] = [];
+      const list = vi.fn(async (): Promise<readonly AuthConfigRow[]> => rows);
+      const store = createConfigStore({ list }, { defaults: { auditLog: true } });
+      expect((await store.capabilitiesSnapshot()).auditLog).toBe(true);
+      expect((await createConfigStore({ list }).capabilitiesSnapshot()).auditLog).toBe(false);
+
+      rows.push({ key: "server", enabled: true, config: { allowDelete: true }, secret: null, updatedAt: "2026-01-01T00:00:00Z" });
+      store.invalidate();
+      expect((await store.capabilitiesSnapshot()).auditLog).toBe(true);
+
+      rows[0] = { ...rows[0]!, config: { auditLog: false }, updatedAt: "2026-01-02T00:00:00Z" };
+      store.invalidate();
+      expect((await store.capabilitiesSnapshot()).auditLog).toBe(false);
+    } finally {
+      if (previous === undefined) delete process.env.AUDIT_LOG_ENABLED;
+      else process.env.AUDIT_LOG_ENABLED = previous;
+    }
+  });
+  it("names the app from AUTH_APP_NAME, then the default, then PodoKit", () => {
+    const previous = process.env.AUTH_APP_NAME;
+    try {
+      delete process.env.AUTH_APP_NAME;
+      expect(envAuthConfig().appName).toBe("PodoKit");
+      expect(envAuthConfig({ appName: "acme" }).appName).toBe("acme");
+      process.env.AUTH_APP_NAME = "  ";
+      expect(envAuthConfig({ appName: "acme" }).appName).toBe("acme");
+      process.env.AUTH_APP_NAME = " Acme Cloud ";
+      expect(envAuthConfig({ appName: "acme" }).appName).toBe("Acme Cloud");
+    } finally {
+      if (previous === undefined) delete process.env.AUTH_APP_NAME;
+      else process.env.AUTH_APP_NAME = previous;
+    }
+  });
+  it("takes the app name from a setting and changes the version with it", async () => {
+    const previous = process.env.AUTH_APP_NAME;
+    delete process.env.AUTH_APP_NAME;
+    try {
+      const settings: AppSettingRow[] = [];
+      const repository = {
+        list: vi.fn(async (): Promise<readonly AuthConfigRow[]> => []),
+        listSettings: vi.fn(async (): Promise<readonly AppSettingRow[]> => settings),
+      };
+      const store = createConfigStore(repository, { defaults: { appName: "acme" }, appNameSetting: "site.name" });
+      expect(await store.load()).toMatchObject({ appName: "acme", version: "env" });
+
+      settings.push({ key: "site.name", value: " Acme Cloud " });
+      store.invalidate();
+      const named = await store.load();
+      expect(named.appName).toBe("Acme Cloud");
+      expect(named.version).not.toBe("env");
+      expect(await store.currentVersion()).toBe(named.version);
+
+      settings[0] = { key: "site.name", value: "" };
+      store.invalidate();
+      expect(await store.load()).toMatchObject({ appName: "acme", version: "env" });
+
+      settings[0] = { key: "site.name", value: "Acme Cloud" };
+      process.env.AUTH_APP_NAME = "Acme Admin";
+      store.invalidate();
+      expect(await store.load()).toMatchObject({ appName: "Acme Admin", version: "env" });
+    } finally {
+      if (previous === undefined) delete process.env.AUTH_APP_NAME;
+      else process.env.AUTH_APP_NAME = previous;
+    }
+  });
   it("SUPPORTED_PROVIDER_IDS gates provider keys and socialKey formats", () => {
     expect(SUPPORTED_PROVIDER_IDS.has("google")).toBe(true);
     expect(socialKey("google")).toBe("social.google");

@@ -69,12 +69,38 @@ is `local`, and `job-progress` uses `jobs-local`, `events-memory`, and `sse` for
 the local combination. Provider commands and `podo add` append settings to
 `.env.example`; merge new settings into an existing `.env` yourself.
 
+## Select a provider at startup
+
+`podo provider set` changes the providers the project is built with. One build
+can also run with other providers, for example PostgreSQL on a server and SQLite
+in a desktop shell: install the module of each provider it may use, then set a
+variable per capability when the API starts.
+
+| Capability | Variable | Values |
+| --- | --- | --- |
+| database | `DATABASE_PROVIDER` | `postgres`, `sqlite` |
+| cache | `CACHE_PROVIDER` | `redis`, `memory` |
+| object-storage | `OBJECT_STORAGE_PROVIDER` | `s3`, `local` |
+| events | `EVENTS_PROVIDER` | `redis`, `memory` |
+| jobs | `JOBS_PROVIDER` | `bullmq`, `local` |
+
+```bash
+DATABASE_PROVIDER=sqlite SQLITE_PATH=/var/lib/my-app/app.sqlite bun run --cwd apps/api migrate:all
+DATABASE_PROVIDER=sqlite SQLITE_PATH=/var/lib/my-app/app.sqlite bun dist/main.js
+```
+
+An unknown value, or a provider whose module is not installed, fails startup.
+The deployment renderers and `.podokit/manifest.json` keep using the project's
+selection, so run migrations with the same variables as the API.
+`apps/api/src/config/provider-selection.ts` applies them; the managed
+`config/providers.ts` keeps the project's selection.
+
 ## Runtime settings
 
 | Provider | Setting | Default behavior |
 | --- | --- | --- |
 | PostgreSQL | `DATABASE_URL`, or `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Example connects to `localhost:5432`, database/user `podokit`; `DATABASE_URL` takes precedence |
-| SQLite | `DATABASE_URL` with a `sqlite:` or `file:` URL | `./data/podokit.sqlite` |
+| SQLite | `DATABASE_URL` with a `sqlite:` or `file:` URL, or the file path `SQLITE_PATH` | `./data/podokit.sqlite` |
 | Redis cache/events | `REDIS_URL`, or `REDIS_HOST`, `REDIS_PORT`, `REDIS_DB`, and optional auth/TLS settings | `localhost:6379`, database `0`; `REDIS_URL` takes precedence |
 | Memory cache/events | No external connection | Bounded state held inside the API process |
 | S3 | `STORAGE_PROVIDER`, `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, credentials, `S3_FORCE_PATH_STYLE` | Silo-compatible development settings described below |
@@ -211,6 +237,32 @@ modules are the only layer that should import Redis, S3, BullMQ, or local storag
 implementation details. Application-owned replacements can use the same
 contracts through `apps/api/src/app.extensions.ts`.
 
+### Repeating jobs
+
+`JobQueue.schedule(id, name, payload, repeat)` adds a `name` job with `payload`
+on a schedule and replaces an earlier schedule with the same `id`;
+`unschedule(id)` stops it. `repeat` holds exactly one of `cron` (five fields, or
+six with seconds first, read in `timezone`, UTC by default) and `everyMs` (at
+least 1000). A worker or `process()` handler for `name` runs the jobs, and times
+missed while nothing was running are not made up. Register schedules when the
+API starts, for example in `app.extensions.ts`:
+
+```ts
+export function configureServices(services: ServiceRegistry): void {
+  const jobs = services.resolve(JOBS);
+  services.onStart(() => jobs.schedule("nightly-report", "report", {}, { cron: "0 3 * * *", timezone: "Asia/Seoul" }));
+}
+```
+
+The queue keeps its schedules and applies them again whenever its connection is
+restored, and `schedule()` resolves while the backend is down. BullMQ stores
+them as job schedulers in Redis, so the worker process keeps adding the jobs
+while the API is stopped, and every API replica applies the same ids. The local
+provider adds each job from a timer in the API process, at multiples of
+`everyMs` since the Unix epoch, with a job id made of the schedule id and the
+time, so a time is added once even across restarts. An invalid cron expression
+or time zone rejects.
+
 ### Object storage reads
 
 `ObjectStore.get(key)` resolves `null` for a missing key; otherwise it returns
@@ -320,7 +372,8 @@ carry more than 128 MiB, or keep requests small with multipart parts.
 
 ## Local persistence and backup
 
-SQLite defaults to `./data/podokit.sqlite`; local object storage defaults to
+SQLite defaults to `./data/podokit.sqlite` (`SQLITE_PATH` moves it when
+`DATABASE_URL` is unset); local object storage defaults to
 `./data/files`, both relative to the API process's working directory. Commands
 using `bun run --cwd apps/api` therefore use `apps/api/data` by default. Set
 absolute paths for packaged desktop and production use, and use the same

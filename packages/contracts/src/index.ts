@@ -43,6 +43,8 @@ export interface Capabilities {
   roles: string[];
   /** Automatic logout after this many inactive minutes; null/absent means disabled. */
   sessionIdleTimeoutMinutes?: number | null;
+  /** The application's own on/off settings (APP_FLAG_DEFAULTS in the API's app-flags.ts). */
+  appFlags?: Record<string, boolean>;
 }
 
 /** Stable better-auth error code returned when a user still needs approval. */
@@ -94,14 +96,16 @@ export interface ErrorEnvelope {
 
 /**
  * Backend exception carrying a stable `code`. The global exception filter
- * renders it into an {@link ErrorEnvelope}. Pure (extends Error), so it lives in
- * contracts and both layers can reference the code space.
+ * renders it into an {@link ErrorEnvelope}, with `details` as `error.details`
+ * when set, such as the fields a validation failed on. Pure (extends Error), so
+ * it lives in contracts and both layers can reference the code space.
  */
 export class AppException extends Error {
   constructor(
     readonly code: string,
     message: string,
     readonly statusCode = 400,
+    readonly details?: unknown,
   ) {
     super(message);
     this.name = "AppException";

@@ -25,6 +25,11 @@ describe("AppException", () => {
   it("accepts an explicit status", () => {
     expect(new AppException("FORBIDDEN", "no", 403).statusCode).toBe(403);
   });
+  it("carries optional details for the error envelope", () => {
+    expect(new AppException("EMAIL_TAKEN", "taken").details).toBeUndefined();
+    const fields = { fields: [{ path: "email", code: "taken" }] };
+    expect(new AppException("VALIDATION_ERROR", "invalid", 422, fields).details).toBe(fields);
+  });
 
   it("exports one profile-image policy for the API and UI", () => {
     expect(PROFILE_IMAGE_POLICY).toEqual({

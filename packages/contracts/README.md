@@ -7,7 +7,8 @@ SvelteKit frontend must agree on, in one place so they cannot drift:
   the two-factor enrolment requirement and the optional session idle timeout,
   reported at `GET /account/capabilities`.
 - `ErrorEnvelope` / `ErrorBody` — the standard non-2xx response shape.
-- `AppException` — backend exception carrying a stable `code`.
+- `AppException` — backend exception carrying a stable `code`, a status, and
+  optional `details` that the error envelope returns as `error.details`.
 - `SIGNUP_APPROVAL_REQUIRED` — the stable pending-registration error code.
 - `PUBLIC_SIGNUP_DISABLED` — the stable closed-registration error code.
 - `PROFILE_IMAGE_POLICY` / `ProfileImageResponse` — the shared profile-image
@@ -29,6 +30,8 @@ import { AppException, type Capabilities, type ErrorEnvelope } from "@podosoft/p
 
 // backend: throw with a stable, language-independent code
 throw new AppException("EMAIL_TAKEN", "That email is already registered", 409);
+// with details the client can show, returned as error.details
+throw new AppException("SIGNUP_INVALID", "Invalid sign-up", 422, { fields: ["email"] });
 
 // frontend: branch on error.code, not the message
 ```

@@ -4,8 +4,9 @@
   "requires": ["auth"],
   "targetApp": "api",
   "env": [
-    "# audit-log: managed on the admin Settings page, stored in the DB,",
-    "# and applied without restart. This environment value is the fallback.",
+    "# audit-log: on unless switched off. Managed on the admin Settings page,",
+    "# stored in the DB, and applied without restart; this value applies until an",
+    "# administrator saves the setting. Set it to false to start with the log off.",
     "AUDIT_LOG_ENABLED=true",
     "# audit-log: delete entries older than this many days. Unset or 0 keeps them",
     "# forever; set it only when your retention policy requires deleting them.",
@@ -37,6 +38,11 @@
       "marker": "# podokit:end:runtime-config",
       "text": "AUDIT_LOG_ENABLED: \"true\"",
       "optional": true
+    },
+    {
+      "file": "apps/api/src/auth/auth-config-store.ts",
+      "marker": "// podokit:end:auth-config-defaults",
+      "text": "auditLog: true,"
     }
   ],
   "instructions": [

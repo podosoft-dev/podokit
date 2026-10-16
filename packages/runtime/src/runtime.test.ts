@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   assertPartNumber,
+  assertRepeatOptions,
   DATABASE,
   IN_MEMORY_READ_BYTES,
   LOCAL_PROVIDER_SELECTIONS,
@@ -105,6 +106,24 @@ describe("provider contracts", () => {
     expect(() => resolveProviderSelections({ database: "mysql" })).toThrow(
       "Unknown database provider",
     );
+  });
+});
+
+describe("job schedules", () => {
+  it("accepts one of cron and everyMs", () => {
+    expect(() => assertRepeatOptions({ cron: "0 3 * * *" })).not.toThrow();
+    expect(() => assertRepeatOptions({ cron: "0 3 * * *", timezone: "Asia/Seoul" })).not.toThrow();
+    expect(() => assertRepeatOptions({ everyMs: 60_000 })).not.toThrow();
+  });
+
+  it("rejects a schedule without exactly one timing or with an unusable interval", () => {
+    expect(() => assertRepeatOptions({})).toThrow("exactly one of cron and everyMs");
+    expect(() => assertRepeatOptions({ cron: "* * * * *", everyMs: 1_000 })).toThrow("exactly one");
+    expect(() => assertRepeatOptions({ cron: " " })).toThrow("cron expression is empty");
+    for (const everyMs of [999, 1_500.5, Number.NaN]) {
+      expect(() => assertRepeatOptions({ everyMs })).toThrow("whole number of at least 1000");
+    }
+    expect(() => assertRepeatOptions({ everyMs: 1_000, timezone: "UTC" })).toThrow("applies only to cron");
   });
 });
 

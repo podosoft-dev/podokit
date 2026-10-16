@@ -244,7 +244,29 @@ migration Job before a rolling deployment.
   restart** (paste a client id/secret and social login works on the next request). Only
   `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are required env vars; the rest are optional
   fallbacks/overrides that the DB config takes precedence over (handy for secrets-manager
-  injection in production).
+  injection in production). With `NODE_ENV=production` the API refuses to start with an unset
+  or placeholder `BETTER_AUTH_SECRET`, or a `BETTER_AUTH_URL` that is not `https:` unless it
+  is a loopback address such as `http://127.0.0.1:5002` (a desktop shell, for example).
+- **Starting before the migrations.** Better Auth checks the database schema and keeps a
+  mismatch it found, such as missing tables when the API started before `migrate:all`. While it
+  holds one, the API rebuilds the auth instance at most every 2 seconds on a request, so the first
+  sign-in after `migrate:all` ran in another process or container succeeds without a restart.
+- **The app name users see.** Authenticator apps show it as the TOTP issuer, browsers show it in
+  the passkey prompt, and Better Auth uses it as its `appName`. `AUTH_APP_NAME` sets it; unset, it
+  is the site name from the admin Settings (`site.name`, with `admin-dashboard`), then the project
+  name the app was generated with (`AUTH_CONFIG_DEFAULTS` in `apps/api/src/auth/auth-config-store.ts`).
+  A changed site name applies to new enrolments within the settings refresh, without a restart;
+  authenticator entries made before keep their old label.
+- **Application flags.** Declare the app's own on/off settings in the owned
+  `apps/api/src/settings/app-flags.ts`, for example
+  `export const APP_FLAG_DEFAULTS = { reportsEnabled: true } satisfies Record<string, boolean>;`.
+  They are stored in `app_setting` with the feature flags, changed by an administrator with
+  `PUT /account/settings` (`{ "reportsEnabled": false }`), read with
+  `SettingsService.getBool("reportsEnabled")`, and returned to every caller as
+  `appFlags` by `GET /account/capabilities`, so keep secrets out of them. A missing row keeps
+  the default, so no migration is needed; a name PodoKit already uses fails at startup. With
+  `admin-dashboard`, list them in `APP_FLAG_SETTINGS` to give each a switch on the Settings
+  page (see [application settings](#application-settings)).
 - **How settings changes reach every replica.** `auth_config` and `app_setting` share one
   in-process snapshot. The replica that handled a write applies it before responding. Other
   replicas run one version probe (row count and latest update time of both tables) at most every
@@ -404,6 +426,22 @@ themselves with the same backoff, from 250 ms up to 5 seconds, so they resume
 processing shortly after Redis returns. A job whose enqueue timed out may still
 be added if the server resumes; pass `deduplicationKey` when a retried enqueue
 must not create a second job.
+
+The worker process (`main-worker.ts`) consumes the demo queue and the queues
+that `configureWorkers(setup)` in the owned `apps/api/src/worker.extensions.ts`
+returns, one BullMQ worker per queue. Open what the processors need there and
+release it with `setup.onClose`, which runs after the workers stop:
+
+```ts
+// apps/api/src/worker.extensions.ts
+export async function configureWorkers(setup: WorkerSetup): Promise<WorkerDefinition[]> {
+  const database = new Database(validateEnv(process.env));
+  setup.onClose(() => database.close());
+  return [{ queue: "reports", processor: (job) => buildReport(database, job.data), options: { concurrency: 2 } }];
+}
+```
+
+Two workers for one queue fail at startup.
 
 ### `jobs-local`
 
@@ -1024,7 +1062,7 @@ owner, so they run without publishing progress.
 Structured request logging with [pino](https://getpino.io/): every Elysia request
 is logged with a per-request **correlation id** (`x-request-id`, honored from the
 inbound header and echoed back). Logs are pretty single-line records in
-development and JSON in production.
+development and JSON when the validated `NODE_ENV` is `production`.
 
 ```bash
 npx @podosoft/podokit add logging
@@ -1050,10 +1088,11 @@ request (see [client address](templates.md#client-address)), never a forwarded
 header as the caller sent it.
 
 On/off is an **admin toggle on the Settings page** (stored in the DB, applied
-live — no restart); `AUDIT_LOG_ENABLED` is only the fallback default until an
-admin sets it (leave it `true` so the trail is on out of the box). Every write
-path checks the toggle in `AuditService`, so turning it off stops Better Auth
-entries and application entries alike.
+live — no restart). Until an admin saves it, `AUDIT_LOG_ENABLED` decides, and
+with the module installed an unset or empty value means on; only `false` starts
+with the log off. Every write path checks the toggle in `AuditService`, so
+turning it off stops Better Auth entries and application entries alike, and the
+API logs one warning at startup while it is off.
 
 Writes are awaited by default, so a response waits for its audit INSERT. For
 high-volume events that are not security relevant, `recordAuditLater()` (or
@@ -1862,6 +1901,29 @@ export const APP_ADMIN_NAV: readonly AdminNavEntry[] = [
 
 Put the label in the app-owned `i18n/catalogs/app/*.json` files. `adminOnly`
 hides an entry from users whose role is not `admin`.
+
+### Application settings
+
+The API's application flags (`APP_FLAG_DEFAULTS`, see [auth](#auth-better-auth))
+get one switch each on an **Application** tab of the admin Settings page when
+`APP_FLAG_SETTINGS` in the application-owned `apps/web/src/lib/admin/app-flags.ts`
+lists them. The tab follows PodoKit's and the modules' tabs and is hidden while
+the list is empty:
+
+```ts
+import type { AppFlagSetting } from "./registry.svelte.js";
+
+export const APP_FLAG_SETTINGS: readonly AppFlagSetting[] = [
+  { flag: "reportsEnabled", label: (t) => t.reports.flag, description: (t) => t.reports.flagDescription },
+];
+```
+
+Put the label and description in the app-owned `i18n/catalogs/app/*.json`
+files. A switch saves through `PUT /account/settings`, so it needs an
+administrator and applies at once, like the feature switches on the
+Authentication tab; neither writes an audit entry. A listed flag the API does not
+report shows as not available. The managed `tests/ui/app-flags.ui.spec.ts`
+checks the tab against the list and, with `@exclusive`, saves the first flag.
 
 ### Module entries
 

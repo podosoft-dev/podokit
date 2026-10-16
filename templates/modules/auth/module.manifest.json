@@ -6,6 +6,9 @@
   "managedOverrides": [
     ".claude/skills/podokit-configure-auth/**"
   ],
+  "ownedGlobs": [
+    "apps/api/src/settings/app-flags.ts"
+  ],
   "dependencies": {
     "@podosoft/podokit-auth": "^0.5.0",
     "@podosoft/podokit-contracts": "^0.5.0",
@@ -28,6 +31,9 @@
     "# makes previously saved DB secrets undecryptable.",
     "BETTER_AUTH_SECRET=change-me-in-production-min-32-characters",
     "BETTER_AUTH_URL=http://localhost:5002",
+    "# The name authenticator apps and passkey prompts show. Unset, it is the site",
+    "# name from the admin Settings, then the project name.",
+    "# AUTH_APP_NAME=",
     "# Everything below is optional. OAuth providers, SMTP, and server-enforced",
     "# toggles are configured on the admin Settings page and applied without restart.",
     "# Email/SMTP is provided by the mailer module (see its .env block).",

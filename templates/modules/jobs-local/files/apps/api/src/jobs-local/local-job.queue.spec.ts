@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { SQL } from "bun";
-import { LocalJobQueue } from "./local-job.queue";
+import { LocalJobQueue, nextScheduledTime, type ScheduleTimer } from "./local-job.queue";
 
 let sql: SQL | undefined;
 
@@ -63,6 +63,92 @@ describe("local job queue", () => {
       attempts: 2,
       error: "expected failure",
     });
+    queue.close();
+  });
+});
+
+/** A clock and timer the test moves by hand. */
+function manualTime(start: number): { now: () => number; timer: ScheduleTimer; advance: (to: number) => void; waiting: () => number } {
+  let now = start;
+  const timers: Array<{ at: number; task: () => void; done: boolean }> = [];
+  return {
+    now: () => now,
+    timer: {
+      after: (delayMs, task) => {
+        const entry = { at: now + delayMs, task, done: false };
+        timers.push(entry);
+        return () => { entry.done = true; };
+      },
+    },
+    advance: (to) => {
+      for (;;) {
+        const due = timers.filter((entry) => !entry.done && entry.at <= to).sort((a, b) => a.at - b.at)[0];
+        if (!due) break;
+        due.done = true;
+        now = due.at;
+        due.task();
+      }
+      now = to;
+    },
+    waiting: () => timers.filter((entry) => !entry.done).length,
+  };
+}
+
+async function scheduledJobs(database: SQL): Promise<string[]> {
+  // Scheduled jobs are added without waiting; let those inserts finish.
+  await Bun.sleep(5);
+  const rows = await database<Array<{ id: string }>>`SELECT "id" FROM "podokit_job" ORDER BY "createdAt", "id"`;
+  return rows.map((row) => row.id);
+}
+
+describe("local job schedules", () => {
+  it("adds one job for each time of an interval and keeps going", async () => {
+    sql = new SQL(":memory:");
+    const time = manualTime(10_500);
+    const queue = new LocalJobQueue(sql, { pollIntervalMs: 60_000, now: time.now, timer: time.timer });
+    await queue.schedule("nightly", "report", { scope: "all" }, { everyMs: 1_000 });
+    await queue.start();
+    time.advance(11_000);
+    expect(await scheduledJobs(sql)).toEqual(["report:schedule:nightly:11000"]);
+    time.advance(13_200);
+    expect(await scheduledJobs(sql)).toEqual([
+      "report:schedule:nightly:11000",
+      "report:schedule:nightly:12000",
+      "report:schedule:nightly:13000",
+    ]);
+    await expect(queue.get("report:schedule:nightly:12000")).resolves.toMatchObject({ name: "report", status: "waiting" });
+    queue.close();
+    expect(time.waiting()).toBe(0);
+  });
+
+  it("replaces a schedule with the same id and stops one on unschedule", async () => {
+    sql = new SQL(":memory:");
+    const time = manualTime(0);
+    const queue = new LocalJobQueue(sql, { pollIntervalMs: 60_000, now: time.now, timer: time.timer });
+    await queue.start();
+    await queue.schedule("sync", "sync", {}, { everyMs: 1_000 });
+    await queue.schedule("sync", "sync", {}, { everyMs: 5_000 });
+    time.advance(5_000);
+    expect(await scheduledJobs(sql)).toEqual(["sync:schedule:sync:5000"]);
+    await queue.unschedule("sync");
+    time.advance(20_000);
+    expect(await scheduledJobs(sql)).toEqual(["sync:schedule:sync:5000"]);
+    queue.close();
+  });
+
+  it("reads cron expressions in the schedule's time zone, UTC by default", () => {
+    const after = Date.UTC(2026, 0, 1, 0, 0);
+    expect(nextScheduledTime({ cron: "0 3 * * *" }, after)).toBe(Date.UTC(2026, 0, 1, 3, 0));
+    expect(nextScheduledTime({ cron: "0 3 * * *", timezone: "Asia/Seoul" }, after)).toBe(Date.UTC(2026, 0, 1, 18, 0));
+    expect(nextScheduledTime({ everyMs: 60_000 }, after + 1)).toBe(after + 60_000);
+  });
+
+  it("rejects an invalid schedule before it is kept", async () => {
+    sql = new SQL(":memory:");
+    const queue = new LocalJobQueue(sql);
+    await expect(queue.schedule("bad", "report", {}, { cron: "61 * * * *" })).rejects.toThrow();
+    await expect(queue.schedule("bad", "report", {}, { cron: "0 3 * * *", timezone: "Mars/Olympus" })).rejects.toThrow();
+    await expect(queue.schedule("bad", "report", {}, { everyMs: 10 })).rejects.toThrow("at least 1000");
     queue.close();
   });
 });

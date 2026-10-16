@@ -164,7 +164,24 @@ export const extensionModules: PodokitModule[] = [];
 
 For a new route, create an Elysia plugin, validate inputs with `t`, throw
 `AppException` with a stable code, declare OpenAPI details, register its access
-policy, and add Bun tests plus an API contract entry.
+policy, and add Bun tests plus an API contract entry. An `AppException`'s
+optional fourth argument reaches the client as `error.details`, for example
+`new AppException("SIGNUP_INVALID", "Invalid sign-up", 422, { fields })`.
+
+### API extension files
+
+Each of these application-owned files starts empty, is imported by a managed
+file, and is created once by `podo update` in an existing app and never
+overwritten afterwards. Use them instead of editing the managed file.
+
+| File | Export | Use it instead of editing |
+| --- | --- | --- |
+| `apps/api/src/database/entities.ts` | `APP_ENTITIES` (TypeORM entity classes) | `database/data-source.ts`: the migration data source loads them, so `migration:generate` compares them with the database |
+| `apps/api/src/core/api-contract.extensions.ts` | `APP_DOCUMENTED_ROUTES` (`"GET /reports/{id}"` or `"GET /reports/:id"`) | `scripts/verify-api-contract.ts` and `core/api-contract.ts`: `bun run contract` fails when one is not registered or not in the OpenAPI document |
+| `apps/api/src/settings/app-flags.ts` (auth module) | `APP_FLAG_DEFAULTS` (`{ reportsEnabled: true }`) | `settings/flag-defaults.ts`, `auth/auth.module.ts`, and a migration seeding a row: the flags are stored with PodoKit's, set with `PUT /account/settings`, read with `SettingsService.getBool()`, and returned as `appFlags` by `GET /account/capabilities` |
+| `apps/api/src/worker.extensions.ts` (bullmq module) | `configureWorkers(setup)` returning `{ queue, processor, options? }[]` | `jobs/worker.module.ts` and `main-worker.ts`: the worker process consumes these queues and runs `setup.onClose` after its workers stop |
+| `apps/api/scripts/build.extensions.mjs` | `appBuildTargets` (`{ entrypoint, outdir }[]`) | `scripts/build.mjs`: the API build bundles these entry points too, and fails when one does not exist |
+| `apps/api/src/config/env.extensions.ts` | `appEnvShape` (zod fields) and `refineAppEnv(env, context)` | `config/env.validation.ts`: application variables are validated at startup and typed on `AppEnv`; redefining a PodoKit variable fails |
 
 ## Extending the web app
 
@@ -173,7 +190,8 @@ files listed under [web extension points](templates.md#web-extension-points):
 Vite and SvelteKit options in `apps/web/vite.extensions.ts`, styles in
 `apps/web/src/app.extensions.css`, and with
 `admin-dashboard` a request hook in `apps/web/src/lib/server/app-hooks.ts`,
-admin sidebar entries in `apps/web/src/lib/admin/app-nav.ts`, and private page
+admin sidebar entries in `apps/web/src/lib/admin/app-nav.ts`, Settings switches
+for the API's application flags in `apps/web/src/lib/admin/app-flags.ts`, and private page
 prefixes in `apps/web/src/lib/server/non-indexable-paths.ts`. `podo update`
 creates each of them once in an existing app. An app that edited the managed
 `vite.config.ts`, `app.css`, `hooks.server.ts`, `admin-sidebar.svelte`, or

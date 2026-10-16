@@ -16,9 +16,13 @@
     "apps/api/src/jobs/**",
     "apps/api/src/main-worker.ts"
   ],
+  "ownedGlobs": [
+    "apps/api/src/worker.extensions.ts"
+  ],
   "targetApp": "api",
   "dependencies": {
-    "bullmq": "^5.57.0"
+    "bullmq": "^5.57.0",
+    "cron-parser": "^4.9.0"
   },
   "scripts": {
     "start:worker": "bun dist/main-worker.js",

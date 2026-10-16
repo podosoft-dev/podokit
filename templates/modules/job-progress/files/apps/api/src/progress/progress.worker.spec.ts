@@ -41,6 +41,8 @@ function fakeQueue(): FakeQueue {
       if (!handler) throw new Error(`no handler for ${job.name}`);
       await handler(payload, job);
     },
+    schedule: async () => undefined,
+    unschedule: async () => undefined,
     close: () => undefined,
   };
 }

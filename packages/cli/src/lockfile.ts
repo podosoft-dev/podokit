@@ -122,6 +122,14 @@ export const DEFAULT_OWNED_GLOBS = [
   "apps/web/src/lib/i18n/catalogs/app/**",
   // Owned Elysia extension slot — register application services and plugins here.
   "apps/api/src/app.extensions.ts",
+  // Owned application environment variables, validated with PodoKit's.
+  "apps/api/src/config/env.extensions.ts",
+  // Owned TypeORM entities the migration data source loads.
+  "apps/api/src/database/entities.ts",
+  // Owned application operations that `bun run contract` requires.
+  "apps/api/src/core/api-contract.extensions.ts",
+  // Owned entry points the API build bundles next to PodoKit's.
+  "apps/api/scripts/build.extensions.mjs",
   // Owned additions to the managed /api proxy's header lists, body limits, and
   // response deadlines.
   "apps/web/src/lib/server/proxy-headers.ts",

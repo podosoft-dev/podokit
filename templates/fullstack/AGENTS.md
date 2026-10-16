@@ -99,6 +99,9 @@ Merge added module settings from `.env.example` into an existing `.env`.
   Better Auth schema before the application migrations. `{{apiRun}} migration:run` runs
   only the application migrations and never creates Better Auth tables;
   `{{apiRun}} migration:revert` reverts the latest application migration.
+- Name a migration `apps/api/src/migrations/<timestamp>-<Name>.ts` with exactly one exported
+  migration class. The build lists compiled migrations in `dist/migrations/migrations.json` and
+  fails when one is lost; `{{apiRun}} migrate:list` prints what a build would run.
 - e2e (Playwright, ships in `tests/`): `{{rootRun}} test:e2e`. Run the whole suite on more
   workers with `E2E_WORKERS=2`, never `--workers`. Tag a test `{ tag: "@exclusive" }` when
   it changes state other tests rely on (a server-wide setting, a seeded account's profile);
@@ -138,7 +141,7 @@ changes need an e2e/unit test.
 This project is managed by the `podo` CLI. Files have an ownership tier recorded
 in `.podokit/files.lock` — respect it:
 
-- **owned** (your code: `apps/web/src/routes/**`, your components/services, `apps/api/src/app.extensions.ts`, and this `AGENTS.md`) — edit freely. Add application-owned services or module descriptors through `app.extensions.ts` instead of changing toolkit registrations. Set Bun server options (`maxRequestBodySize`, `idleTimeout`) with its `apiServerOptions` export rather than editing `main.ts`; `API_MAX_REQUEST_BODY_SIZE` and `API_IDLE_TIMEOUT` apply when the export leaves them out.
+- **owned** (your code: `apps/web/src/routes/**`, your components/services, `apps/api/src/app.extensions.ts`, and this `AGENTS.md`) — edit freely. Add application-owned services or module descriptors through `app.extensions.ts` instead of changing toolkit registrations. Set Bun server options (`maxRequestBodySize`, `idleTimeout`) with its `apiServerOptions` export rather than editing `main.ts`; `API_MAX_REQUEST_BODY_SIZE` and `API_IDLE_TIMEOUT` apply when the export leaves them out. Declare application environment variables in the owned `apps/api/src/config/env.extensions.ts` (`appEnvShape`, `refineAppEnv`) instead of editing `env.validation.ts`, and TypeORM entities in `APP_ENTITIES` of the owned `apps/api/src/database/entities.ts` instead of editing `data-source.ts`. List the operations your API must keep in `APP_DOCUMENTED_ROUTES` of the owned `apps/api/src/core/api-contract.extensions.ts`; `{{apiRun}} contract` checks they are registered and documented. With `auth`, declare app on/off settings in `APP_FLAG_DEFAULTS` of the owned `apps/api/src/settings/app-flags.ts` instead of editing `flag-defaults.ts`.
 - **assembled** (e.g. `apps/api/src/app.ts`, `auth.ts`) — contain `// podokit:begin:… / …:end` fenced regions that the toolkit recomputes. Edit outside the fences only; **never hand-edit inside the fences**.
 - **managed** (bootstrap/config like `main.ts`) — the toolkit may update these; avoid gratuitous edits.
 
