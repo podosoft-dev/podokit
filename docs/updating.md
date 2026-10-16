@@ -166,7 +166,10 @@ podo update --apply
 
 The manifest records the package name and installed version. If the package is
 missing from `node_modules`, update fails instead of silently removing its
-files. When a 3-way merge requires a previous external module, registry access
+files. If `node_modules` holds an older version than the manifest records, for
+example after switching to a branch with an older lockfile, the dry run warns
+and `--apply` refuses instead of writing the older module's files; run
+`bun install` and update again. When a 3-way merge requires a previous external module, registry access
 to that recorded version is required.
 
 ## Module path migrations

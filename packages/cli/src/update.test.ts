@@ -17,7 +17,7 @@ import { addModule } from "./add";
 import { assembleProject } from "./assemble";
 import { eject } from "./eject";
 import { removeModule } from "./remove";
-import { planUpdate, applyUpdate, summarize, targetProject } from "./update";
+import { planUpdate, applyUpdate, compareVersions, summarize, targetProject } from "./update";
 import {
   computeDrift,
   computeFilesLock,
@@ -256,6 +256,50 @@ describe("external module updates", () => {
       .toBe("up-to-date");
     applyUpdate(project, REPO_TEMPLATES);
     expect(computeDrift(project).drifted).not.toContain("package.json");
+  });
+
+  it("refuses to apply an older installed external module than the project applied", () => {
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: REPO_TEMPLATES, targetDir: project });
+    const packageDir = join(project, "node_modules/@podosoft/podokit-module-blog");
+    const fileRel = "apps/api/src/blog/external.ts";
+    const publish = (version: string): void => {
+      mkdirSync(join(packageDir, "files/apps/api/src/blog"), { recursive: true });
+      writeFileSync(
+        join(packageDir, "package.json"),
+        JSON.stringify({ name: "@podosoft/podokit-module-blog", version }),
+      );
+      writeFileSync(
+        join(packageDir, "module.manifest.json"),
+        JSON.stringify({ manifestVersion: 1, name: "blog", description: "test", targetApp: "api" }),
+      );
+      writeFileSync(join(packageDir, "files", fileRel), `export const version = "${version}";\n`);
+    };
+    publish("1.2.0");
+    addModule({ projectRoot: project, module: "blog", modulesDir: join(REPO_TEMPLATES, "modules") });
+    publish("1.1.9");
+    const manifestBefore = readFileSync(join(project, ".podokit/manifest.json"), "utf8");
+
+    const plan = planUpdate(project, REPO_TEMPLATES);
+    expect(plan.moduleDowngrades).toEqual([
+      { name: "blog", packageName: "@podosoft/podokit-module-blog", recorded: "1.2.0", installed: "1.1.9" },
+    ]);
+    expect(() => applyUpdate(project, REPO_TEMPLATES)).toThrow(
+      "@podosoft/podokit-module-blog 1.1.9 is installed; the project applied 1.2.0",
+    );
+    expect(readFileSync(join(project, fileRel), "utf8")).toContain('"1.2.0"');
+    expect(readFileSync(join(project, ".podokit/manifest.json"), "utf8")).toBe(manifestBefore);
+
+    publish("1.10.0");
+    expect(planUpdate(project, REPO_TEMPLATES).moduleDowngrades).toEqual([]);
+  });
+
+  it("orders module versions by semantic version", () => {
+    expect(compareVersions("1.10.0", "1.9.0")).toBeGreaterThan(0);
+    expect(compareVersions("1.1.1", "1.1.1")).toBe(0);
+    expect(compareVersions("2.0.0-beta.2", "2.0.0")).toBeLessThan(0);
+    expect(compareVersions("2.0.0-beta.10", "2.0.0-beta.2")).toBeGreaterThan(0);
+    expect(compareVersions("0.9.0", "1.0.0")).toBeLessThan(0);
   });
 
   it("replays the recorded external module version for the merge base", () => {

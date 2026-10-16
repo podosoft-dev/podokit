@@ -91,6 +91,12 @@ export interface UpdatePlan {
   modules: string[];
   /** Modules the update adds, ordered ahead of the modules that need them. */
   addedModules: AddedModule[];
+  /**
+   * External modules whose installed package is older than the version the
+   * project last applied. Applying would write the older module's files, so
+   * `applyUpdate` refuses while this is not empty.
+   */
+  moduleDowngrades: ModuleDowngrade[];
   changes: FileChange[];
   /** Direct API paths that modules newly declare, per configuration file. */
   apiPaths: ApiPathResult;
@@ -113,9 +119,43 @@ function diskContent(projectRoot: string, path: string): Buffer | null {
   return existsSync(abs) ? readFileSync(abs) : null;
 }
 
+/** An external module installed at an older version than the project last applied. */
+export interface ModuleDowngrade {
+  name: string;
+  packageName: string;
+  /** Version recorded in the manifest. */
+  recorded: string;
+  /** Version installed in node_modules. */
+  installed: string;
+}
+
 interface TargetModules {
   modules: ManifestModule[];
   added: AddedModule[];
+  downgrades: ModuleDowngrade[];
+}
+
+function versionParts(version: string): { core: number[]; prerelease: string | null } {
+  const [withoutBuild = ""] = version.split("+");
+  const dash = withoutBuild.indexOf("-");
+  const core = (dash === -1 ? withoutBuild : withoutBuild.slice(0, dash))
+    .split(".")
+    .map((part) => Number.parseInt(part, 10) || 0);
+  return { core, prerelease: dash === -1 ? null : withoutBuild.slice(dash + 1) };
+}
+
+/** Semantic version order of two exact versions: negative when `a` is older. */
+export function compareVersions(a: string, b: string): number {
+  const left = versionParts(a);
+  const right = versionParts(b);
+  for (let index = 0; index < Math.max(left.core.length, right.core.length); index += 1) {
+    const difference = (left.core[index] ?? 0) - (right.core[index] ?? 0);
+    if (difference !== 0) return difference;
+  }
+  if (left.prerelease === right.prerelease) return 0;
+  if (left.prerelease === null) return 1;
+  if (right.prerelease === null) return -1;
+  return left.prerelease.localeCompare(right.prerelease, "en", { numeric: true });
 }
 
 /**
@@ -137,6 +177,7 @@ function targetModules(
   const recorded = new Map(modules.map((module) => [module.name, module]));
   const ordered: ManifestModule[] = [];
   const added: AddedModule[] = [];
+  const downgrades: ModuleDowngrade[] = [];
   const visiting = new Set<string>();
   const visited = new Set<string>();
 
@@ -156,6 +197,19 @@ function targetModules(
       );
     }
 
+    if (
+      existing?.moduleVersion &&
+      resolved.packageName &&
+      resolved.moduleVersion &&
+      compareVersions(resolved.moduleVersion, existing.moduleVersion) < 0
+    ) {
+      downgrades.push({
+        name: resolved.name,
+        packageName: resolved.packageName,
+        recorded: existing.moduleVersion,
+        installed: resolved.moduleVersion,
+      });
+    }
     visiting.add(name);
     const moduleManifest = readModuleManifest(resolved.dir);
     for (const required of moduleManifest.requires ?? []) visit(required, name);
@@ -192,7 +246,7 @@ function targetModules(
   for (const module of [...modules].sort((a, b) => a.order - b.order)) {
     visit(module.name);
   }
-  return { modules: ordered, added };
+  return { modules: ordered, added, downgrades };
 }
 
 interface TargetApiPaths {
@@ -280,6 +334,8 @@ export interface TargetProject {
   /** Recorded modules plus any the target version requires, in configure order. */
   modules: ManifestModule[];
   addedModules: AddedModule[];
+  /** External modules installed at an older version than the project applied. */
+  moduleDowngrades: ModuleDowngrade[];
   tree: VfsTree;
   ownedGlobs: string[];
   managedOverrides: string[];
@@ -293,7 +349,7 @@ export function targetProject(
   const manifest = readManifest(projectRoot);
   const lock = readFilesLock(projectRoot);
   if (!manifest || !lock) throw new NotAProjectError();
-  const { modules, added } = targetModules(
+  const { modules, added, downgrades } = targetModules(
     projectRoot,
     templatesDir,
     manifest.modules,
@@ -311,6 +367,7 @@ export function targetProject(
     lock,
     modules,
     addedModules: added,
+    moduleDowngrades: downgrades,
     tree,
     ownedGlobs: targetOwnedGlobs(projectRoot, templatesDir, modules, manifest.ownedGlobs),
     managedOverrides: targetManagedOverrides(
@@ -332,6 +389,7 @@ export function planUpdate(
     lock,
     modules,
     addedModules: added,
+    moduleDowngrades,
     tree: newTree,
     ownedGlobs,
     managedOverrides,
@@ -492,6 +550,7 @@ export function planUpdate(
     template: manifest.template,
     modules: modules.map((module) => module.name),
     addedModules: added,
+    moduleDowngrades,
     changes,
     apiPaths,
     ownedWithoutTemplate,
@@ -761,6 +820,12 @@ export function applyUpdate(
     forceManagedPaths: options.forceManagedPaths,
     onlyPaths: options.onlyPaths,
   });
+  if (plan.moduleDowngrades.length) {
+    throw new Error(
+      `Refusing to downgrade external modules:\n${describeDowngrades(plan.moduleDowngrades)}\n` +
+        "Install at least the recorded version (for example bun install), then run podo update again.",
+    );
+  }
   const { modules } = targetModules(
     projectRoot,
     templatesDir,
@@ -930,6 +995,13 @@ export function applyUpdate(
     podokitVersion: podokitVersion(),
   });
   return result;
+}
+
+/** One line per external module installed at an older version than recorded. */
+export function describeDowngrades(downgrades: ModuleDowngrade[]): string {
+  return downgrades
+    .map((entry) => `  ${entry.packageName} ${entry.installed} is installed; the project applied ${entry.recorded}`)
+    .join("\n");
 }
 
 /** Why an update adds a module, for the plan report. */

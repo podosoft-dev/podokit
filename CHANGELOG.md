@@ -220,6 +220,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- `podo update --apply` refuses when an external module package in
+  `node_modules` is older than the version the project last applied, and the
+  dry run warns about it. It used to write the older module's files and record
+  the older version without a word.
 - The root `package.json` of an app with two or more external modules no
   longer stays marked as edited. Bun writes `devDependencies` sorted by name,
   while PodoKit rebuilt the section in module order, so `podo status` and

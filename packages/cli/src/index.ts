@@ -9,6 +9,7 @@ import { removeModule } from "./remove";
 import { status, diff, doctor } from "./inspect";
 import {
   addedModuleReason,
+  describeDowngrades,
   planUpdate,
   applyUpdate,
   summarize,
@@ -876,6 +877,13 @@ async function main(argv: string[]): Promise<void> {
       process.stdout.write(
         `podo update ${plan.fromVersion} -> ${plan.toVersion}  (template: ${plan.template}; modules: ${plan.modules.join(", ") || "none"})\n\n`,
       );
+      if (plan.moduleDowngrades.length) {
+        process.stdout.write(
+          "WARN older external modules are installed than this project applied:\n" +
+            `${describeDowngrades(plan.moduleDowngrades)}\n` +
+            "--apply refuses until you install the recorded versions; the plan below would downgrade them.\n\n",
+        );
+      }
       if (plan.addedModules.length) {
         process.stdout.write(
           "Modules to add:\n" +
