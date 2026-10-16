@@ -4,6 +4,8 @@ import { AppException, type ErrorEnvelope } from "@podosoft/podokit-contracts";
 import { Elysia } from "elysia";
 import { configureServices, extensionModules } from "./app.extensions";
 import { validateEnv, type AppEnv } from "./config/env.validation";
+import { assertSelectedProvidersInstalled } from "./config/provider-selection";
+import { PROVIDERS } from "./config/providers";
 import { stampClientAddress } from "./core/client-address";
 import {
   appContext,
@@ -172,6 +174,7 @@ const buildApp = (options: CreateAppOptions = {}) => {
   ];
   for (const module of modules) module.configure?.(env, services);
   configureServices(services);
+  assertSelectedProvidersInstalled(services, PROVIDERS);
   services.freeze();
   const context = appContext(env, services);
   const corsOrigin = env.CORS_ORIGIN?.split(",").map((origin) => origin.trim());

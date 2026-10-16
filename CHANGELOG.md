@@ -148,6 +148,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   workers stop, and two workers for one queue fail at startup.
   `startWorkers()` is now asynchronous and returns `{ workers, close }`.
   `podo update` creates the file once and never overwrites it.
+- `DATABASE_PROVIDER`, `CACHE_PROVIDER`, `OBJECT_STORAGE_PROVIDER`,
+  `EVENTS_PROVIDER`, and `JOBS_PROVIDER` replace the project's provider for one
+  capability when the API starts, so one build can run on PostgreSQL on a
+  server and SQLite in a desktop shell. An unknown value, or a provider whose
+  module is not installed, fails startup. `config/providers.ts` passes the
+  project's selection through `providersFromEnvironment()` from the new
+  `config/provider-selection.ts`, and `podo provider set` writes it that way.
 
 ### Removed
 
@@ -401,6 +408,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `apps/api/src/worker.extensions.ts`; `podo update` reports those edits as
   conflicts. Code of yours that calls `startWorkers()` awaits it now and stops
   the workers with the returned `close()`.
+- If you edited `apps/api/src/config/providers.ts` to choose providers from
+  your own variables, set the `<CAPABILITY>_PROVIDER` variables instead and take
+  the new file; `podo update` reports the edit as a conflict. Check that none of
+  those five names is already in your environment for another purpose.
 
 ## [1.5.0] - 2026-10-16
 

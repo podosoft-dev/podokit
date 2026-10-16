@@ -69,6 +69,32 @@ is `local`, and `job-progress` uses `jobs-local`, `events-memory`, and `sse` for
 the local combination. Provider commands and `podo add` append settings to
 `.env.example`; merge new settings into an existing `.env` yourself.
 
+## Select a provider at startup
+
+`podo provider set` changes the providers the project is built with. One build
+can also run with other providers, for example PostgreSQL on a server and SQLite
+in a desktop shell: install the module of each provider it may use, then set a
+variable per capability when the API starts.
+
+| Capability | Variable | Values |
+| --- | --- | --- |
+| database | `DATABASE_PROVIDER` | `postgres`, `sqlite` |
+| cache | `CACHE_PROVIDER` | `redis`, `memory` |
+| object-storage | `OBJECT_STORAGE_PROVIDER` | `s3`, `local` |
+| events | `EVENTS_PROVIDER` | `redis`, `memory` |
+| jobs | `JOBS_PROVIDER` | `bullmq`, `local` |
+
+```bash
+DATABASE_PROVIDER=sqlite SQLITE_PATH=/var/lib/my-app/app.sqlite bun run --cwd apps/api migrate:all
+DATABASE_PROVIDER=sqlite SQLITE_PATH=/var/lib/my-app/app.sqlite bun dist/main.js
+```
+
+An unknown value, or a provider whose module is not installed, fails startup.
+The deployment renderers and `.podokit/manifest.json` keep using the project's
+selection, so run migrations with the same variables as the API.
+`apps/api/src/config/provider-selection.ts` applies them; the managed
+`config/providers.ts` keeps the project's selection.
+
 ## Runtime settings
 
 | Provider | Setting | Default behavior |
