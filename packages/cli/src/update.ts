@@ -23,6 +23,7 @@ import {
   type Tier,
   type FilesLock,
   type ManifestModule,
+  type PodokitManifest,
 } from "./lockfile";
 import type { ProviderCapability, ProviderSelections } from "@podosoft/podokit-runtime";
 import type { Toolchain } from "./toolchain";
@@ -240,6 +241,15 @@ function targetOwnedGlobs(
   return [...owned];
 }
 
+/** Owned paths the template and the installed modules declare, without the app's own. */
+export function declaredOwnedGlobs(
+  projectRoot: string,
+  templatesDir: string,
+  modules: { name: string; packageName?: string }[],
+): string[] {
+  return targetOwnedGlobs(projectRoot, templatesDir, modules, []);
+}
+
 /**
  * Build the update plan. `templatesDir` is the installed CLI's template set (the
  * new version); the lock records what PodoKit last wrote (to detect user edits).
@@ -253,11 +263,23 @@ export interface PlanOptions {
   onlyPaths?: string[];
 }
 
-export function planUpdate(
+/** The project as the installed CLI's templates would generate it. */
+export interface TargetProject {
+  manifest: PodokitManifest;
+  lock: FilesLock;
+  /** Recorded modules plus any the target version requires, in configure order. */
+  modules: ManifestModule[];
+  addedModules: AddedModule[];
+  tree: VfsTree;
+  ownedGlobs: string[];
+  managedOverrides: string[];
+}
+
+export function targetProject(
   projectRoot: string,
   templatesDir: string,
-  options: PlanOptions = {},
-): UpdatePlan {
+  targetAnswers?: TemplateVars,
+): TargetProject {
   const manifest = readManifest(projectRoot);
   const lock = readFilesLock(projectRoot);
   if (!manifest || !lock) throw new NotAProjectError();
@@ -267,21 +289,43 @@ export function planUpdate(
     manifest.modules,
     manifest.providers,
   );
-
-  const newTree = assembleProject({
+  const tree = assembleProject({
     templatesDir,
     template: manifest.template,
-    answers: options.targetAnswers ?? manifestTemplateVars(manifest),
+    answers: targetAnswers ?? manifestTemplateVars(manifest),
     modules,
     projectRoot,
   });
-  const managedOverrides = targetManagedOverrides(
-    projectRoot,
-    templatesDir,
+  return {
+    manifest,
+    lock,
     modules,
-    manifest.managedOverrides,
-  );
-  const ownedGlobs = targetOwnedGlobs(projectRoot, templatesDir, modules, manifest.ownedGlobs);
+    addedModules: added,
+    tree,
+    ownedGlobs: targetOwnedGlobs(projectRoot, templatesDir, modules, manifest.ownedGlobs),
+    managedOverrides: targetManagedOverrides(
+      projectRoot,
+      templatesDir,
+      modules,
+      manifest.managedOverrides,
+    ),
+  };
+}
+
+export function planUpdate(
+  projectRoot: string,
+  templatesDir: string,
+  options: PlanOptions = {},
+): UpdatePlan {
+  const {
+    manifest,
+    lock,
+    modules,
+    addedModules: added,
+    tree: newTree,
+    ownedGlobs,
+    managedOverrides,
+  } = targetProject(projectRoot, templatesDir, options.targetAnswers);
   const pendingMigrations = collectPendingMigrations(
     projectRoot,
     templatesDir,

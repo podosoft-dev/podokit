@@ -9,6 +9,7 @@ import { removeModule } from "./remove";
 import { status, diff, doctor } from "./inspect";
 import { addedModuleReason, planUpdate, applyUpdate, summarize } from "./update";
 import { eject } from "./eject";
+import { restore, templateDiff } from "./template-files";
 import { runDevCommand } from "./dev";
 import {
   addLocale,
@@ -64,7 +65,7 @@ Usage:
   podo provider set <capability> <provider> [--apply]
   podo remove <module>     Un-apply a module (inverse of add)
   podo status              Show version, modules, file tiers, and local edits
-  podo diff                List PodoKit-managed files you have edited
+  podo diff [path...]      List edited managed files, or diff files against the template
   podo doctor              Check framework versions against supported ranges
   podo dev <action> [...]  Run the shared, portless container development gateway
   podo deploy <action>     Plan, apply, verify, or roll back a deployment
@@ -72,6 +73,7 @@ Usage:
   podo locale <command>    Add, validate, activate, or list JSON locales
   podo update [--apply]    Preview (or apply) what a version update would change
   podo eject <path...>     Take ownership of managed files (update skips them)
+  podo restore <path...>   Rewrite managed or ejected files from the template
 
 Options:
   --template <t> Template to scaffold (see below)
@@ -550,7 +552,31 @@ async function main(argv: string[]): Promise<void> {
   }
 
   if (args.command === "diff") {
+    const targets = args.positionals.slice(1);
     try {
+      if (targets.length) {
+        const result = templateDiff(process.cwd(), join(__dirname, "templates"), targets);
+        if (result.projectVersion !== result.templateVersion) {
+          process.stdout.write(
+            `Comparing with PodoKit ${result.templateVersion} templates; this project is on ${result.projectVersion}.\n`,
+          );
+        }
+        for (const file of result.files) {
+          const tier = file.tier ? ` (${file.tier})` : "";
+          if (file.status === "not-generated") {
+            process.stdout.write(`${file.path}: PodoKit does not generate this file.\n`);
+          } else if (file.status === "missing") {
+            process.stdout.write(`${file.path}${tier}: missing; podo restore ${file.path} writes the template's version.\n`);
+          } else if (file.status === "same") {
+            process.stdout.write(`${file.path}${tier}: same as the template.\n`);
+          } else if (file.binary) {
+            process.stdout.write(`${file.path}${tier}: binary file differs from the template.\n`);
+          } else {
+            process.stdout.write(file.diff);
+          }
+        }
+        return;
+      }
       const { drifted, missing } = diff(process.cwd());
       if (!drifted.length && !missing.length) {
         process.stdout.write("No local edits to PodoKit-managed files.\n");
@@ -856,6 +882,23 @@ async function main(argv: string[]): Promise<void> {
       }
       if (!result.ejected.length && !result.unknown.length) {
         process.stdout.write("Nothing to eject (already owned).\n");
+      }
+    } catch (err) {
+      fail((err as Error).message);
+    }
+    return;
+  }
+
+  if (args.command === "restore") {
+    const targets = args.positionals.slice(1);
+    if (!targets.length) {
+      fail("Usage: podo restore <path...>");
+    }
+    try {
+      const result = restore(process.cwd(), join(__dirname, "templates"), targets);
+      process.stdout.write(`Restored from the template: ${result.restored.join(", ")}\n`);
+      if (result.remanaged.length) {
+        process.stdout.write(`Managed by PodoKit again: ${result.remanaged.join(", ")}\n`);
       }
     } catch (err) {
       fail((err as Error).message);

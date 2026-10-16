@@ -85,11 +85,12 @@ on restart; files and the database-backed local jobs persist.
 | `podo provider list` | Show active database, cache, object storage, event, and job providers. |
 | `podo provider set <capability> <provider> [--apply]` | Preview or apply one provider change. |
 | `podo status` | Show the PodoKit version, modules, ownership tiers, and local edits. |
-| `podo diff` | List edited or deleted managed files. |
+| `podo diff [path...]` | List edited or deleted managed files, or show a file's diff against its template. |
 | `podo doctor` | Check Bun and framework versions. |
 | `podo locale <command>` | Manage JSON locales. |
 | `podo update [--apply]` | Preview or apply managed template and module updates. |
 | `podo eject <path...>` | Transfer managed files to application ownership. |
+| `podo restore <path...>` | Rewrite managed files from the template; an ejected file becomes managed again. |
 | `podo dev <action>` | Manage the generated development containers. |
 | `podo deploy <action>` | Plan, apply, verify, or roll back an immutable Kubernetes or Docker Compose release. |
 
