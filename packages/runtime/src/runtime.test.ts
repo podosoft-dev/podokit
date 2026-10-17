@@ -6,6 +6,8 @@ import {
   assertPartNumber,
   assertRepeatOptions,
   DATABASE,
+  DEFAULT_SCHEDULE_KEEP_COMPLETED,
+  DEFAULT_SCHEDULE_KEEP_FAILED,
   IN_MEMORY_READ_BYTES,
   LOCAL_PROVIDER_SELECTIONS,
   LocalObjectStore,
@@ -24,6 +26,7 @@ import {
   RATE_LIMIT_ROUTES,
   readObjectBytes,
   resolveProviderSelections,
+  scheduleRetention,
   SERVER_PROVIDER_SELECTIONS,
 } from "./index";
 
@@ -124,6 +127,24 @@ describe("job schedules", () => {
       expect(() => assertRepeatOptions({ everyMs })).toThrow("whole number of at least 1000");
     }
     expect(() => assertRepeatOptions({ everyMs: 1_000, timezone: "UTC" })).toThrow("applies only to cron");
+  });
+
+  it("bounds the finished runs a schedule keeps unless told otherwise", () => {
+    expect(scheduleRetention()).toEqual({
+      keepCompleted: DEFAULT_SCHEDULE_KEEP_COMPLETED,
+      keepFailed: DEFAULT_SCHEDULE_KEEP_FAILED,
+    });
+    expect(DEFAULT_SCHEDULE_KEEP_COMPLETED).toBe(100);
+    expect(DEFAULT_SCHEDULE_KEEP_FAILED).toBe(1_000);
+    expect(scheduleRetention({ keepCompleted: 0 })).toEqual({ keepCompleted: 0, keepFailed: 1_000 });
+    expect(scheduleRetention({ keepCompleted: 5, keepFailed: 20 })).toEqual({ keepCompleted: 5, keepFailed: 20 });
+  });
+
+  it("rejects a finished-run limit that is not a whole number of at least 0", () => {
+    for (const value of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => scheduleRetention({ keepCompleted: value })).toThrow("keepCompleted must be a whole number of at least 0");
+      expect(() => scheduleRetention({ keepFailed: value })).toThrow("keepFailed must be a whole number of at least 0");
+    }
   });
 });
 

@@ -21,6 +21,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `sizeKey`, so such a pool was refused as an unknown key or left out, and
   `podo deploy doctor` and `podo deploy plan` under-counted the connections a
   deployment can open. Each entry sets exactly one of `sizeKey` and `size`.
+- `JobQueue.schedule()` no longer keeps every finished run. A schedule added
+  its jobs without removal options, so BullMQ kept each completed and failed
+  run in Redis (86,400 a day for a schedule every second) and the local
+  provider kept the same rows in `podokit_job`. When a scheduled run finishes,
+  both providers now keep the newest 100 completed and 1000 failed jobs of its
+  name, jobs added with `enqueue()` included, and remove older ones. An
+  optional fifth argument, `ScheduleOptions`, sets `keepCompleted` and
+  `keepFailed`; 0 removes only the finished run, and a negative or fractional
+  limit rejects. `@podosoft/podokit-runtime` exports `ScheduleOptions`,
+  `scheduleRetention()`, and the default limits.
 
 ## [1.6.0] - 2026-10-17
 

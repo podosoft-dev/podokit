@@ -33,10 +33,16 @@ replacing an earlier one with the same `id`, and `unschedule(id)` stops it.
 `MIN_REPEAT_INTERVAL_MS` floor, and providers check the cron expression.
 Providers keep their schedules, apply them again when their connection is
 restored, and resolve `schedule()` while the backend is down.
+When a scheduled run finishes, the queue keeps the newest
+`DEFAULT_SCHEDULE_KEEP_COMPLETED` (100) completed and
+`DEFAULT_SCHEDULE_KEEP_FAILED` (1000) failed jobs of that name and removes older
+ones; the optional fifth argument, `ScheduleOptions`, sets `keepCompleted` and
+`keepFailed`, where 0 removes only the finished run. `scheduleRetention()`
+applies the defaults and checks the limits.
 
 ```ts
 await jobs.schedule("nightly-report", "report", {}, { cron: "0 3 * * *", timezone: "Asia/Seoul" });
-await jobs.schedule("heartbeat", "heartbeat", {}, { everyMs: 60_000 });
+await jobs.schedule("heartbeat", "heartbeat", {}, { everyMs: 60_000 }, { keepCompleted: 0, keepFailed: 20 });
 ```
 
 ## Object storage

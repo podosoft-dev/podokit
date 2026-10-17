@@ -263,6 +263,21 @@ provider adds each job from a timer in the API process, at multiples of
 time, so a time is added once even across restarts. An invalid cron expression
 or time zone rejects.
 
+A schedule does not keep every run. When a run finishes, the queue keeps the
+newest 100 completed and 1000 failed jobs of its `name`, jobs added with
+`enqueue()` included, and removes older ones, so a schedule that runs every
+second does not add 86,400 jobs a day to Redis or the database. Set other
+limits with the fifth argument; 0 removes the finished run itself and no other
+job:
+
+```ts
+jobs.schedule("heartbeat", "heartbeat", {}, { everyMs: 60_000 }, { keepCompleted: 0, keepFailed: 20 });
+```
+
+BullMQ applies the limits as the job scheduler's `removeOnComplete` and
+`removeOnFail` counts; the local provider deletes the same rows from
+`podokit_job`. A negative or fractional limit rejects.
+
 ### Object storage reads
 
 `ObjectStore.get(key)` resolves `null` for a missing key; otherwise it returns
