@@ -38,6 +38,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   the application's entries and come before Settings. The CI gate's generated
   app installs `blog` and `analytics`, which `scripts/dev-app.mjs` now adds from
   the local packages.
+- The generated theme spec, `tests/ui/theme-mode.ui.spec.ts`, failed on every
+  run against a development server: after reloading the page it opened the
+  theme menu before the page had hydrated, so the click did nothing. It now
+  waits with the new `hydrated(page)` from `tests/helpers/hydration.ts`, finds
+  the toggle by its new `data-testid="theme-toggle"`, and opens the
+  `accountMenu` page from `tests/helpers/app-paths.ts`, so it also works with
+  an application's own header.
 
 ## [1.6.0] - 2026-10-17
 

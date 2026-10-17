@@ -310,7 +310,7 @@ those files instead of editing or ejecting managed specs.
 | `homeReady(page)` | the page's `h1` | the smoke test and the sidebar's home link |
 | `indexable` | `["/"]` | public pages that must not carry `X-Robots-Tag` |
 | `footer` | `/login` | a public page that renders `SiteFooter` (`data-testid="site-footer"`); `null` skips the footer test |
-| `accountMenu` | `/` | a page that renders `LanguageSwitch`, `ThemeToggle`, and `AccountMenu`; `null` skips those checks |
+| `accountMenu` | `/` | a page that renders `LanguageSwitch`, `ThemeToggle` (`data-testid="theme-toggle"`), and `AccountMenu`; the theme and account menu tests use it, and `null` skips them |
 
 ```ts
 import type { AppPaths } from "./paths";
