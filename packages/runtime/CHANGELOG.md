@@ -1,5 +1,11 @@
 # @podosoft/podokit-runtime
 
+## 0.5.1
+
+### Patch Changes
+
+- [#244](https://github.com/podosoft-dev/podokit/pull/244) [`9154af2`](https://github.com/podosoft-dev/podokit/commit/9154af27522620d6147ca5a6e3d4357d3e9f2b7c) Thanks [@korone00](https://github.com/korone00)! - Remove finished runs of `JobQueue.schedule()` beyond a limit instead of keeping every one: after a scheduled run finishes, the BullMQ and local providers keep the newest 100 completed and 1000 failed jobs of its name, and a new optional `ScheduleOptions` argument sets `keepCompleted` and `keepFailed` (0 removes only the run). The runtime exports `ScheduleOptions`, `scheduleRetention()`, and the default limits.
+
 ## 0.5.0
 
 ### Minor Changes
