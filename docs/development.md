@@ -12,12 +12,16 @@ From the PodoKit monorepo root:
 ```bash
 node scripts/dev-app.mjs /tmp/myapp
 node scripts/dev-app.mjs /tmp/myapp --add auth,admin-dashboard
+node scripts/dev-app.mjs /tmp/myapp --add admin-dashboard,rate-limit,audit-log,file-upload,blog,analytics
 node scripts/dev-app.mjs /tmp/myapp --template todo --no-build
 node scripts/dev-app.mjs /tmp/podokit --template todo --database sqlite --local-providers
 ```
 
 The helper builds the monorepo, runs the local CLI, links unpublished local
-`@podosoft/*` packages, applies requested modules, and runs `bun install`. It
+`@podosoft/*` packages, applies requested modules, and runs `bun install`. A
+module published as its own package, such as `blog` or `analytics`, is
+installed from `packages/podokit-module-<name>` and added after the bundled
+modules, so list the modules it requires as well. It
 ends with the time each phase took. The links point at the checkout the helper
 ran from, so regenerate the app after removing that checkout or worktree; with a
 warm Bun cache and twelve modules, the whole run took 13 seconds (2026-10-16).

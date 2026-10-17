@@ -9,10 +9,12 @@
 //
 // It builds the monorepo, generates the app with the local CLI, points the
 // web app's @podosoft/podokit-api-client at the local package (file:), applies
-// any requested modules, and runs bun install. It prints how long each phase
-// took, so a slow regeneration shows which phase to look at.
+// any requested modules, and runs bun install. A module this repository ships
+// as a package, such as blog or analytics, is installed from
+// packages/podokit-module-<name> and added after the bundled ones. It prints how
+// long each phase took, so a slow regeneration shows which phase to look at.
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createPhaseTimer } from "./e2e-ci-lib.mjs";
@@ -34,7 +36,13 @@ const target = resolve(targetDir);
 const template = flag("template") ?? "fullstack";
 const database = flag("database");
 const localProviders = args.includes("--local-providers");
-const modules = (flag("add") ?? "").split(",").map((m) => m.trim()).filter(Boolean);
+const requested = (flag("add") ?? "").split(",").map((m) => m.trim()).filter(Boolean);
+const modulePackage = (mod) => join(repoRoot, "packages", `podokit-module-${mod}`);
+const isExternal = (mod) =>
+  !existsSync(join(repoRoot, "templates/modules", mod, "module.manifest.json")) &&
+  existsSync(join(modulePackage(mod), "module.manifest.json"));
+const modules = requested.filter((mod) => !isExternal(mod));
+const externalModules = requested.filter(isExternal);
 const name = target.split("/").pop();
 
 const run = (cmd, cmdArgs, cwd = repoRoot) =>
@@ -120,6 +128,15 @@ if (!usePublished) {
   console.log("• pinned local @podosoft runtime, contracts, auth, and API packages via overrides");
 } else {
   console.log("• using published @podosoft packages (container-friendly)");
+}
+
+if (externalModules.length > 0) {
+  timer.start(`add ${externalModules.join(", ")} from the local packages`);
+  run("bun", ["add", "--dev", ...externalModules.map((mod) => `file:${modulePackage(mod)}`)], target);
+  for (const mod of externalModules) {
+    console.log(`• podo add ${mod}…`);
+    run("node", [join(repoRoot, "packages/cli/dist/index.js"), "add", mod], target);
+  }
 }
 
 timer.start("bun install");

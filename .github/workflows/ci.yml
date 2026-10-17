@@ -43,7 +43,7 @@ jobs:
         run: |
           app_dir="$(mktemp -d)"
           node scripts/dev-app.mjs "$app_dir" \
-            --add admin-dashboard,job-progress,api-key-auth,audit-log,file-upload,logging,rate-limit \
+            --add admin-dashboard,job-progress,api-key-auth,audit-log,file-upload,logging,rate-limit,blog,analytics \
             --no-build
           (
             cd "$app_dir"

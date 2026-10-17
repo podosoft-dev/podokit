@@ -31,6 +31,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `keepFailed`; 0 removes only the finished run, and a negative or fractional
   limit rejects. `@podosoft/podokit-runtime` exports `ScheduleOptions`,
   `scheduleRetention()`, and the default limits.
+- The generated admin navigation unit test, `apps/web/src/lib/admin/nav.test.ts`,
+  failed in apps whose modules add admin pages, such as `blog` and `analytics`,
+  because its expected list left out their entries. It now stands in for the
+  module entries as it does for the application's and checks that they follow
+  the application's entries and come before Settings. The CI gate's generated
+  app installs `blog` and `analytics`, which `scripts/dev-app.mjs` now adds from
+  the local packages.
 
 ## [1.6.0] - 2026-10-17
 
