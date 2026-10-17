@@ -350,7 +350,10 @@ With `admin-dashboard`, `tests/helpers/app-accounts.ts` names the seeded
 accounts when an application's differ from `admin@example.com` and
 `user@example.com`. `E2E_ADMIN_EMAIL`, `E2E_USER_EMAIL`, `E2E_ADMIN_PASSWORD`,
 and `E2E_USER_PASSWORD` win over it. The seed signs the accounts up, so list the
-administrator's address in the API's `ADMIN_EMAILS`.
+administrator's address in the API's `ADMIN_EMAILS`. Specs of modules that do
+not require `admin-dashboard`, such as the object storage and SSE specs, sign
+in as the administrator through `tests/helpers/seeded-admin.ts`, which reads the
+same values and skips those tests in an app without that module.
 
 ## Sign-in budget
 

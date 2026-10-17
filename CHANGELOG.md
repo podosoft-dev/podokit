@@ -62,6 +62,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   runs, so selecting an exclusive test no longer runs every other test first.
   A single `bunx playwright test` on more workers keeps the old ordering and
   warns about it. The Outer harness runs the suite through `run-e2e.ts`.
+- The `object-storage-s3`, `object-storage-local`, and `sse` specs signed in as
+  `admin@example.com` with the default password, or the `E2E_ADMIN_*`
+  variables, and ignored the application's `tests/helpers/app-accounts.ts`.
+  They now sign in through the new `tests/helpers/seeded-admin.ts`, which
+  reads the same values as `accounts.ts` and returns null in an app without
+  `admin-dashboard`, where those tests skip. The check that managed specs name
+  seeded accounts only through the account helpers also catches `E2E_*`
+  account variables and covers the external module packages.
 
 ## [1.6.0] - 2026-10-17
 
