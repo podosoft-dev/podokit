@@ -3,6 +3,9 @@ import { resolve } from "node:path";
 import type { FullConfig, PlaywrightTestConfig } from "@playwright/test";
 import { afterEach, describe, expect, it } from "vitest";
 import checkWorkers, {
+  e2ePhase,
+  e2eRuns,
+  e2eRunSettings,
   e2eWorkers,
   withExclusivePhase,
 } from "../../../templates/fullstack/tests/playwright.extensions";
@@ -34,11 +37,21 @@ function runs(project: Project, title: string): boolean {
   return included && !list(project.grepInvert).some((pattern) => pattern.test(title));
 }
 
+/** Whether Playwright would collect a test file in `project` at all. */
+function collects(project: Project, file: string): boolean {
+  const list = (value: Project["testIgnore"]): Array<string | RegExp> =>
+    value === undefined ? [] : Array.isArray(value) ? value : [value];
+  return !list(project.testIgnore).some((pattern) => (typeof pattern === "string" ? file === pattern : pattern.test(file)));
+}
+
 describe("generated Playwright exclusive phase", () => {
   const savedWorkers = process.env.E2E_WORKERS;
+  const savedPhase = process.env.E2E_PHASE;
   afterEach(() => {
     if (savedWorkers === undefined) delete process.env.E2E_WORKERS;
     else process.env.E2E_WORKERS = savedWorkers;
+    if (savedPhase === undefined) delete process.env.E2E_PHASE;
+    else process.env.E2E_PHASE = savedPhase;
   });
 
   it("reads the worker count from E2E_WORKERS and defaults to one", () => {
@@ -97,7 +110,65 @@ describe("generated Playwright exclusive phase", () => {
     }
   });
 
-  it("orders the twins after every other test project, one after another, with more workers", () => {
+  it("runs the exclusive tests in a second Playwright run with more workers, whatever the first run does", () => {
+    expect(e2eRuns([], 1)).toEqual([{ args: [] }]);
+    expect(e2eRuns(["--grep", "@smoke"], 1)).toEqual([{ args: ["--grep", "@smoke"] }]);
+    expect(e2eRuns([], 2)).toEqual([
+      { phase: "shared", args: [] },
+      { phase: "exclusive", args: ["--pass-with-no-tests"] },
+    ]);
+    expect(e2eRuns(["--project=ui", "--project=ui-exclusive"], 3)).toEqual([
+      { phase: "shared", args: ["--pass-with-no-tests", "--project=ui", "--project=ui-exclusive"] },
+      { phase: "exclusive", args: ["--pass-with-no-tests", "--project=ui", "--project=ui-exclusive"] },
+    ]);
+  });
+
+  it("splits the projects between the two runs without a dependency on the other tests", () => {
+    const file = "/app/tests/ui/settings.ui.spec.ts";
+    const first = withExclusivePhase(adminProjects, 2, "shared");
+    const second = withExclusivePhase(adminProjects, 1, "exclusive");
+
+    for (const name of ["api", "ui"]) {
+      expect(collects(byName(first, name), file), `shared ${name}`).toBe(true);
+      expect(collects(byName(first, `${name}-exclusive`), file), `shared ${name}-exclusive`).toBe(false);
+      expect(collects(byName(second, name), file), `exclusive ${name}`).toBe(false);
+      expect(collects(byName(second, `${name}-exclusive`), file), `exclusive ${name}-exclusive`).toBe(true);
+      expect(byName(first, `${name}-exclusive`).dependencies).toEqual(["setup"]);
+      expect(byName(second, `${name}-exclusive`).dependencies).toEqual(["setup"]);
+      expect(runs(byName(second, `${name}-exclusive`), "settings maintenance mode @exclusive")).toBe(true);
+    }
+    for (const name of ["setup", "cleanup"]) {
+      expect(byName(first, name)).toBe(byName(adminProjects, name));
+      expect(byName(second, name)).toBe(byName(adminProjects, name));
+    }
+  });
+
+  it("runs the exclusive phase on one worker with its own results and report", () => {
+    expect(e2eRunSettings(undefined, 2)).toEqual({
+      phase: undefined,
+      workers: 2,
+      outputDir: "test-results",
+      reportFolder: "playwright-report",
+    });
+    expect(e2eRunSettings("shared", 2)).toEqual({
+      phase: "shared",
+      workers: 2,
+      outputDir: "test-results",
+      reportFolder: "playwright-report",
+    });
+    expect(e2eRunSettings("exclusive", 2)).toEqual({
+      phase: "exclusive",
+      workers: 1,
+      outputDir: "test-results/exclusive",
+      reportFolder: "playwright-report/exclusive",
+    });
+    expect(e2ePhase(undefined)).toBeUndefined();
+    expect(e2ePhase("")).toBeUndefined();
+    expect(e2ePhase("exclusive")).toBe("exclusive");
+    expect(() => e2ePhase("both")).toThrow('E2E_PHASE must be "shared" or "exclusive", got "both".');
+  });
+
+  it("orders the twins after every other test project, one after another, in a single run with more workers", () => {
     const mobile: Project = {
       name: "mobile",
       testMatch: /.*\.ui\.spec\.ts/,
@@ -150,8 +221,30 @@ describe("generated Playwright exclusive phase", () => {
     expect(() => checkWorkers(config(1))).not.toThrow();
     expect(() => checkWorkers(config(2))).toThrow("Set the worker count with E2E_WORKERS=2 instead of --workers.");
     process.env.E2E_WORKERS = "2";
-    expect(() => checkWorkers(config(2))).not.toThrow();
-    expect(() => checkWorkers(config(4))).not.toThrow();
+    expect(() => checkWorkers(config(2), () => undefined)).not.toThrow();
+    expect(() => checkWorkers(config(4), () => undefined)).not.toThrow();
+  });
+
+  it("warns when more than one worker runs the suite in a single Playwright run", () => {
+    const config = (workers: number): FullConfig => ({ workers }) as FullConfig;
+    const warnings: string[] = [];
+    const warn = (message: string): void => {
+      warnings.push(message);
+    };
+
+    process.env.E2E_WORKERS = "2";
+    delete process.env.E2E_PHASE;
+    checkWorkers(config(2), warn);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("a failing test makes Playwright skip the tests tagged @exclusive");
+    process.env.E2E_PHASE = "shared";
+    checkWorkers(config(2), warn);
+    process.env.E2E_PHASE = "exclusive";
+    checkWorkers(config(1), warn);
+    delete process.env.E2E_WORKERS;
+    delete process.env.E2E_PHASE;
+    checkWorkers(config(1), warn);
+    expect(warnings).toHaveLength(1);
   });
 
   it("builds both managed configs from E2E_WORKERS with the phase and its guard", () => {
@@ -160,11 +253,12 @@ describe("generated Playwright exclusive phase", () => {
       "templates/modules/admin-dashboard/files/tests/playwright.config.ts",
     ]) {
       const config = readFileSync(resolve(REPO_ROOT, path), "utf8");
-      expect(config, path).toContain("const workers = e2eWorkers();");
-      expect(config, path).toContain("  workers,\n");
+      expect(config, path).toContain("const run = e2eRunSettings();");
+      expect(config, path).toContain("  workers: run.workers,\n  outputDir: run.outputDir,\n");
       expect(config, path).toContain('globalSetup: "./playwright.extensions.ts",');
+      expect(config, path).toContain('["html", { open: "never", outputFolder: run.reportFolder }]');
       expect(config, path).toContain(
-        "projects: withExclusivePhase([...coreProjects, ...loadPlaywrightProjects(coreProjects)], workers),",
+        "projects: withExclusivePhase([...coreProjects, ...loadPlaywrightProjects(coreProjects)], run.workers, run.phase),",
       );
     }
     const scripts = (
@@ -172,7 +266,8 @@ describe("generated Playwright exclusive phase", () => {
         scripts: Record<string, string>;
       }
     ).scripts;
-    expect(scripts["test:e2e:api"]).toBe("bunx playwright test --project=api --project=api-exclusive");
-    expect(scripts["test:e2e:ui"]).toBe("bunx playwright test --project=ui --project=ui-exclusive");
+    expect(scripts["test:e2e"]).toBe("bun run-e2e.ts");
+    expect(scripts["test:e2e:api"]).toBe("bun run-e2e.ts --project=api --project=api-exclusive");
+    expect(scripts["test:e2e:ui"]).toBe("bun run-e2e.ts --project=ui --project=ui-exclusive");
   });
 });

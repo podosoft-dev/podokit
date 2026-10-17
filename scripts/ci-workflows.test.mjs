@@ -91,7 +91,9 @@ test("publishes a GitHub Release only after npm packages succeed", () => {
 
 test("links unpublished workspace packages in generated app CI", () => {
   assert.match(ci, /node scripts\/dev-app\.mjs "\$app_dir"/);
-  assert.match(ci, /--add admin-dashboard,job-progress,api-key-auth,audit-log,file-upload,logging,rate-limit/);
+  assert.match(ci, /--add admin-dashboard,job-progress,api-key-auth,audit-log,file-upload,logging,rate-limit,blog,analytics/);
   assert.match(ci, /--no-build/);
+  assert.match(ci, /> apps\/api\/scripts\/build\.extensions\.mjs/);
+  assert.match(ci, /test "\$\(bun apps\/api\/dist\/scripts\/app-task\.js\)" = "app task"/);
   assert.doesNotMatch(ci, /node packages\/cli\/dist\/index\.js create app/);
 });

@@ -19,7 +19,7 @@ import {
   assertCleanMigrationOutput,
   createPhaseTimer,
   localRegistryEnvironment,
-  playwrightArguments,
+  suiteArguments,
   playwrightWorkers,
   resolveE2eOptions,
   retryTransientInstall,
@@ -433,14 +433,14 @@ async function main() {
   step(`run Playwright${smoke ? " smoke" : " full suite"} with E2E_WORKERS=${workers}`);
   // --grep wins when given (run just one feature's specs); otherwise --smoke runs
   // the @smoke subset, and the default runs everything.
-  const testArgs = playwrightArguments(options);
+  const testArgs = suiteArguments(options);
   // A developer may already have an unrelated Mailpit bound to the default
   // port. Only expose Mailpit to the generated tests when SMTP is also wired to
   // it; otherwise email specs must skip instead of reading from the wrong sink.
   const mailpitURL = process.env.SMTP_HOST
     ? (process.env.MAILPIT_URL ?? "http://localhost:8025")
     : "http://127.0.0.1:1";
-  run("bunx", testArgs, {
+  run("bun", testArgs, {
     cwd: join(target, "tests"),
     env: {
       ...process.env,

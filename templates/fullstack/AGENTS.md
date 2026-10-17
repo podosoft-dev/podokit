@@ -105,7 +105,9 @@ Merge added module settings from `.env.example` into an existing `.env`.
 - e2e (Playwright, ships in `tests/`): `{{rootRun}} test:e2e`. Run the whole suite on more
   workers with `E2E_WORKERS=2`, never `--workers`. Tag a test `{ tag: "@exclusive" }` when
   it changes state other tests rely on (a server-wide setting, a seeded account's profile);
-  tagged tests run alone after the rest. Give each test its own mail and SMS recipients and
+  tagged tests run alone after the rest, in a second Playwright run that `test:e2e` starts
+  even when the first one failed, so run the suite through `test:e2e`, not
+  `bunx playwright test`, on more workers. Give each test its own mail and SMS recipients and
   never empty the shared Mailpit inbox or SMS sink. See `tests/README.md`. The managed specs
   read the app's first screen, public pages, and seeded accounts from the owned
   `tests/helpers/app-paths.ts` (and `app-accounts.ts` with admin-dashboard): change those

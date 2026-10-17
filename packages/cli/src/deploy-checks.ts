@@ -161,9 +161,10 @@ export function connectionBudget(profile: AnyDeployProfile, modules: Set<string>
     perProcessTerms.push(`DB_AUTH_POOL_MAX ${authPool}`);
     perProcess += authPool;
   }
-  for (const pool of postgres.appPools ?? []) {
-    const size = poolSize(config, pool.sizeKey, 0);
-    perProcessTerms.push(`${pool.sizeKey} ${size}${pool.extraConnections ? ` + ${pool.extraConnections}` : ""}`);
+  for (const [index, pool] of (postgres.appPools ?? []).entries()) {
+    const [label, size] =
+      "sizeKey" in pool ? [pool.sizeKey, poolSize(config, pool.sizeKey, 0)] : [`appPools[${index}]`, pool.size];
+    perProcessTerms.push(`${label} ${size}${pool.extraConnections ? ` + ${pool.extraConnections}` : ""}`);
     perProcess += size + pool.extraConnections;
   }
   const worker = profile.workloads.worker;

@@ -45,16 +45,26 @@ Tag a test when it changes a server-wide setting (a feature flag, the
 authentication configuration such as SMTP, social providers, or sign-up
 approval, the site settings, or a module's settings) or the profile of a seeded
 account. Each project has an `<name>-exclusive` twin, such as `ui-exclusive`,
-that runs only the tagged tests, one at a time. With more than one worker the
-twins wait for every other test, so an exclusive test never runs alongside
-another one. Never empty the shared mail catcher or SMS sink in a test: send to
-an address or number of the test's own instead.
+that runs only the tagged tests, one at a time. Never empty the shared mail
+catcher or SMS sink in a test: send to an address or number of the test's own
+instead.
 
-More than one worker suits the whole suite. When a run selects exclusive tests
-with a file name, `--grep`, or `--project`, Playwright also runs every other test
-first, because the twins depend on them, and a test that fails there marks the
-exclusive tests as not run. Use the default single worker for a few files, and
-do not combine `--no-deps` with `E2E_WORKERS` above 1.
+The `test:e2e` scripts run `run-e2e.ts`, which hands its arguments (a file,
+`--grep`, `--project`) to Playwright. With more than one worker it runs
+Playwright twice: first every test not tagged `@exclusive` on those workers,
+then the tagged tests on one worker, even when a test failed in the first run.
+The suite fails when either run fails. The second run reports to
+`playwright-report/exclusive` and `test-results/exclusive`:
+
+```bash
+bunx playwright show-report playwright-report/exclusive
+```
+
+A plain `bunx playwright test` with `E2E_WORKERS` above 1 makes one run in which
+the twins depend on every other test: a failing test there leaves the exclusive
+tests not run, and selecting an exclusive test runs every other test first. Use
+`{{rootRun}} test:e2e` on more workers, and do not combine `--no-deps` with
+`E2E_WORKERS` above 1.
 
 Application-owned projects in `playwright.projects.cjs` get twins too. A project
 that another project depends on is a setup project and keeps a single copy.

@@ -294,6 +294,41 @@ export function assertRepeatOptions(repeat: RepeatOptions): void {
   if (repeat.timezone !== undefined && !hasCron) throw new Error("A job schedule's timezone applies only to cron");
 }
 
+/** Completed jobs a queue keeps by default after a scheduled run completes. */
+export const DEFAULT_SCHEDULE_KEEP_COMPLETED = 100;
+/** Failed jobs a queue keeps by default after a scheduled run fails. */
+export const DEFAULT_SCHEDULE_KEEP_FAILED = 1_000;
+
+/**
+ * How many finished jobs a schedule's runs leave behind. When a run finishes,
+ * the queue keeps the newest `keepCompleted` completed or `keepFailed` failed
+ * jobs named like it, jobs added with `enqueue()` included, and removes the
+ * older ones; 0 removes the run itself and no other job.
+ */
+export interface ScheduleOptions {
+  /** Defaults to `DEFAULT_SCHEDULE_KEEP_COMPLETED`. */
+  keepCompleted?: number;
+  /** Defaults to `DEFAULT_SCHEDULE_KEEP_FAILED`. */
+  keepFailed?: number;
+}
+
+/** A schedule's finished-job limits with the defaults applied. */
+export type ScheduleRetention = Required<ScheduleOptions>;
+
+/** Applies the defaults and throws unless each limit is a whole number of at least 0. */
+export function scheduleRetention(options: ScheduleOptions = {}): ScheduleRetention {
+  const retention = {
+    keepCompleted: options.keepCompleted ?? DEFAULT_SCHEDULE_KEEP_COMPLETED,
+    keepFailed: options.keepFailed ?? DEFAULT_SCHEDULE_KEEP_FAILED,
+  };
+  for (const [key, value] of Object.entries(retention)) {
+    if (!Number.isSafeInteger(value) || value < 0) {
+      throw new Error(`A job schedule's ${key} must be a whole number of at least 0`);
+    }
+  }
+  return retention;
+}
+
 export interface JobQueue {
   enqueue(name: string, payload: unknown, options?: EnqueueOptions): Promise<JobReference>;
   get(id: string): Promise<JobSnapshot | null>;
@@ -305,9 +340,16 @@ export interface JobQueue {
    * them, such as a restarted Redis without persistence, gets them back. It
    * resolves while the backend is unreachable and applies the schedule once it
    * is reachable; an invalid schedule rejects. A worker or `process()` handler
-   * for `name` runs the jobs. Missed times are not made up.
+   * for `name` runs the jobs. Missed times are not made up. Finished runs are
+   * removed beyond the limits in `options`; see `ScheduleOptions`.
    */
-  schedule(id: string, name: string, payload: unknown, repeat: RepeatOptions): Promise<void>;
+  schedule(
+    id: string,
+    name: string,
+    payload: unknown,
+    repeat: RepeatOptions,
+    options?: ScheduleOptions,
+  ): Promise<void>;
   /** Stops the schedule `id`. Jobs it already added stay. */
   unschedule(id: string): Promise<void>;
   close(): void | Promise<void>;

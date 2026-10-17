@@ -282,7 +282,7 @@ exceed it during a deployment.
 
 | Term | Connections |
 | --- | --- |
-| One API or worker process | `DB_POOL_MAX` (20) + 1 that the query pool opens to check a stalled server, `DB_AUTH_POOL_MAX` (10) with the `auth` module, and each pool in `dependencies.postgres.appPools`; each from `runtimeConfig`, else the default in parentheses |
+| One API or worker process | `DB_POOL_MAX` (20) + 1 that the query pool opens to check a stalled server, `DB_AUTH_POOL_MAX` (10) with the `auth` module, and each pool in `dependencies.postgres.appPools`; each from `runtimeConfig`, else the default in parentheses, except an application pool with a fixed `size` |
 | Between rollouts | API replicas + worker replicas, times one process |
 | A Kubernetes rollout | one surge pod more for the API and one for a worker, which the rendered `maxSurge: 1` allows; Compose replaces containers without a surge |
 | The migration | 2, beside the processes of the release still serving |
@@ -293,8 +293,10 @@ the pools, for example `"DB_POOL_MAX": "10"` and `"DB_AUTH_POOL_MAX": "8"`, or
 raise the limit. Behind a connection pooler such as PgBouncer, set
 `maxConnections` to the pooler's client limit instead.
 
-An application that opens a pool of its own lists it, with the `runtimeConfig`
-key that caps it and any connections it opens beyond the cap:
+An application that opens a pool of its own lists it with what caps it and any
+connections it opens beyond the cap. A pool sized from the environment names its
+`runtimeConfig` key in `sizeKey`; a pool whose size the code sets, such as a
+TypeORM data source that keeps the `pg` default of 10, states it in `size`:
 
 ```json
 {
@@ -303,14 +305,18 @@ key that caps it and any connections it opens beyond the cap:
     "postgres": {
       "mode": "inCluster",
       "maxConnections": 200,
-      "appPools": [{ "sizeKey": "REPORTS_DB_POOL_MAX", "extraConnections": 1 }]
+      "appPools": [
+        { "sizeKey": "REPORTS_DB_POOL_MAX", "extraConnections": 1 },
+        { "size": 10 }
+      ]
     }
   }
 }
 ```
 
-The profile fails to load when `runtimeConfig` does not set that key to a
-positive integer. On a PostgreSQL server PodoKit runs, `maxConnections` is also
+Each entry sets exactly one of `sizeKey` and `size`. The profile fails to load
+when `runtimeConfig` does not set a `sizeKey` to a positive integer, or when
+`size` is not a positive integer. On a PostgreSQL server PodoKit runs, `maxConnections` is also
 rendered as `-c max_connections=<n>`, which recreates the database container or
 pod once; for an `external` server it only records the server's setting.
 

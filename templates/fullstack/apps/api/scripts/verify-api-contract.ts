@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createApp } from "../src/app";
 import { validateEnv } from "../src/config/env.validation";
+import { PROVIDERS } from "../src/config/providers";
 import {
   assertApiContract,
   assertApplicationRoutes,
@@ -30,7 +31,7 @@ try {
   }
   const document: unknown = await response.json();
   const modules = manifest.modules.map((module) => module.name);
-  assertApiContract(document, manifest.template, modules);
+  assertApiContract(document, manifest.template, modules, PROVIDERS);
   assertApplicationRoutes(document, app.routes, APP_DOCUMENTED_ROUTES);
   process.stdout.write(
     `Verified ${documentedApiRoutes(document).size} documented API operations for ${manifest.template}, ` +

@@ -22,20 +22,17 @@ export function resolveE2eOptions(args, environment = process.env) {
   return { mode, grep, keep };
 }
 
-export function playwrightArguments({ mode, grep }) {
+// Bun runs the generated suite's runner, tests/run-e2e.ts, with these
+// arguments. With more than one worker it runs the tests tagged @exclusive in a
+// second Playwright run, which a failure in the first one does not skip.
+export function suiteArguments({ mode, grep }) {
   if (mode === "package-smoke") {
     throw new Error("package-smoke does not run Playwright");
   }
-  return [
-    "playwright",
-    "test",
-    ...(grep ? ["--grep", grep] : mode === "smoke" ? ["--grep", "@smoke"] : []),
-  ];
+  return ["run-e2e.ts", ...(grep ? ["--grep", grep] : mode === "smoke" ? ["--grep", "@smoke"] : [])];
 }
 
-// The generated suite runs tests tagged @exclusive after all others when it has
-// more than one worker. Playwright then runs those other tests in full even when
-// --grep selects only some of them, so only the full suite gets two workers.
+// The full suite runs on two workers; a filtered run is small and keeps one.
 export function playwrightWorkers({ mode, grep }, environment = process.env) {
   if (environment.E2E_WORKERS) return environment.E2E_WORKERS;
   return mode === "full" && !grep ? "2" : "1";

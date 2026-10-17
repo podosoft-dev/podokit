@@ -6,6 +6,71 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- The generated API contract check, `bun run contract`, expects the routes of a
+  provider module only while `PROVIDERS` selects its provider, including a
+  `<CAPABILITY>_PROVIDER` override. An app with both object-storage modules
+  installed and S3 selected failed on `GET /files/content/*`, and one that
+  selected the memory cache with `redis` installed failed on the `/cache`
+  routes. The check also covers the `jobs-local` routes.
+- Deployment profiles count application PostgreSQL pools of a fixed size:
+  an entry in `dependencies.postgres.appPools` takes `size` instead of
+  `sizeKey` when the application's code sets the pool's size, such as a
+  TypeORM data source with the `pg` default of 10. `appPools` accepted only a
+  `sizeKey`, so such a pool was refused as an unknown key or left out, and
+  `podo deploy doctor` and `podo deploy plan` under-counted the connections a
+  deployment can open. Each entry sets exactly one of `sizeKey` and `size`.
+- `JobQueue.schedule()` no longer keeps every finished run. A schedule added
+  its jobs without removal options, so BullMQ kept each completed and failed
+  run in Redis (86,400 a day for a schedule every second) and the local
+  provider kept the same rows in `podokit_job`. When a scheduled run finishes,
+  both providers now keep the newest 100 completed and 1000 failed jobs of its
+  name, jobs added with `enqueue()` included, and remove older ones. An
+  optional fifth argument, `ScheduleOptions`, sets `keepCompleted` and
+  `keepFailed`; 0 removes only the finished run, and a negative or fractional
+  limit rejects. `@podosoft/podokit-runtime` exports `ScheduleOptions`,
+  `scheduleRetention()`, and the default limits.
+- The generated admin navigation unit test, `apps/web/src/lib/admin/nav.test.ts`,
+  failed in apps whose modules add admin pages, such as `blog` and `analytics`,
+  because its expected list left out their entries. It now stands in for the
+  module entries as it does for the application's and checks that they follow
+  the application's entries and come before Settings. The CI gate's generated
+  app installs `blog` and `analytics`, which `scripts/dev-app.mjs` now adds from
+  the local packages.
+- The generated theme spec, `tests/ui/theme-mode.ui.spec.ts`, failed on every
+  run against a development server: after reloading the page it opened the
+  theme menu before the page had hydrated, so the click did nothing. It now
+  waits with the new `hydrated(page)` from `tests/helpers/hydration.ts`, finds
+  the toggle by its new `data-testid="theme-toggle"`, and opens the
+  `accountMenu` page from `tests/helpers/app-paths.ts`, so it also works with
+  an application's own header.
+- The generated API build test, `apps/api/src/build.spec.ts`, copied the
+  application's `scripts/build.extensions.mjs` into its temporary builds, so
+  four of its tests failed as soon as an application listed a build target of
+  its own. Each build now starts without application targets, and the tests
+  of `appBuildTargets` pass their own file. The CI gate's generated app lists
+  an API build target of its own and runs the built entry point.
+- A failing test no longer keeps the tests tagged `@exclusive` from running.
+  With `E2E_WORKERS` above 1 their twin projects depended on every other test
+  project, and Playwright skips a project whose dependency failed, so one
+  failure left about 40 exclusive tests not run. The `test:e2e` scripts now
+  start the suite through the new `tests/run-e2e.ts`: it runs the other tests
+  first and the exclusive ones in a second Playwright run on one worker, even
+  after a failure, and fails when either run fails. The second run writes its
+  results and HTML report to `exclusive/` subfolders. A filter applies to both
+  runs, so selecting an exclusive test no longer runs every other test first.
+  A single `bunx playwright test` on more workers keeps the old ordering and
+  warns about it. The Outer harness runs the suite through `run-e2e.ts`.
+- The `object-storage-s3`, `object-storage-local`, and `sse` specs signed in as
+  `admin@example.com` with the default password, or the `E2E_ADMIN_*`
+  variables, and ignored the application's `tests/helpers/app-accounts.ts`.
+  They now sign in through the new `tests/helpers/seeded-admin.ts`, which
+  reads the same values as `accounts.ts` and returns null in an app without
+  `admin-dashboard`, where those tests skip. The check that managed specs name
+  seeded accounts only through the account helpers also catches `E2E_*`
+  account variables and covers the external module packages.
+
 ## [1.6.0] - 2026-10-17
 
 ### Added
