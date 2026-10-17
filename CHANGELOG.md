@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- The generated API contract check, `bun run contract`, expects the routes of a
+  provider module only while `PROVIDERS` selects its provider, including a
+  `<CAPABILITY>_PROVIDER` override. An app with both object-storage modules
+  installed and S3 selected failed on `GET /files/content/*`, and one that
+  selected the memory cache with `redis` installed failed on the `/cache`
+  routes. The check also covers the `jobs-local` routes.
+
 ## [1.6.0] - 2026-10-17
 
 ### Added
