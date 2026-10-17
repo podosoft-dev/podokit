@@ -69,20 +69,36 @@ deletion, automatic logout, or audit logging, the site settings and favicon,
 and module settings such as analytics) and the profile of a seeded account. The
 managed config gives every test project an `<name>-exclusive` twin, such as
 `api-exclusive` and `ui-exclusive`, that runs only the tagged tests on one
-worker. With one worker the twins come last; with more, each twin depends on
-every other test project and on the twin before it, so an exclusive test never
-runs alongside another test. Projects that applications add in
-`tests/playwright.projects.cjs` get twins as well, except setup projects that
-another project depends on. Tests never empty the shared inbox or sink; each
-one mails and texts recipients of its own.
+worker. Projects that applications add in `tests/playwright.projects.cjs` get
+twins as well, except setup projects that another project depends on. Tests
+never empty the shared inbox or sink; each one mails and texts recipients of
+its own.
 
-Playwright runs a project's dependencies in full. With more than one worker, a
-run that selects exclusive tests with a file name, `--grep`, or `--project`
-therefore runs every other test first, and a test that fails there marks the
-exclusive tests as not run. Use more workers for the whole suite and the default
-single worker for a few files. The global setup refuses `--workers` above 1
-without `E2E_WORKERS`, because the projects are already built by then; do not
-combine `--no-deps` with `E2E_WORKERS` above 1 either.
+The `test:e2e` scripts start the suite through `tests/run-e2e.ts`, which passes
+its arguments (a file, `--grep`, `--project`, and so on) to Playwright. With one
+worker it makes a single Playwright run, and the twins need no ordering. With
+`E2E_WORKERS` above 1 it makes two runs:
+
+1. The tests not tagged `@exclusive`, on `E2E_WORKERS` workers.
+2. The tagged tests, on one worker, after the first run ends, even when a test
+   failed there.
+
+The suite fails when either run fails, and each run reports only its own tests:
+the first in `tests/playwright-report` and `tests/test-results`, the second in
+their `exclusive/` subfolders (`bunx playwright show-report
+playwright-report/exclusive`). Both runs start with the setup project and end
+with the cleanup project, and a filter applies to both, so a run of a few files
+on more workers stays small. A run that finds no tests of one kind passes that
+run.
+
+A single `bunx playwright test` with `E2E_WORKERS` above 1 still keeps exclusive
+tests apart: each twin depends on every other test project and on the twin
+before it. Playwright, though, skips a project whose dependency failed, so one
+failing test leaves every exclusive test not run, and it runs dependencies in
+full, so selecting an exclusive test runs every other test first. The global
+setup warns about this; use `bun run test:e2e` instead. The global setup refuses
+`--workers` above 1 without `E2E_WORKERS`, because the projects are already
+built by then; do not combine `--no-deps` with `E2E_WORKERS` above 1 either.
 
 Install the browser once from the generated project with:
 
@@ -167,9 +183,10 @@ node scripts/e2e-ci.mjs --grep "magic link"
   repeating the browser matrix; Changesets version PRs use it.
 - `--grep` narrows feature scenarios but still performs the faithful package and
   generated-app setup.
-- The full suite runs with `E2E_WORKERS=2`; smoke and `--grep` runs keep one
-  worker, because with more a selected exclusive test pulls in every other
-  test. Set `E2E_WORKERS` to override either.
+- Every mode runs the generated suite through `tests/run-e2e.ts`. The full suite
+  runs with `E2E_WORKERS=2`, so a failing test does not keep the exclusive tests
+  from running; smoke and `--grep` runs are small and keep one worker. Set
+  `E2E_WORKERS` to override either.
 
 The harness publishes the template engine, contracts, auth helpers, API client,
 CLI, MCP server, and external modules to Verdaccio. It then uses the real CLI,
@@ -259,6 +276,13 @@ Changes made after a measurement:
   phase from 134 to 93 seconds in two runs each, without a failure; the
   exclusive tests take about 40 seconds of either. Running the require-2fa test
   among the others again made an administrator request fail with `403`.
+- With more than one worker a failing test left every exclusive test not run:
+  36 of them in the 12-module app with one deliberately failing test
+  (2026-10-17). `tests/run-e2e.ts` now runs them in a second Playwright run,
+  which ran all 36 after the same failure. The second run seeds the accounts
+  and cleans up again; the Outer full run with S3 and SMTP (241 tests,
+  `E2E_WORKERS=2`) took 47.6 and 37.2 seconds for the two runs, 85.8 seconds of
+  Playwright and 129 seconds in all (2026-10-17).
 - npm's delay is inherent. Poll it in the background, for example
   `until npm view @podosoft/podokit@<version> version; do sleep 30; done`.
 

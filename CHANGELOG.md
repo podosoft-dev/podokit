@@ -51,6 +51,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   its own. Each build now starts without application targets, and the tests
   of `appBuildTargets` pass their own file. The CI gate's generated app lists
   an API build target of its own and runs the built entry point.
+- A failing test no longer keeps the tests tagged `@exclusive` from running.
+  With `E2E_WORKERS` above 1 their twin projects depended on every other test
+  project, and Playwright skips a project whose dependency failed, so one
+  failure left about 40 exclusive tests not run. The `test:e2e` scripts now
+  start the suite through the new `tests/run-e2e.ts`: it runs the other tests
+  first and the exclusive ones in a second Playwright run on one worker, even
+  after a failure, and fails when either run fails. The second run writes its
+  results and HTML report to `exclusive/` subfolders. A filter applies to both
+  runs, so selecting an exclusive test no longer runs every other test first.
+  A single `bunx playwright test` on more workers keeps the old ordering and
+  warns about it. The Outer harness runs the suite through `run-e2e.ts`.
 
 ## [1.6.0] - 2026-10-17
 

@@ -8,7 +8,7 @@ import {
   createPhaseTimer,
   INSTALL_RETRY_DELAYS_MS,
   localRegistryEnvironment,
-  playwrightArguments,
+  suiteArguments,
   playwrightWorkers,
   resolveE2eOptions,
   retryTransientInstall,
@@ -61,21 +61,14 @@ test("resolves full, smoke, grep, and package-smoke modes", () => {
   );
 });
 
-test("builds Playwright arguments only for browser modes", () => {
-  assert.deepEqual(playwrightArguments({ mode: "full" }), ["playwright", "test"]);
-  assert.deepEqual(playwrightArguments({ mode: "smoke" }), [
-    "playwright",
-    "test",
-    "--grep",
-    "@smoke",
-  ]);
-  assert.deepEqual(playwrightArguments({ mode: "full", grep: "account" }), [
-    "playwright",
-    "test",
-    "--grep",
-    "account",
-  ]);
-  assert.throws(() => playwrightArguments({ mode: "package-smoke" }), /does not run Playwright/);
+test("runs the suite through its runner only in browser modes", () => {
+  assert.deepEqual(suiteArguments({ mode: "full" }), ["run-e2e.ts"]);
+  assert.deepEqual(suiteArguments({ mode: "smoke" }), ["run-e2e.ts", "--grep", "@smoke"]);
+  assert.deepEqual(suiteArguments({ mode: "full", grep: "account" }), ["run-e2e.ts", "--grep", "account"]);
+  assert.throws(() => suiteArguments({ mode: "package-smoke" }), /does not run Playwright/);
+
+  const source = readFileSync(join(repoRoot, "scripts/e2e-ci.mjs"), "utf8");
+  assert.match(source, /run\("bun", testArgs, \{\n    cwd: join\(target, "tests"\),/);
 });
 
 test("runs only the full suite on more than one worker", () => {
