@@ -45,6 +45,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   the toggle by its new `data-testid="theme-toggle"`, and opens the
   `accountMenu` page from `tests/helpers/app-paths.ts`, so it also works with
   an application's own header.
+- The generated API build test, `apps/api/src/build.spec.ts`, copied the
+  application's `scripts/build.extensions.mjs` into its temporary builds, so
+  four of its tests failed as soon as an application listed a build target of
+  its own. Each build now starts without application targets, and the tests
+  of `appBuildTargets` pass their own file. The CI gate's generated app lists
+  an API build target of its own and runs the built entry point.
 
 ## [1.6.0] - 2026-10-17
 

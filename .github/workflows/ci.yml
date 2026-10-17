@@ -47,8 +47,14 @@ jobs:
             --no-build
           (
             cd "$app_dir"
+            # An API build target of the app's own, as applications add in the
+            # owned build.extensions.mjs; the managed tests must not depend on it.
+            echo 'export const appBuildTargets = [{ entrypoint: "scripts/app-task.ts", outdir: "dist/scripts" }];' \
+              > apps/api/scripts/build.extensions.mjs
+            echo 'console.log("app task");' > apps/api/scripts/app-task.ts
             bun run lint
             bun run test
             bun run build
+            test "$(bun apps/api/dist/scripts/app-task.js)" = "app task"
             node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" status --json | grep -q '"runtime": "bun"'
           )
