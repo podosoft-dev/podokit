@@ -1,5 +1,27 @@
 # @podosoft/podokit
 
+## 1.6.1
+
+### Patch Changes
+
+- [#244](https://github.com/podosoft-dev/podokit/pull/244) [`9154af2`](https://github.com/podosoft-dev/podokit/commit/9154af27522620d6147ca5a6e3d4357d3e9f2b7c) Thanks [@korone00](https://github.com/korone00)! - Make the generated admin navigation unit test stand in for module entries the way it does for the application's, so it no longer fails in apps whose modules add admin pages, such as blog and analytics.
+
+- [#244](https://github.com/podosoft-dev/podokit/pull/244) [`9154af2`](https://github.com/podosoft-dev/podokit/commit/9154af27522620d6147ca5a6e3d4357d3e9f2b7c) Thanks [@korone00](https://github.com/korone00)! - Start the temporary builds of the generated API build test without the application's own build targets, so an app that lists entry points in `scripts/build.extensions.mjs` no longer fails four of its tests.
+
+- [#244](https://github.com/podosoft-dev/podokit/pull/244) [`9154af2`](https://github.com/podosoft-dev/podokit/commit/9154af27522620d6147ca5a6e3d4357d3e9f2b7c) Thanks [@korone00](https://github.com/korone00)! - Remove finished runs of `JobQueue.schedule()` beyond a limit instead of keeping every one: after a scheduled run finishes, the BullMQ and local providers keep the newest 100 completed and 1000 failed jobs of its name, and a new optional `ScheduleOptions` argument sets `keepCompleted` and `keepFailed` (0 removes only the run). The runtime exports `ScheduleOptions`, `scheduleRetention()`, and the default limits.
+
+- [#244](https://github.com/podosoft-dev/podokit/pull/244) [`9154af2`](https://github.com/podosoft-dev/podokit/commit/9154af27522620d6147ca5a6e3d4357d3e9f2b7c) Thanks [@korone00](https://github.com/korone00)! - Make the generated API contract check (`bun run contract`) expect a provider module's routes only while `PROVIDERS` selects its provider, including a `<CAPABILITY>_PROVIDER` override, so an app with both object-storage, cache, or jobs providers installed no longer fails on the unselected module's routes. The check now also covers the `jobs-local` routes.
+
+- [#244](https://github.com/podosoft-dev/podokit/pull/244) [`9154af2`](https://github.com/podosoft-dev/podokit/commit/9154af27522620d6147ca5a6e3d4357d3e9f2b7c) Thanks [@korone00](https://github.com/korone00)! - Run the tests tagged `@exclusive` in a second Playwright run when `E2E_WORKERS` is above 1. The `test:e2e` scripts start the suite through the new `tests/run-e2e.ts`, so a failing test no longer leaves the exclusive tests not run, and the suite still fails when either run fails.
+
+- [#244](https://github.com/podosoft-dev/podokit/pull/244) [`9154af2`](https://github.com/podosoft-dev/podokit/commit/9154af27522620d6147ca5a6e3d4357d3e9f2b7c) Thanks [@korone00](https://github.com/korone00)! - Let `dependencies.postgres.appPools` entries in a deployment profile state a fixed `size` instead of a `sizeKey`, so `podo deploy doctor` and `podo deploy plan` count application pools whose size the code sets, such as a TypeORM data source with the `pg` default of 10, instead of rejecting them and under-counting the connections.
+
+- [#244](https://github.com/podosoft-dev/podokit/pull/244) [`9154af2`](https://github.com/podosoft-dev/podokit/commit/9154af27522620d6147ca5a6e3d4357d3e9f2b7c) Thanks [@korone00](https://github.com/korone00)! - Sign the object storage and SSE specs in as the administrator through the new `tests/helpers/seeded-admin.ts`, which reads the application's `app-accounts.ts` and `E2E_*` values, instead of a hard-coded `admin@example.com` and password, and extend the check that managed specs name seeded accounts only through the account helpers to `E2E_*` variables and the external module packages.
+
+- [#244](https://github.com/podosoft-dev/podokit/pull/244) [`9154af2`](https://github.com/podosoft-dev/podokit/commit/9154af27522620d6147ca5a6e3d4357d3e9f2b7c) Thanks [@korone00](https://github.com/korone00)! - Make the generated theme spec wait for hydration after it reloads the page and find the theme toggle by its new `data-testid="theme-toggle"` on the `accountMenu` page from `tests/helpers/app-paths.ts`, so it no longer fails against a development server or with an application's own header.
+- Updated dependencies [[`9154af2`](https://github.com/podosoft-dev/podokit/commit/9154af27522620d6147ca5a6e3d4357d3e9f2b7c)]:
+  - @podosoft/podokit-runtime@0.5.1
+
 ## 1.6.0
 
 ### Minor Changes
