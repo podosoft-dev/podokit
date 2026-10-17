@@ -1,5 +1,13 @@
 # @podosoft/podokit-contracts
 
+## 0.6.0
+
+### Minor Changes
+
+- [#241](https://github.com/podosoft-dev/podokit/pull/241) [`9b5322b`](https://github.com/podosoft-dev/podokit/commit/9b5322bc5e4f2cea726dd62929cce0470eb3b14d) Thanks [@korone00](https://github.com/korone00)! - Let `AppException` carry `details`. Its optional fourth argument is returned as `error.details` in the API's error envelope, so apps stop subclassing it and editing the managed `app.ts`. The API's error rendering moved into the exported `renderError()`.
+
+- [#241](https://github.com/podosoft-dev/podokit/pull/241) [`9b5322b`](https://github.com/podosoft-dev/podokit/commit/9b5322bc5e4f2cea726dd62929cce0470eb3b14d) Thanks [@korone00](https://github.com/korone00)! - Add the auth module's application-owned `apps/api/src/settings/app-flags.ts` with `APP_FLAG_DEFAULTS`. Application flags are stored with the feature flags, changed with `PUT /account/settings`, read with `SettingsService.getBool()`, and returned as `appFlags` by `GET /account/capabilities` (`Capabilities.appFlags`), so apps stop editing the managed `flag-defaults.ts` and adding their own capability routes. A name PodoKit already uses fails at startup.
+
 ## 0.5.0
 
 ### Minor Changes

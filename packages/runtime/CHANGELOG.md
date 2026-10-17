@@ -1,5 +1,11 @@
 # @podosoft/podokit-runtime
 
+## 0.5.0
+
+### Minor Changes
+
+- [#241](https://github.com/podosoft-dev/podokit/pull/241) [`9b5322b`](https://github.com/podosoft-dev/podokit/commit/9b5322bc5e4f2cea726dd62929cce0470eb3b14d) Thanks [@korone00](https://github.com/korone00)! - Repeat jobs through the jobs contract. `JobQueue.schedule(id, name, payload, { cron | everyMs, timezone? })` adds a job on a cron expression or a fixed interval and replaces an earlier schedule with the same id, and `unschedule(id)` stops it. The BullMQ provider stores the schedules as Redis job schedulers and the local provider adds the jobs from a timer, once per time; both apply their schedules again when the connection is restored, resolve `schedule()` while the backend is down, and reject an invalid schedule. The runtime package exports `RepeatOptions`, `assertRepeatOptions()`, and `MIN_REPEAT_INTERVAL_MS`. Implementations of `JobQueue`, including test fakes, need the two new methods.
+
 ## 0.4.1
 
 ### Patch Changes

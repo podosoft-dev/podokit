@@ -1,5 +1,11 @@
 # @podosoft/podokit-module-blog
 
+## 1.1.2
+
+### Patch Changes
+
+- [#238](https://github.com/podosoft-dev/podokit/pull/238) [`a514856`](https://github.com/podosoft-dev/podokit/commit/a514856c2b2434bbd6904d33caff8206652a2bff) Thanks [@korone00](https://github.com/korone00)! - Keep the generated e2e specs from depending on data other tests change at the same time. `clearMailpit()` and `clearSms()` are removed, because emptying the shared Mailpit inbox or SMS sink lost the messages other tests were waiting for; every spec already mails and texts recipients of its own. The organization spec picks the seeded user as a manager instead of the first user listed, and the blog comment validation spec posts to a post of its own.
+
 ## 1.1.1
 
 ### Patch Changes
