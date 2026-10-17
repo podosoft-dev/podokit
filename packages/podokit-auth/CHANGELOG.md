@@ -1,5 +1,13 @@
 # @podosoft/podokit-auth
 
+## 0.6.0
+
+### Minor Changes
+
+- [#241](https://github.com/podosoft-dev/podokit/pull/241) [`9b5322b`](https://github.com/podosoft-dev/podokit/commit/9b5322bc5e4f2cea726dd62929cce0470eb3b14d) Thanks [@korone00](https://github.com/korone00)! - Record the audit log in apps that never set its toggle. With the audit-log module installed, an unset or empty `AUDIT_LOG_ENABLED` now means on, only `false` turns it off, and the admin Settings toggle still overrides both; before, a deployment without the variable and without a saved setting recorded nothing. The API logs one warning at startup while the audit log is off. `createConfigStore()` and `envAuthConfig()` in `@podosoft/podokit-auth` take a `defaults` object for values that neither a row nor the environment sets, and the auth module keeps them in `AUTH_CONFIG_DEFAULTS` (`apps/api/src/auth/auth-config-store.ts`), where the audit-log module adds `auditLog: true`.
+
+- [#241](https://github.com/podosoft-dev/podokit/pull/241) [`9b5322b`](https://github.com/podosoft-dev/podokit/commit/9b5322bc5e4f2cea726dd62929cce0470eb3b14d) Thanks [@korone00](https://github.com/korone00)! - Name the app in sign-in prompts. Better Auth's `appName`, the TOTP issuer shown by authenticator apps, and the passkey relying-party name shown by browsers now come from one value: `AUTH_APP_NAME` when set, otherwise the admin site name (`site.name`), otherwise the project name. Before, users saw "Better Auth" and "PodoKit". `AuthConfig` gains `appName`, and `createConfigStore()` takes `appNameSetting` (an app_setting key whose change changes the config version) and `defaults.appName`.
+
 ## 0.5.0
 
 ### Minor Changes

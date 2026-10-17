@@ -5,7 +5,7 @@
   "targetApp": "api",
   "dependencies": {
     "nodemailer": "^9.0.5",
-    "@podosoft/podokit-auth": "^0.5.0"
+    "@podosoft/podokit-auth": "^0.6.0"
   },
   "devDependencies": {
     "@types/nodemailer": "^8.0.1"
