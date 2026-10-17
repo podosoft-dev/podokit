@@ -14,6 +14,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   installed and S3 selected failed on `GET /files/content/*`, and one that
   selected the memory cache with `redis` installed failed on the `/cache`
   routes. The check also covers the `jobs-local` routes.
+- Deployment profiles count application PostgreSQL pools of a fixed size:
+  an entry in `dependencies.postgres.appPools` takes `size` instead of
+  `sizeKey` when the application's code sets the pool's size, such as a
+  TypeORM data source with the `pg` default of 10. `appPools` accepted only a
+  `sizeKey`, so such a pool was refused as an unknown key or left out, and
+  `podo deploy doctor` and `podo deploy plan` under-counted the connections a
+  deployment can open. Each entry sets exactly one of `sizeKey` and `size`.
 
 ## [1.6.0] - 2026-10-17
 

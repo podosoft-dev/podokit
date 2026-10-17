@@ -300,14 +300,14 @@ export function parseRuntimeConfig(runtimeConfig: Record<string, unknown>): Reco
 
 /**
  * An application-owned PostgreSQL pool each API or worker process opens beside
- * PodoKit's own: `sizeKey` names the runtimeConfig key that caps it, and
+ * PodoKit's own. Either `sizeKey` names the runtimeConfig key that caps it, or
+ * `size` is the cap the application's code sets, such as a driver's default.
  * `extraConnections` counts connections it opens beyond that cap, such as one to
  * check a server that stopped answering.
  */
-export interface AppConnectionPool {
-  sizeKey: string;
-  extraConnections: number;
-}
+export type AppConnectionPool =
+  | { sizeKey: string; extraConnections: number }
+  | { size: number; extraConnections: number };
 
 /** What the connection budget needs to know about the database, beyond its mode. */
 export interface PostgresBudgetProfile {
@@ -349,7 +349,26 @@ export function parsePostgresBudget(
     parsed.appPools = value.appPools.map((entry, index): AppConnectionPool => {
       const entryField = `${field}.appPools[${index}]`;
       if (!isRecord(entry)) throw new Error(`Deployment profile field "${entryField}" must be an object.`);
-      assertOnlyKeys(entry, ["sizeKey", "extraConnections"], entryField);
+      assertOnlyKeys(entry, ["sizeKey", "size", "extraConnections"], entryField);
+      if ((entry.sizeKey === undefined) === (entry.size === undefined)) {
+        throw new Error(
+          `Deployment profile field "${entryField}" must set either sizeKey, the runtimeConfig key that caps the pool, ` +
+            "or size, the cap the application sets itself.",
+        );
+      }
+      const extraConnections = entry.extraConnections ?? 0;
+      if (typeof extraConnections !== "number" || !Number.isInteger(extraConnections) || extraConnections < 0) {
+        throw new Error(`Deployment profile field "${entryField}.extraConnections" must be a non-negative integer.`);
+      }
+      if (entry.size !== undefined) {
+        const size = entry.size;
+        if (typeof size !== "number" || !Number.isInteger(size) || size < 1 || size > MAX_POSTGRES_CONNECTIONS) {
+          throw new Error(
+            `Deployment profile field "${entryField}.size" must be an integer from 1 to ${MAX_POSTGRES_CONNECTIONS}.`,
+          );
+        }
+        return { size, extraConnections };
+      }
       const sizeKey = requiredString(entry, "sizeKey");
       if (!/^[A-Z][A-Z0-9_]*$/.test(sizeKey) || PODOKIT_POOL_KEYS.includes(sizeKey) || seen.has(sizeKey)) {
         throw new Error(
@@ -362,10 +381,6 @@ export function parsePostgresBudget(
         throw new Error(
           `Deployment profile field "${entryField}.sizeKey" names ${sizeKey}, which runtimeConfig must set to a positive integer.`,
         );
-      }
-      const extraConnections = entry.extraConnections ?? 0;
-      if (typeof extraConnections !== "number" || !Number.isInteger(extraConnections) || extraConnections < 0) {
-        throw new Error(`Deployment profile field "${entryField}.extraConnections" must be a non-negative integer.`);
       }
       return { sizeKey, extraConnections };
     });

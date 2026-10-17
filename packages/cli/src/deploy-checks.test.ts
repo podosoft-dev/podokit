@@ -104,6 +104,28 @@ describe("PostgreSQL connection budget", () => {
     expect(budgetFinding(root)).toMatchObject({ ok: true, warning: true });
   });
 
+  it("counts an application pool of a fixed size", () => {
+    const root = project("docker-compose", ["auth"]);
+    // Without its own pool, two API containers hold 2 x 31 and the migration 2: 64 of 77.
+    edit(root, (value) => {
+      value.dependencies.postgres.maxConnections = 80;
+    });
+    expect(budgetFinding(root)).toMatchObject({ ok: true });
+    // A TypeORM pool keeps pg's default of 10 connections without an environment key.
+    const profile = edit(root, (value) => {
+      value.dependencies.postgres.appPools = [{ size: 10 }, { sizeKey: "SDD_DB_POOL_MAX", extraConnections: 1 }];
+      value.runtimeConfig.SDD_DB_POOL_MAX = "4";
+    });
+    expect(connectionBudget(profile, installedModules(root))).toMatchObject({
+      perProcess: 46,
+      perProcessTerms: ["DB_POOL_MAX 20 + 1", "DB_AUTH_POOL_MAX 10", "appPools[0] 10", "SDD_DB_POOL_MAX 4 + 1"],
+      steady: 92,
+      peak: 94,
+    });
+    expect(budgetFinding(root)).toMatchObject({ ok: false });
+    expect(budgetFinding(root)?.message).toContain("appPools[0] 10");
+  });
+
   it("adds the migration but no surge for Compose", () => {
     const root = project("docker-compose", ["auth", "bullmq"]);
     const budget = connectionBudget(loadAnyDeploymentProfile(root, "production"), installedModules(root));
@@ -142,8 +164,14 @@ describe("PostgreSQL connection budget", () => {
     [
       { appPools: [{ sizeKey: "SDD_DB_POOL_MAX", size: 10 }] },
       { SDD_DB_POOL_MAX: "10" },
-      "contains unknown key(s): size",
+      "must set either sizeKey, the runtimeConfig key that caps the pool, or size",
     ],
+    [{ appPools: [{ extraConnections: 1 }] }, {}, "must set either sizeKey"],
+    [{ appPools: [{ size: 0 }] }, {}, "appPools[0].size\" must be an integer from 1 to 262143"],
+    [{ appPools: [{ size: "10" }] }, {}, "appPools[0].size\" must be an integer from 1 to 262143"],
+    [{ appPools: [{ size: 2.5 }] }, {}, "appPools[0].size\" must be an integer from 1 to 262143"],
+    [{ appPools: [{ size: 10, extraConnections: -1 }] }, {}, "must be a non-negative integer"],
+    [{ appPools: [{ size: 10, name: "typeorm" }] }, {}, "contains unknown key(s): name"],
   ])("rejects a budget setting it cannot use %#", (postgres, runtimeConfig, message) => {
     for (const driver of ["kubernetes-helm", "docker-compose"] as const) {
       const root = project(driver, ["auth"]);
