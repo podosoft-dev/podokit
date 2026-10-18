@@ -366,8 +366,13 @@ export const appPaths: Partial<AppPaths> = {
 With `admin-dashboard`, `tests/helpers/app-accounts.ts` names the seeded
 accounts when an application's differ from `admin@example.com` and
 `user@example.com`. `E2E_ADMIN_EMAIL`, `E2E_USER_EMAIL`, `E2E_ADMIN_PASSWORD`,
-and `E2E_USER_PASSWORD` win over it. The seed signs the accounts up, so list the
-administrator's address in the API's `ADMIN_EMAILS`. Specs of modules that do
+and `E2E_USER_PASSWORD` win over it. The seed signs the user up but only signs
+the administrator in, because the API refuses a sign-up with an `ADMIN_EMAILS`
+address. Create the administrator first: for the default accounts, run
+`ADMIN_BOOTSTRAP_EMAIL=admin@example.com ADMIN_BOOTSTRAP_PASSWORD='Podokit3e-Str0ng!pw' ADMIN_BOOTSTRAP_NAME=Admin bun run --cwd apps/api admin:bootstrap`
+with `admin@example.com` in `ADMIN_EMAILS`, as `scripts/e2e-ci.mjs` does after the
+migrations. Set `E2E_UNCLAIMED_ADMIN_EMAIL` to an `ADMIN_EMAILS` address without an
+account to run the test that a sign-up cannot claim it. Specs of modules that do
 not require `admin-dashboard`, such as the object storage and SSE specs, sign
 in as the administrator through `tests/helpers/seeded-admin.ts`, which reads the
 same values and skips those tests in an app without that module.

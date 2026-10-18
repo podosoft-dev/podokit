@@ -1976,7 +1976,7 @@ describe("audit hook registration", () => {
     const authPath = join(project, AUTH);
     writeFileSync(
       authPath,
-      readFileSync(authPath, "utf8").replace("const adminEmails = new Set(", "// application note\nconst adminEmails = new Set("),
+      readFileSync(authPath, "utf8").replace("const webOrigins = ", "// application note\nconst webOrigins = "),
     );
 
     const result = applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
@@ -1984,7 +1984,7 @@ describe("audit hook registration", () => {
     expect(result.merged).toContain(AUTH);
     expect(result.conflicts).toEqual([]);
     const auth = readFileSync(authPath, "utf8");
-    expect(auth).toContain("// application note\nconst adminEmails = new Set(");
+    expect(auth).toContain("// application note\nconst webOrigins = ");
     expectPluginOnly(auth);
   });
 });
