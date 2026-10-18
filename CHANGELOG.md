@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- The generated theme spec, `tests/ui/theme-mode.ui.spec.ts`, skipped in apps
+  whose `tests/helpers/app-paths.ts` sets `accountMenu` to `null`, so it checked
+  nothing there even when the app renders the theme toggle on another page. It
+  now opens the new `themeToggle` entry, which defaults to `accountMenu` and,
+  when that is `null`, to `/admin`, whose header renders the managed toggle for
+  the signed-in administrator. Set `themeToggle` to a page of the app's own, or
+  to `null` to skip the test.
+
 ## [1.6.1] - 2026-10-17
 
 ### Fixed

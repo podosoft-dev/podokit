@@ -334,7 +334,8 @@ those files instead of editing or ejecting managed specs.
 | `homeReady(page)` | the page's `h1` | the smoke test and the sidebar's home link |
 | `indexable` | `["/"]` | public pages that must not carry `X-Robots-Tag` |
 | `footer` | `/login` | a public page that renders `SiteFooter` (`data-testid="site-footer"`); `null` skips the footer test |
-| `accountMenu` | `/` | a page that renders `LanguageSwitch`, `ThemeToggle` (`data-testid="theme-toggle"`), and `AccountMenu`; the theme and account menu tests use it, and `null` skips them |
+| `accountMenu` | `/` | a page that renders `LanguageSwitch`, `ThemeToggle`, and `AccountMenu`; the account menu tests use it, and `null` skips them |
+| `themeToggle` | `accountMenu`, or `/admin` when that is `null` | a page that renders `ThemeToggle` (`data-testid="theme-toggle"`) for the signed-in administrator; the theme test uses it, and `null` skips it |
 
 ```ts
 import type { AppPaths } from "./paths";
