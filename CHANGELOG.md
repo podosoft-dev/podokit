@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- The generated API's database spec, `apps/api/src/database/database.spec.ts`,
+  checked that a failed host lookup is recognized as an unavailable database by
+  fetching `http://database.invalid/` through the system resolver and waiting up
+  to 30 seconds. On CI runners whose resolver stopped answering, the lookup
+  failed only after two 16-second resolver timeouts, so the test timed out in
+  every generated app's CI. The test now asks a DNS server that it runs on a
+  local UDP port and that answers `NXDOMAIN`, which takes milliseconds, and a new
+  test asks one that never answers, which fails with `ETIMEOUT` after about a
+  second. Both are real lookups through the runtime's resolver and neither
+  depends on the machine's DNS.
+
 ## [1.6.2] - 2026-10-18
 
 ### Fixed
