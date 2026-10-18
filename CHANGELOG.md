@@ -15,6 +15,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   when that is `null`, to `/admin`, whose header renders the managed toggle for
   the signed-in administrator. Set `themeToggle` to a page of the app's own, or
   to `null` to skip the test.
+- An organization's `list-members` answered 500 on PostgreSQL when a filter or
+  an offset matched no member: Better Auth's Kysely adapter sends an `in` filter
+  on an empty array as `IN ()`, which PostgreSQL rejects. The `auth` module now
+  runs Better Auth's PostgreSQL queries through a Kysely instance with a plugin
+  that sends an empty `in` list as `1 = 0` and an empty `not in` list as
+  `1 = 1`, and the generated API depends on `kysely` directly. SQLite accepts
+  `IN ()` and is unchanged.
 
 ## [1.6.1] - 2026-10-17
 
