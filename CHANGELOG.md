@@ -74,6 +74,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   anything and lists the files that need the merge; `--from <dir>` still takes
   precedence. Edited files without a merge base, such as one the new version
   removes, are listed as skipped with the reason.
+- Rolling updates on Kubernetes no longer answer requests with 502 while a
+  replaced API or web pod leaves. A terminating pod still receives new
+  connections until the nodes and the ingress controller drop it from its
+  Service's endpoints, but the servers stop accepting connections on `SIGTERM`.
+  The rendered API and web containers now run `sleep 5` in a `preStop` hook
+  before `SIGTERM`, and their pods' `terminationGracePeriodSeconds` covers the
+  hook, the web server's `SHUTDOWN_TIMEOUT` drain (30 seconds unless
+  `runtimeConfig` sets it), and 5 seconds to exit: 40 seconds by default instead
+  of 30.
 
 ## [1.6.1] - 2026-10-17
 

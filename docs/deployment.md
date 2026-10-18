@@ -270,6 +270,32 @@ External object storage, unchanged live and recorded managed server images in a
 deployed release, and new installations keep the existing Helm behavior. This execution safeguard
 does not change the rendered manifests or the plan confirmation hash.
 
+### Rolling updates on Kubernetes
+
+The rendered API and web Deployments replace one pod at a time with a surge pod
+(`maxSurge: 1`, `maxUnavailable: 0`), so a pod leaves only after its replacement is
+ready. A pod that starts terminating still receives new connections for a moment,
+until every node and the ingress controller drop it from its Service's endpoints,
+while the API and web servers stop accepting connections as soon as they receive
+`SIGTERM`. Each API and web container therefore has a `preStop` hook that runs
+`sleep 5` before Kubernetes sends `SIGTERM`, and the pod keeps serving during those
+5 seconds. The hook runs the image's `/bin/sleep`, which PodoKit's Alpine-based
+images include. In an image without it the hook fails, and Kubernetes records a
+`FailedPreStopHook` event and sends `SIGTERM` at once, as it did without a hook.
+
+The pod's `terminationGracePeriodSeconds` counts the hook as well: 5 seconds for it,
+the web server's `SHUTDOWN_TIMEOUT` for open requests to finish (30 seconds unless
+`runtimeConfig` sets it), and 5 more for the web server to close what remains and
+exit, 40 seconds by default. The API waits for its in-flight requests without a
+limit of its own and gets the same period, which covers the `/api` proxy's default
+30-second wait. Kubernetes kills a container still running when the period ends,
+so raise `SHUTDOWN_TIMEOUT` in `runtimeConfig` when requests may take longer, such
+as uploads under a long [`APP_PROXY_TIMEOUTS`](templates.md#proxy-deadlines-per-route)
+deadline, and the grace period follows it. A replaced pod keeps its database
+connections until it exits, so for these seconds a rollout can run more processes
+than the one surge pod the connection budget below counts. Workers receive no
+traffic through a Service and keep the Kubernetes defaults.
+
 ### Database connections
 
 Every API and worker process keeps its own PostgreSQL pools, and PostgreSQL
