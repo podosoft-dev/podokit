@@ -363,10 +363,17 @@ describe("external module updates", () => {
 });
 
 describe("applyUpdate", () => {
-  // Build an "old" template set (a copy) and mutate the live templates so there
-  // is a real version delta to apply.
+  // Build an "old" template set (a copy) and change a second copy to get a real
+  // version delta. Never change the repository's templates: test files run in
+  // parallel, and another file reading them mid-change fails.
   function oldTemplatesCopy(): string {
     const dir = join(tmp(), "old-templates");
+    mkdirSync(dir, { recursive: true });
+    cpSync(REPO_TEMPLATES, dir, { recursive: true });
+    return dir;
+  }
+  function newTemplatesCopy(): string {
+    const dir = join(tmp(), "new-templates");
     mkdirSync(dir, { recursive: true });
     cpSync(REPO_TEMPLATES, dir, { recursive: true });
     return dir;
@@ -1005,17 +1012,13 @@ describe("applyUpdate", () => {
     // generate from the OLD templates
     create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: dir });
     // NEW templates change a managed file
-    const tplMain = join(REPO_TEMPLATES, "fullstack/apps/api/src/main.ts");
-    const original = readFileSync(tplMain, "utf8");
-    try {
-      writeFileSync(tplMain, original + "\n// new in this version\n");
-      const result = applyUpdate(dir, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
-      expect(result.written).toContain("apps/api/src/main.ts");
-      expect(readFileSync(join(dir, "apps/api/src/main.ts"), "utf8")).toContain("// new in this version");
-      expect(result.conflicts).toEqual([]);
-    } finally {
-      writeFileSync(tplMain, original);
-    }
+    const newTemplates = newTemplatesCopy();
+    const tplMain = join(newTemplates, "fullstack/apps/api/src/main.ts");
+    writeFileSync(tplMain, readFileSync(tplMain, "utf8") + "\n// new in this version\n");
+    const result = applyUpdate(dir, newTemplates, { oldTemplatesDir: oldTemplates });
+    expect(result.written).toContain("apps/api/src/main.ts");
+    expect(readFileSync(join(dir, "apps/api/src/main.ts"), "utf8")).toContain("// new in this version");
+    expect(result.conflicts).toEqual([]);
   });
 
   it("3-way merges a user edit with an upstream change without losing either", () => {
@@ -1025,29 +1028,25 @@ describe("applyUpdate", () => {
     // user edits the FIRST line region; upstream edits the END — disjoint => clean 3-way
     const appMain = join(dir, "apps/api/src/main.ts");
     writeFileSync(appMain, "// my header\n" + readFileSync(appMain, "utf8"));
-    const tplMain = join(REPO_TEMPLATES, "fullstack/apps/api/src/main.ts");
-    const original = readFileSync(tplMain, "utf8");
-    try {
-      writeFileSync(tplMain, original + "\n// upstream footer\n");
-      const result = applyUpdate(dir, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
-      const merged = readFileSync(appMain, "utf8");
-      expect(merged).toContain("// my header"); // user edit preserved
-      expect(merged).toContain("// upstream footer"); // upstream change applied
-      expect(result.conflicts).toEqual([]);
+    const newTemplates = newTemplatesCopy();
+    const tplMain = join(newTemplates, "fullstack/apps/api/src/main.ts");
+    writeFileSync(tplMain, readFileSync(tplMain, "utf8") + "\n// upstream footer\n");
+    const result = applyUpdate(dir, newTemplates, { oldTemplatesDir: oldTemplates });
+    const merged = readFileSync(appMain, "utf8");
+    expect(merged).toContain("// my header"); // user edit preserved
+    expect(merged).toContain("// upstream footer"); // upstream change applied
+    expect(result.conflicts).toEqual([]);
 
-      // The lock keeps PodoKit's assembled output as the baseline. A repeated
-      // update must still recognise the merged user header as an edit instead
-      // of replacing the whole file with the template.
-      const repeated = planUpdate(dir, REPO_TEMPLATES);
-      expect(repeated.changes.find((change) => change.path === "apps/api/src/main.ts")?.action).toBe("conflict");
-      // On the installed version, the installed templates are the merge base.
-      const sameVersion = applyUpdate(dir, REPO_TEMPLATES, { fetchTemplates: unreachableRegistry });
-      expect(sameVersion.merged).toContain("apps/api/src/main.ts");
-      expect(sameVersion.conflicts).toEqual([]);
-      expect(readFileSync(appMain, "utf8")).toBe(merged);
-    } finally {
-      writeFileSync(tplMain, original);
-    }
+    // The lock keeps PodoKit's assembled output as the baseline. A repeated
+    // update must still recognise the merged user header as an edit instead
+    // of replacing the whole file with the template.
+    const repeated = planUpdate(dir, newTemplates);
+    expect(repeated.changes.find((change) => change.path === "apps/api/src/main.ts")?.action).toBe("conflict");
+    // On the installed version, the installed templates are the merge base.
+    const sameVersion = applyUpdate(dir, newTemplates, { fetchTemplates: unreachableRegistry });
+    expect(sameVersion.merged).toContain("apps/api/src/main.ts");
+    expect(sameVersion.conflicts).toEqual([]);
+    expect(readFileSync(appMain, "utf8")).toBe(merged);
   });
 
   it("does not adopt unrelated application files as managed during update", () => {
@@ -1071,29 +1070,25 @@ describe("applyUpdate", () => {
     writeManifest(dir, { ...readManifest(dir)!, podokitVersion: "1.5.0" });
     const appMain = join(dir, "apps/api/src/main.ts");
     writeFileSync(appMain, "// my header\n" + readFileSync(appMain, "utf8"));
-    const tplMain = join(REPO_TEMPLATES, "fullstack/apps/api/src/main.ts");
-    const original = readFileSync(tplMain, "utf8");
+    const newTemplates = newTemplatesCopy();
+    const tplMain = join(newTemplates, "fullstack/apps/api/src/main.ts");
+    writeFileSync(tplMain, readFileSync(tplMain, "utf8") + "\n// upstream footer\n");
     const requested: string[] = [];
     let cleanedUp = false;
-    try {
-      writeFileSync(tplMain, original + "\n// upstream footer\n");
-      const result = applyUpdate(dir, REPO_TEMPLATES, {
-        fetchTemplates: (version) => {
-          requested.push(version);
-          return { dir: oldTemplates, cleanup: () => { cleanedUp = true; } };
-        },
-      });
-      expect(requested).toEqual(["1.5.0"]);
-      expect(cleanedUp).toBe(true);
-      expect(result.merged).toContain("apps/api/src/main.ts");
-      expect(result.conflicts).toEqual([]);
-      const merged = readFileSync(appMain, "utf8");
-      expect(merged).toContain("// my header");
-      expect(merged).toContain("// upstream footer");
-      expect(readManifest(dir)?.podokitVersion).not.toBe("1.5.0");
-    } finally {
-      writeFileSync(tplMain, original);
-    }
+    const result = applyUpdate(dir, newTemplates, {
+      fetchTemplates: (version) => {
+        requested.push(version);
+        return { dir: oldTemplates, cleanup: () => { cleanedUp = true; } };
+      },
+    });
+    expect(requested).toEqual(["1.5.0"]);
+    expect(cleanedUp).toBe(true);
+    expect(result.merged).toContain("apps/api/src/main.ts");
+    expect(result.conflicts).toEqual([]);
+    const merged = readFileSync(appMain, "utf8");
+    expect(merged).toContain("// my header");
+    expect(merged).toContain("// upstream footer");
+    expect(readManifest(dir)?.podokitVersion).not.toBe("1.5.0");
   });
 
   it("keeps --from ahead of fetching the recorded version's templates", () => {
@@ -1118,22 +1113,17 @@ describe("applyUpdate", () => {
     const appMain = join(dir, "apps/api/src/main.ts");
     const edited = readFileSync(appMain, "utf8") + "\n// precious edit\n";
     writeFileSync(appMain, edited);
-    const tplMain = join(REPO_TEMPLATES, "fullstack/apps/api/src/main.ts");
-    const tplSmoke = join(REPO_TEMPLATES, "fullstack/tests/ui/smoke.ui.spec.ts");
-    const original = readFileSync(tplMain, "utf8");
+    const newTemplates = newTemplatesCopy();
+    const tplMain = join(newTemplates, "fullstack/apps/api/src/main.ts");
+    const tplSmoke = join(newTemplates, "fullstack/tests/ui/smoke.ui.spec.ts");
     const originalSmoke = readFileSync(tplSmoke, "utf8");
     const manifestBefore = readFileSync(join(dir, ".podokit/manifest.json"), "utf8");
     const lockBefore = readFileSync(join(dir, ".podokit/files.lock"), "utf8");
-    try {
-      writeFileSync(tplMain, original + "\n// upstream\n");
-      writeFileSync(tplSmoke, originalSmoke + "\n// clean upstream change\n");
-      expect(() => applyUpdate(dir, REPO_TEMPLATES, { fetchTemplates: unreachableRegistry })).toThrow(
-        /registry unreachable\n.*templates of 1\.5\.0.*\n  - apps\/api\/src\/main\.ts\nNothing was written.*--from <dir>/s,
-      );
-    } finally {
-      writeFileSync(tplMain, original);
-      writeFileSync(tplSmoke, originalSmoke);
-    }
+    writeFileSync(tplMain, readFileSync(tplMain, "utf8") + "\n// upstream\n");
+    writeFileSync(tplSmoke, originalSmoke + "\n// clean upstream change\n");
+    expect(() => applyUpdate(dir, newTemplates, { fetchTemplates: unreachableRegistry })).toThrow(
+      /registry unreachable\n.*templates of 1\.5\.0.*\n  - apps\/api\/src\/main\.ts\nNothing was written.*--from <dir>/s,
+    );
     expect(readFileSync(appMain, "utf8")).toBe(edited);
     expect(readFileSync(join(dir, "tests/ui/smoke.ui.spec.ts"), "utf8")).toBe(originalSmoke);
     expect(readFileSync(join(dir, ".podokit/manifest.json"), "utf8")).toBe(manifestBefore);
