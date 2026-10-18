@@ -619,26 +619,32 @@ describe("compose plan", () => {
     expect(first.images.gateway).toBeNull();
     expect(plan.images.gateway).toBe(`caddy:2.10-alpine@${GATEWAY_DIGEST}`);
     expect(plan.actions.find((action) => action.kind === "application")?.description).toBe(
-      "Roll out api, web, gateway and wait for health. Route /api/files/uploads/ directly to the API without /api.",
+      "Start the new api and web beside the running containers and wait for health, then stop the old containers; " +
+        "the gateway is replaced only when its definition changes. Route /api/files/uploads/ directly to the API without /api.",
     );
     expect(plan.planHash).not.toBe(first.planHash);
   });
 
   it("warns when the deployment can open more PostgreSQL connections than the server allows", () => {
     const root = initialized(["auth", "bullmq"]);
+    const file = profilePath(root, "production");
+    const value = JSON.parse(readFileSync(file, "utf8")) as {
+      workloads: { api: { replicas: number } };
+      dependencies: { postgres: { maxConnections?: number } };
+    };
+    // One API and one worker process, and the new API beside the old during a rollout: 3 x 31 of 97.
+    value.workloads.api.replicas = 1;
+    writeFileSync(file, JSON.stringify(value));
     expect(planComposeDeployment(root, "production", "v1.2.3", scriptedRunner()).warnings.join(" ")).not.toContain(
       "PostgreSQL connections",
     );
-    const file = profilePath(root, "production");
-    const value = JSON.parse(readFileSync(file, "utf8")) as {
-      dependencies: { postgres: { maxConnections?: number } };
-    };
-    value.dependencies.postgres.maxConnections = 97;
+    value.dependencies.postgres.maxConnections = 95;
     writeFileSync(file, JSON.stringify(value));
     expect(planComposeDeployment(root, "production", "v1.2.3", scriptedRunner()).warnings).toContain(
-      "PostgreSQL connections can reach 95, above the 94 that max_connections 97 leaves after 3 reserved: " +
-        "each API or worker process holds up to 31 (DB_POOL_MAX 20 + 1 + DB_AUTH_POOL_MAX 10); 3 process(es) hold 93, " +
-        "and the migration adds 2 to the 93. Lower DB_POOL_MAX or DB_AUTH_POOL_MAX in runtimeConfig, run fewer replicas, " +
+      "PostgreSQL connections can reach 93, above the 92 that max_connections 95 leaves after 3 reserved: " +
+        "each API or worker process holds up to 31 (DB_POOL_MAX 20 + 1 + DB_AUTH_POOL_MAX 10); 2 process(es) hold 62, " +
+        "3 during a rollout, counting old API containers that have not stopped, hold 93, " +
+        "and the migration adds 2 to the 62. Lower DB_POOL_MAX or DB_AUTH_POOL_MAX in runtimeConfig, run fewer replicas, " +
         "or raise dependencies.postgres.maxConnections.",
     );
   });

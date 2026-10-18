@@ -41,6 +41,7 @@ import {
   rolloutStateDigest,
   serviceName,
   type ComposeImages,
+  type ComposeRuntime,
 } from "./deploy-compose-render";
 import { assertAnyReleaseTag } from "./deploy-driver";
 import { readManifest } from "./lockfile";
@@ -360,6 +361,37 @@ function managedDependencyServices(profile: DockerComposeProfileV1): string[] {
   ];
 }
 
+/** The one-shot job that creates the bucket and the application user, when storage is managed. */
+function objectStorageInit(profile: DockerComposeProfileV1): string | null {
+  return profile.dependencies.objectStorage.mode === "managed"
+    ? serviceName(profile, "object-storage-init")
+    : null;
+}
+
+/**
+ * Runs the object storage init job and fails unless it exits 0.
+ *
+ * It runs with the dependencies, not in the application rollout: new API
+ * containers start without their dependencies, so the bucket and the application
+ * user must be reconciled before they do. `up --wait` cannot run it, because it
+ * reports a listed service that exits as a failure even with status 0, and an
+ * attached `up` would print the job's output, which names the access key.
+ */
+function runObjectStorageInit(
+  profile: DockerComposeProfileV1,
+  runtime: ComposeRuntime,
+  service: string,
+  runner: CommandRunner,
+): void {
+  runCompose(profile, runtime, "compose", ["up", "-d", "--no-deps", service], runner, false);
+  for (const container of serviceContainers(profile, service, runner)) {
+    const status = checked(runner, "docker", dockerArgs(profile, ["wait", container.id])).trim();
+    if (status !== "0") {
+      throw new Error(`${service} exited with status ${status}; inspect it with docker logs ${container.id}.`);
+    }
+  }
+}
+
 export function doctorComposeDeployment(
   projectRoot: string,
   profileName: string,
@@ -604,12 +636,13 @@ export function planComposeDeployment(
 
   const actions: ComposePlanAction[] = [];
   const dependencies = managedDependencyServices(profile);
+  const init = objectStorageInit(profile);
   let order = 1;
   if (dependencies.length) {
     actions.push({
       order: order++,
       kind: "dependencies",
-      description: `Reconcile and wait for ${dependencies.join(", ")}.`,
+      description: `Reconcile and wait for ${dependencies.join(", ")}${init ? `, then run ${init}` : ""}.`,
     });
   }
   actions.push({
@@ -623,7 +656,7 @@ export function planComposeDeployment(
   actions.push({
     order: order++,
     kind: "application",
-    description: `Roll out api, web${profile.workloads.worker ? ", worker" : ""}${composeHasGateway(profile) ? ", gateway" : ""} and wait for health.${directApiRoutes(profile.exposure.apiPaths)}`,
+    description: `${rolloutDescription(profile)}${directApiRoutes(profile.exposure.apiPaths)}`,
   });
   actions.push({
     order: order++,
@@ -670,6 +703,206 @@ export function planComposeDeployment(
     actions,
     warnings,
   };
+}
+
+/**
+ * Which application services are replaced side by side.
+ *
+ * The API always is. Web is only behind the gateway: without one it publishes the
+ * host port itself, and a second container cannot bind it.
+ */
+function sideBySideServices(profile: DockerComposeProfileV1): Array<{ service: string; replicas: number }> {
+  return [
+    { service: serviceName(profile, "api"), replicas: profile.workloads.api.replicas },
+    ...(composeHasGateway(profile)
+      ? [{ service: serviceName(profile, "web"), replicas: profile.workloads.web.replicas }]
+      : []),
+  ];
+}
+
+function rolloutDescription(profile: DockerComposeProfileV1): string {
+  const replacedInPlace = [
+    ...(composeHasGateway(profile) ? [] : ["web"]),
+    ...(profile.workloads.worker ? ["worker"] : []),
+  ];
+  return (
+    `Start the new ${composeHasGateway(profile) ? "api and web" : "api"} beside the running containers and wait for health, ` +
+    (replacedInPlace.length ? `replace ${replacedInPlace.join(" and ")} in place, ` : "") +
+    `then stop the old containers${composeHasGateway(profile) ? "; the gateway is replaced only when its definition changes" : ""}.`
+  );
+}
+
+interface ServiceContainer {
+  id: string;
+  running: boolean;
+  configHash: string;
+}
+
+function serviceContainers(
+  profile: DockerComposeProfileV1,
+  service: string,
+  runner: CommandRunner,
+): ServiceContainer[] {
+  const output = checked(
+    runner,
+    "docker",
+    dockerArgs(profile, [
+      "ps",
+      "-a",
+      "--filter",
+      `label=com.docker.compose.project=${profile.target.project}`,
+      "--filter",
+      `label=com.docker.compose.service=${service}`,
+      "--format",
+      '{{.ID}}\t{{.State}}\t{{.Label "com.docker.compose.config-hash"}}',
+    ]),
+  );
+  return output
+    .split("\n")
+    .map((line) => line.trim().split("\t"))
+    .flatMap(([id, state, configHash]) =>
+      id ? [{ id, running: state === "running", configHash: configHash ?? "" }] : [],
+    );
+}
+
+/** The hash Compose stamps on a container of this service as the project file now defines it. */
+function composeConfigHash(
+  profile: DockerComposeProfileV1,
+  runtime: ComposeRuntime,
+  service: string,
+  runner: CommandRunner,
+): string {
+  const output = runCompose(profile, runtime, "compose", ["config", "--hash", service], runner, true);
+  const line = output.split("\n").find((entry) => entry.trim().startsWith(`${service} `));
+  const hash = line?.trim().split(/\s+/)[1];
+  if (!hash) throw new Error(`docker compose config --hash did not report a hash for ${service}.`);
+  return hash;
+}
+
+interface SideBySide {
+  service: string;
+  /** The containers that served before and are stopped once the new ones are healthy. */
+  replaced: string[];
+  /** The containers this rollout started, removed again if the rollout fails. */
+  started: string[];
+}
+
+/**
+ * Starts a service's new containers next to the running ones and waits for them.
+ *
+ * Compose recreates a changed service by stopping its container before it starts
+ * the replacement, and it stops every changed service before it starts any, so a
+ * single-host deployment had no API and no web server until the new ones passed
+ * their healthchecks. Scaling up with `--no-recreate` keeps the old containers
+ * serving while Compose creates new ones from the new definition, and both answer
+ * to the service's name on the project network until the old ones are stopped.
+ *
+ * A service with nothing running, or already running its new definition, is left
+ * to the final `compose up`: there is no traffic to keep, or nothing to replace.
+ */
+function startBeside(
+  profile: DockerComposeProfileV1,
+  runtime: ComposeRuntime,
+  service: string,
+  replicas: number,
+  runner: CommandRunner,
+): SideBySide {
+  const before = serviceContainers(profile, service, runner);
+  const running = before.filter((container) => container.running);
+  if (!running.length) return { service, replaced: [], started: [] };
+  const expected = composeConfigHash(profile, runtime, service, runner);
+  if (running.length === replicas && running.every((container) => container.configHash === expected)) {
+    return { service, replaced: [], started: [] };
+  }
+  // A stopped container serves nothing, and `up` would start it again with the
+  // old definition.
+  const stopped = before.filter((container) => !container.running).map((container) => container.id);
+  if (stopped.length) checked(runner, "docker", dockerArgs(profile, ["rm", "-f", ...stopped]));
+  const replaced = running.map((container) => container.id);
+  try {
+    runCompose(
+      profile,
+      runtime,
+      "compose",
+      [
+        "up",
+        "-d",
+        "--no-deps",
+        "--no-recreate",
+        "--wait",
+        "--scale",
+        `${service}=${running.length + replicas}`,
+        service,
+      ],
+      runner,
+      false,
+    );
+  } catch (error) {
+    removeContainers(profile, startedSince(profile, service, replaced, runner), runner);
+    throw error;
+  }
+  return { service, replaced, started: startedSince(profile, service, replaced, runner) };
+}
+
+function startedSince(
+  profile: DockerComposeProfileV1,
+  service: string,
+  replaced: string[],
+  runner: CommandRunner,
+): string[] {
+  return serviceContainers(profile, service, runner)
+    .map((container) => container.id)
+    .filter((id) => !replaced.includes(id));
+}
+
+function removeContainers(profile: DockerComposeProfileV1, ids: string[], runner: CommandRunner): void {
+  if (ids.length) runner("docker", dockerArgs(profile, ["rm", "-f", ...ids]), { capture: true });
+}
+
+/**
+ * Replaces the application containers without leaving a moment with nothing to
+ * answer.
+ *
+ * The new API, and the new web server behind the gateway, start beside the running
+ * ones. Only when all of them are healthy do the old ones get a graceful stop, web
+ * before API so an old web server never outlives the API it was talking to. The
+ * worker, a web server that publishes the port itself, and a changed gateway are
+ * replaced in place by the final `compose up`, which also removes orphans. If a new
+ * container fails its healthcheck, the containers this rollout started are removed
+ * and the old ones keep serving.
+ */
+function rollOutApplication(
+  profile: DockerComposeProfileV1,
+  runtime: ComposeRuntime,
+  runner: CommandRunner,
+): void {
+  const sideBySide: SideBySide[] = [];
+  try {
+    for (const { service, replicas } of sideBySideServices(profile)) {
+      sideBySide.push(startBeside(profile, runtime, service, replicas, runner));
+    }
+    if (!composeHasGateway(profile)) {
+      // `--remove-orphans`: a gateway left from a profile that had one still holds
+      // the port this web server publishes.
+      runCompose(
+        profile,
+        runtime,
+        "compose",
+        ["up", "-d", "--no-deps", "--wait", "--remove-orphans", serviceName(profile, "web")],
+        runner,
+        false,
+      );
+    }
+  } catch (error) {
+    for (const entry of sideBySide) removeContainers(profile, entry.started, runner);
+    throw error;
+  }
+  for (const entry of [...sideBySide].reverse()) {
+    if (!entry.replaced.length) continue;
+    checked(runner, "docker", dockerArgs(profile, ["stop", ...entry.replaced]));
+    checked(runner, "docker", dockerArgs(profile, ["rm", ...entry.replaced]));
+  }
+  runCompose(profile, runtime, "compose", ["up", "-d", "--wait", "--remove-orphans"], runner, false);
 }
 
 export async function applyComposeDeployment(
@@ -733,15 +966,19 @@ export async function applyComposeDeployment(
     const dependencies = managedDependencyServices(profile);
     if (dependencies.length) {
       runCompose(profile, runtime, "compose", ["up", "-d", "--wait", ...dependencies], runner, false);
+      const init = objectStorageInit(profile);
+      if (init) runObjectStorageInit(profile, runtime, init, runner);
     } else {
       // The application network still has to exist before the migration project,
-      // which joins it as an external network, can start.
-      runCompose(profile, runtime, "compose", ["up", "-d", "--no-start"], runner, false);
+      // which joins it as an external network, can start. `--no-recreate` keeps
+      // this from stopping the running containers of a changed service before the
+      // migration has even run.
+      runCompose(profile, runtime, "compose", ["up", "-d", "--no-start", "--no-recreate"], runner, false);
     }
 
     runCompose(profile, runtime, "migration", ["run", "--rm", "--no-deps", "migrate"], runner, false);
 
-    runCompose(profile, runtime, "compose", ["up", "-d", "--wait", "--remove-orphans"], runner, false);
+    rollOutApplication(profile, runtime, runner);
 
     const ledger = readLedger(profile, plan.images.api, runner);
     ledger.entries.push({
@@ -982,7 +1219,7 @@ export async function rollbackComposeDeployment(
       preflight.images,
       preflight.rolloutStateDigest,
     );
-    runCompose(profile, runtime, "compose", ["up", "-d", "--wait", "--remove-orphans"], runner, false);
+    rollOutApplication(profile, runtime, runner);
     const ledger = readLedger(profile, preflight.images.api, runner);
     ledger.entries.push({
       revision: (currentLedgerEntry(ledger)?.revision ?? 0) + 1,

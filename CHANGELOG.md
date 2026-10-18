@@ -43,6 +43,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `user.stop_impersonate` names the administrator as actor and the impersonated
   user as target instead of the impersonated user as actor. An email change by
   code (`/email-otp/change-email`) is now recorded as `auth.email_change`.
+- A Docker Compose `podo deploy apply` or `rollback` left the deployment
+  unreachable for tens of seconds. Both ran one `compose up`, which stops every
+  changed service before it starts any of them, then starts the new API, web
+  server, and gateway one after another as each passes its healthcheck. The
+  public port answered 502 the whole time, and an API holding a WebSocket or
+  server-sent events stream first spent Docker's 10-second stop timeout in
+  shutdown, while the web server answered 503 for `/api`. On a local Compose
+  target behind an edge proxy, with one replica each and an open server-sent
+  events stream, 182 of 525 probe responses failed over about 23 seconds. The
+  new API containers, and the new web server behind the gateway, now start
+  beside the running ones (`compose up --no-deps --no-recreate --scale`), and the
+  old ones get a graceful stop, web before API, only once all new ones are
+  healthy; the worker is still replaced in place. The same probe saw no failed
+  response during three applies and a rollback, nor during an apply whose new
+  API never became healthy: if a new container is not healthy, the containers
+  the rollout started are removed, apply fails, and the old ones keep serving
+  instead of staying stopped.
+- The Compose gateway carried the release and rollout-state labels, so every
+  release replaced it and closed the published port. It now carries only the
+  project label and is replaced only when its own definition changes.
+- The Compose web service sets `BUN_CONFIG_DNS_TIME_TO_LIVE_SECONDS` to `"0"`.
+  Bun caches a host name's addresses for 30 seconds and keeps connecting to a
+  cached address after its container is gone, so the web server's `/api` proxy
+  would keep calling a replaced API. `runtimeConfig` can override it.
+- The Compose object storage init job now runs with the dependencies, before the
+  migration, and apply fails when it exits with another status than 0. It ran in
+  the final `compose up`, after the API it prepares the bucket for.
+- A Compose profile without PodoKit-managed dependencies created the application
+  network with `compose up --no-start`, which also replaced the running
+  containers of every changed service before the migration ran. It now passes
+  `--no-recreate`.
+- The PostgreSQL connection budget counts a Compose rollout as twice the API
+  replicas plus the workers, since the old API containers keep their pools until
+  they stop. A default Compose profile with `auth`, two API replicas, reaches 124
+  during a rollout, above the 97 available, so the doctor and the plan warn, as
+  they do for Kubernetes.
 
 ### Security
 
@@ -91,6 +127,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `bun run --cwd apps/api admin:bootstrap`. Set `E2E_UNCLAIMED_ADMIN_EMAIL` to
   an `ADMIN_EMAILS` address without an account to run the new test that a
   sign-up cannot claim it.
+- On a Compose profile with the gateway, the first apply after upgrading replaces
+  the gateway once, because its labels change, which closes the port for a few
+  seconds. A rollback to a revision applied before the upgrade is refused,
+  because it no longer renders byte for byte; roll forward with a new release
+  instead.
+- Without the gateway, web publishes the host port itself, so it is still
+  replaced in place: the port closes until the new web server listens, about a
+  second, or up to the 10-second stop timeout while the old one holds a stream.
 
 ## [1.6.3] - 2026-10-18
 

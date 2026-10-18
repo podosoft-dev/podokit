@@ -246,9 +246,13 @@ Apply performs the same steps on both drivers:
 1. Re-run the doctor.
 2. Take a release-scoped lock and recompute the plan while holding it — a Kubernetes
    Lease, or a `set -C` lock file in a state volume.
-3. Reconcile and wait for PodoKit-run dependencies.
+3. Reconcile and wait for PodoKit-run dependencies. On Compose this includes the
+   object storage init job, which must exit 0.
 4. Run the migration with the exact API image digest.
-5. Roll out API, web, any worker, and the optional Compose gateway, then wait for health.
+5. Roll out API, web, and any worker, then wait for health. Old API and web
+   containers keep serving until their replacements are healthy, see
+   [rolling updates on Kubernetes](#rolling-updates-on-kubernetes) and
+   [on Docker Compose](#rolling-updates-on-docker-compose).
 6. Verify each configured public check, then release the lock.
 
 A second apply or rollback fails while the lock is held, which is what prevents
@@ -299,6 +303,51 @@ connections until it exits, which the [connection budget](#database-connections)
 counts. Workers receive no traffic through a Service and keep the Kubernetes
 defaults.
 
+### Rolling updates on Docker Compose
+
+A plain `docker compose up` replaces a changed service by stopping its containers
+before it starts the new ones, and it stops every changed service before it starts
+any of them, so a one-host deployment would answer nothing while the new API and
+web server start and pass their healthchecks. Apply and rollback replace them side
+by side instead:
+
+1. Start the new API containers beside the running ones from the new definition
+   (`compose up --no-deps --no-recreate --scale`), and wait until they are healthy.
+   Old and new containers both answer to the service name on the project network.
+2. Behind the gateway, do the same for web. Without the gateway, web publishes the
+   host port itself and a second container cannot bind it, so web is replaced in
+   place. The port is closed from the moment the old web server stops accepting
+   connections until the new one listens: about a second, or up to the stop
+   timeout below while the old one holds a stream. A profile with WebSocket or
+   API paths has the gateway.
+3. Stop the old web container, then the old API containers, each with Docker's
+   graceful stop: in-flight requests finish, and a process still running when the
+   stop timeout ends, 10 seconds by default, is killed. A server that holds a
+   WebSocket or server-sent events stream runs until then; the client reconnects
+   to a new container.
+4. Run `compose up --remove-orphans` for the rest. The worker is replaced in place,
+   since it receives no traffic. The gateway carries no release label, so it is
+   replaced only when its own definition changes, such as its paths, trusted proxy
+   CIDRs, or image.
+
+If a new container does not become healthy, apply removes the containers it started
+and fails; the old ones keep serving and the release ledger keeps the current
+revision. A service that already runs the new definition is left alone.
+
+The web server reaches the API through the service name. Bun keeps a resolved
+address for 30 seconds and does not move to another one when it stops answering,
+so the rendered web service sets `BUN_CONFIG_DNS_TIME_TO_LIVE_SECONDS` to `"0"`,
+and its next connection resolves the name again. `runtimeConfig` can set another
+value.
+
+On a profile with the gateway, the first apply with this behavior replaces the
+gateway once, because its labels change, which closes the port for a few seconds.
+An apply that adds the first WebSocket or API path, or removes the last, moves the
+published port between web and the gateway, so the port is closed until the old
+holder has stopped and the new one listens.
+A rollback to a revision applied before this behavior is refused, because the
+revision no longer renders byte for byte; roll forward with a new release instead.
+
 ### Database connections
 
 Every API and worker process keeps its own PostgreSQL pools, and PostgreSQL
@@ -313,12 +362,13 @@ exceed it during a deployment.
 | --- | --- |
 | One API or worker process | `DB_POOL_MAX` (20) + 1 that the query pool opens to check a stalled server, `DB_AUTH_POOL_MAX` (10) with the `auth` module, and each pool in `dependencies.postgres.appPools`; each from `runtimeConfig`, else the default in parentheses, except an application pool with a fixed `size` |
 | Between rollouts | API replicas + worker replicas, times one process |
-| A Kubernetes rollout | twice the API and worker replicas: with the rendered `maxSurge: 1` and `maxUnavailable: 0`, Kubernetes starts the next replacement as soon as the previous one is ready and does not count terminating pods against the surge, while a replaced pod keeps its pools until it exits, up to its grace period, so every old pod can still hold them when all the new ones run; Compose stops each container before it starts the replacement |
+| A Kubernetes rollout | twice the API and worker replicas: with the rendered `maxSurge: 1` and `maxUnavailable: 0`, Kubernetes starts the next replacement as soon as the previous one is ready and does not count terminating pods against the surge, while a replaced pod keeps its pools until it exits, up to its grace period, so every old pod can still hold them when all the new ones run |
+| A Compose rollout | twice the API replicas plus the worker replicas: the new API containers start beside the old ones, which keep their pools until they stop, and the worker is stopped before its replacement starts |
 | The migration | 2, beside the processes of the release still serving |
 
-With the defaults and `auth`, two API replicas hold 62, and a Kubernetes rollout
-124, above the 97 available, so the doctor and the plan warn. A BullMQ worker on
-Kubernetes makes that 186. Lower the pools, for example to `"DB_POOL_MAX": "10"`
+With the defaults and `auth`, two API replicas hold 62, and a rollout 124 on
+either driver, above the 97 available, so the doctor and the plan warn. A BullMQ
+worker makes that 186 on Kubernetes and 155 on Compose. Lower the pools, for example to `"DB_POOL_MAX": "10"`
 and `"DB_AUTH_POOL_MAX": "8"`, which brings a rollout of two API replicas to 76, or
 raise the limit. Behind a connection pooler such as PgBouncer, set
 `maxConnections` to the pooler's client limit instead.
@@ -770,8 +820,8 @@ terminating, are reported separately as `previousPods` with their `count` and
 `restartCount`. Pods of the replaced revision usually remain for their termination
 grace period after `apply` or `rollback` returns, so `previousPods` is often non-zero
 right after a rollout; their restarts do not describe the new release. The Compose
-driver lists only running containers, and Compose recreates a changed service's
-containers with a restart count of zero, so it has no previous containers to report.
+driver lists only running containers, and apply and rollback remove the containers
+they replace before they return, so it has no previous containers to report.
 
 ## Rollback
 
