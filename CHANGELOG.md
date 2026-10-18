@@ -6,6 +6,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security
+
+- The generated `apps/api/src/auth/auth.ts` gave the admin role and sign-up
+  approval to every new account whose email was listed in `ADMIN_EMAILS`, and
+  checked only the address. While email and password sign-up was open and email
+  verification was off, anyone could register a listed address that had no
+  account yet, such as a never-replaced `admin@example.com`, and become an
+  approved administrator at once, bypassing sign-up approval. A listed address
+  now makes an administrator only of an account that proves it as the account
+  is created: one that `admin:bootstrap` or an administrator creates, or one
+  that a sign-in creates with a verified address (a social provider that reports
+  the email verified, a magic link, or an email code). The API refuses any other
+  new account with a listed address, an email and password sign-up included,
+  with `PUBLIC_SIGNUP_DISABLED`, so nobody can register an administrator's
+  address before its owner. While sign-up approval or mandatory email
+  verification is on, Better Auth answers the refusal like any other sign-up,
+  so the response does not reveal the address.
+- With `NODE_ENV=production`, the API now refuses to start when `ADMIN_EMAILS`
+  lists an entry that is not an email address or that is on a name reserved for
+  documentation and receiving no mail: `example.com`, `example.net`,
+  `example.org` and their subdomains, and the `.example`, `.test`, `.invalid`,
+  and `.localhost` names. `podo deploy doctor` checks the same rule before a
+  rollout: it reads `ADMIN_EMAILS` from the profile's `runtimeConfig`, or that
+  one value from the API Secret on Kubernetes or the API env file on Docker
+  Compose, and fails on such an entry. No other secret value is read.
+
+### Upgrade notes
+
+- Set `ADMIN_EMAILS` in production to the administrators' real addresses, or
+  leave it empty, before you update: a placeholder now stops the API and fails
+  the doctor. Check existing administrators too. An account that registered a
+  listed address by email and password before this release has the admin role;
+  list accounts with `role` `admin` and an unverified email and confirm each
+  one is yours.
+- To create an administrator, run `admin:bootstrap`, or sign in with a method
+  that verifies the address, such as a social provider, a magic link, or an
+  email code. An email and password sign-up with an `ADMIN_EMAILS` address is
+  refused, also while mandatory email verification is on.
+- The `admin-dashboard` Playwright seed, `tests/seed.setup.ts`, no longer signs
+  the administrator up; it only signs in. Create the administrator before the
+  suite with `ADMIN_BOOTSTRAP_EMAIL`, `ADMIN_BOOTSTRAP_PASSWORD`, and
+  `ADMIN_BOOTSTRAP_NAME` set to the seeded account (`admin@example.com`, the
+  default test password, and `Admin`, unless `E2E_ADMIN_EMAIL`,
+  `E2E_ADMIN_PASSWORD`, or `tests/helpers/app-accounts.ts` say otherwise) and
+  `bun run --cwd apps/api admin:bootstrap`. Set `E2E_UNCLAIMED_ADMIN_EMAIL` to
+  an `ADMIN_EMAILS` address without an account to run the new test that a
+  sign-up cannot claim it.
+
 ## [1.6.3] - 2026-10-18
 
 ### Fixed

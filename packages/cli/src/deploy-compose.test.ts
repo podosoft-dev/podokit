@@ -462,6 +462,7 @@ function scriptedRunner(overrides: Record<string, string> = {}): CommandRunner {
     if (line.includes("sha256sum")) return reply(`${"f".repeat(64)}\n`);
     if (line.includes("releases.json")) return reply("");
     if (line.includes("compose -f") && line.includes("ps")) return reply("");
+    if (line.includes("ADMIN_EMAILS=")) return reply("");
     if (line.includes("sed -n")) {
       return reply(["BETTER_AUTH_SECRET", "POSTGRES_DB", "POSTGRES_PASSWORD", "POSTGRES_USER"].join("\n"));
     }
@@ -498,6 +499,59 @@ describe("compose doctor", () => {
   it("passes when every required key is present", () => {
     const findings = doctorComposeDeployment(initialized(), "production", scriptedRunner());
     expect(findings.filter((finding) => !finding.ok)).toEqual([]);
+  });
+
+  it("reads only the ADMIN_EMAILS line of the API env file and fails on a placeholder", () => {
+    const root = initialized();
+    const finding = (stdout: string) => {
+      const findings = doctorComposeDeployment(root, "production", scriptedRunner({ "ADMIN_EMAILS=": stdout }));
+      return findings.find((entry) => entry.code === "admin-emails");
+    };
+    const calls: string[] = [];
+    const recording: CommandRunner = (command, args) => {
+      calls.push(`${command} ${args.join(" ")}`);
+      return scriptedRunner({ "ADMIN_EMAILS=": "ops@company.io\n" })(command, args);
+    };
+    expect(
+      doctorComposeDeployment(root, "production", recording).find((entry) => entry.code === "admin-emails"),
+    ).toMatchObject({ ok: true, message: "ADMIN_EMAILS in /etc/podokit/example-app/api.env lists 1 administrator address." });
+    const read = calls.find((call) => call.includes("ADMIN_EMAILS="));
+    // A throwaway container without a network mounts the file read-only and prints that one line.
+    expect(read).toContain("run --rm --network none --user 0:0 -v /etc/podokit/example-app/api.env:/podokit-env:ro");
+    expect(read).toContain("sed -n 's/^[[:space:]]*ADMIN_EMAILS=//p' /podokit-env");
+
+    // Over SSH the deploying user reads the file in place.
+    calls.length = 0;
+    const overSsh = scriptedRunner({ "{{.Endpoints.docker.Host}}": "ssh://deploy@host\n", "ADMIN_EMAILS=": "ops@company.io\n" });
+    const viaSsh = doctorComposeDeployment(root, "production", (command, args) => {
+      calls.push(`${command} ${args.join(" ")}`);
+      return overSsh(command, args);
+    });
+    expect(viaSsh.find((entry) => entry.code === "admin-emails")?.ok).toBe(true);
+    expect(calls).toContain("ssh deploy@host sed -n 's/^[[:space:]]*ADMIN_EMAILS=//p' /etc/podokit/example-app/api.env");
+
+    expect(finding('"admin@example.com"\n')).toMatchObject({ ok: false });
+    expect(finding('"admin@example.com"\n')?.message).toContain(
+      "ADMIN_EMAILS in /etc/podokit/example-app/api.env lists admin@example.com (a placeholder",
+    );
+    // Docker Compose applies the last assignment.
+    expect(finding("admin@example.com\nowner@company.io\n")?.ok).toBe(true);
+    expect(finding("owner@company.io\nadmin@example.com\n")?.ok).toBe(false);
+    expect(finding("")?.message).toContain("does not set ADMIN_EMAILS");
+
+    const failing: CommandRunner = (command, args) =>
+      `${command} ${args.join(" ")}`.includes("ADMIN_EMAILS=")
+        ? { status: 1, stdout: "", stderr: "Permission denied" }
+        : scriptedRunner()(command, args);
+    const unreadable = doctorComposeDeployment(root, "production", failing).find((entry) => entry.code === "admin-emails");
+    expect(unreadable).toMatchObject({ ok: false });
+    expect(unreadable?.message).toContain("Cannot read ADMIN_EMAILS from /etc/podokit/example-app/api.env");
+
+    // Without the auth module nothing reads ADMIN_EMAILS.
+    expect(
+      doctorComposeDeployment(initialized([]), "production", scriptedRunner({ "ADMIN_EMAILS=": "admin@example.com\n" }))
+        .some((entry) => entry.code === "admin-emails"),
+    ).toBe(false);
   });
 
   it("warns, without failing, when a profile does not turn the audit log on", () => {

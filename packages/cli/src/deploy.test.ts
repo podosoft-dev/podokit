@@ -643,6 +643,62 @@ describe("deployment doctor and verification", () => {
     ).toBe(false);
   });
 
+  it("reads only the ADMIN_EMAILS value of the API Secret and fails on a placeholder", () => {
+    const root = initializedProject();
+    const manifestPath = join(root, ".podokit", "manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { modules: unknown[] };
+    manifest.modules = [{ name: "auth", order: 0, addedWith: "0.15.0" }];
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+
+    let adminEmails: string | null = Buffer.from("admin@example.com").toString("base64");
+    const valueReads: string[][] = [];
+    const runner: CommandRunner = (_command, args) => {
+      if (args.includes("config")) return { status: 0, stdout: clusterOutput, stderr: "" };
+      const output = args.find((arg) => arg.startsWith("go-template="));
+      if (output?.includes("ADMIN_EMAILS")) {
+        valueReads.push(args);
+        return adminEmails === null
+          ? { status: 1, stdout: "", stderr: 'Error from server (NotFound): secrets "example-app-api" not found' }
+          : { status: 0, stdout: adminEmails, stderr: "" };
+      }
+      return { status: 0, stdout: "", stderr: "" };
+    };
+    const finding = () =>
+      doctorDeployment(root, "production", runner).find((entry) => entry.code === "admin-emails");
+
+    expect(finding()).toMatchObject({ ok: false });
+    expect(finding()?.message).toContain("ADMIN_EMAILS in Secret example-app-api lists admin@example.com (a placeholder");
+    expect(valueReads.at(-1)).toEqual([
+      "--context",
+      "production",
+      "-n",
+      "example-app",
+      "get",
+      "secret",
+      "example-app-api",
+      "-o",
+      'go-template={{with index .data "ADMIN_EMAILS"}}{{.}}{{end}}',
+    ]);
+
+    adminEmails = Buffer.from("owner@company.io").toString("base64");
+    expect(finding()).toMatchObject({ ok: true, message: "ADMIN_EMAILS in Secret example-app-api lists 1 administrator address." });
+    // A Secret without the key prints nothing.
+    adminEmails = "";
+    expect(finding()?.ok).toBe(true);
+    adminEmails = null;
+    expect(finding()).toMatchObject({ ok: false });
+    expect(finding()?.message).toContain("Cannot read ADMIN_EMAILS from Secret example-app-api");
+
+    // A runtimeConfig value is checked offline instead of the Secret.
+    const path = profilePath(root, "production");
+    const profile = JSON.parse(readFileSync(path, "utf8")) as { runtimeConfig: Record<string, string> };
+    profile.runtimeConfig.ADMIN_EMAILS = "owner@company.io";
+    writeFileSync(path, JSON.stringify(profile));
+    const reads = valueReads.length;
+    expect(finding()).toMatchObject({ ok: true, message: "ADMIN_EMAILS in runtimeConfig lists 1 administrator address." });
+    expect(valueReads).toHaveLength(reads);
+  });
+
   it("requires the Traefik Middleware CRD only when API paths are configured", () => {
     const root = initializedProject();
     const path = profilePath(root, "production");

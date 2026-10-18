@@ -237,7 +237,8 @@ async function main() {
       `CORS_ORIGIN=${webURL}`,
       "BETTER_AUTH_SECRET=e2e-secret-please-change-32-characters",
       `BETTER_AUTH_URL=http://localhost:${env.API_PORT}`,
-      "ADMIN_EMAILS=admin@example.com",
+      // The second address has no account: the suite checks that a sign-up cannot claim it.
+      "ADMIN_EMAILS=admin@example.com,unclaimed-admin@example.com",
       // Auth feature flags (2FA, magic link, OTP, username, multi-session) live in
       // the DB — the app_setting migration seeds them on; seed.setup toggles the
       // phoneNumber flag for its tests. Only server-enforced flags are env:
@@ -294,7 +295,7 @@ async function main() {
     POSTGRES_PASSWORD: env.POSTGRES_PASSWORD,
     POSTGRES_DB: env.POSTGRES_DB,
     BETTER_AUTH_SECRET: "e2e-secret-please-change-32-characters",
-    ADMIN_EMAILS: "admin@example.com",
+    ADMIN_EMAILS: "admin@example.com,unclaimed-admin@example.com",
     // Runtime env for the built Bun API. Auth feature flags
     // are DB-backed (migration-seeded), so only server-enforced env remains.
     AUTH_HIBP: "true",
@@ -328,12 +329,31 @@ async function main() {
   step("build api");
   run("bun", ["run", "--cwd", "apps/api", "build"], { cwd: target });
 
+  // CI gets a new PostgreSQL service per run; start a local run from the same
+  // empty database. Accounts an earlier run left behind would otherwise decide
+  // the result, such as an administrator an older seed signed up unverified,
+  // which admin:bootstrap refuses to adopt.
+  step("empty the e2e database");
+  const databaseURL = `postgres://${encodeURIComponent(env.POSTGRES_USER)}:${encodeURIComponent(env.POSTGRES_PASSWORD)}@${env.POSTGRES_HOST}:${env.POSTGRES_PORT}/${encodeURIComponent(env.POSTGRES_DB)}`;
+  run("bun", ["--eval", "const sql = new Bun.SQL(process.env.E2E_DATABASE_URL); await sql`DROP SCHEMA IF EXISTS public CASCADE`; await sql`CREATE SCHEMA public`; await sql.close();"], {
+    cwd: target,
+    env: { ...process.env, E2E_DATABASE_URL: databaseURL },
+  });
+
   step("migrate auth and app tables from compiled output");
   const migration = spawnSync("bun", ["run", "--cwd", "apps/api", "migrate:all"], { cwd: target, env: pgEnv, encoding: "utf8" });
   process.stdout.write(migration.stdout ?? "");
   process.stderr.write(migration.stderr ?? "");
   if (migration.status !== 0) throw new Error(`migrate:all exited with status ${migration.status}`);
   assertCleanMigrationOutput(`${migration.stdout}${migration.stderr}`);
+
+  // The suite signs in as this administrator. Sign-up cannot create it: the API
+  // refuses an unverified sign-up with an ADMIN_EMAILS address.
+  step("bootstrap the administrator");
+  run("bun", ["run", "--cwd", "apps/api", "admin:bootstrap"], {
+    cwd: target,
+    env: { ...pgEnv, ADMIN_BOOTSTRAP_EMAIL: "admin@example.com", ADMIN_BOOTSTRAP_PASSWORD: "Podokit3e-Str0ng!pw", ADMIN_BOOTSTRAP_NAME: "Admin" },
+  });
 
   step("verify generated API contract");
   run("bun", ["run", "--cwd", "apps/api", "contract"], { cwd: target, env: pgEnv });
@@ -447,6 +467,7 @@ async function main() {
       E2E_BASE_URL: webURL,
       E2E_API_URL: `http://localhost:${env.API_PORT}`,
       E2E_WORKERS: workers,
+      E2E_UNCLAIMED_ADMIN_EMAIL: "unclaimed-admin@example.com",
       // The rate-limit spec compares each budget with the limits the API runs with.
       RATE_LIMIT_MAX: pgEnv.RATE_LIMIT_MAX,
       RATE_LIMIT_AUTH_MAX: pgEnv.RATE_LIMIT_AUTH_MAX,

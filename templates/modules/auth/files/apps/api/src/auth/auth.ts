@@ -17,18 +17,14 @@ import { authBaseUrl, authSecret } from "./auth-environment";
 import { isMaintenanceCommand } from "./maintenance";
 import { CLIENT_ADDRESS_HEADER } from "../core/client-address";
 import { revokeEveryOtherSession } from "./revoke-other-sessions";
+import { adminEmailsFrom, becomesAdministrator } from "./admin-emails";
 // podokit:begin:auth-imports
 // podokit:end:auth-imports
 
 // Web origin(s) where the browser runs (WebAuthn ceremonies must match these).
 const webOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5001").split(",").map((o) => o.trim());
 
-const adminEmails = new Set(
-  (process.env.ADMIN_EMAILS ?? "")
-    .split(",")
-    .map((email) => email.trim().toLowerCase())
-    .filter(Boolean),
-);
+const adminEmails = adminEmailsFrom(process.env.ADMIN_EMAILS);
 
 // Enabled social providers, from the resolved config (DB-first, env fallback).
 // Admins add/edit/remove providers dynamically (Settings page), so this maps the
@@ -43,6 +39,56 @@ function buildSocial(config: AuthConfig): NonNullable<BetterAuthOptions["socialP
     providers[id] = { clientId: p.clientId, clientSecret: p.clientSecret, ...(p.redirectURI ? { redirectURI: p.redirectURI } : {}) };
   }
   return providers as NonNullable<BetterAuthOptions["socialProviders"]>;
+}
+
+// The account and session rules of buildAuth: who may be created, who starts as
+// an administrator or approved, and who may hold a session.
+export function databaseHooksFor(
+  config: Pick<AuthConfig, "requireSignupApproval">,
+  administrators: ReadonlySet<string>,
+  signupOpen: () => Promise<boolean>,
+): NonNullable<BetterAuthOptions["databaseHooks"]> {
+  return {
+    user: {
+      create: {
+        before: async (user, context) => {
+          const createdByAdmin = context?.path === "/admin/create-user";
+          assertUserCreationAllowed(await readSignupOpen(signupOpen), context?.path);
+          const adminEmail = becomesAdministrator(user, createdByAdmin, administrators);
+          return {
+            data: {
+              ...user,
+              // The admin plugin contributes `role` before this hook. Preserve an
+              // explicitly requested admin-created role, while ADMIN_EMAILS
+              // addresses always become administrators.
+              ...(Object.prototype.hasOwnProperty.call(user, "role")
+                ? { role: adminEmail ? "admin" : user.role }
+                : {}),
+              // Existing rows are treated as approved through the field default.
+              // Only self-registration while the policy is enabled starts pending.
+              signupApproved: adminEmail || createdByAdmin || !config.requireSignupApproval,
+            },
+          };
+        },
+      },
+    },
+    session: {
+      create: {
+        before: async (session, context) => {
+          if (!context) return;
+          const user = (await context.context.internalAdapter.findUserById(session.userId)) as {
+            signupApproved?: boolean | null;
+          } | null;
+          if (user?.signupApproved === false) {
+            throw APIError.from("FORBIDDEN", {
+              code: SIGNUP_APPROVAL_REQUIRED,
+              message: "Your account is waiting for administrator approval.",
+            });
+          }
+        },
+      },
+    },
+  };
 }
 
 // Build a better-auth instance from resolved config. Called at boot and rebuilt by
@@ -147,47 +193,7 @@ export function buildAuth(config: AuthConfig) {
   // podokit:begin:auth-plugins
   // podokit:end:auth-plugins
 
-  const databaseHooks: NonNullable<BetterAuthOptions["databaseHooks"]> = {
-    user: {
-      create: {
-        before: async (user, context) => {
-          const adminEmail = adminEmails.has(user.email.toLowerCase());
-          const createdByAdmin = context?.path === "/admin/create-user";
-          assertUserCreationAllowed(await readSignupOpen(isSignupOpen), context?.path);
-          return {
-            data: {
-              ...user,
-              // The admin plugin contributes `role` before this hook. Preserve an
-              // explicitly requested admin-created role, while bootstrap emails
-              // always become administrators.
-              ...(Object.prototype.hasOwnProperty.call(user, "role")
-                ? { role: adminEmail ? "admin" : user.role }
-                : {}),
-              // Existing rows are treated as approved through the field default.
-              // Only self-registration while the policy is enabled starts pending.
-              signupApproved: adminEmail || createdByAdmin || !config.requireSignupApproval,
-            },
-          };
-        },
-      },
-    },
-    session: {
-      create: {
-        before: async (session, context) => {
-          if (!context) return;
-          const user = (await context.context.internalAdapter.findUserById(session.userId)) as {
-            signupApproved?: boolean | null;
-          } | null;
-          if (user?.signupApproved === false) {
-            throw APIError.from("FORBIDDEN", {
-              code: SIGNUP_APPROVAL_REQUIRED,
-              message: "Your account is waiting for administrator approval.",
-            });
-          }
-        },
-      },
-    },
-  };
+  const databaseHooks = databaseHooksFor(config, adminEmails, isSignupOpen);
 
   // Request-time hooks. The feature gate turns the admin Settings toggles into a
   // real server boundary (disabled features 404) for endpoint calls, including

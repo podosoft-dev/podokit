@@ -286,8 +286,8 @@ migration Job before a rolling deployment.
 - **Sign-up approval is provider-independent.** Turn on *Sign-up approval* in Settings to mark
   every new self-registered account as pending, whether it came from email/password, Google,
   Apple, magic link, or another provider. Pending accounts cannot create a session and receive the
-  stable `SIGNUP_APPROVAL_REQUIRED` code. Existing users, `ADMIN_EMAILS`, and users created by an
-  administrator remain approved. Turning the policy off auto-approves future registrations; it
+  stable `SIGNUP_APPROVAL_REQUIRED` code. Existing users, administrators made from `ADMIN_EMAILS`,
+  and users created by an administrator remain approved. Turning the policy off auto-approves future registrations; it
   does not silently approve the existing queue. Approve those users from `/admin/users`.
 - **Automatic logout is server-enforced.** Turn on *Automatic logout* in Settings and choose an
   idle period from 5 minutes through 7 days. Better Auth uses a sliding session expiration, while
@@ -1408,6 +1408,21 @@ unset ADMIN_BOOTSTRAP_PASSWORD
 
 `ADMIN_BOOTSTRAP_EMAIL` must be present in `ADMIN_EMAILS`. New accounts are
 created with `role=admin`, `emailVerified=true`, and `signupApproved=true`.
+
+`ADMIN_EMAILS` makes an administrator only of an account that has proven its
+address: one that `admin:bootstrap` or an administrator creates, or one that a
+sign-in creates with a verified address (a social provider that reports the
+email verified, a magic link, or an email code). The API refuses any other new
+account with a listed address, such as an email and password sign-up, with
+`PUBLIC_SIGNUP_DISABLED`, so nobody can register an administrator's address
+before its owner. While sign-up approval or mandatory email verification is on,
+Better Auth answers that refusal like any other sign-up, so the response does not
+reveal the address. With `NODE_ENV=production` the API refuses to start when
+`ADMIN_EMAILS` lists an entry that is not an address or that is on a name
+reserved for documentation, which receives no mail (`example.com`,
+`example.net`, `example.org` and their subdomains, and the `.example`, `.test`,
+`.invalid`, and `.localhost` names), and `podo deploy doctor` fails on such an
+entry before a rollout.
 Existing accounts are never modified: the command succeeds only when the stored
 role, flags, and password already match. Use `--check-only` for a read-only
 deployment check. It works with PostgreSQL and SQLite. With
