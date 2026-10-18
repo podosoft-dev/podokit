@@ -127,7 +127,10 @@ export interface ConnectionBudget {
   perProcessTerms: string[];
   steadyProcesses: number;
   steady: number;
-  /** Processes and connections while a rollout runs old and new pods side by side. */
+  /**
+   * Processes and connections while a rollout runs old and new pods side by side,
+   * counting replaced pods that still hold their pools while they terminate.
+   */
   rolloutProcesses: number;
   rollout: number;
   migration: number;
@@ -143,10 +146,18 @@ function poolSize(runtimeConfig: Record<string, string>, key: string, fallback: 
 
 /**
  * The most PostgreSQL connections the deployment can open: every API and worker
- * process with each pool full, the Kubernetes rollout's surge pod per workload
- * (the rendered strategy allows one), and the migration that runs beside the
- * release still serving. Compose replaces containers without a surge. Null when
- * the deployment uses no PostgreSQL.
+ * process with each pool full, a Kubernetes rollout's old and new pods together,
+ * and the migration that runs beside the release still serving. Null when the
+ * deployment uses no PostgreSQL.
+ *
+ * A replaced pod keeps its pools until its process exits, up to its grace period
+ * after the scale-down (the preStop sleep plus the drain for API pods), and the
+ * Deployment controller does not count terminating pods against maxSurge: it
+ * starts the next surge pod as soon as the previous replacement is ready. When
+ * replacements become ready faster than replaced pods exit, every old pod of a
+ * workload can still hold its pools while all of its new pods run, twice its
+ * replicas whatever the surge. Compose stops a container before it starts the
+ * replacement, so it never runs both.
  */
 export function connectionBudget(profile: AnyDeployProfile, modules: Set<string>): ConnectionBudget | null {
   const postgres = profile.dependencies.postgres;
@@ -169,7 +180,7 @@ export function connectionBudget(profile: AnyDeployProfile, modules: Set<string>
   }
   const worker = profile.workloads.worker;
   const steadyProcesses = profile.workloads.api.replicas + (worker?.replicas ?? 0);
-  const rolloutProcesses = steadyProcesses + (profile.driver === "kubernetes-helm" ? 1 + (worker ? 1 : 0) : 0);
+  const rolloutProcesses = profile.driver === "kubernetes-helm" ? 2 * steadyProcesses : steadyProcesses;
   const maxConnections = postgres.maxConnections ?? DEFAULT_MAX_CONNECTIONS;
   const steady = steadyProcesses * perProcess;
   const rollout = rolloutProcesses * perProcess;
@@ -192,7 +203,7 @@ function budgetSummary(budget: ConnectionBudget): string {
     `each API or worker process holds up to ${budget.perProcess} (${budget.perProcessTerms.join(" + ")}); ` +
     `${budget.steadyProcesses} process(es) hold ${budget.steady}` +
     (budget.rolloutProcesses > budget.steadyProcesses
-      ? `, ${budget.rolloutProcesses} during a rollout hold ${budget.rollout}`
+      ? `, ${budget.rolloutProcesses} during a rollout, counting replaced pods that have not exited, hold ${budget.rollout}`
       : "") +
     `, and the migration adds ${budget.migration} to the ${budget.steady}`
   );

@@ -87,6 +87,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `podo deploy status` apart from the current revision's `restartCount` instead
   of "restart totals", so an agent no longer attributes the restarts of pods
   replaced by `apply` or `rollback` to the new release.
+- The PostgreSQL connection budget of `podo deploy doctor` and
+  `podo deploy plan` counts a Kubernetes rollout as twice the API and worker
+  replicas instead of one surge pod more per workload. Kubernetes starts the
+  next replacement as soon as the previous one is ready without counting
+  terminating pods against `maxSurge`, and a replaced pod keeps its pools until
+  it exits, so every old pod can still hold its connections while all the new
+  ones run. With the defaults and `auth`, two API replicas now count 124
+  connections during a rollout instead of 93, above the 97 that PostgreSQL's
+  default `max_connections` leaves, and the doctor and the plan warn: lower
+  `DB_POOL_MAX` and `DB_AUTH_POOL_MAX`, or raise
+  `dependencies.postgres.maxConnections`.
 
 ## [1.6.1] - 2026-10-17
 

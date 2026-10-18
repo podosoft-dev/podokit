@@ -292,9 +292,9 @@ limit of its own and gets the same period, which covers the `/api` proxy's defau
 so raise `SHUTDOWN_TIMEOUT` in `runtimeConfig` when requests may take longer, such
 as uploads under a long [`APP_PROXY_TIMEOUTS`](templates.md#proxy-deadlines-per-route)
 deadline, and the grace period follows it. A replaced pod keeps its database
-connections until it exits, so for these seconds a rollout can run more processes
-than the one surge pod the connection budget below counts. Workers receive no
-traffic through a Service and keep the Kubernetes defaults.
+connections until it exits, which the [connection budget](#database-connections)
+counts. Workers receive no traffic through a Service and keep the Kubernetes
+defaults.
 
 ### Database connections
 
@@ -310,12 +310,13 @@ exceed it during a deployment.
 | --- | --- |
 | One API or worker process | `DB_POOL_MAX` (20) + 1 that the query pool opens to check a stalled server, `DB_AUTH_POOL_MAX` (10) with the `auth` module, and each pool in `dependencies.postgres.appPools`; each from `runtimeConfig`, else the default in parentheses, except an application pool with a fixed `size` |
 | Between rollouts | API replicas + worker replicas, times one process |
-| A Kubernetes rollout | one surge pod more for the API and one for a worker, which the rendered `maxSurge: 1` allows; Compose replaces containers without a surge |
+| A Kubernetes rollout | twice the API and worker replicas: with the rendered `maxSurge: 1` and `maxUnavailable: 0`, Kubernetes starts the next replacement as soon as the previous one is ready and does not count terminating pods against the surge, while a replaced pod keeps its pools until it exits, up to its grace period, so every old pod can still hold them when all the new ones run; Compose stops each container before it starts the replacement |
 | The migration | 2, beside the processes of the release still serving |
 
-With the defaults and `auth`, two API replicas hold 62 and a Kubernetes rollout
-93 of 97. A BullMQ worker on Kubernetes makes that 155 during a rollout, so lower
-the pools, for example `"DB_POOL_MAX": "10"` and `"DB_AUTH_POOL_MAX": "8"`, or
+With the defaults and `auth`, two API replicas hold 62, and a Kubernetes rollout
+124, above the 97 available, so the doctor and the plan warn. A BullMQ worker on
+Kubernetes makes that 186. Lower the pools, for example to `"DB_POOL_MAX": "10"`
+and `"DB_AUTH_POOL_MAX": "8"`, which brings a rollout of two API replicas to 76, or
 raise the limit. Behind a connection pooler such as PgBouncer, set
 `maxConnections` to the pooler's client limit instead.
 

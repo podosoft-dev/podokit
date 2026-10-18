@@ -532,9 +532,9 @@ describe("deployment rendering and planning", () => {
     const crowded = JSON.parse(readFileSync(path, "utf8")) as { workloads: { api: { replicas: number } } };
     crowded.workloads.api.replicas = 4;
     writeFileSync(path, JSON.stringify(crowded));
-    // Four API pods and a surge pod, each with DB_POOL_MAX 20 + 1 connections.
+    // Four API pods and their four replacements, each with DB_POOL_MAX 20 + 1 connections.
     expect(planDeployment(root, "production", "v1.2.3", runner).warnings.join(" ")).toContain(
-      "PostgreSQL connections can reach 105, above the 97",
+      "PostgreSQL connections can reach 168, above the 97",
     );
   });
 
