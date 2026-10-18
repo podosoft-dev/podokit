@@ -732,6 +732,17 @@ Status reports the deployed revision, the actual images, ready or running replic
 and restart totals. Verification checks the configured HTTPS origin without changing
 the target.
 
+On Kubernetes, a Deployment's `restartCount` adds up the container restarts of the
+running pods of its current revision only: the pods whose `pod-template-hash` is that
+of the ReplicaSet carrying the Deployment's `deployment.kubernetes.io/revision`, and
+that are not terminating. The other pods it still lists, from an earlier revision or
+terminating, are reported separately as `previousPods` with their `count` and
+`restartCount`. Pods of the replaced revision usually remain for their termination
+grace period after `apply` or `rollback` returns, so `previousPods` is often non-zero
+right after a rollout; their restarts do not describe the new release. The Compose
+driver lists only running containers, and Compose recreates a changed service's
+containers with a restart count of zero, so it has no previous containers to report.
+
 ## Rollback
 
 Preview a revision without a confirmation hash, then pass the hash it prints:

@@ -55,6 +55,64 @@ function initializedProject(): string {
   return root;
 }
 
+interface DeploymentResource {
+  metadata: { name: string; annotations?: Record<string, string> };
+  spec: { replicas: number; template: { spec: { containers: Array<{ image: string }> } } };
+  status: { readyReplicas: number };
+}
+
+function deploymentResource(name: string, revision: string, readyReplicas = 2): DeploymentResource {
+  return {
+    metadata: { name, annotations: { "deployment.kubernetes.io/revision": revision } },
+    spec: { replicas: 2, template: { spec: { containers: [{ image: `${name}@sha256:abc` }] } } },
+    status: { readyReplicas },
+  };
+}
+
+function replicaSet(revision: string, hash: string): Record<string, unknown> {
+  return {
+    metadata: {
+      annotations: { "deployment.kubernetes.io/revision": revision },
+      labels: { "pod-template-hash": hash },
+    },
+  };
+}
+
+function pod(hash: string, restarts: unknown[]): Record<string, unknown> {
+  return {
+    metadata: { labels: { "pod-template-hash": hash } },
+    status: { containerStatuses: restarts.map((restartCount) => ({ restartCount })) },
+  };
+}
+
+/** A cluster without a Helm release that holds the given Deployments, ReplicaSets, and pods. */
+function statusRunner(
+  cluster: { deployments: Record<string, DeploymentResource>; replicaSets: unknown[]; pods: unknown },
+  calls: string[][] = [],
+): CommandRunner {
+  return (_command, args) => {
+    calls.push(args);
+    if (args.includes("config")) return { status: 0, stdout: clusterOutput, stderr: "" };
+    if (args.includes("status")) {
+      return { status: 1, stdout: "", stderr: "Error: release: not found" };
+    }
+    if (args.includes("deployment")) {
+      const deployment = Object.entries(cluster.deployments).find(([name]) => args.includes(name));
+      return deployment
+        ? { status: 0, stdout: JSON.stringify(deployment[1]), stderr: "" }
+        : { status: 1, stdout: "", stderr: "Error from server (NotFound)" };
+    }
+    if (args.includes("replicasets")) {
+      return { status: 0, stdout: JSON.stringify({ items: cluster.replicaSets }), stderr: "" };
+    }
+    if (args.includes("pods")) {
+      const items = Array.isArray(cluster.pods) ? { items: cluster.pods } : cluster.pods;
+      return { status: 0, stdout: JSON.stringify(items), stderr: "" };
+    }
+    return { status: 0, stdout: "", stderr: "" };
+  };
+}
+
 afterEach(() => {
   for (const directory of created.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
@@ -678,40 +736,113 @@ describe("deployment doctor and verification", () => {
 
   it("reports partial workload state without hiding a missing deployment", () => {
     const root = initializedProject();
-    const runner: CommandRunner = (_command, args) => {
-      if (args.includes("config")) {
-        return { status: 0, stdout: clusterOutput, stderr: "" };
-      }
-      if (args.includes("status")) {
-        return { status: 1, stdout: "", stderr: "Error: release: not found" };
-      }
-      if (args.includes("example-app-api") && args.includes("deployment")) {
-        return {
-          status: 0,
-          stdout: JSON.stringify({
-            metadata: { name: "example-app-api" },
-            spec: {
-              replicas: 2,
-              template: { spec: { containers: [{ image: "api@sha256:abc" }] } },
-            },
-            status: { readyReplicas: 1 },
-          }),
-          stderr: "",
-        };
-      }
-      if (args.includes("example-app-web") && args.includes("deployment")) {
-        return { status: 1, stdout: "", stderr: "Error from server (NotFound)" };
-      }
-      if (args.includes("pods")) {
-        return { status: 0, stdout: "0\n", stderr: "" };
-      }
-      return { status: 0, stdout: "", stderr: "" };
-    };
+    const runner = statusRunner({
+      deployments: { "example-app-api": deploymentResource("example-app-api", "1", 1) },
+      replicaSets: [replicaSet("1", "current")],
+      pods: [pod("current", [0])],
+    });
     const status = getDeploymentStatus(root, "production", runner);
     expect(status.helmStatus).toBe("not-installed");
     expect(status.deployments).toEqual([
       expect.objectContaining({ name: "example-app-api", readyReplicas: 1 }),
     ]);
+  });
+
+  it("counts restarts of the current revision's running pods apart from earlier ones", () => {
+    const root = initializedProject();
+    const calls: string[][] = [];
+    const replicaSets = [replicaSet("4", "old"), replicaSet("5", "new")];
+    const terminatingOldPod = {
+      ...pod("old", [3]),
+      metadata: {
+        labels: { "pod-template-hash": "old" },
+        deletionTimestamp: "2026-10-18T05:00:00Z",
+      },
+    };
+    const runner = statusRunner(
+      {
+        deployments: {
+          "example-app-api": deploymentResource("example-app-api", "5"),
+          "example-app-web": deploymentResource("example-app-web", "5"),
+        },
+        replicaSets,
+        pods: [pod("new", [0]), pod("new", [0]), terminatingOldPod],
+      },
+      calls,
+    );
+    const status = getDeploymentStatus(root, "production", runner);
+    expect(status.deployments).toEqual([
+      expect.objectContaining({
+        name: "example-app-api",
+        restartCount: 0,
+        previousPods: { count: 1, restartCount: 3 },
+      }),
+      expect.objectContaining({
+        name: "example-app-web",
+        restartCount: 0,
+        previousPods: { count: 1, restartCount: 3 },
+      }),
+    ]);
+    expect(calls).toContainEqual(
+      expect.arrayContaining(["get", "pods", "-l", "app.kubernetes.io/name=example-app-api", "-o", "json"]),
+    );
+    expect(calls).toContainEqual(
+      expect.arrayContaining(["get", "replicasets", "-l", "app.kubernetes.io/name=example-app-api", "-o", "json"]),
+    );
+
+    const restarted = getDeploymentStatus(root, "production", statusRunner({
+      deployments: { "example-app-api": deploymentResource("example-app-api", "5") },
+      replicaSets,
+      pods: [pod("new", [2]), pod("new", [0]), terminatingOldPod],
+    }));
+    expect(restarted.deployments[0]).toMatchObject({
+      restartCount: 2,
+      previousPods: { count: 1, restartCount: 3 },
+    });
+
+    // An earlier revision's pod that is still running, mid-rollout, and a current
+    // pod that is terminating are not current either.
+    const terminatingCurrentPod = {
+      ...pod("new", [1]),
+      metadata: { labels: { "pod-template-hash": "new" }, deletionTimestamp: "2026-10-18T05:00:00Z" },
+    };
+    const rolling = getDeploymentStatus(root, "production", statusRunner({
+      deployments: { "example-app-api": deploymentResource("example-app-api", "5") },
+      replicaSets,
+      pods: [pod("new", [0, 0]), pod("old", [4]), terminatingCurrentPod, { metadata: { labels: { "pod-template-hash": "new" } } }],
+    }));
+    expect(rolling.deployments[0]).toMatchObject({
+      restartCount: 0,
+      previousPods: { count: 2, restartCount: 5 },
+    });
+  });
+
+  it("fails closed when the current revision's pods cannot be identified", () => {
+    const root = initializedProject();
+    const withoutRevision = deploymentResource("example-app-api", "5");
+    withoutRevision.metadata = { name: "example-app-api" };
+    expect(() => getDeploymentStatus(root, "production", statusRunner({
+      deployments: { "example-app-api": withoutRevision },
+      replicaSets: [replicaSet("5", "new")],
+      pods: [],
+    }))).toThrow(
+      "Kubernetes Deployment example-app-api has no valid deployment.kubernetes.io/revision annotation",
+    );
+    expect(() => getDeploymentStatus(root, "production", statusRunner({
+      deployments: { "example-app-api": deploymentResource("example-app-api", "5") },
+      replicaSets: [replicaSet("4", "old")],
+      pods: [],
+    }))).toThrow("Kubernetes Deployment example-app-api has 0 ReplicaSets for revision 5; expected one");
+    expect(() => getDeploymentStatus(root, "production", statusRunner({
+      deployments: { "example-app-api": deploymentResource("example-app-api", "5") },
+      replicaSets: [replicaSet("5", "new")],
+      pods: [pod("new", ["3"])],
+    }))).toThrow("Kubernetes pod restart counts for example-app-api are invalid");
+    expect(() => getDeploymentStatus(root, "production", statusRunner({
+      deployments: { "example-app-api": deploymentResource("example-app-api", "5") },
+      replicaSets: [replicaSet("5", "new")],
+      pods: "not-a-list",
+    }))).toThrow("Kubernetes pods of example-app-api returned an invalid list");
   });
 
   it("verifies every configured public path without following redirects", async () => {

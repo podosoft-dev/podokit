@@ -259,7 +259,7 @@ spec:
       return {
         status: 0,
         stdout: JSON.stringify({
-          metadata: { name },
+          metadata: { name, annotations: { "deployment.kubernetes.io/revision": "2" } },
           spec: {
             replicas: 2,
             template: {
@@ -282,8 +282,26 @@ spec:
         stderr: options.storageReadFails ? "private diagnostic" : "",
       };
     }
+    if (args.includes("replicasets")) {
+      return {
+        status: 0,
+        stdout: JSON.stringify({
+          items: [{
+            metadata: {
+              annotations: { "deployment.kubernetes.io/revision": "2" },
+              labels: { "pod-template-hash": "current" },
+            },
+          }],
+        }),
+        stderr: "",
+      };
+    }
     if (args.includes("pods")) {
-      return { status: 0, stdout: "0\n0\n", stderr: "" };
+      const current = {
+        metadata: { labels: { "pod-template-hash": "current" } },
+        status: { containerStatuses: [{ restartCount: 0 }] },
+      };
+      return { status: 0, stdout: JSON.stringify({ items: [current, current] }), stderr: "" };
     }
     if (
       options.failMigrationApply &&
@@ -426,6 +444,10 @@ describe("deployment mutations", () => {
     );
 
     expect(status.deployments).toHaveLength(2);
+    expect(status.deployments[0]).toMatchObject({
+      restartCount: 0,
+      previousPods: { count: 0, restartCount: 0 },
+    });
     expect(fetcher).toHaveBeenCalledTimes(3);
     expect(leaseTimestamps).toEqual([
       {

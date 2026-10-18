@@ -54,6 +54,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `hooks.after = auditAfterHook;` line and its import. An application that owns
   `auth.ts` replaces them with `plugins.push(auditPlugin());` and
   `import { auditPlugin } from "../audit/audit-hook";`.
+- `podo deploy status` on Kubernetes reports the restarts of each Deployment's
+  current revision only. It added up the restarts of every pod with the
+  workload's label, so right after `podo deploy apply` or `rollback` it reported
+  the restarts of replaced pods that were still terminating as if the new
+  release had restarted. `restartCount` now counts the running pods of the
+  ReplicaSet that carries the Deployment's revision, and the new `previousPods`
+  field gives the `count` and `restartCount` of the other pods, from an earlier
+  revision or terminating. A pod or ReplicaSet list of an unexpected shape fails
+  the command.
 
 ## [1.6.1] - 2026-10-17
 
