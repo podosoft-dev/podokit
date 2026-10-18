@@ -1092,7 +1092,18 @@ recorded as a sign-in, except a sign-up, an impersonation, a switch between a
 browser's sessions, and a request that replaces the signed-in user's own
 session. Requests that refresh their own session, such as session reads and
 profile updates, bearer and API key requests included, are not. A two-factor
-sign-in is recorded once, when the second factor completes it. Nothing else is
+sign-in is recorded once, when the second factor completes it. `auth.signup` is
+recorded when Better Auth stores a new user, whichever endpoint creates it (email
+sign-up, a social callback, a magic link, an email code, or an application's
+plugin), with `metadata.method` and, for social sign-up, `metadata.provider`. It
+is recorded even when the request then fails, as a social sign-up that waits for
+approval does, and a user an administrator creates is recorded as `user.create`
+only. Entries name the user even when the request carries no session:
+`auth.logout` names each account whose session the sign-out ended (a sign-out
+without a session records nothing), password resets by link, email code, or text
+message code and email verifications name the account they changed,
+`user.session_revoke` names the owner of the revoked session, and
+`user.stop_impersonate` names the administrator. Nothing else is
 recorded automatically: application
 code records its own semantic events with
 `AuditService.recordRequest()` or `recordAudit()`. Admins read entries at
