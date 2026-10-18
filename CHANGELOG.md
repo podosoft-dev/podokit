@@ -6,6 +6,99 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- The generated theme spec, `tests/ui/theme-mode.ui.spec.ts`, skipped in apps
+  whose `tests/helpers/app-paths.ts` sets `accountMenu` to `null`, so it checked
+  nothing there even when the app renders the theme toggle on another page. It
+  now opens the new `themeToggle` entry, which defaults to `accountMenu` and,
+  when that is `null`, to `/admin`, whose header renders the managed toggle for
+  the signed-in administrator. Set `themeToggle` to a page of the app's own, or
+  to `null` to skip the test.
+- An organization's `list-members` answered 500 on PostgreSQL when a filter or
+  an offset matched no member: Better Auth's Kysely adapter sends an `in` filter
+  on an empty array as `IN ()`, which PostgreSQL rejects. The `auth` module now
+  runs Better Auth's PostgreSQL queries through a Kysely instance with a plugin
+  that sends an empty `in` list as `1 = 0` and an empty `not in` list as
+  `1 = 1`, and the generated API depends on `kysely` directly. SQLite accepts
+  `IN ()` and is unchanged.
+- The `rate-limit` module's spec, `tests/api/rate-limit.api.spec.ts`, expected
+  the limits from the runner's environment and otherwise the module defaults,
+  so it failed against a stack with other limits, such as the development
+  example's `RATE_LIMIT_MAX=100` or raised local limits, unless the runner was
+  given the same values. It now reads each budget's limit from the API's
+  `RateLimit-Limit` header and checks which budget a route is counted in from
+  how `RateLimit-Remaining` moves. Limits set in the runner's environment are
+  still expected exactly. A check that compares counts across requests runs
+  again when a short `RATE_LIMIT_TTL` window ends in between, the 429 test
+  skips when the general window ends before this client reaches the limit, and
+  the session read test skips when the authentication limit is not below the
+  runtime one. It probes `/api/account/me` instead of the Redis provider's demo
+  cache route. `E2E_SKIP_RATE_LIMIT=true` still skips the file.
+- The `audit-log` module records every sign-in as `auth.login`. Only
+  `/sign-in/email` was recorded, so social, magic link, email code, passkey,
+  phone number, username, and two-factor sign-ins, and the automatic sign-in
+  after email verification, left no entry. Each entry names the method in
+  `metadata.method` and, for social sign-in, the provider in
+  `metadata.provider`.
+- The `audit-log` module no longer records failed requests as completed
+  actions. Better Auth runs after hooks for failed requests too, so a wrong
+  password was recorded as `auth.login`, a non-administrator's refused
+  `/admin/ban-user` as `user.ban`, and a failed password change as
+  `auth.password_change`. The password step of a two-factor sign-in was also
+  recorded as a sign-in, and the second factor that completes it was not; the
+  sign-in is now recorded once, when the second factor completes it.
+- The audit hook is now a Better Auth plugin that `apps/api/src/auth/auth.ts`
+  pushes after every other plugin, because the top-level `hooks.after` it used
+  runs before the two-factor plugin's hook. `podo update` replaces the
+  `hooks.after = auditAfterHook;` line and its import. An application that owns
+  `auth.ts` replaces them with `plugins.push(auditPlugin());` and
+  `import { auditPlugin } from "../audit/audit-hook";`.
+- `podo deploy status` on Kubernetes reports the restarts of each Deployment's
+  current revision only. It added up the restarts of every pod with the
+  workload's label, so right after `podo deploy apply` or `rollback` it reported
+  the restarts of replaced pods that were still terminating as if the new
+  release had restarted. `restartCount` now counts the running pods of the
+  ReplicaSet that carries the Deployment's revision, and the new `previousPods`
+  field gives the `count` and `restartCount` of the other pods, from an earlier
+  revision or terminating. A pod or ReplicaSet list of an unexpected shape fails
+  the command.
+- `podo update --apply` 3-way merges edited managed files without `--from`.
+  Without it, every edited managed file was left as it was and reported as a
+  conflict while the manifest and lock moved to the new version, so that
+  version's changes to those files were never applied. The merge base is now the
+  templates of the version `.podokit/manifest.json` records: the installed CLI's
+  own when the project is on that version, and otherwise that version of
+  `@podosoft/podokit`, installed from the npm registry into a temporary
+  directory. When the registry cannot provide it, `--apply` stops before writing
+  anything and lists the files that need the merge; `--from <dir>` still takes
+  precedence. Edited files without a merge base, such as one the new version
+  removes, are listed as skipped with the reason.
+- Rolling updates on Kubernetes no longer answer requests with 502 while a
+  replaced API or web pod leaves. A terminating pod still receives new
+  connections until the nodes and the ingress controller drop it from its
+  Service's endpoints, but the servers stop accepting connections on `SIGTERM`.
+  The rendered API and web containers now run `sleep 5` in a `preStop` hook
+  before `SIGTERM`, and their pods' `terminationGracePeriodSeconds` covers the
+  hook, the web server's `SHUTDOWN_TIMEOUT` drain (30 seconds unless
+  `runtimeConfig` sets it), and 5 seconds to exit: 40 seconds by default instead
+  of 30.
+- The generated `podokit-deploy` agent skill reports the `previousPods` of
+  `podo deploy status` apart from the current revision's `restartCount` instead
+  of "restart totals", so an agent no longer attributes the restarts of pods
+  replaced by `apply` or `rollback` to the new release.
+- The PostgreSQL connection budget of `podo deploy doctor` and
+  `podo deploy plan` counts a Kubernetes rollout as twice the API and worker
+  replicas instead of one surge pod more per workload. Kubernetes starts the
+  next replacement as soon as the previous one is ready without counting
+  terminating pods against `maxSurge`, and a replaced pod keeps its pools until
+  it exits, so every old pod can still hold its connections while all the new
+  ones run. With the defaults and `auth`, two API replicas now count 124
+  connections during a rollout instead of 93, above the 97 that PostgreSQL's
+  default `max_connections` leaves, and the doctor and the plan warn: lower
+  `DB_POOL_MAX` and `DB_AUTH_POOL_MAX`, or raise
+  `dependencies.postgres.maxConnections`.
+
 ## [1.6.1] - 2026-10-17
 
 ### Fixed

@@ -228,6 +228,45 @@ spec:
   });
 });
 
+describe("deployment pod termination", () => {
+  function deploymentDocument(manifest: string, name: string): string {
+    return manifest
+      .split(/\n---\n/)
+      .find((document) => document.includes("kind: Deployment") && document.includes(`name: ${name}\n`)) ?? "";
+  }
+
+  it("keeps API and web pods serving while they leave the Service's endpoints", () => {
+    const { root, profile } = initializedProfile();
+    const manifest = renderDeployment(root, "production", profile, "v1.2.3").applicationManifest;
+
+    for (const name of ["example-app-api", "example-app-web"]) {
+      const document = deploymentDocument(manifest, name);
+      expect(document).toContain(
+        '          lifecycle:\n            preStop:\n              exec: { command: [sleep, "5"] }\n',
+      );
+      // The 5 s sleep, the web server's 30 s drain and 1 s force-close, and a margin.
+      expect(document).toContain("      terminationGracePeriodSeconds: 40\n");
+    }
+    const worker = deploymentDocument(manifest, "example-app-worker");
+    expect(worker).toContain("kind: Deployment");
+    expect(worker).not.toContain("preStop");
+    expect(worker).not.toContain("terminationGracePeriodSeconds");
+  });
+
+  it("extends the grace period by the configured web shutdown timeout", () => {
+    const { root, profile } = initializedProfile();
+    profile.runtimeConfig = { ...profile.runtimeConfig, SHUTDOWN_TIMEOUT: "120" };
+    const manifest = renderDeployment(root, "production", profile, "v1.2.3").applicationManifest;
+
+    expect(deploymentDocument(manifest, "example-app-api")).toContain(
+      "      terminationGracePeriodSeconds: 130\n",
+    );
+    expect(deploymentDocument(manifest, "example-app-web")).toContain(
+      "      terminationGracePeriodSeconds: 130\n",
+    );
+  });
+});
+
 describe("deployment migration command", () => {
   it("runs workers with Bun", () => {
     const { root, profile } = initializedProfile();

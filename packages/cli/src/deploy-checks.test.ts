@@ -6,7 +6,7 @@ import { connectionBudget, connectionBudgetWarning, installedModules, profileFin
 import { initializeComposeProfile } from "./deploy-compose-profile";
 import { renderComposeDeployment } from "./deploy-compose-render";
 import { loadAnyDeploymentProfile, type AnyDeployProfile } from "./deploy-driver";
-import { initializeDeploymentProfile } from "./deploy-profile";
+import { initializeDeploymentProfile, loadDeploymentProfile } from "./deploy-profile";
 import { renderDeployment } from "./deploy-render";
 import { profilePath } from "./deploy-schema";
 import { initLockfile } from "./lockfile";
@@ -43,6 +43,43 @@ function edit(root: string, change: (profile: Record<string, any>) => void): Any
   return loadAnyDeploymentProfile(root, "production");
 }
 
+function rollingUpdate(manifest: string, name: string): { maxSurge: number; maxUnavailable: number } {
+  const deployment = manifest
+    .split(/\n---\n/)
+    .find((document) => document.includes("kind: Deployment") && document.includes(`name: ${name}\n`));
+  const match = deployment?.match(/rollingUpdate: \{ maxUnavailable: (\d+), maxSurge: (\d+) \}/);
+  if (!match) throw new Error(`No rolling update strategy rendered for ${name}.`);
+  return { maxUnavailable: Number(match[1]), maxSurge: Number(match[2]) };
+}
+
+/**
+ * Pods of one Deployment that can hold their pools at once during a rollout, by
+ * the Deployment controller's rules: it scales the new ReplicaSet up while the
+ * ReplicaSets' replicas stay within replicas + maxSurge, scales the old one down
+ * while available pods stay at least replicas - maxUnavailable, and does not
+ * count terminating pods. Each new pod is ready at once and no replaced pod
+ * exits before the rollout ends, which is the worst case.
+ */
+function mostPodsDuringRollout(
+  replicas: number,
+  strategy: { maxSurge: number; maxUnavailable: number },
+): number {
+  let old = replicas;
+  let current = 0;
+  let terminating = 0;
+  let most = replicas;
+  while (old > 0 || current < replicas) {
+    const scaleUp = Math.min(replicas - current, Math.max(0, replicas + strategy.maxSurge - (old + current)));
+    current += scaleUp;
+    most = Math.max(most, old + current + terminating);
+    const scaleDown = Math.min(old, Math.max(0, old + current - (replicas - strategy.maxUnavailable)));
+    old -= scaleDown;
+    terminating += scaleDown;
+    if (scaleUp === 0 && scaleDown === 0) throw new Error("The rollout cannot progress.");
+  }
+  return most;
+}
+
 function budgetFinding(root: string) {
   return profileFindings(root, loadAnyDeploymentProfile(root, "production")).find(
     (finding) => finding.code === "database-connections",
@@ -50,30 +87,60 @@ function budgetFinding(root: string) {
 }
 
 describe("PostgreSQL connection budget", () => {
-  it("counts every API and worker process with full pools, and Kubernetes' surge pods", () => {
+  it("counts every API and worker process with full pools, and Kubernetes' replaced pods", () => {
     const root = project("kubernetes-helm", ["auth"]);
     const budget = connectionBudget(loadAnyDeploymentProfile(root, "production"), installedModules(root));
+    // Two API pods, and during a rollout their two replacements beside them: 4 x 31.
     expect(budget).toMatchObject({
       maxConnections: 100,
       available: 97,
       perProcess: 31,
       perProcessTerms: ["DB_POOL_MAX 20 + 1", "DB_AUTH_POOL_MAX 10"],
+      steadyProcesses: 2,
       steady: 62,
-      rolloutProcesses: 3,
-      rollout: 93,
-      peak: 93,
+      rolloutProcesses: 4,
+      rollout: 124,
+      peak: 124,
     });
+    expect(budgetFinding(root)).toMatchObject({ ok: true, warning: true });
+    expect(budgetFinding(root)?.message).toContain(
+      "4 during a rollout, counting replaced pods that have not exited, hold 124",
+    );
+    edit(root, (value) => {
+      Object.assign(value.runtimeConfig, { DB_POOL_MAX: "10", DB_AUTH_POOL_MAX: "8" });
+    });
+    // 4 x (10 + 1 + 8) = 76 of 97.
     expect(budgetFinding(root)).toMatchObject({ ok: true });
     expect(budgetFinding(root)?.warning).toBeUndefined();
   });
 
+  it("counts the most pods the rendered rollout strategy can run at once", () => {
+    const root = project("kubernetes-helm", ["auth", "bullmq"]);
+    const kubernetesProfile = loadDeploymentProfile(root, "production");
+    kubernetesProfile.workloads.worker = { replicas: 1, resources: kubernetesProfile.workloads.api.resources };
+    const manifest = renderDeployment(root, "production", kubernetesProfile, "v1.2.3").applicationManifest;
+    for (const replicas of [1, 2, 3, 5]) {
+      const profile = edit(root, (value) => {
+        value.workloads.api.replicas = replicas;
+        value.workloads.worker = { replicas, resources: value.workloads.api.resources };
+      });
+      const budget = connectionBudget(profile, installedModules(root))!;
+      let pods = 0;
+      for (const name of ["example-app-api", "example-app-worker"]) {
+        pods += mostPodsDuringRollout(replicas, rollingUpdate(manifest, name));
+      }
+      expect(pods).toBe(4 * replicas);
+      expect(budget.rolloutProcesses).toBe(pods);
+    }
+  });
+
   it("warns when a Kubernetes rollout can exceed max_connections, and fails when steady state does", () => {
     const root = project("kubernetes-helm", ["auth", "bullmq"]);
-    // Two API and one worker pod, plus a surge pod for each during a rollout: 5 x 31.
+    // Two API and one worker pod, and as many replacements during a rollout: 6 x 31.
     expect(budgetFinding(root)).toMatchObject({ ok: true, warning: true });
-    expect(budgetFinding(root)?.message).toContain("can reach 155 during a deployment");
+    expect(budgetFinding(root)?.message).toContain("can reach 186 during a deployment");
     expect(connectionBudgetWarning(loadAnyDeploymentProfile(root, "production"), installedModules(root))).toContain(
-      "PostgreSQL connections can reach 155, above the 97 that max_connections 100 leaves after 3 reserved",
+      "PostgreSQL connections can reach 186, above the 97 that max_connections 100 leaves after 3 reserved",
     );
 
     edit(root, (profile) => {
@@ -95,12 +162,27 @@ describe("PostgreSQL connection budget", () => {
       Object.assign(value.runtimeConfig, { DB_POOL_MAX: "10", SDD_DB_POOL_MAX: "10" });
       value.dependencies.postgres.appPools = [{ sizeKey: "SDD_DB_POOL_MAX", extraConnections: 1 }];
     });
-    // (2 replicas + 1 surge) x (10 + 1 + 10 + 10 + 1) = 96 of 97.
-    expect(connectionBudget(profile, installedModules(root))).toMatchObject({ perProcess: 32, peak: 96 });
+    // Two API replicas with the rendered maxSurge 1 and maxUnavailable 0: once the
+    // second replacement is ready, both replaced pods can still be inside their
+    // grace period. (2 old + 2 new) x (10 + 1 + 10 + 10 + 1) = 128, above 97.
+    expect(connectionBudget(profile, installedModules(root))).toMatchObject({
+      perProcess: 32,
+      steady: 64,
+      rolloutProcesses: 4,
+      rollout: 128,
+      peak: 128,
+    });
+    expect(budgetFinding(root)).toMatchObject({ ok: true, warning: true });
+    expect(budgetFinding(root)?.message).toContain("can reach 128 during a deployment");
+    edit(root, (value) => {
+      Object.assign(value.runtimeConfig, { DB_POOL_MAX: "6", SDD_DB_POOL_MAX: "6" });
+    });
+    // 4 x (6 + 1 + 10 + 6 + 1) = 96 of 97.
     expect(budgetFinding(root)?.warning).toBeUndefined();
     edit(root, (value) => {
       value.workloads.api.replicas = 3;
     });
+    // 6 x 24 = 144: three replicas need a higher limit or smaller pools.
     expect(budgetFinding(root)).toMatchObject({ ok: true, warning: true });
   });
 

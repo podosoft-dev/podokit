@@ -192,7 +192,9 @@ export function buildAuth(config: AuthConfig) {
   // Request-time hooks. The feature gate turns the admin Settings toggles into a
   // real server boundary (disabled features 404) for endpoint calls, including
   // in-process auth.api calls the plugin above never sees. Other PodoKit modules
-  // add their own hooks below the marker.
+  // add their own hooks below the marker. The top-level `hooks.after` runs before
+  // every plugin's after hooks, so a hook that needs a request's final outcome is
+  // pushed below the marker as a plugin, after all the plugins above.
   const hooks: NonNullable<BetterAuthOptions["hooks"]> = {
     before: createFeatureGate(gateSettings),
   };

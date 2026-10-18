@@ -851,7 +851,8 @@ async function main(argv: string[]): Promise<void> {
         process.stdout.write(
           `Applied: ${result.written.length} written, ${result.moved.length} moved, ` +
             `${result.removed.length} removed, ` +
-            `${result.merged.length} merged, ${result.conflicts.length} conflict.\n`,
+            `${result.merged.length} merged, ${result.conflicts.length} conflict, ` +
+            `${result.skipped.length} skipped.\n`,
         );
         writeApiPaths("Direct API paths:", result.apiPaths, "add");
         if (result.conflicts.length) {
@@ -866,6 +867,13 @@ async function main(argv: string[]): Promise<void> {
             "\nThe template changed for these files you own; they were left as they are. " +
               "Compare each with podo diff <path>:\n" +
               result.review.map((f) => `  ${f}`).join("\n") +
+              "\n",
+          );
+        }
+        if (result.skipped.length) {
+          process.stdout.write(
+            "\nSkipped edited files, left as they are:\n" +
+              result.skipped.map((file) => `  ${file.path}  (${file.reason})`).join("\n") +
               "\n",
           );
         }
@@ -905,7 +913,8 @@ async function main(argv: string[]): Promise<void> {
         process.stdout.write(
           `${shown.length ? "\n" : ""}${counts.update} update, ${counts.add} add, ${counts.move} move, ` +
             `${counts.remove} remove, ${counts.conflict} conflict, ${counts.review} review. ` +
-            `Dry-run — nothing was written. Re-run with --apply to write (use --from <dir> for a 3-way merge).\n`,
+            `Dry-run — nothing was written. Re-run with --apply to write; it 3-way merges each conflict ` +
+            `against the ${plan.fromVersion} templates, fetched from npm unless --from <dir> gives them.\n`,
         );
       }
       writeOwnedTemplateNotes(plan, templatesDir, args.from);

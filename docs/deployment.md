@@ -270,6 +270,32 @@ External object storage, unchanged live and recorded managed server images in a
 deployed release, and new installations keep the existing Helm behavior. This execution safeguard
 does not change the rendered manifests or the plan confirmation hash.
 
+### Rolling updates on Kubernetes
+
+The rendered API and web Deployments replace one pod at a time with a surge pod
+(`maxSurge: 1`, `maxUnavailable: 0`), so a pod leaves only after its replacement is
+ready. A pod that starts terminating still receives new connections for a moment,
+until every node and the ingress controller drop it from its Service's endpoints,
+while the API and web servers stop accepting connections as soon as they receive
+`SIGTERM`. Each API and web container therefore has a `preStop` hook that runs
+`sleep 5` before Kubernetes sends `SIGTERM`, and the pod keeps serving during those
+5 seconds. The hook runs the image's `/bin/sleep`, which PodoKit's Alpine-based
+images include. In an image without it the hook fails, and Kubernetes records a
+`FailedPreStopHook` event and sends `SIGTERM` at once, as it did without a hook.
+
+The pod's `terminationGracePeriodSeconds` counts the hook as well: 5 seconds for it,
+the web server's `SHUTDOWN_TIMEOUT` for open requests to finish (30 seconds unless
+`runtimeConfig` sets it), and 5 more for the web server to close what remains and
+exit, 40 seconds by default. The API waits for its in-flight requests without a
+limit of its own and gets the same period, which covers the `/api` proxy's default
+30-second wait. Kubernetes kills a container still running when the period ends,
+so raise `SHUTDOWN_TIMEOUT` in `runtimeConfig` when requests may take longer, such
+as uploads under a long [`APP_PROXY_TIMEOUTS`](templates.md#proxy-deadlines-per-route)
+deadline, and the grace period follows it. A replaced pod keeps its database
+connections until it exits, which the [connection budget](#database-connections)
+counts. Workers receive no traffic through a Service and keep the Kubernetes
+defaults.
+
 ### Database connections
 
 Every API and worker process keeps its own PostgreSQL pools, and PostgreSQL
@@ -284,12 +310,13 @@ exceed it during a deployment.
 | --- | --- |
 | One API or worker process | `DB_POOL_MAX` (20) + 1 that the query pool opens to check a stalled server, `DB_AUTH_POOL_MAX` (10) with the `auth` module, and each pool in `dependencies.postgres.appPools`; each from `runtimeConfig`, else the default in parentheses, except an application pool with a fixed `size` |
 | Between rollouts | API replicas + worker replicas, times one process |
-| A Kubernetes rollout | one surge pod more for the API and one for a worker, which the rendered `maxSurge: 1` allows; Compose replaces containers without a surge |
+| A Kubernetes rollout | twice the API and worker replicas: with the rendered `maxSurge: 1` and `maxUnavailable: 0`, Kubernetes starts the next replacement as soon as the previous one is ready and does not count terminating pods against the surge, while a replaced pod keeps its pools until it exits, up to its grace period, so every old pod can still hold them when all the new ones run; Compose stops each container before it starts the replacement |
 | The migration | 2, beside the processes of the release still serving |
 
-With the defaults and `auth`, two API replicas hold 62 and a Kubernetes rollout
-93 of 97. A BullMQ worker on Kubernetes makes that 155 during a rollout, so lower
-the pools, for example `"DB_POOL_MAX": "10"` and `"DB_AUTH_POOL_MAX": "8"`, or
+With the defaults and `auth`, two API replicas hold 62, and a Kubernetes rollout
+124, above the 97 available, so the doctor and the plan warn. A BullMQ worker on
+Kubernetes makes that 186. Lower the pools, for example to `"DB_POOL_MAX": "10"`
+and `"DB_AUTH_POOL_MAX": "8"`, which brings a rollout of two API replicas to 76, or
 raise the limit. Behind a connection pooler such as PgBouncer, set
 `maxConnections` to the pooler's client limit instead.
 
@@ -731,6 +758,17 @@ podo deploy verify --profile production --json
 Status reports the deployed revision, the actual images, ready or running replicas,
 and restart totals. Verification checks the configured HTTPS origin without changing
 the target.
+
+On Kubernetes, a Deployment's `restartCount` adds up the container restarts of the
+running pods of its current revision only: the pods whose `pod-template-hash` is that
+of the ReplicaSet carrying the Deployment's `deployment.kubernetes.io/revision`, and
+that are not terminating. The other pods it still lists, from an earlier revision or
+terminating, are reported separately as `previousPods` with their `count` and
+`restartCount`. Pods of the replaced revision usually remain for their termination
+grace period after `apply` or `rollback` returns, so `previousPods` is often non-zero
+right after a rollout; their restarts do not describe the new release. The Compose
+driver lists only running containers, and Compose recreates a changed service's
+containers with a restart count of zero, so it has no previous containers to report.
 
 ## Rollback
 

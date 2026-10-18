@@ -69,7 +69,13 @@ export interface DeploymentStatus {
     readyReplicas: number;
     replicas: number;
     images: string[];
+    /** Container restarts of the running pods of the Deployment's current revision. */
     restartCount: number;
+    /**
+     * Pods still listed that are not current: from an earlier revision, or
+     * terminating. They linger for the termination grace period after a rollout.
+     */
+    previousPods: { count: number; restartCount: number };
   }>;
 }
 
@@ -90,7 +96,7 @@ interface ImageManifest {
 }
 
 interface KubernetesDeployment {
-  metadata?: { name?: string };
+  metadata?: { name?: string; annotations?: Record<string, unknown> };
   spec?: {
     replicas?: number;
     template?: { spec?: { containers?: Array<{ image?: string }> } };
@@ -656,17 +662,109 @@ function parseDeployment(
   return deployment;
 }
 
-function restartCount(output: string, workloadName: string): number {
-  const values = output
-    .split(/\s+/)
-    .map((value) => value.trim())
-    .filter(Boolean);
-  if (values.some((value) => !/^(0|[1-9][0-9]*)$/.test(value))) {
+const REVISION_ANNOTATION = "deployment.kubernetes.io/revision";
+const POD_TEMPLATE_HASH_LABEL = "pod-template-hash";
+
+function deploymentRevision(deployment: KubernetesDeployment, workloadName: string): string {
+  const revision = deployment.metadata?.annotations?.[REVISION_ANNOTATION];
+  if (typeof revision !== "string" || !/^[1-9][0-9]*$/.test(revision)) {
     throw new Error(
-      `Kubernetes pod restart counts for ${workloadName} are invalid.`,
+      `Kubernetes Deployment ${workloadName} has no valid ${REVISION_ANNOTATION} annotation.`,
     );
   }
-  return values.reduce((sum, value) => sum + Number(value), 0);
+  return revision;
+}
+
+function kubernetesListItems(output: string, description: string): unknown[] {
+  const list = parseJson<unknown>(output, description);
+  if (!isRecord(list) || !Array.isArray(list.items)) {
+    throw new Error(`${description} returned an invalid list.`);
+  }
+  return list.items;
+}
+
+function optionalRecord(value: unknown): value is Record<string, unknown> | undefined {
+  return value === undefined || isRecord(value);
+}
+
+/** The pod-template-hash of the ReplicaSet that carries the Deployment's revision. */
+function currentPodTemplateHash(
+  output: string,
+  workloadName: string,
+  revision: string,
+): string {
+  const description = `Kubernetes ReplicaSets of ${workloadName}`;
+  const matching = kubernetesListItems(output, description).map((item) => {
+    if (
+      !isRecord(item) ||
+      !isRecord(item.metadata) ||
+      !optionalRecord(item.metadata.annotations) ||
+      !optionalRecord(item.metadata.labels)
+    ) {
+      throw new Error(`${description} have an invalid schema.`);
+    }
+    return {
+      revision: item.metadata.annotations?.[REVISION_ANNOTATION],
+      hash: item.metadata.labels?.[POD_TEMPLATE_HASH_LABEL],
+    };
+  }).filter((replicaSet) => replicaSet.revision === revision);
+  if (matching.length !== 1) {
+    throw new Error(
+      `Kubernetes Deployment ${workloadName} has ${matching.length} ReplicaSets for revision ${revision}; expected one.`,
+    );
+  }
+  const hash = matching[0]!.hash;
+  if (typeof hash !== "string" || hash.length === 0) {
+    throw new Error(
+      `${description}: revision ${revision} has no ${POD_TEMPLATE_HASH_LABEL} label.`,
+    );
+  }
+  return hash;
+}
+
+interface PodRestarts {
+  restartCount: number;
+  previousPods: { count: number; restartCount: number };
+}
+
+/**
+ * Restarts of the current revision's running pods, and of the rest separately.
+ * Pods of every revision share the workload label, and an earlier ReplicaSet's
+ * pods stay listed with a deletionTimestamp until they finish terminating.
+ */
+function podRestarts(output: string, workloadName: string, currentHash: string): PodRestarts {
+  const description = `Kubernetes pods of ${workloadName}`;
+  const result: PodRestarts = { restartCount: 0, previousPods: { count: 0, restartCount: 0 } };
+  for (const pod of kubernetesListItems(output, description)) {
+    if (
+      !isRecord(pod) ||
+      !isRecord(pod.metadata) ||
+      !optionalRecord(pod.metadata.labels) ||
+      (pod.status !== undefined && !isRecord(pod.status))
+    ) {
+      throw new Error(`${description} have an invalid schema.`);
+    }
+    // A pod that has not started a container yet reports no statuses.
+    const statuses = pod.status?.containerStatuses ?? [];
+    if (!Array.isArray(statuses)) throw new Error(`${description} have an invalid schema.`);
+    let restarts = 0;
+    for (const status of statuses) {
+      const count = isRecord(status) ? status.restartCount : undefined;
+      if (typeof count !== "number" || !Number.isInteger(count) || count < 0) {
+        throw new Error(`Kubernetes pod restart counts for ${workloadName} are invalid.`);
+      }
+      restarts += count;
+    }
+    const terminating =
+      pod.metadata.deletionTimestamp !== undefined && pod.metadata.deletionTimestamp !== null;
+    if (!terminating && pod.metadata.labels?.[POD_TEMPLATE_HASH_LABEL] === currentHash) {
+      result.restartCount += restarts;
+    } else {
+      result.previousPods.count += 1;
+      result.previousPods.restartCount += restarts;
+    }
+  }
+  return result;
 }
 
 function planDigest(input: Omit<DeploymentPlan, "planHash">, runtime: DeploymentRuntime): string {
@@ -1249,20 +1347,24 @@ export function getDeploymentStatus(
   });
   const deployments = items.map((item) => {
     const name = item.metadata!.name!;
-    const observedRestartCount = restartCount(
+    const selector = `app.kubernetes.io/name=${name}`;
+    const currentHash = currentPodTemplateHash(
       checked(
         runner,
         "kubectl",
-        kubectlArgs(profile, [
-          "get",
-          "pods",
-          "-l",
-          `app.kubernetes.io/name=${name}`,
-          "-o",
-          "jsonpath={range .items[*].status.containerStatuses[*]}{.restartCount}{\"\\n\"}{end}",
-        ]),
+        kubectlArgs(profile, ["get", "replicasets", "-l", selector, "-o", "json"]),
       ),
       name,
+      deploymentRevision(item, name),
+    );
+    const restarts = podRestarts(
+      checked(
+        runner,
+        "kubectl",
+        kubectlArgs(profile, ["get", "pods", "-l", selector, "-o", "json"]),
+      ),
+      name,
+      currentHash,
     );
     return {
       name,
@@ -1271,7 +1373,7 @@ export function getDeploymentStatus(
       images: (item.spec?.template?.spec?.containers ?? [])
         .map((container) => container.image)
         .filter((image): image is string => typeof image === "string"),
-      restartCount: observedRestartCount,
+      ...restarts,
     };
   });
   return {

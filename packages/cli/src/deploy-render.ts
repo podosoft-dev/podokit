@@ -465,6 +465,28 @@ ${entries.length ? `data:\n${entries.map(([key, value]) => `  ${key}: ${quote(va
 // web server.
 const PROBE_TIMEOUT_SECONDS = 2;
 
+// A terminating pod still receives new connections until every node and the
+// ingress controller drop it from the Service's endpoints, while the API and web
+// servers stop accepting them on SIGTERM. The kubelet runs this sleep before it
+// sends SIGTERM, so the pod keeps serving meanwhile. PodoKit's API and web images
+// are Alpine-based and ship /bin/sleep; an exec hook works on every Kubernetes
+// version, unlike the sleep action.
+const PRE_STOP_SLEEP_SECONDS = 5;
+// The web server drains for SHUTDOWN_TIMEOUT seconds (30 unless set) and then
+// force-closes for up to one more. The API's stop waits for in-flight requests
+// without a bound of its own, so it gets the same window, which covers the /api
+// proxy's default 30 s wait. The grace period also counts the preStop sleep.
+const DEFAULT_SHUTDOWN_TIMEOUT_SECONDS = 30;
+const SHUTDOWN_MARGIN_SECONDS = 5;
+
+function terminationGracePeriodSeconds(runtimeConfig: Record<string, string>): number {
+  const configured = runtimeConfig.SHUTDOWN_TIMEOUT;
+  const drain = configured !== undefined && /^\d+$/.test(configured)
+    ? Number(configured)
+    : DEFAULT_SHUTDOWN_TIMEOUT_SECONDS;
+  return PRE_STOP_SLEEP_SECONDS + drain + SHUTDOWN_MARGIN_SECONDS;
+}
+
 function deployment(
   profile: DeployProfileV1,
   kind: "api" | "web",
@@ -472,6 +494,7 @@ function deployment(
   image: string,
   rolloutStateDigest: string,
   runtimeConfigDigest: string,
+  gracePeriodSeconds: number,
 ): string {
   const name = `${profile.target.release}-${kind}`;
   const workloadSecret = kind === "api" ? profile.secrets.api : profile.secrets.web;
@@ -533,6 +556,7 @@ ${labels(name, 8)}    spec:
         runAsUser: 100
         runAsGroup: 101
         seccompProfile: { type: RuntimeDefault }
+      terminationGracePeriodSeconds: ${gracePeriodSeconds}
       containers:
         - name: ${kind}
           image: ${quote(image)}
@@ -544,6 +568,9 @@ ${labels(name, 8)}    spec:
             - configMapRef: { name: ${profile.target.release}-runtime }
 ${secretEnvFrom}          ports:
             - { name: http, containerPort: 3000 }
+          lifecycle:
+            preStop:
+              exec: { command: [sleep, "${PRE_STOP_SLEEP_SECONDS}"] }
 ${probe}${resources(workload.resources)}---
 apiVersion: v1
 kind: Service
@@ -728,6 +755,7 @@ function applicationManifest(
   runtimeConfig: Record<string, string>,
 ): string {
   const runtimeConfigDigest = digest(["runtime-config", JSON.stringify(sortedRuntimeConfig(runtimeConfig))]);
+  const gracePeriodSeconds = terminationGracePeriodSeconds(runtimeConfig);
   return [
     configMap(profile, runtimeConfig),
     deployment(
@@ -737,6 +765,7 @@ function applicationManifest(
       images.api,
       rolloutStateDigest,
       runtimeConfigDigest,
+      gracePeriodSeconds,
     ),
     deployment(
       profile,
@@ -745,6 +774,7 @@ function applicationManifest(
       images.web,
       rolloutStateDigest,
       runtimeConfigDigest,
+      gracePeriodSeconds,
     ),
     workerDeployment(
       profile,
