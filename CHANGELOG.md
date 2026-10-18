@@ -6,6 +6,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- The `audit-log` module recorded `auth.signup` only for `POST /sign-up/email`.
+  An account created through any other endpoint, such as a social provider's
+  callback (`/callback/:id`), `/sign-in/social` with an ID token, a magic link,
+  an email code, or a plugin the application adds, had no sign-up entry. One
+  created while sign-up approval is on, which Better Auth stores and then refuses
+  a session, left no entry at all, so a pending account was invisible in the
+  audit log until an administrator approved it. The audit plugin now records
+  `auth.signup` from Better Auth's user creation through a database hook, once
+  per account, whichever endpoint creates it and even when the request then
+  fails. The entry names the new user as actor and target, and
+  `metadata.method` names the endpoint as `auth.login` does, with the provider
+  for a social sign-up, for example `{ "method": "social", "provider": "google" }`.
+  An approved social sign-up records `auth.signup` and then `auth.login`, and an
+  email sign-up still records one `auth.signup`; a sign-up with an address that
+  already has an account, which Better Auth answers with the same `200` when
+  auto sign-in is off, no longer records a second one. A user an administrator
+  creates is still recorded as `user.create` only, which now carries the new
+  user's id in `targetId`. An account that application code creates outside a
+  request is recorded with no actor.
+- The `audit-log` module's `auth.logout` entries had no actor or target:
+  `/sign-out` does not load the session into the request, and the session row is
+  gone by the time the audit hook runs. The plugin now notes the owner of each
+  session a request ends, and `auth.logout` names each account whose session the
+  sign-out ended, one entry per account when `multiSession()` signs out every
+  account of a browser. A sign-out that ends no session, such as an anonymous
+  `POST /sign-out`, records nothing instead of an entry without an actor. Other
+  entries that named nobody now name the user: a password reset by link
+  (`/reset-password`), email code (`/email-otp/reset-password`, newly recorded),
+  or text message code (`/phone-number/reset-password`, newly recorded), and an
+  email verification by link or by code (`/email-otp/verify-email`, newly
+  recorded) name the account as actor and target; `user.session_revoke` names
+  the owner of the session an administrator revokes; and
+  `user.stop_impersonate` names the administrator as actor and the impersonated
+  user as target instead of the impersonated user as actor. An email change by
+  code (`/email-otp/change-email`) is now recorded as `auth.email_change`.
+
 ### Security
 
 - The generated `apps/api/src/auth/auth.ts` gave the admin role and sign-up
