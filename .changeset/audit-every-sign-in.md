@@ -1,5 +1,0 @@
----
-"@podosoft/podokit": patch
----
-
-Record every sign-in method in the audit log, and only requests that succeeded. The audit-log module's Better Auth hook recorded `auth.login` only for `/sign-in/email`, so social, magic link, email code, passkey, phone number, username, and two-factor sign-ins left no entry. It also ran for failed requests and before two-factor's hook, so a wrong password, a forbidden admin call such as a non-administrator's `/admin/ban-user`, a failed password change, and the password step of a two-factor sign-in were recorded as completed actions. The hook is now a plugin that `auth.ts` pushes after every other plugin. It skips failed requests, records `auth.login` when a request ends with a session it did not come with, with `metadata.method` and, for social sign-in, `metadata.provider`, and records a two-factor sign-in when the second factor completes it. `podo update` replaces the `hooks.after = auditAfterHook;` line in `apps/api/src/auth/auth.ts`; an application that owns `auth.ts` replaces it and its import with `plugins.push(auditPlugin());` and `import { auditPlugin } from "../audit/audit-hook";`.
