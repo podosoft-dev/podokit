@@ -455,6 +455,9 @@ async function main() {
         ? { E2E_SECONDARY_API_URL: `http://localhost:${env.SECONDARY_API_PORT}` }
         : {}),
       MAILPIT_URL: mailpitURL,
+      // With SMTP wired to that Mailpit, an email spec whose probe message does
+      // not arrive fails instead of skipping.
+      ...(process.env.SMTP_HOST ? { E2E_REQUIRE_MAIL: process.env.E2E_REQUIRE_MAIL ?? "true" } : {}),
       SMS_SINK_URL: smsSinkURL,
     },
   });
