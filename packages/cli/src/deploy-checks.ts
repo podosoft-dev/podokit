@@ -133,6 +133,8 @@ export interface ConnectionBudget {
    */
   rolloutProcesses: number;
   rollout: number;
+  /** What the rollout count includes beyond the steady processes. */
+  rolloutOverlap: string;
   migration: number;
   peak: number;
 }
@@ -156,8 +158,9 @@ function poolSize(runtimeConfig: Record<string, string>, key: string, fallback: 
  * starts the next surge pod as soon as the previous replacement is ready. When
  * replacements become ready faster than replaced pods exit, every old pod of a
  * workload can still hold its pools while all of its new pods run, twice its
- * replicas whatever the surge. Compose stops a container before it starts the
- * replacement, so it never runs both.
+ * replicas whatever the surge. Compose starts the new API containers beside the
+ * old ones and stops the old ones once the new ones are healthy, so it runs twice
+ * the API replicas; it stops the worker before it starts the replacement.
  */
 export function connectionBudget(profile: AnyDeployProfile, modules: Set<string>): ConnectionBudget | null {
   const postgres = profile.dependencies.postgres;
@@ -180,7 +183,10 @@ export function connectionBudget(profile: AnyDeployProfile, modules: Set<string>
   }
   const worker = profile.workloads.worker;
   const steadyProcesses = profile.workloads.api.replicas + (worker?.replicas ?? 0);
-  const rolloutProcesses = profile.driver === "kubernetes-helm" ? 2 * steadyProcesses : steadyProcesses;
+  const rolloutProcesses =
+    profile.driver === "kubernetes-helm"
+      ? 2 * steadyProcesses
+      : steadyProcesses + profile.workloads.api.replicas;
   const maxConnections = postgres.maxConnections ?? DEFAULT_MAX_CONNECTIONS;
   const steady = steadyProcesses * perProcess;
   const rollout = rolloutProcesses * perProcess;
@@ -193,6 +199,10 @@ export function connectionBudget(profile: AnyDeployProfile, modules: Set<string>
     steady,
     rolloutProcesses,
     rollout,
+    rolloutOverlap:
+      profile.driver === "kubernetes-helm"
+        ? "replaced pods that have not exited"
+        : "old API containers that have not stopped",
     migration: MIGRATION_CONNECTIONS,
     peak: Math.max(rollout, steady + MIGRATION_CONNECTIONS),
   };
@@ -203,7 +213,7 @@ function budgetSummary(budget: ConnectionBudget): string {
     `each API or worker process holds up to ${budget.perProcess} (${budget.perProcessTerms.join(" + ")}); ` +
     `${budget.steadyProcesses} process(es) hold ${budget.steady}` +
     (budget.rolloutProcesses > budget.steadyProcesses
-      ? `, ${budget.rolloutProcesses} during a rollout, counting replaced pods that have not exited, hold ${budget.rollout}`
+      ? `, ${budget.rolloutProcesses} during a rollout, counting ${budget.rolloutOverlap}, hold ${budget.rollout}`
       : "") +
     `, and the migration adds ${budget.migration} to the ${budget.steady}`
   );

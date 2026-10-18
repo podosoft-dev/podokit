@@ -195,11 +195,11 @@ describe("PostgreSQL connection budget", () => {
 
   it("counts an application pool of a fixed size", () => {
     const root = project("docker-compose", ["auth"]);
-    // Without its own pool, two API containers hold 2 x 31 and the migration 2: 64 of 77.
+    // Without its own pool, two API containers hold 2 x 31 of 77, and 4 x 31 during a rollout.
     edit(root, (value) => {
       value.dependencies.postgres.maxConnections = 80;
     });
-    expect(budgetFinding(root)).toMatchObject({ ok: true });
+    expect(budgetFinding(root)).toMatchObject({ ok: true, warning: true });
     // A TypeORM pool keeps pg's default of 10 connections without an environment key.
     const profile = edit(root, (value) => {
       value.dependencies.postgres.appPools = [{ size: 10 }, { sizeKey: "SDD_DB_POOL_MAX", extraConnections: 1 }];
@@ -209,22 +209,32 @@ describe("PostgreSQL connection budget", () => {
       perProcess: 46,
       perProcessTerms: ["DB_POOL_MAX 20 + 1", "DB_AUTH_POOL_MAX 10", "appPools[0] 10", "SDD_DB_POOL_MAX 4 + 1"],
       steady: 92,
-      peak: 94,
+      peak: 184,
     });
     expect(budgetFinding(root)).toMatchObject({ ok: false });
     expect(budgetFinding(root)?.message).toContain("appPools[0] 10");
   });
 
-  it("adds the migration but no surge for Compose", () => {
+  it("counts the old API containers beside the new ones during a Compose rollout", () => {
     const root = project("docker-compose", ["auth", "bullmq"]);
     const budget = connectionBudget(loadAnyDeploymentProfile(root, "production"), installedModules(root));
-    // Compose replaces containers one at a time; the migration runs beside the old ones.
-    expect(budget).toMatchObject({ steady: 93, rollout: 93, migration: 2, peak: 95 });
+    // Two API containers and a worker; the two new API containers start beside the
+    // old ones, while the worker is stopped before its replacement starts: 5 x 31.
+    expect(budget).toMatchObject({ steady: 93, rolloutProcesses: 5, rollout: 155, migration: 2, peak: 155 });
+    expect(budgetFinding(root)).toMatchObject({ ok: true, warning: true });
+    expect(budgetFinding(root)?.message).toContain(
+      "5 during a rollout, counting old API containers that have not stopped, hold 155",
+    );
+    edit(root, (value) => {
+      value.workloads.api.replicas = 1;
+    });
+    // 3 x 31 = 93 during a rollout, and the migration beside the old release 62 + 2.
     expect(budgetFinding(root)?.warning).toBeUndefined();
     edit(root, (value) => {
-      value.dependencies.postgres.maxConnections = 97;
+      value.dependencies.postgres.maxConnections = 95;
     });
     expect(budgetFinding(root)).toMatchObject({ ok: true, warning: true });
+    expect(budgetFinding(root)?.message).toContain("can reach 93 during a deployment");
   });
 
   it("skips a deployment without PostgreSQL and fails pool sizes it cannot read", () => {

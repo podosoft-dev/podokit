@@ -48,6 +48,14 @@ export interface ComposeImages {
 /** The internal port every generated application service listens on. */
 const CONTAINER_PORT = 3000;
 
+/**
+ * Bun caches a host name's addresses for 30 seconds and keeps connecting to a
+ * cached address after it stops answering. The web server reaches the API by its
+ * service name, which a rollout moves to new containers, so with the cache it
+ * would keep calling the old API's address after that container is gone.
+ */
+const WEB_DNS_CONFIG: Record<string, string> = { BUN_CONFIG_DNS_TIME_TO_LIVE_SECONDS: "0" };
+
 function quote(value: string): string {
   return JSON.stringify(value);
 }
@@ -356,12 +364,7 @@ function applicationService(
   );
 }
 
-function gatewayService(
-  profile: DockerComposeProfileV1,
-  image: string,
-  release: string,
-  stateDigest: string,
-): string {
+function gatewayService(profile: DockerComposeProfileV1, image: string): string {
   const globalOptions = profile.exposure.trustedProxyCidrs.length
     ? `{
   servers {
@@ -423,7 +426,10 @@ function gatewayService(
     `    healthcheck:\n` +
     `      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]\n` +
     `      interval: 10s\n      timeout: 5s\n      retries: 6\n      start_period: 10s\n` +
-    labelsBlock(profile, release, stateDigest, "    ")
+    // No release or rollout-state label: the gateway runs none of the release's
+    // code, and a label that changes with every release would make Compose
+    // recreate it, which closes the published port until the new one starts.
+    `    labels:\n      io.podokit.project: ${quote(profile.target.project)}\n`
   );
 }
 
@@ -455,8 +461,9 @@ export function renderComposeDocument(
       healthcheckPath: "/health/ready",
     }),
   );
+  const webEnvironment = { ...WEB_DNS_CONFIG, ...environment };
   services.push(
-    applicationService(profile, "web", images.web, release, stateDigest, environment, {
+    applicationService(profile, "web", images.web, release, stateDigest, webEnvironment, {
       // The web server's own route: an API outage must not mark it unhealthy.
       healthcheckPath: "/healthz",
       publish: !hasGateway,
@@ -466,7 +473,7 @@ export function renderComposeDocument(
     if (!images.gateway) {
       throw new Error("A resolved gateway image is required when WebSocket or API paths are configured.");
     }
-    services.push(gatewayService(profile, images.gateway, release, stateDigest));
+    services.push(gatewayService(profile, images.gateway));
   }
   if (profile.workloads.worker) {
     // The worker runs the API image with a different entry point, exactly as the
