@@ -1079,9 +1079,14 @@ request, and module logs use the same pino instance.
 
 Audit logging built on `auth` (added automatically). Entries follow an
 actor / action / target model and are stored in the `audit_logs` table. A Better
-Auth hook records sign-in, sign-up, password, session, two-factor, and admin user
-actions (`auth.login`, `user.ban`, `user.role_change`, ...). Nothing else is
-recorded automatically: application code records its own semantic events with
+Auth plugin records sign-in, sign-up, password, session, two-factor, and admin user
+actions (`auth.login`, `user.ban`, `user.role_change`, ...), each only when the
+request succeeded. `auth.login` covers every sign-in method (password, username,
+phone number, email code, magic link, social, passkey, and the automatic sign-in
+after email verification) and names it in `metadata.method`, with the social
+provider in `metadata.provider`. A two-factor sign-in is recorded once, when the
+second factor completes it. Nothing else is recorded automatically: application
+code records its own semantic events with
 `AuditService.recordRequest()` or `recordAudit()`. Admins read entries at
 `/audit-logs`. An entry's `ip` is the client address the API resolved for the
 request (see [client address](templates.md#client-address)), never a forwarded

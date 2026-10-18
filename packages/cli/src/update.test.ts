@@ -1824,3 +1824,70 @@ describe("development hostname in rendered files", () => {
     expect(text(".podokit/dev.json")).toBe(readFileSync(join(dir, ".podokit/dev.json"), "utf8"));
   });
 });
+
+describe("audit hook registration", () => {
+  const AUTH = "apps/api/src/auth/auth.ts";
+  const IMPORT = 'import { auditPlugin } from "../audit/audit-hook";';
+  const PLUGIN = "plugins.push(auditPlugin());";
+  const OLD_IMPORT = 'import { auditAfterHook } from "../audit/audit-hook";';
+  const OLD_HOOK = "hooks.after = auditAfterHook;";
+
+  // Earlier audit-log versions set Better Auth's top-level hooks.after, which runs
+  // before every plugin's after hooks and saw a pending two-factor sign-in as a
+  // finished one.
+  function templatesWithTopLevelHook(): string {
+    const dir = join(tmp(), "old-templates");
+    cpSync(REPO_TEMPLATES, dir, { recursive: true });
+    const manifestPath = join(dir, "modules/audit-log/module.manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { inject: { text: string }[] };
+    const replaced = { [IMPORT]: OLD_IMPORT, [PLUGIN]: OLD_HOOK };
+    for (const injection of manifest.inject) injection.text = replaced[injection.text] ?? injection.text;
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    return dir;
+  }
+
+  function projectWithTopLevelHook(oldTemplates: string): string {
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: project });
+    addModule({ projectRoot: project, module: "audit-log", modulesDir: join(oldTemplates, "modules") });
+    const auth = readFileSync(join(project, AUTH), "utf8");
+    expect(auth).toContain(OLD_IMPORT);
+    expect(auth).toContain(OLD_HOOK);
+    return project;
+  }
+
+  function expectPluginOnly(auth: string): void {
+    expect(auth).not.toContain("auditAfterHook");
+    expect(auth.split(IMPORT)).toHaveLength(2);
+    expect(auth.split(PLUGIN)).toHaveLength(2);
+  }
+
+  it("replaces the top-level hook with the plugin in an unedited auth.ts", () => {
+    const oldTemplates = templatesWithTopLevelHook();
+    const project = projectWithTopLevelHook(oldTemplates);
+
+    const result = applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+
+    expect(result.written).toContain(AUTH);
+    expect(result.conflicts).toEqual([]);
+    expectPluginOnly(readFileSync(join(project, AUTH), "utf8"));
+  });
+
+  it("merges the plugin into an auth.ts the application edited", () => {
+    const oldTemplates = templatesWithTopLevelHook();
+    const project = projectWithTopLevelHook(oldTemplates);
+    const authPath = join(project, AUTH);
+    writeFileSync(
+      authPath,
+      readFileSync(authPath, "utf8").replace("const adminEmails = new Set(", "// application note\nconst adminEmails = new Set("),
+    );
+
+    const result = applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
+
+    expect(result.merged).toContain(AUTH);
+    expect(result.conflicts).toEqual([]);
+    const auth = readFileSync(authPath, "utf8");
+    expect(auth).toContain("// application note\nconst adminEmails = new Set(");
+    expectPluginOnly(auth);
+  });
+});

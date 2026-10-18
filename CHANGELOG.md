@@ -35,6 +35,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   the session read test skips when the authentication limit is not below the
   runtime one. It probes `/api/account/me` instead of the Redis provider's demo
   cache route. `E2E_SKIP_RATE_LIMIT=true` still skips the file.
+- The `audit-log` module records every sign-in as `auth.login`. Only
+  `/sign-in/email` was recorded, so social, magic link, email code, passkey,
+  phone number, username, and two-factor sign-ins, and the automatic sign-in
+  after email verification, left no entry. Each entry names the method in
+  `metadata.method` and, for social sign-in, the provider in
+  `metadata.provider`.
+- The `audit-log` module no longer records failed requests as completed
+  actions. Better Auth runs after hooks for failed requests too, so a wrong
+  password was recorded as `auth.login`, a non-administrator's refused
+  `/admin/ban-user` as `user.ban`, and a failed password change as
+  `auth.password_change`. The password step of a two-factor sign-in was also
+  recorded as a sign-in, and the second factor that completes it was not; the
+  sign-in is now recorded once, when the second factor completes it.
+- The audit hook is now a Better Auth plugin that `apps/api/src/auth/auth.ts`
+  pushes after every other plugin, because the top-level `hooks.after` it used
+  runs before the two-factor plugin's hook. `podo update` replaces the
+  `hooks.after = auditAfterHook;` line and its import. An application that owns
+  `auth.ts` replaces them with `plugins.push(auditPlugin());` and
+  `import { auditPlugin } from "../audit/audit-hook";`.
 
 ## [1.6.1] - 2026-10-17
 

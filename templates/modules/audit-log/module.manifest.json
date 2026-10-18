@@ -26,12 +26,12 @@
     {
       "file": "apps/api/src/auth/auth.ts",
       "marker": "// podokit:end:auth-imports",
-      "text": "import { auditAfterHook } from \"../audit/audit-hook\";"
+      "text": "import { auditPlugin } from \"../audit/audit-hook\";"
     },
     {
       "file": "apps/api/src/auth/auth.ts",
       "marker": "// podokit:end:auth-hooks",
-      "text": "hooks.after = auditAfterHook;"
+      "text": "plugins.push(auditPlugin());"
     },
     {
       "file": "infra/k3s/configmap.yaml",
