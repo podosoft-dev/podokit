@@ -1,5 +1,17 @@
 # @podosoft/podokit
 
+## 1.6.3
+
+### Patch Changes
+
+- [#250](https://github.com/podosoft-dev/podokit/pull/250) [`e6a6825`](https://github.com/podosoft-dev/podokit/commit/e6a68252598bd8f7066a0036f8183dad11cf1faf) Thanks [@korone00](https://github.com/korone00)! - Make the `audit-log` module record a sign-in through any endpoint, including those of Better Auth plugins an application adds to its own `auth.ts`, such as `@better-auth/electron`'s `/electron/token`. The audit plugin recorded `auth.login` only for the endpoints in its `SIGN_IN_METHODS` list, so a desktop app's sign-in left no entry. It now records a request that ends with a new session it did not come with, naming the endpoint's path in `metadata.method` when the endpoint is not in `SIGN_IN_METHODS`, except the endpoints in the new `NOT_SIGN_INS` list: sign-up, impersonation, switching between a browser's sessions, and requests that replace the signed-in user's own session. Session reads and updates that refresh the request's own session, bearer and API key requests included, and endpoints that another endpoint dispatches are not recorded as sign-ins.
+
+- [#250](https://github.com/podosoft-dev/podokit/pull/250) [`e6a6825`](https://github.com/podosoft-dev/podokit/commit/e6a68252598bd8f7066a0036f8183dad11cf1faf) Thanks [@korone00](https://github.com/korone00)! - Make the generated API's database spec look up a host that does not exist through a DNS server on a local UDP port instead of the system resolver, so its result no longer depends on the machine's DNS. The test fetched `http://database.invalid/` and timed out after 30 seconds on CI runners whose resolver did not answer. It now checks a real `NXDOMAIN` answer (`ENOTFOUND`) in milliseconds and, in a new test, a resolver that never answers (`ETIMEOUT`) in about a second.
+
+- [#252](https://github.com/podosoft-dev/podokit/pull/252) [`4bcb93a`](https://github.com/podosoft-dev/podokit/commit/4bcb93a42af36f9db4c0ded59cd11e65fc887b73) Thanks [@korone00](https://github.com/korone00)! - Make the `admin-dashboard` module's email specs run only when the app under test delivers its mail to the Mailpit they read. They ran whenever a Mailpit answered on `MAILPIT_URL` (default `http://localhost:8025`), so in an app without SMTP, or one that sends to another catcher, another project's Mailpit on that port made every email test wait for a message that never came and fail. Before the first email test, each worker now has the app send a password reset email to a throwaway account and waits up to five seconds for it in that Mailpit; when it does not arrive, the email tests skip with the cause. `E2E_REQUIRE_MAIL=true` makes them fail instead.
+
+- [#250](https://github.com/podosoft-dev/podokit/pull/250) [`e6a6825`](https://github.com/podosoft-dev/podokit/commit/e6a68252598bd8f7066a0036f8183dad11cf1faf) Thanks [@korone00](https://github.com/korone00)! - Make the `rate-limit` module's spec decide from time instead of a fixed limit whether it can send a budget's worth of requests. The 429 test skipped only above a general limit of 10,000, so at a raised local limit such as `RATE_LIMIT_MAX=6000` it failed on the 30-second test timeout. It and the session read test now time their first 50 requests and skip, naming the pace and the time needed, when the rest would take more than half of the time the test has left; at the default limits they run as before.
+
 ## 1.6.2
 
 ### Patch Changes
