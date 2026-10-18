@@ -18,6 +18,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   test asks one that never answers, which fails with `ETIMEOUT` after about a
   second. Both are real lookups through the runtime's resolver and neither
   depends on the machine's DNS.
+- The `rate-limit` module's spec, `tests/api/rate-limit.api.spec.ts`, skipped
+  the test that expects a 429 only when the general limit was above 10,000. At a
+  raised local limit such as `RATE_LIMIT_MAX=6000` it sent requests until the
+  30-second test timeout failed it. The test now times its first 50 requests
+  and skips, naming the pace and the time it would need, when the requests left
+  to the limit would take more than half of the time the test has left, and it
+  judges again whenever a new window starts. The test that reads sessions past
+  the authentication limit replaces its fixed limit of 1,000 with the same
+  check. At the default limits both run and pass as before.
 
 ## [1.6.2] - 2026-10-18
 

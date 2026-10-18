@@ -1241,9 +1241,12 @@ a short `RATE_LIMIT_TTL` window ends in between. When Playwright's environment
 sets `RATE_LIMIT_MAX`, `RATE_LIMIT_AUTH_MAX`, or `RATE_LIMIT_RUNTIME_MAX`, the
 spec also expects the stack to use that value. It sends one request more than
 the general limit, and it skips the test that reads sessions past the
-authentication limit while that limit is not below the runtime one. Set
-`E2E_SKIP_RATE_LIMIT=true` to skip the file, for example in a run against
-raised limits that should not spend that many requests.
+authentication limit while that limit is not below the runtime one. Both tests
+time their first 50 requests and skip, with the pace and the time they would
+need, when the rest would take more than half of the time the test has left,
+so raised local limits such as `RATE_LIMIT_MAX=6000` skip them instead of
+failing on the test timeout. Set `E2E_SKIP_RATE_LIMIT=true` to skip the file,
+for example in a run that should not spend those requests at all.
 
 #### Route profiles
 
