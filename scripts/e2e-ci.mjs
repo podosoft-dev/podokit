@@ -329,6 +329,17 @@ async function main() {
   step("build api");
   run("bun", ["run", "--cwd", "apps/api", "build"], { cwd: target });
 
+  // CI gets a new PostgreSQL service per run; start a local run from the same
+  // empty database. Accounts an earlier run left behind would otherwise decide
+  // the result, such as an administrator an older seed signed up unverified,
+  // which admin:bootstrap refuses to adopt.
+  step("empty the e2e database");
+  const databaseURL = `postgres://${encodeURIComponent(env.POSTGRES_USER)}:${encodeURIComponent(env.POSTGRES_PASSWORD)}@${env.POSTGRES_HOST}:${env.POSTGRES_PORT}/${encodeURIComponent(env.POSTGRES_DB)}`;
+  run("bun", ["--eval", "const sql = new Bun.SQL(process.env.E2E_DATABASE_URL); await sql`DROP SCHEMA IF EXISTS public CASCADE`; await sql`CREATE SCHEMA public`; await sql.close();"], {
+    cwd: target,
+    env: { ...process.env, E2E_DATABASE_URL: databaseURL },
+  });
+
   step("migrate auth and app tables from compiled output");
   const migration = spawnSync("bun", ["run", "--cwd", "apps/api", "migrate:all"], { cwd: target, env: pgEnv, encoding: "utf8" });
   process.stdout.write(migration.stdout ?? "");

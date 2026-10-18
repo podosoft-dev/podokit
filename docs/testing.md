@@ -204,9 +204,12 @@ node scripts/e2e-ci.mjs --grep "magic link"
 
 The harness publishes the template engine, contracts, auth helpers, API client,
 CLI, MCP server, and external modules to Verdaccio. It then uses the real CLI,
-installs the generated workspace with Bun 1.4.0, runs Better Auth and TypeORM
-migrations, verifies the OpenAPI contract, builds and starts the Bun API and
-worker plus the SvelteKit server, and runs the shipped Playwright suite.
+installs the generated workspace with Bun 1.4.0, empties the `POSTGRES_DB`
+database (it drops and recreates the `public` schema, so point the harness only
+at a database it may wipe), runs Better Auth and TypeORM migrations, creates the
+seeded administrator with `admin:bootstrap`, verifies the OpenAPI contract,
+builds and starts the Bun API and worker plus the SvelteKit server, and runs the
+shipped Playwright suite.
 
 The packages it publishes carry the versions of the released ones. npx caches a
 package by name and version, not by registry, so the harness runs every npm and
