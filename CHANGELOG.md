@@ -22,6 +22,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   that sends an empty `in` list as `1 = 0` and an empty `not in` list as
   `1 = 1`, and the generated API depends on `kysely` directly. SQLite accepts
   `IN ()` and is unchanged.
+- The `rate-limit` module's spec, `tests/api/rate-limit.api.spec.ts`, expected
+  the limits from the runner's environment and otherwise the module defaults,
+  so it failed against a stack with other limits, such as the development
+  example's `RATE_LIMIT_MAX=100` or raised local limits, unless the runner was
+  given the same values. It now reads each budget's limit from the API's
+  `RateLimit-Limit` header and checks which budget a route is counted in from
+  how `RateLimit-Remaining` moves. Limits set in the runner's environment are
+  still expected exactly. A check that compares counts across requests runs
+  again when a short `RATE_LIMIT_TTL` window ends in between, the 429 test
+  skips when the general window ends before this client reaches the limit, and
+  the session read test skips when the authentication limit is not below the
+  runtime one. It probes `/api/account/me` instead of the Redis provider's demo
+  cache route. `E2E_SKIP_RATE_LIMIT=true` still skips the file.
 
 ## [1.6.1] - 2026-10-17
 
