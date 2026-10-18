@@ -558,8 +558,14 @@ export function planUpdate(
 }
 
 export interface ApplyOptions {
-  /** Templates for the version the project is currently on, for 3-way merges. */
+  /**
+   * Templates for the version the project is currently on, for 3-way merges.
+   * Without it, the update uses the installed templates when the project is on
+   * the installed version and otherwise fetches that version's.
+   */
   oldTemplatesDir?: string;
+  /** Fetches the templates a published PodoKit version ships. Defaults to npm. */
+  fetchTemplates?: (version: string) => PreviousTemplates;
   /** Preinstalled previous external modules. Primarily useful for offline updates. */
   oldExternalModulesRoot?: string;
   /** Replay variables and manifest value used by a runtime conversion. */
@@ -584,8 +590,95 @@ export interface ApplyResult {
   conflicts: string[];
   /** Owned files whose template changed; they are left as they are. */
   review: string[];
+  /** Edited managed files the update left as they are, and why. */
+  skipped: SkippedFile[];
   /** Direct API paths added to `.podokit/dev.json` and deployment profiles. */
   apiPaths: ApiPathResult;
+}
+
+export interface SkippedFile {
+  path: string;
+  reason: string;
+}
+
+/** A template set to merge against, and how to dispose of it. */
+export interface PreviousTemplates {
+  dir: string;
+  cleanup(): void;
+}
+
+const CLI_PACKAGE = "@podosoft/podokit";
+const EXACT_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+
+/** Install a published PodoKit CLI into a temporary directory and return its templates. */
+export function publishedTemplates(version: string): PreviousTemplates {
+  if (!EXACT_VERSION.test(version)) {
+    throw new Error(`"${version}" is not a published ${CLI_PACKAGE} version.`);
+  }
+  const root = mkdtempSync(join(tmpdir(), "podokit-update-templates-"));
+  const cleanup = (): void => rmSync(root, { recursive: true, force: true });
+  try {
+    writeFileSync(
+      join(root, "package.json"),
+      `${JSON.stringify(
+        { name: "podokit-update-templates", private: true, devDependencies: { [CLI_PACKAGE]: version } },
+        null,
+        2,
+      )}\n`,
+    );
+    execFileSync(
+      "npm",
+      ["install", "--ignore-scripts", "--no-audit", "--no-fund", "--package-lock=false"],
+      { cwd: root, stdio: "pipe" },
+    );
+    const packageDir = join(root, "node_modules", ...CLI_PACKAGE.split("/"));
+    const installed = (JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8")) as {
+      version?: string;
+    }).version;
+    const dir = join(packageDir, "dist", "templates");
+    if (installed !== version || !existsSync(dir)) {
+      throw new Error(`the installed package is not ${version} or ships no templates`);
+    }
+    return { dir, cleanup };
+  } catch (error) {
+    cleanup();
+    throw new Error(`Cannot install ${CLI_PACKAGE}@${version} from the npm registry: ${npmFailure(error)}`);
+  }
+}
+
+/** npm's error code, such as ECONNREFUSED or ETARGET, rather than the command line. */
+function npmFailure(error: unknown): string {
+  const stderr = (error as { stderr?: unknown } | null)?.stderr;
+  const code = String(stderr ?? "").match(/^npm (?:error|ERR!) code (\S+)/m)?.[1];
+  if (code) return `npm error ${code}`;
+  return error instanceof Error ? (error.message.split("\n")[0] ?? error.message) : String(error);
+}
+
+/**
+ * The templates the project's edited managed files were generated from, which
+ * a 3-way merge needs as its base: `--from` when given, the installed ones when
+ * the project is on the installed version, and the recorded version's otherwise.
+ */
+function mergeBaseTemplates(
+  recordedVersion: string,
+  templatesDir: string,
+  options: ApplyOptions,
+  paths: string[],
+): PreviousTemplates {
+  if (options.oldTemplatesDir) return { dir: options.oldTemplatesDir, cleanup: () => {} };
+  if (recordedVersion === podokitVersion()) return { dir: templatesDir, cleanup: () => {} };
+  try {
+    return (options.fetchTemplates ?? publishedTemplates)(recordedVersion);
+  } catch (error) {
+    throw new Error(
+      `${error instanceof Error ? error.message : String(error)}\n` +
+        `The 3-way merge of these edited files needs the templates of ${recordedVersion}, ` +
+        `the version this project was last generated or updated with:\n${paths
+          .map((path) => `  - ${path}`)
+          .join("\n")}\n` +
+        "Nothing was written. Check npm registry access, or pass that version's templates with --from <dir>.",
+    );
+  }
 }
 
 function assertRecordedExternalModules(
@@ -802,10 +895,11 @@ function updatedFilesLock(
 
 /**
  * Apply an update to the working copy. Clean updates and additions are written,
- * upstream removals deleted, and user-edited files 3-way merged against the old
- * version (when `oldTemplatesDir` is given) or written with git-style conflict
- * markers otherwise. Owned files are never touched. Refreshes the lockfile and
- * stamps the new version.
+ * upstream removals deleted, and user-edited files 3-way merged against the
+ * templates of the version the project is on, with git-style conflict markers
+ * where both sides changed the same lines. Refuses before writing anything when
+ * those templates are unavailable. Owned files are never touched. Refreshes the
+ * lockfile and stamps the new version.
  */
 export function applyUpdate(
   projectRoot: string,
@@ -868,15 +962,17 @@ export function applyUpdate(
       managedOverrides.map((glob) => migrateConfiguredPath(glob, pendingMigrations)),
     ),
   ];
-  const needsMergeBase = plan.changes.some((change) => change.action === "conflict");
+  const mergePaths = plan.changes
+    .filter((change) => change.action === "conflict" && treeText(newTree, change.path) !== null)
+    .map((change) => change.path);
   let oldTree: VfsTree | null = null;
-  if (options.oldTemplatesDir && needsMergeBase) {
-    oldTree = previousTree(
-      projectRoot,
-      manifest,
-      options.oldTemplatesDir,
-      options.oldExternalModulesRoot,
-    );
+  if (mergePaths.length) {
+    const base = mergeBaseTemplates(manifest.podokitVersion, templatesDir, options, mergePaths);
+    try {
+      oldTree = previousTree(projectRoot, manifest, base.dir, options.oldExternalModulesRoot);
+    } finally {
+      base.cleanup();
+    }
   }
 
   if (options.abortOnConflict) {
@@ -909,6 +1005,7 @@ export function applyUpdate(
     merged: [],
     conflicts: [],
     review: plan.changes.filter((change) => change.action === "review").map((change) => change.path),
+    skipped: [],
     apiPaths: { changed: [], skipped: [] },
   };
 
@@ -920,12 +1017,22 @@ export function applyUpdate(
     } else if (change.action === "remove") {
       rmSync(join(projectRoot, change.path), { force: true });
       result.removed.push(change.path);
-    } else if (change.action === "conflict" && newText !== null) {
+    } else if (change.action === "conflict") {
+      if (newText === null) {
+        result.skipped.push({
+          path: change.path,
+          reason: "removed in this version but edited locally, so it was kept; delete it when you no longer need it",
+        });
+        continue;
+      }
       const disk = readFileSync(join(projectRoot, change.path), "utf8");
       const base = oldTree ? treeText(oldTree, change.path) : null;
       if (base === null) {
-        // No old version to merge against — never clobber the user's edits.
-        result.conflicts.push(change.path);
+        // Nothing to merge against: never clobber the application's version.
+        result.skipped.push({
+          path: change.path,
+          reason: `the previous version's templates do not generate it, so there is no merge base; compare it with podo diff ${change.path}`,
+        });
         continue;
       }
       const merge = threeWayMerge(base, disk, newText, { current: "current", next: "podokit" });

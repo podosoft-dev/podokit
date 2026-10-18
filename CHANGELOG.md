@@ -63,6 +63,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   field gives the `count` and `restartCount` of the other pods, from an earlier
   revision or terminating. A pod or ReplicaSet list of an unexpected shape fails
   the command.
+- `podo update --apply` 3-way merges edited managed files without `--from`.
+  Without it, every edited managed file was left as it was and reported as a
+  conflict while the manifest and lock moved to the new version, so that
+  version's changes to those files were never applied. The merge base is now the
+  templates of the version `.podokit/manifest.json` records: the installed CLI's
+  own when the project is on that version, and otherwise that version of
+  `@podosoft/podokit`, installed from the npm registry into a temporary
+  directory. When the registry cannot provide it, `--apply` stops before writing
+  anything and lists the files that need the merge; `--from <dir>` still takes
+  precedence. Edited files without a merge base, such as one the new version
+  removes, are listed as skipped with the reason.
 
 ## [1.6.1] - 2026-10-17
 

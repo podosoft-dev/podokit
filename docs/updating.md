@@ -88,11 +88,27 @@ During apply:
 
 - unchanged managed files are replaced with the new generated version;
 - assembled fenced regions are recomputed from the module graph;
-- edited managed files use a 3-way merge when a previous template tree is
-  available;
+- edited managed files are 3-way merged against the templates of the version
+  `.podokit/manifest.json` records;
 - conflicts are written with standard conflict markers and reported;
+- edited files without a merge base, such as a file the previous version did not
+  generate or one this version removes, are left as they are and listed with the
+  reason at the end;
 - owned files are never modified; and
 - the manifest and lockfile advance only with the applied tree.
+
+The merge base is the templates of the version the project was last generated or
+updated with. When that is the installed CLI's version, its own templates serve.
+Otherwise `--apply` installs that version of `@podosoft/podokit` from the npm
+registry into a temporary directory, reads its templates, and removes it. If it
+cannot, it stops before writing anything and lists the files that needed the
+merge. Pass that version's templates yourself to merge offline:
+
+```bash
+podo update --apply --from ./previous-podokit/templates
+```
+
+A published `@podosoft/podokit` package carries them in `dist/templates`.
 
 ### Owned files whose template changed
 
