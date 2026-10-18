@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.6.3] - 2026-10-18
+
 ### Fixed
 
 - The generated API's database spec, `apps/api/src/database/database.spec.ts`,
