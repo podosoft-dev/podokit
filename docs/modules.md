@@ -1084,8 +1084,16 @@ actions (`auth.login`, `user.ban`, `user.role_change`, ...), each only when the
 request succeeded. `auth.login` covers every sign-in method (password, username,
 phone number, email code, magic link, social, passkey, and the automatic sign-in
 after email verification) and names it in `metadata.method`, with the social
-provider in `metadata.provider`. A two-factor sign-in is recorded once, when the
-second factor completes it. Nothing else is recorded automatically: application
+provider in `metadata.provider`. It also covers sign-ins through endpoints of
+Better Auth plugins the application adds to its own `auth.ts`, such as
+`@better-auth/electron`'s `/electron/token`, with the endpoint's path as
+`metadata.method`: a request that ends with a new session it did not come with is
+recorded as a sign-in, except a sign-up, an impersonation, a switch between a
+browser's sessions, and a request that replaces the signed-in user's own
+session. Requests that refresh their own session, such as session reads and
+profile updates, bearer and API key requests included, are not. A two-factor
+sign-in is recorded once, when the second factor completes it. Nothing else is
+recorded automatically: application
 code records its own semantic events with
 `AuditService.recordRequest()` or `recordAudit()`. Admins read entries at
 `/audit-logs`. An entry's `ip` is the client address the API resolved for the
@@ -1241,9 +1249,12 @@ a short `RATE_LIMIT_TTL` window ends in between. When Playwright's environment
 sets `RATE_LIMIT_MAX`, `RATE_LIMIT_AUTH_MAX`, or `RATE_LIMIT_RUNTIME_MAX`, the
 spec also expects the stack to use that value. It sends one request more than
 the general limit, and it skips the test that reads sessions past the
-authentication limit while that limit is not below the runtime one. Set
-`E2E_SKIP_RATE_LIMIT=true` to skip the file, for example in a run against
-raised limits that should not spend that many requests.
+authentication limit while that limit is not below the runtime one. Both tests
+time their first 50 requests and skip, with the pace and the time they would
+need, when the rest would take more than half of the time the test has left,
+so raised local limits such as `RATE_LIMIT_MAX=6000` skip them instead of
+failing on the test timeout. Set `E2E_SKIP_RATE_LIMIT=true` to skip the file,
+for example in a run that should not spend those requests at all.
 
 #### Route profiles
 

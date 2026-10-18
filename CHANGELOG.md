@@ -6,6 +6,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- The generated API's database spec, `apps/api/src/database/database.spec.ts`,
+  checked that a failed host lookup is recognized as an unavailable database by
+  fetching `http://database.invalid/` through the system resolver and waiting up
+  to 30 seconds. On CI runners whose resolver stopped answering, the lookup
+  failed only after two 16-second resolver timeouts, so the test timed out in
+  every generated app's CI. The test now asks a DNS server that it runs on a
+  local UDP port and that answers `NXDOMAIN`, which takes milliseconds, and a new
+  test asks one that never answers, which fails with `ETIMEOUT` after about a
+  second. Both are real lookups through the runtime's resolver and neither
+  depends on the machine's DNS.
+- The `rate-limit` module's spec, `tests/api/rate-limit.api.spec.ts`, skipped
+  the test that expects a 429 only when the general limit was above 10,000. At a
+  raised local limit such as `RATE_LIMIT_MAX=6000` it sent requests until the
+  30-second test timeout failed it. The test now times its first 50 requests
+  and skips, naming the pace and the time it would need, when the requests left
+  to the limit would take more than half of the time the test has left, and it
+  judges again whenever a new window starts. The test that reads sessions past
+  the authentication limit replaces its fixed limit of 1,000 with the same
+  check. At the default limits both run and pass as before.
+- The `audit-log` module recorded `auth.login` only for the endpoints in its
+  `SIGN_IN_METHODS` list, so a sign-in through an endpoint of a Better Auth
+  plugin that an application adds to its own `auth.ts`, such as the desktop
+  sign-in of `@better-auth/electron` (`POST /api/auth/electron/token`), started
+  a session and left no entry. The audit plugin now runs for every endpoint and
+  records `auth.login` when a request ends with a new session that its response
+  sets and that the request did not come with. `metadata.method` is the name in
+  `SIGN_IN_METHODS` or, for other endpoints, the endpoint's path. The new
+  `NOT_SIGN_INS` list names the endpoints that start or swap a session without a
+  sign-in: `/sign-up/email` (recorded as `auth.signup` only), the administrator's
+  `/admin/impersonate-user` and `/admin/stop-impersonating`,
+  `/multi-session/set-active` and `/multi-session/revoke`, and
+  `/two-factor/enable`, `/two-factor/disable`, and `/change-password`, which
+  replace the signed-in user's own session. Requests that refresh their own
+  session, such as session reads that extend it and profile or email updates,
+  bearer and API key requests included, and `/oauth2/authorize` when
+  `oauthProvider()` runs it inside a sign-in are not sign-ins. The module's
+  `audit-hook.spec.ts` classifies every endpoint of Better Auth and of the
+  plugins PodoKit configures and fails on a new one that it has not classified.
+
 ## [1.6.2] - 2026-10-18
 
 ### Fixed
