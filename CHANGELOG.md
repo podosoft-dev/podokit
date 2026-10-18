@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.6.4] - 2026-10-18
+
 ### Fixed
 
 - The `audit-log` module recorded `auth.signup` only for `POST /sign-up/email`.
