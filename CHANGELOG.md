@@ -46,6 +46,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `oauthProvider()` runs it inside a sign-in are not sign-ins. The module's
   `audit-hook.spec.ts` classifies every endpoint of Better Auth and of the
   plugins PodoKit configures and fails on a new one that it has not classified.
+- The `admin-dashboard` module's email specs ran whenever a Mailpit answered on
+  `MAILPIT_URL` (default `http://localhost:8025`), without checking that the app
+  under test sends its mail there. In an app without SMTP, another project's
+  Mailpit on that port made all seven email tests wait for messages that never
+  came and fail; with two generated apps up, one app's tests could read the
+  other's catcher. `tests/helpers/mailpit.ts` now replaces `mailpitReachable()`
+  with `skipUnlessMailReachesMailpit()`: before the first email test, each
+  worker signs up a throwaway account, asks the app for its password reset
+  email, and waits up to five seconds for that message in Mailpit. When it does
+  not arrive, the email tests skip with the cause, such as `Mailpit at
+  http://localhost:8025 does not receive this app's mail`. With
+  `E2E_REQUIRE_MAIL=true` they fail instead; the faithful e2e harness sets it
+  whenever it wires SMTP, so CI still fails when mail stops arriving.
+
+### Upgrade notes
+
+- A spec of your own that imports `mailpitReachable()` from
+  `tests/helpers/mailpit.ts` fails after `podo update` replaces it. Call
+  `await skipUnlessMailReachesMailpit()` where it called
+  `test.skip(!(await mailpitReachable()), ...)`.
 
 ## [1.6.2] - 2026-10-18
 

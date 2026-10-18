@@ -106,6 +106,20 @@ Install the browser once from the generated project with:
 bunx playwright install chromium
 ```
 
+### Email tests
+
+The email specs from the `admin-dashboard` module read messages from the Mailpit
+at `MAILPIT_URL` (default `http://localhost:8025`). A Mailpit answering there
+does not show that the app under test sends its mail to it: another project's
+catcher may hold the port while this app has no SMTP or sends elsewhere. So
+before the first email test, each worker signs up a throwaway account, asks the
+app for its password reset email, and waits up to five seconds for that message
+in Mailpit. When it does not arrive, the email tests skip with the cause, such
+as `Mailpit at http://localhost:8025 does not receive this app's mail`. Point
+`MAILPIT_URL` at the Mailpit that receives the app's SMTP to run them. With
+`E2E_REQUIRE_MAIL=true`, as the faithful harness sets when it wires SMTP, a probe
+that fails fails the email tests instead.
+
 ## API contract verification
 
 Every generated API exposes merged OpenAPI documents at `/api-docs` and
@@ -216,11 +230,13 @@ error, or any other status fails at once. A public package that really does not
 exist fails after the third attempt.
 
 Optional Mailpit, SMS, Redis, and Silo tests run only when the harness explicitly
-configures those services. When `S3_ENDPOINT` is configured, storage failures fail
-the smoke test, and the storage and chunked upload specs also download their
-objects through the presigned URL. Without it, they skip that download, because a
-containerized dev stack signs URLs for an in-network host that the runner cannot
-resolve. Local storage returns a signed API path, which is always downloaded.
+configures those services. With `SMTP_HOST` set, the harness also sets
+`E2E_REQUIRE_MAIL=true`, so an email spec whose probe message does not arrive
+in Mailpit fails instead of skipping. When `S3_ENDPOINT` is configured, storage
+failures fail the smoke test, and the storage and chunked upload specs also
+download their objects through the presigned URL. Without it, they skip that
+download, because a containerized dev stack signs URLs for an in-network host
+that the runner cannot resolve. Local storage returns a signed API path, which is always downloaded.
 `KEEP=1` preserves the generated app for inspection.
 Ports and backing-service credentials can be overridden with the documented
 `E2E_*`, `POSTGRES_*`, Redis, and S3 environment variables. The shared suite's

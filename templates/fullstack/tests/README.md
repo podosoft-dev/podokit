@@ -68,3 +68,14 @@ tests not run, and selecting an exclusive test runs every other test first. Use
 
 Application-owned projects in `playwright.projects.cjs` get twins too. A project
 that another project depends on is a setup project and keeps a single copy.
+
+## Email tests
+
+The email specs that the `admin-dashboard` module adds read messages from the
+Mailpit at `MAILPIT_URL` (default `http://localhost:8025`). Before the first one,
+each worker has the app send a password reset email to a throwaway account and
+waits up to five seconds for it there. When it does not arrive, because the app
+has no SMTP or sends to a catcher other than the one on that port, the email
+tests skip with that cause. Set `MAILPIT_URL` to the Mailpit that receives the
+app's mail to run them, and `E2E_REQUIRE_MAIL=true` to make a missing probe
+message fail them instead of skipping.
