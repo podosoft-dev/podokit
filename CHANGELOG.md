@@ -27,6 +27,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   judges again whenever a new window starts. The test that reads sessions past
   the authentication limit replaces its fixed limit of 1,000 with the same
   check. At the default limits both run and pass as before.
+- The `audit-log` module recorded `auth.login` only for the endpoints in its
+  `SIGN_IN_METHODS` list, so a sign-in through an endpoint of a Better Auth
+  plugin that an application adds to its own `auth.ts`, such as the desktop
+  sign-in of `@better-auth/electron` (`POST /api/auth/electron/token`), started
+  a session and left no entry. The audit plugin now runs for every endpoint and
+  records `auth.login` when a request ends with a new session that its response
+  sets and that the request did not come with. `metadata.method` is the name in
+  `SIGN_IN_METHODS` or, for other endpoints, the endpoint's path. The new
+  `NOT_SIGN_INS` list names the endpoints that start or swap a session without a
+  sign-in: `/sign-up/email` (recorded as `auth.signup` only), the administrator's
+  `/admin/impersonate-user` and `/admin/stop-impersonating`,
+  `/multi-session/set-active` and `/multi-session/revoke`, and
+  `/two-factor/enable`, `/two-factor/disable`, and `/change-password`, which
+  replace the signed-in user's own session. Requests that refresh their own
+  session, such as session reads that extend it and profile or email updates,
+  bearer and API key requests included, and `/oauth2/authorize` when
+  `oauthProvider()` runs it inside a sign-in are not sign-ins. The module's
+  `audit-hook.spec.ts` classifies every endpoint of Better Auth and of the
+  plugins PodoKit configures and fails on a new one that it has not classified.
 
 ## [1.6.2] - 2026-10-18
 

@@ -1084,8 +1084,16 @@ actions (`auth.login`, `user.ban`, `user.role_change`, ...), each only when the
 request succeeded. `auth.login` covers every sign-in method (password, username,
 phone number, email code, magic link, social, passkey, and the automatic sign-in
 after email verification) and names it in `metadata.method`, with the social
-provider in `metadata.provider`. A two-factor sign-in is recorded once, when the
-second factor completes it. Nothing else is recorded automatically: application
+provider in `metadata.provider`. It also covers sign-ins through endpoints of
+Better Auth plugins the application adds to its own `auth.ts`, such as
+`@better-auth/electron`'s `/electron/token`, with the endpoint's path as
+`metadata.method`: a request that ends with a new session it did not come with is
+recorded as a sign-in, except a sign-up, an impersonation, a switch between a
+browser's sessions, and a request that replaces the signed-in user's own
+session. Requests that refresh their own session, such as session reads and
+profile updates, bearer and API key requests included, are not. A two-factor
+sign-in is recorded once, when the second factor completes it. Nothing else is
+recorded automatically: application
 code records its own semantic events with
 `AuditService.recordRequest()` or `recordAudit()`. Admins read entries at
 `/audit-logs`. An entry's `ip` is the client address the API resolved for the
