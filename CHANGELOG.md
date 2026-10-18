@@ -83,6 +83,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   hook, the web server's `SHUTDOWN_TIMEOUT` drain (30 seconds unless
   `runtimeConfig` sets it), and 5 seconds to exit: 40 seconds by default instead
   of 30.
+- The generated `podokit-deploy` agent skill reports the `previousPods` of
+  `podo deploy status` apart from the current revision's `restartCount` instead
+  of "restart totals", so an agent no longer attributes the restarts of pods
+  replaced by `apply` or `rollback` to the new release.
 
 ## [1.6.1] - 2026-10-17
 
