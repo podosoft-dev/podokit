@@ -310,6 +310,81 @@ function clientAddressFinding(profile: AnyDeployProfile): DeployFinding {
   return { code, ok: true, message: `With exposure.edgeProxies ${edge}, ${summary}.${traefik}` };
 }
 
+/** Domains and top-level names reserved for documentation and testing (RFC 2606, RFC 6761), which receive no mail. */
+const PLACEHOLDER_DOMAINS = ["example.com", "example.net", "example.org"];
+const PLACEHOLDER_TOP_LEVEL_NAMES = new Set(["example", "test", "invalid", "localhost"]);
+
+/** The ADMIN_EMAILS entries the API reads, from a value that may still carry an env file's quotes. */
+export function adminEmailEntries(value: string): string[] {
+  return value
+    .trim()
+    .replace(/^(["'])([\s\S]*)\1$/, "$2")
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/** Why an ADMIN_EMAILS entry cannot be an administrator's real address, or null when it can be. */
+export function adminEmailProblem(entry: string): string | null {
+  const at = entry.lastIndexOf("@");
+  if (at >= 0) {
+    const domain = entry.slice(at + 1);
+    const topLevel = domain.split(".").at(-1) ?? "";
+    if (
+      PLACEHOLDER_DOMAINS.some((reserved) => domain === reserved || domain.endsWith(`.${reserved}`)) ||
+      PLACEHOLDER_TOP_LEVEL_NAMES.has(topLevel)
+    ) {
+      return `a placeholder: ${domain} is reserved and receives no mail`;
+    }
+  }
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(entry) ? null : "not an email address";
+}
+
+/**
+ * Whether ADMIN_EMAILS names real addresses. A placeholder such as
+ * admin@example.com names an administrator nobody can be, and a generated API
+ * refuses to start in production with one, so the doctor fails before a rollout.
+ */
+export function adminEmailsFinding(value: string | undefined, source: string): DeployFinding {
+  const code = "admin-emails";
+  const entries = adminEmailEntries(value ?? "");
+  if (entries.length === 0) {
+    return {
+      code,
+      ok: true,
+      message:
+        `${source} does not set ADMIN_EMAILS, so no account becomes an administrator through it; ` +
+        "administrators come from admin:bootstrap or the admin console.",
+    };
+  }
+  const problems = entries.flatMap((entry) => {
+    const problem = adminEmailProblem(entry);
+    return problem ? [`${entry} (${problem})`] : [];
+  });
+  if (problems.length) {
+    return {
+      code,
+      ok: false,
+      message:
+        `ADMIN_EMAILS in ${source} lists ${problems.join(", ")}. In production it must list the administrators' ` +
+        "real addresses or stay empty; a generated API refuses to start in production with such an entry.",
+    };
+  }
+  return {
+    code,
+    ok: true,
+    message: `ADMIN_EMAILS in ${source} lists ${entries.length} administrator address${entries.length === 1 ? "" : "es"}.`,
+  };
+}
+
+/**
+ * Whether a driver must read ADMIN_EMAILS from the API secret on the target: the
+ * auth module reads it, and runtimeConfig, which profileFindings checks, does not set it.
+ */
+export function adminEmailsOnTarget(projectRoot: string, profile: AnyDeployProfile): boolean {
+  return installedModules(projectRoot).has("auth") && profile.runtimeConfig.ADMIN_EMAILS === undefined;
+}
+
 export function profileFindings(projectRoot: string, profile: AnyDeployProfile): DeployFinding[] {
   const modules = installedModules(projectRoot);
   const findings: DeployFinding[] = [
@@ -319,6 +394,9 @@ export function profileFindings(projectRoot: string, profile: AnyDeployProfile):
   const budget = connectionBudgetFinding(profile, modules);
   if (budget) findings.push(budget);
   if (modules.has("audit-log")) findings.push(auditLogFinding(profile.runtimeConfig));
+  if (modules.has("auth") && profile.runtimeConfig.ADMIN_EMAILS !== undefined) {
+    findings.push(adminEmailsFinding(profile.runtimeConfig.ADMIN_EMAILS, "runtimeConfig"));
+  }
   return findings;
 }
 

@@ -190,7 +190,7 @@ The two drivers differ only in the mechanism.
 | --- | --- | --- |
 | Application | pre-existing Kubernetes Secrets, referenced by name | env files on the target host, referenced by absolute path |
 | Registry | an image-pull Secret of type `kubernetes.io/dockerconfigjson` | `docker login` on the target host |
-| Inspection | `kubectl` is asked for key names only | a throwaway container prints key names from a read-only mount |
+| Inspection | `kubectl` is asked for key names, and for the value of `ADMIN_EMAILS` only | a throwaway container prints key names, and the `ADMIN_EMAILS` line only, from a read-only mount |
 
 Required keys are the same on both:
 
@@ -215,7 +215,9 @@ podo deploy plan --profile production --release v1.2.3 --json
 ```
 
 The doctor is read-only. It validates the exact target, the tooling, the fingerprint,
-and the required secret key names without printing a value. It also checks the
+and the required secret key names without printing a value. With the `auth` module
+installed it also reads `ADMIN_EMAILS`, an allowlist of addresses rather than a
+credential, from `runtimeConfig` or else the API secret. It also checks the
 profile against the application before it contacts the target. Each line starts
 with `ok`, `warn`, or `FAIL`; apply runs the doctor first and stops on a `FAIL`,
 while a `warn` reports a setting that deploys but probably not as intended:
@@ -225,6 +227,7 @@ while a `warn` reports a setting that deploys but probably not as intended:
 | `client-address` | `warn` when `exposure.edgeProxies`, `trustedProxyCidrs`, and the direct paths contradict each other, see [client addresses](#client-addresses) |
 | `idle-timeouts` | `FAIL` when the idle timeouts cannot be derived or `CONNECTION_IDLE_TIMEOUT` set in `runtimeConfig` cannot cover the longest `/api` proxy wait; `warn` when `API_IDLE_TIMEOUT` cannot, see [idle timeouts](#idle-timeouts) |
 | `database-connections` (with PostgreSQL) | `FAIL` when the API and worker processes can open more connections than PostgreSQL allows between rollouts, `warn` when a rollout or the migration can; see [database connections](#database-connections) |
+| `admin-emails` (with `auth` installed) | `FAIL` when `ADMIN_EMAILS` lists an entry that is not an email address or whose domain is reserved and receives no mail (`example.com`, `example.net`, `example.org` and their subdomains, and the `.example`, `.test`, `.invalid`, and `.localhost` names), such as the `admin@example.com` of `.env.example`; a generated API refuses to start in production with such an entry. List the administrators' real addresses, or leave it empty and create administrators with `admin:bootstrap` |
 | `audit-log` (with the module installed) | `warn` when `runtimeConfig` lacks `AUDIT_LOG_ENABLED` or sets it to anything but `"true"`: the audit log then records nothing until an administrator turns it on, or depends on the API's built-in default |
 
 The plan resolves every image tag to an immutable registry digest and binds those

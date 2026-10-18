@@ -6,6 +6,8 @@ import { join } from "node:path";
 import { directApiRoutes } from "./api-paths";
 import { readAppProxyTimeouts } from "./app-proxy-timeouts";
 import {
+  adminEmailsFinding,
+  adminEmailsOnTarget,
   connectionBudgetWarning,
   installedModules,
   profileFindings,
@@ -223,6 +225,25 @@ function secretKeys(
     .sort();
 }
 
+// ADMIN_EMAILS is an allowlist of addresses, not a credential, so the doctor reads
+// this one value of the API Secret to catch a placeholder. Every other value stays unread.
+function secretAdminEmails(profile: DeployProfileV1, runner: CommandRunner): DeploymentDoctorFinding {
+  const name = profile.secrets.api.name;
+  const result = runner(
+    "kubectl",
+    kubectlArgs(profile, ["get", "secret", name, "-o", 'go-template={{with index .data "ADMIN_EMAILS"}}{{.}}{{end}}']),
+    { capture: true },
+  );
+  if (result.status !== 0) {
+    return {
+      code: "admin-emails",
+      ok: false,
+      message: `Cannot read ADMIN_EMAILS from Secret ${name}: ${result.stderr.trim() || "the Secret is missing or inaccessible"}.`,
+    };
+  }
+  return adminEmailsFinding(Buffer.from(result.stdout.trim(), "base64").toString("utf8"), `Secret ${name}`);
+}
+
 function dependencySecretRequirements(
   profile: DeployProfileV1,
 ): Array<{ name: string; keys: string[] }> {
@@ -438,6 +459,8 @@ export function doctorDeployment(
             : `Secret ${requirement.name} contains the required key names.`,
     });
   }
+
+  if (adminEmailsOnTarget(projectRoot, profile)) findings.push(secretAdminEmails(profile, runner));
 
   const imagePullType = runner(
     "kubectl",

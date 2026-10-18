@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { directApiRoutes } from "./api-paths";
 import { readAppProxyTimeouts } from "./app-proxy-timeouts";
 import {
+  adminEmailsFinding,
+  adminEmailsOnTarget,
   connectionBudgetWarning,
   installedModules,
   profileFindings,
@@ -177,37 +179,26 @@ export function inspectComposeEndpointFingerprint(
 }
 
 /**
- * Reads key NAMES from an env file on the target host.
+ * Runs a read-only shell command against an env file on the target host, as the
+ * identity that will actually deploy, and returns its output.
  *
- * The file never leaves the host and no value is captured: a throwaway container
- * mounts it read-only and prints the left-hand sides only. This mirrors the
- * Kubernetes doctor asking `kubectl` for key names rather than Secret contents.
+ * The file never leaves the host: over SSH the command reads it in place, and
+ * otherwise a throwaway container mounts it read-only.
  */
-function readEnvFileKeys(
+function readEnvFile(
   profile: DockerComposeProfileV1,
   path: string,
   image: string,
   runner: CommandRunner,
-): string[] {
-  const script = `sed -n 's/^[[:space:]]*\\([A-Z][A-Z0-9_]*\\)=.*/\\1/p' /podokit-env | sort -u`;
-  // Read it as the identity that will actually deploy.
-  //
+  command: (file: string) => string,
+): string {
   // A container running as root proves only that root can read the file, and
   // `docker compose` on a remote target runs as the SSH user. Checking with the
   // wrong identity is how a doctor passes and the apply then dies on
   // "permission denied" -- which is exactly what happened.
   const destination = sshDestination(profile, runner);
-  if (destination) {
-    const remote = checked(runner, "ssh", [
-      destination,
-      `sed -n 's/^[[:space:]]*\\([A-Z][A-Z0-9_]*\\)=.*/\\1/p' ${path} | sort -u`,
-    ]);
-    return remote
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
-  }
-  const output = checked(
+  if (destination) return checked(runner, "ssh", [destination, command(path)]);
+  return checked(
     runner,
     "docker",
     dockerArgs(profile, [
@@ -226,13 +217,46 @@ function readEnvFileKeys(
       "sh",
       image,
       "-c",
-      script,
+      command("/podokit-env"),
     ]),
   );
-  return output
+}
+
+/**
+ * Reads key NAMES from an env file on the target host. No value is captured: the
+ * command prints the left-hand sides only, which mirrors the Kubernetes doctor
+ * asking `kubectl` for key names rather than Secret contents.
+ */
+function readEnvFileKeys(
+  profile: DockerComposeProfileV1,
+  path: string,
+  image: string,
+  runner: CommandRunner,
+): string[] {
+  return readEnvFile(profile, path, image, runner, (file) => `sed -n 's/^[[:space:]]*\\([A-Z][A-Z0-9_]*\\)=.*/\\1/p' ${file} | sort -u`)
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
+}
+
+// ADMIN_EMAILS is an allowlist of addresses, not a credential, so the doctor reads
+// this one value of the API env file to catch a placeholder. Every other value stays unread.
+function envFileAdminEmails(
+  profile: DockerComposeProfileV1,
+  image: string,
+  runner: CommandRunner,
+): ComposeDoctorFinding {
+  const path = profile.secrets.api.path;
+  try {
+    const lines = readEnvFile(profile, path, image, runner, (file) => `sed -n 's/^[[:space:]]*ADMIN_EMAILS=//p' ${file}`)
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    // Docker Compose applies the last assignment of a key in an env file.
+    return adminEmailsFinding(lines.at(-1), path);
+  } catch (error) {
+    return { code: "admin-emails", ok: false, message: `Cannot read ADMIN_EMAILS from ${path}: ${(error as Error).message}` };
+  }
 }
 
 function writeLedger(
@@ -452,6 +476,7 @@ export function doctorComposeDeployment(
       record("env-file-" + file.label, false, `Cannot read ${file.path}: ${(error as Error).message}`);
     }
   }
+  if (adminEmailsOnTarget(projectRoot, profile)) findings.push(envFileAdminEmails(profile, probe, runner));
 
   if (profile.secrets.registryLogin && release) {
     const result = runner(

@@ -2,7 +2,14 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { connectionBudget, connectionBudgetWarning, installedModules, profileFindings } from "./deploy-checks";
+import {
+  adminEmailEntries,
+  adminEmailsFinding,
+  connectionBudget,
+  connectionBudgetWarning,
+  installedModules,
+  profileFindings,
+} from "./deploy-checks";
 import { initializeComposeProfile } from "./deploy-compose-profile";
 import { renderComposeDeployment } from "./deploy-compose-render";
 import { loadAnyDeploymentProfile, type AnyDeployProfile } from "./deploy-driver";
@@ -424,5 +431,88 @@ describe("client address settings", () => {
         value.exposure.edgeProxies = edgeProxies;
       }),
     ).toThrow('"exposure.edgeProxies" must be an integer from 0 to 8');
+  });
+});
+
+describe("ADMIN_EMAILS", () => {
+  it.each([
+    ["admin@example.com", "a placeholder: example.com"],
+    ["a@mail.example.org", "a placeholder: mail.example.org"],
+    ["ops@example.net", "a placeholder: example.net"],
+    ["a@host.test", "a placeholder: host.test"],
+    ["a@localhost", "a placeholder: localhost"],
+    ["root@box.invalid", "a placeholder: box.invalid"],
+    ["root@docs.example", "a placeholder: docs.example"],
+    ["admin", "not an email address"],
+    ["a@b", "not an email address"],
+    ["a b@company.io", "not an email address"],
+  ])("fails on %s", (value, reason) => {
+    const finding = adminEmailsFinding(value, "Secret example-app-api");
+    expect(finding).toMatchObject({ code: "admin-emails", ok: false });
+    expect(finding.message).toContain(`${value} (${reason}`);
+    expect(finding.message).toContain("must list the administrators' real addresses or stay empty");
+    expect(finding.message).toContain("refuses to start in production");
+  });
+
+  it("names only the offending entries of a mixed list", () => {
+    const finding = adminEmailsFinding("owner@company.io, Admin@Example.com", "runtimeConfig");
+    expect(finding.ok).toBe(false);
+    expect(finding.message).toContain("admin@example.com (a placeholder");
+    expect(finding.message).not.toContain("owner@company.io");
+  });
+
+  it("passes real addresses without printing them", () => {
+    const finding = adminEmailsFinding(" owner@company.io,ops@mail.company.io ", "runtimeConfig");
+    expect(finding).toEqual({
+      code: "admin-emails",
+      ok: true,
+      message: "ADMIN_EMAILS in runtimeConfig lists 2 administrator addresses.",
+    });
+    // Look-alikes of the reserved names are real domains.
+    expect(adminEmailsFinding("a@example.company, b@notexample.com, c@test.io", "runtimeConfig").ok).toBe(true);
+  });
+
+  it.each([undefined, "", " , ", '""'])("passes when ADMIN_EMAILS is %j", (value) => {
+    const finding = adminEmailsFinding(value, "runtimeConfig");
+    expect(finding.ok).toBe(true);
+    expect(finding.warning).toBeUndefined();
+    expect(finding.message).toContain("no account becomes an administrator through it");
+  });
+
+  it("reads an env file value with its quotes", () => {
+    expect(adminEmailEntries('"Owner@Company.io, ops@company.io"')).toEqual(["owner@company.io", "ops@company.io"]);
+    expect(adminEmailEntries("'admin@example.com'")).toEqual(["admin@example.com"]);
+    expect(adminEmailsFinding("'admin@example.com'", "/srv/app/api.env").ok).toBe(false);
+  });
+
+  it("checks runtimeConfig when the auth module reads it", () => {
+    for (const driver of ["kubernetes-helm", "docker-compose"] as const) {
+      const root = project(driver, ["auth"]);
+      const finding = () =>
+        profileFindings(root, loadAnyDeploymentProfile(root, "production")).find(
+          (entry) => entry.code === "admin-emails",
+        );
+      // Left to the driver, which reads the API secret on the target.
+      expect(finding()).toBeUndefined();
+      edit(root, (value) => {
+        value.runtimeConfig.ADMIN_EMAILS = "admin@example.com";
+      });
+      expect(finding()).toMatchObject({ ok: false });
+      expect(finding()?.message).toContain("ADMIN_EMAILS in runtimeConfig lists admin@example.com");
+      edit(root, (value) => {
+        value.runtimeConfig.ADMIN_EMAILS = "owner@company.io";
+      });
+      expect(finding()).toMatchObject({ ok: true });
+
+      const withoutAuth = project(driver, []);
+      edit(withoutAuth, (value) => {
+        value.runtimeConfig.ADMIN_EMAILS = "admin@example.com";
+      });
+      expect(
+        profileFindings(withoutAuth, loadAnyDeploymentProfile(withoutAuth, "production")).some(
+          (entry) => entry.code === "admin-emails",
+        ),
+      ).toBe(false);
+    }
   });
 });
