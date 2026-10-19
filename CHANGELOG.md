@@ -198,6 +198,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   generated `src/lib/server/csrf.ts` now trusts no other origin when the name is
   not defined, so only the site's own forms pass, and a build with the managed
   config still inlines the configured origins.
+- After a dev stack restarted, the shared gateway could answer 404 for that
+  project for minutes, until the gateway restarted. A request that reached the
+  project's new gateway link before the link loaded its TCP forwards was
+  answered by the link itself with 404, and Traefik keeps serving such a
+  connection as HTTP for its whole life; the gateway kept reusing the pooled
+  connection, so later requests on it got 404 too. The link now closes every
+  connection it answers itself after one response, so the gateway dials a new
+  one that is passed through. Compose recreates the link once on the next
+  `podo dev watch` or `podo dev up`.
 
 - `podo dev watch` recreated a running service whenever `docker compose run`
   started a one-off container of it, for example a second API for a test. It

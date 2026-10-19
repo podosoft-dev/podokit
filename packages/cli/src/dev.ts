@@ -354,9 +354,17 @@ export function renderRuntimeCompose(runtime: DevRuntime): string {
       .join("");
   // The entry points also change the command whenever the forwards change, so
   // Compose recreates the link instead of keeping the old configuration.
+  // Until the link loads its TCP routers, Traefik serves a connection it accepts
+  // as HTTP and answers 404, and keeps doing so for that connection's life. The
+  // gateway pools its connections, so one dialed while the link started kept
+  // returning 404 for minutes. Closing every connection the link answers itself
+  // after one response drops it; passed-through connections stay open.
   const linkCommand = [
     "--providers.file.filename=/etc/traefik/link.yml",
-    ...forwards.map(({ name, port }) => `--entrypoints.${name}.address=:${port}`),
+    ...forwards.flatMap(({ name, port }) => [
+      `--entrypoints.${name}.address=:${port}`,
+      `--entrypoints.${name}.transport.keepAliveMaxRequests=1`,
+    ]),
     "--global.checknewversion=false",
     "--global.sendanonymoususage=false",
   ]
