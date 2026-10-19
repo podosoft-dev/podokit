@@ -182,7 +182,10 @@ podo update --apply
 
 The manifest records the package name and installed version. If the package is
 missing from `node_modules`, update fails instead of silently removing its
-files. If `node_modules` holds an older version than the manifest records, for
+files. A fresh clone or git worktree has no `node_modules` yet, so run
+`bun install` there first; until then `podo update`, `podo diff <path>`,
+`podo restore`, and `podo remove` stop with a message that names the package and
+asks for it. If `node_modules` holds an older version than the manifest records, for
 example after switching to a branch with an older lockfile, the dry run warns
 and `--apply` refuses instead of writing the older module's files; run
 `bun install` and update again. When a 3-way merge requires a previous external module, registry access

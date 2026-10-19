@@ -27,5 +27,8 @@ Rules to respect:
   the `// podokit:begin…end` fences.
 - Run `podo update` (dry-run) first and read the plan before `--apply`. Commit or
   stash your work beforehand so a merge is easy to review.
+- In a fresh clone or git worktree, run `bun install` before `podo update` when the
+  project uses an external module package (`.podokit/manifest.json` records its
+  `packageName`); PodoKit reads that module from `node_modules`.
 - PodoKit v1 projects are Bun-only. A PodoKit 0.x project must keep using its
   pinned 0.x CLI; there is no in-place NestJS/Node conversion path.

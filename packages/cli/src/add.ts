@@ -207,10 +207,37 @@ export function resolveModuleDir(name: string, modulesDir: string, projectRoot: 
   const pkg = name.includes("/") ? name : `${PACKAGE_PREFIX}${name}`;
   try {
     const req = createRequire(join(projectRoot, "package.json"));
-    return dirname(req.resolve(`${pkg}/module.manifest.json`));
+    // require.resolve caches paths per process, so a package removed since an
+    // earlier resolution still resolves; a long-running caller such as the MCP
+    // server would then fail reading its manifest.
+    const manifest = req.resolve(`${pkg}/module.manifest.json`);
+    return existsSync(manifest) ? dirname(manifest) : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Why a module the project records cannot be resolved, with what to do. An
+ * external module resolves from node_modules, which a fresh clone or git
+ * worktree does not have until its packages are installed.
+ */
+export function unresolvedModuleMessage(
+  module: { name: string; packageName?: string },
+  projectRoot: string,
+): string {
+  const rerun = "Run bun install, then run this podo command again.";
+  const installed = existsSync(join(projectRoot, "node_modules"));
+  if (module.packageName) {
+    return installed
+      ? `Module "${module.name}" comes from ${module.packageName}, which is not installed. ${rerun}`
+      : `Module "${module.name}" comes from ${module.packageName}, but this project has no node_modules, ` +
+          `as in a fresh clone or git worktree. ${rerun}`;
+  }
+  return installed
+    ? `Cannot resolve module "${module.name}": this PodoKit version does not bundle it, and no installed package provides it.`
+    : `Cannot resolve module "${module.name}": this PodoKit version does not bundle it, and this project has no ` +
+        `node_modules to find its package in. ${rerun}`;
 }
 
 /** Resolve a module and capture the package identity needed to replay external

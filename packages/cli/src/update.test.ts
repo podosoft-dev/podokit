@@ -26,6 +26,7 @@ import {
   targetProject,
   type PreviousTemplates,
 } from "./update";
+import { templateDiff } from "./template-files";
 import {
   computeDrift,
   computeFilesLock,
@@ -304,6 +305,39 @@ describe("external module updates", () => {
 
     publish("1.10.0");
     expect(planUpdate(project, REPO_TEMPLATES).moduleDowngrades).toEqual([]);
+  });
+
+  it("asks for bun install when an external module's package is not installed", () => {
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: REPO_TEMPLATES, targetDir: project });
+    const packageDir = join(project, "node_modules/@podosoft/podokit-module-blog");
+    mkdirSync(packageDir, { recursive: true });
+    writeFileSync(
+      join(packageDir, "package.json"),
+      JSON.stringify({ name: "@podosoft/podokit-module-blog", version: "0.1.0" }),
+    );
+    writeFileSync(
+      join(packageDir, "module.manifest.json"),
+      JSON.stringify({ manifestVersion: 1, name: "blog", description: "test", targetApp: "api" }),
+    );
+    addModule({ projectRoot: project, module: "blog", modulesDir: join(REPO_TEMPLATES, "modules") });
+    const modulesDir = join(REPO_TEMPLATES, "modules");
+
+    // A fresh clone or git worktree has no node_modules until it installs.
+    rmSync(join(project, "node_modules"), { recursive: true, force: true });
+    const noNodeModules =
+      'Module "blog" comes from @podosoft/podokit-module-blog, but this project has no node_modules, ' +
+      "as in a fresh clone or git worktree. Run bun install, then run this podo command again.";
+    expect(() => planUpdate(project, REPO_TEMPLATES)).toThrow(noNodeModules);
+    expect(() => applyUpdate(project, REPO_TEMPLATES)).toThrow(noNodeModules);
+    expect(() => templateDiff(project, REPO_TEMPLATES, ["apps/api/src/main.ts"])).toThrow(noNodeModules);
+    expect(() => removeModule({ projectRoot: project, module: "blog", modulesDir })).toThrow(noNodeModules);
+
+    mkdirSync(join(project, "node_modules"));
+    expect(() => planUpdate(project, REPO_TEMPLATES)).toThrow(
+      'Module "blog" comes from @podosoft/podokit-module-blog, which is not installed. ' +
+        "Run bun install, then run this podo command again.",
+    );
   });
 
   it("orders module versions by semantic version", () => {

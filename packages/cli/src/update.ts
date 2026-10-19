@@ -31,7 +31,12 @@ import {
 import type { ProviderCapability, ProviderSelections } from "@podosoft/podokit-runtime";
 import type { Toolchain } from "./toolchain";
 import { NotAProjectError } from "./inspect";
-import { readModuleManifest, resolveModule, selectedProviderModule } from "./add";
+import {
+  readModuleManifest,
+  resolveModule,
+  selectedProviderModule,
+  unresolvedModuleMessage,
+} from "./add";
 import {
   applyModuleMigrations,
   collectPendingMigrations,
@@ -191,9 +196,9 @@ function targetModules(
     const resolved = resolveModule(existing?.packageName ?? name, modulesDir, projectRoot);
     if (!resolved) {
       throw new Error(
-        requiredBy
-          ? `Module "${requiredBy}" requires unknown module "${name}".`
-          : `Cannot resolve module "${name}" while updating the project.`,
+        existing
+          ? unresolvedModuleMessage(existing, projectRoot)
+          : `Module "${requiredBy}" requires unknown module "${name}".`,
       );
     }
 
