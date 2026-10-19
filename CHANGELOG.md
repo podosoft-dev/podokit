@@ -34,6 +34,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   before `auth.ts` read `ADMIN_EMAILS`, for a real address too. The child now
   loads `auth.ts` with the test's environment, then evaluates `auth.ts` alone
   again in production, and the test checks only the `ADMIN_EMAILS` error.
+- Four web proxy deadline tests (`apps/web/src/lib/server/backend-proxy.test.ts`)
+  failed when `bun run test` in `apps/web` loaded a `.env` with the example's
+  `CONNECTION_IDLE_TIMEOUT=35`: the proxy checks that value against routes
+  without a deadline when it loads, and the tests did not set it. They now set
+  it to `0` unless a test checks it.
 
 ## [1.6.4] - 2026-10-18
 
