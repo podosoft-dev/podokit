@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- The `audit-log` module's `user.delete` entry, recorded when an administrator
+  removes a user (`/admin/remove-user`), carried the user's id as its
+  `targetLabel` instead of the email: the audit hook looked the user up after
+  Better Auth had deleted it. `account.delete` (`/delete-user`) carried no
+  target at all. The audit plugin now notes each user a request deletes through
+  a `user.delete.before` database hook, which receives the row Better Auth reads
+  before deleting it, so both entries name the deleted user with its id as
+  `targetId` and its email as `targetLabel`, at no extra query. When account
+  deletion asks for confirmation (`sendDeleteAccountVerification`), the link's
+  request (`/delete-user/callback`, or `/delete-user` with its token) is now
+  recorded as `account.delete`, and the request that only sends the link records
+  nothing.
+- The generated `tests/helpers/app-accounts.ts` and `tests/helpers/accounts.ts`
+  still said that the Playwright seed signs the administrator up, and
+  `docs/deployment.md` said the suite signs up its seed accounts. Since 1.6.4 the
+  seed signs only the user up and signs the administrator in, so a new stack
+  needs the administrator from `admin:bootstrap` first.
+
 ## [1.6.4] - 2026-10-18
 
 ### Fixed

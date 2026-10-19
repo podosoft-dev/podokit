@@ -1,0 +1,5 @@
+---
+"@podosoft/podokit": patch
+---
+
+Make the `audit-log` module name a deleted user by the email it had. `user.delete` (`/admin/remove-user`) recorded the user's id as `targetLabel`, because the audit hook looked the user up after Better Auth had deleted it, and `account.delete` (`/delete-user`) recorded no target at all. The audit plugin now notes each user a request deletes through a `user.delete.before` database hook, which receives the row Better Auth reads before deleting it, so both entries carry the user's id as `targetId` and its email as `targetLabel` without an extra query. `/delete-user/callback`, the link of a deletion that asks for confirmation, is now recorded as `account.delete`, and a `/delete-user` request that only sends that link records nothing. The generated `tests/helpers/app-accounts.ts` and `tests/helpers/accounts.ts` no longer say that the Playwright seed signs the administrator up; since 1.6.4 it signs the administrator in, and the account comes from `admin:bootstrap`.
