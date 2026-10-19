@@ -876,11 +876,13 @@ async function superviseWatch(
       "--filter",
       "event=start",
       "--format",
-      '{{.Actor.ID}} {{index .Actor.Attributes "com.docker.compose.service"}}',
+      '{{.Actor.ID}} {{index .Actor.Attributes "com.docker.compose.service"}} {{index .Actor.Attributes "com.docker.compose.oneoff"}}',
     ],
     (line) => {
-      const [id, service] = line.trim().split(/\s+/);
-      if (!id || !service || known.has(id)) return;
+      const [id, service, oneOff] = line.trim().split(/\s+/);
+      // A `docker compose run` container carries its service's label but is
+      // not that service: rebuilding the service for it recreated the running one.
+      if (!id || !service || oneOff === "True" || known.has(id)) return;
       known.add(id);
       const paths = services.get(service);
       if (!paths) return;
