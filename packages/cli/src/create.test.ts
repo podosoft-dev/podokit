@@ -151,7 +151,7 @@ describe("create (integration against templates)", () => {
       }
     }
     const apiMain = readFileSync(join(target, "apps/api/src/main.ts"), "utf8");
-    expect(apiMain).toContain("await serveApi(createApp({ env, services }), env, services);");
+    expect(apiMain).toContain("await serveApi(app, env, services);");
     const apiServe = readFileSync(join(target, "apps/api/src/core/serve.ts"), "utf8");
     expect(apiServe).toContain("await services.start()");
     expect(apiServe).toContain("...apiServerOptions(env)");

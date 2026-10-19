@@ -106,7 +106,8 @@ listens. Compose Watch restarts the API container whenever a file under
 `apps/api/src` changes, so a migration that arrives with a pull or a rebase
 reaches the development database before a request needs it, and so does a module
 you just added. The log names what ran (`Applied 1 migrations: ...`) and how long
-it took; with nothing pending it adds about 0.7 s to a restart. A failing
+it took; when the auth schema itself is pending, Better Auth first reports a
+schema mismatch as the API loads, and the following lines show it created; with nothing pending it adds about 0.7 s to a restart. A failing
 migration does not stop the API: the error stays in `podo dev logs api` and
 `/api/health/ready` reports a `migrations` check that is down until a restart
 applies it. Write a hand-made migration completely before you save it, because a
