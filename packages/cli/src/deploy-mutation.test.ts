@@ -79,6 +79,8 @@ interface RunnerOptions {
   recordedStorageParseFails?: boolean;
   recordedStorageOutput?: string;
   migrationJob?: unknown;
+  migrationPods?: unknown[];
+  migrationLogs?: string;
   migrationLedger?: string;
   failMigrationWait?: boolean;
   failLedgerWrite?: boolean;
@@ -177,6 +179,12 @@ spec:
     }
     if (args.includes("config")) {
       return { status: 0, stdout: clusterOutput, stderr: "" };
+    }
+    if (args.includes("pods") && args.some((entry) => entry.startsWith("job-name="))) {
+      return { status: 0, stdout: JSON.stringify({ items: options.migrationPods ?? [] }), stderr: "" };
+    }
+    if (args.includes("logs")) {
+      return { status: 0, stdout: options.migrationLogs ?? "", stderr: "" };
     }
     if (args.includes("create") && args.includes("--dry-run=client")) {
       expect(args).toContain("--validate=false");
@@ -320,9 +328,10 @@ spec:
       return { status: 1, stdout: "", stderr: "timed out waiting for the condition" };
     }
     if (args.includes("get") && args.includes("job") && args.includes("json")) {
-      return options.migrationJob === undefined
-        ? { status: 1, stdout: "", stderr: "not found" }
-        : { status: 0, stdout: JSON.stringify(options.migrationJob), stderr: "" };
+      const job = options.migrationJob ?? {
+        status: { startTime: "2026-10-19T07:38:08Z", conditions: [{ type: "Complete", status: "True" }] },
+      };
+      return { status: 0, stdout: JSON.stringify(job), stderr: "" };
     }
     if (args.includes("get") && args.includes("configmap")) {
       return { status: 0, stdout: options.migrationLedger ?? "", stderr: "" };
@@ -622,17 +631,39 @@ describe("deployment mutations", () => {
       expect(status.lastMigration?.release).toBe("v1.0.19");
     });
 
-    it("records a failed migration and still fails the apply before the rollout", async () => {
+    it("stops at a failed migration within one wait and reports its pod's log without credentials", async () => {
       const root = initializedProject();
       const { calls, ledgerWrites, runner } = deploymentRunner({
         failMigrationWait: true,
         migrationJob: migrationJob({ type: "Failed", reason: "BackoffLimitExceeded", message: "Job has reached the specified backoff limit" }),
+        migrationPods: [
+          { metadata: { name: "example-app-migrate-v1-2-3-old", creationTimestamp: "2026-10-19T07:38:00Z" } },
+          { metadata: { name: "example-app-migrate-v1-2-3-new", creationTimestamp: "2026-10-19T07:38:08Z" } },
+        ],
+        migrationLogs: [
+          "connecting to postgres://app:hunter2@db:5432/app",
+          "DB_PASSWORD=hunter2 API_TOKEN: 'abc def'",
+          "",
+          "migration 0042 failed: relation \"users\" does not exist",
+        ].join("\n"),
       });
       const plan = planDeployment(root, "production", "v1.2.3", runner);
 
-      await expect(applyDeployment(root, "production", "v1.2.3", plan.planHash, runner, successfulFetcher()))
-        .rejects.toThrow(/wait --for=condition=complete job\/example-app-migrate-v1-2-3 .* failed with status 1/);
+      const failure = await applyDeployment(root, "production", "v1.2.3", plan.planHash, runner, successfulFetcher())
+        .then(() => null, (error: Error) => error);
 
+      expect(failure?.message).toBe(
+        "Migration Job example-app-migrate-v1-2-3 failed: BackoffLimitExceeded: Job has reached the specified backoff limit.\n" +
+          "Last log lines of pod example-app-migrate-v1-2-3-new:\n" +
+          "  connecting to postgres://app:***@db:5432/app\n" +
+          "  DB_PASSWORD=*** API_TOKEN: ***\n" +
+          "  migration 0042 failed: relation \"users\" does not exist",
+      );
+      expect(failure?.message).not.toContain("hunter2");
+      const waits = calls.filter(({ args }) => args.includes("wait") && args.some((entry) => entry.startsWith("job/")));
+      expect(waits).toHaveLength(1);
+      expect(waits[0]?.args).toContain("--timeout=5s");
+      expect(calls.some(({ args }) => args.includes("logs") && args.includes("example-app-migrate-v1-2-3-new"))).toBe(true);
       expect(writtenEntries(ledgerWrites[0])).toEqual([
         expect.objectContaining({
           release: "v1.2.3",
@@ -645,17 +676,27 @@ describe("deployment mutations", () => {
       expect(calls.at(-1)?.args).toEqual(expect.arrayContaining(["delete", "lease"]));
     });
 
-    it("records a migration apply stopped waiting for as incomplete", async () => {
+    it("gives up on a migration that never finishes after the 10-minute budget of short waits", async () => {
       const root = initializedProject();
-      const { ledgerWrites, runner } = deploymentRunner({
+      const { calls, ledgerWrites, runner } = deploymentRunner({
         failMigrationWait: true,
         migrationJob: { spec: {}, status: { startTime: "2026-10-19T07:38:08Z", active: 1 } },
+        migrationPods: [{
+          metadata: { name: "example-app-migrate-v1-2-3-abcde", creationTimestamp: "2026-10-19T07:38:08Z" },
+          status: { containerStatuses: [{ state: { waiting: { reason: "ImagePullBackOff", message: "Back-off pulling image" } } }] },
+        }],
       });
       const plan = planDeployment(root, "production", "v1.2.3", runner);
 
       await expect(applyDeployment(root, "production", "v1.2.3", plan.planHash, runner, successfulFetcher()))
-        .rejects.toThrow("failed with status 1");
+        .rejects.toThrow(
+          "Migration Job example-app-migrate-v1-2-3 did not finish within 10 minutes; its pod is waiting: " +
+            "ImagePullBackOff: Back-off pulling image. Inspect it with kubectl -n example-app describe job example-app-migrate-v1-2-3.\n" +
+            "Pod example-app-migrate-v1-2-3-abcde printed no log lines.",
+        );
 
+      expect(calls.filter(({ args }) => args.includes("wait") && args.some((entry) => entry.startsWith("job/"))))
+        .toHaveLength(120);
       expect(writtenEntries(ledgerWrites[0])).toEqual([
         expect.objectContaining({
           image: `ghcr.io/example/example-app-api:v1.2.3@sha256:${"b".repeat(64)}`,

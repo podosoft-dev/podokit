@@ -906,6 +906,15 @@ they replace before they return, so it has no previous containers to report.
 
 ### Migration ledger
 
+Apply waits up to 10 minutes for the migration Job and stops as soon as it completes
+or fails. The Job does not retry a failed migration (`backoffLimit: 0`), so a
+migration that exits non-zero stops apply within seconds, before the application
+rollout. Apply then prints the last 20 log lines of the Job's pod, with the password
+of a connection URL and values of keys such as `*_PASSWORD`, `*_SECRET`, and
+`*_TOKEN` masked. A Job still unfinished after 10 minutes stops apply too, and the
+message names what the pod is waiting for, such as `ImagePullBackOff`. Fix the cause
+and apply again: each apply replaces the Job.
+
 On Kubernetes the migration runs as a Job that Kubernetes deletes, with its pod and
 logs, an hour after it finishes (`ttlSecondsAfterFinished: 3600`). So that its outcome
 can still be checked later, apply appends it, while it holds the Lease, to the
