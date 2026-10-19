@@ -6,6 +6,7 @@ import checkWorkers, {
   e2ePhase,
   e2eRuns,
   e2eRunSettings,
+  e2eTrace,
   e2eWorkers,
   withExclusivePhase,
 } from "../../../templates/fullstack/tests/playwright.extensions";
@@ -271,15 +272,25 @@ describe("generated Playwright exclusive phase", () => {
     expect(scripts["test:e2e:ui"]).toBe("bun run-e2e.ts --project=ui --project=ui-exclusive");
   });
 
-  it("keeps the trace of a test that fails on its first and only attempt", () => {
-    // Local runs make no retries, so a trace recorded only on a retry never exists there.
+  it("records traces only when asked, or on a CI retry", () => {
+    // A trace of every test, kept only for failures, slowed the UI tests on the
+    // Vite dev server; locally a failed file is rerun with E2E_TRACE instead.
+    expect(e2eTrace(undefined, false)).toBe("off");
+    expect(e2eTrace(" ", false)).toBe("off");
+    expect(e2eTrace(undefined, true)).toBe("on-first-retry");
+    expect(e2eTrace("retain-on-failure", false)).toBe("retain-on-failure");
+    expect(e2eTrace("on", true)).toBe("on");
+    expect(e2eTrace("off", true)).toBe("off");
+    expect(() => e2eTrace("always", false)).toThrow(
+      'E2E_TRACE must be one of off, on, retain-on-failure, on-first-retry, on-all-retries, retain-on-first-failure, retain-on-failure-and-retries, got "always".',
+    );
     for (const path of [
       "templates/fullstack/tests/playwright.config.ts",
       "templates/modules/admin-dashboard/files/tests/playwright.config.ts",
     ]) {
       const config = readFileSync(resolve(REPO_ROOT, path), "utf8");
-      expect(config, path).toMatch(/\btrace: "retain-on-failure"/);
-      expect(config, path).not.toMatch(/\btrace: "on-first-retry"/);
+      expect(config, path).toMatch(/\btrace: e2eTrace\(\),/);
+      expect(config, path).not.toMatch(/\btrace: "/);
       expect(config, path).toContain('screenshot: "only-on-failure"');
       expect(config, path).toContain("retries: process.env.CI ? 2 : 0,");
     }

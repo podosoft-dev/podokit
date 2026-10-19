@@ -128,8 +128,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   missing external module package and ask to run `bun install` first.
 - Generated Playwright suites recorded a trace only on a retry
   (`trace: "on-first-retry"`), and local runs make no retries, so a UI test that
-  failed once kept only a screenshot. The managed configs now use
-  `trace: "retain-on-failure"`.
+  failed once kept only a screenshot. `E2E_TRACE` now sets the trace mode: rerun
+  a failed file with `E2E_TRACE=retain-on-failure` to keep its trace. Unset, CI
+  still records a trace on the first retry and a local run records none, because
+  a trace of every test made the UI tests on `vite dev` about 30% slower (75% on
+  one worker). A value that is not a Playwright trace mode fails the run with
+  the list of modes.
 - The hydration helpers (`ready`, `hydrated`) waited until the 30-second test
   timeout on a page that cannot hydrate. They now fail at once on SvelteKit's
   static error page and five seconds after an uncaught page error, and name the

@@ -108,20 +108,26 @@ bunx playwright install chromium
 
 ### Failed tests
 
-A failed test keeps a Playwright trace (`trace.zip`), a screenshot, and a page
-snapshot (`error-context.md`) in its folder under `tests/test-results`
-(`test-results/exclusive` for the exclusive run). The trace holds each action
-with the page before and after it, the console, and the network log, so a
-failure that does not come back on a rerun can still be examined:
+A failed test keeps a screenshot and a page snapshot (`error-context.md`) in
+its folder under `tests/test-results` (`test-results/exclusive` for the
+exclusive run). Passing tests keep nothing.
+
+`E2E_TRACE` sets the Playwright trace mode. Unset, a local run records no trace,
+and CI (`CI` set), which retries a failed test twice, records one on the first
+retry (`on-first-retry`). Recording a trace of every test, even one kept only
+when the test fails, makes the UI tests on `vite dev` about 30% slower, and
+those on one worker about 75% (see [Measured durations](#measured-durations)).
+To examine a local failure, rerun the failed file with a trace:
 
 ```bash
+E2E_TRACE=retain-on-failure E2E_BASE_URL=http://my-app.localhost bun run test:e2e ui/<file>.ui.spec.ts
 bunx playwright show-trace test-results/<test folder>/trace.zip
 ```
 
-The HTML report (`bun run --cwd tests test:e2e:report`) links the same files.
-Playwright records the trace of every test and deletes it when the test passes,
-so passing runs leave nothing behind. CI retries a failed test twice and keeps
-the trace of each failed attempt.
+The trace holds each action with the page before and after it, the console, and
+the network log. `E2E_TRACE` takes any Playwright trace mode, and a value that
+is not one fails the run with the list of modes. The HTML report
+(`bun run --cwd tests test:e2e:report`) links the same files.
 
 The UI specs of the `admin-dashboard` module wait for hydration with `ready(page,
 path)` or `hydrated(page)` from `tests/helpers/hydration.ts`. A page that cannot
@@ -136,8 +142,8 @@ hydrate fails that wait at once, instead of at the 30-second test timeout:
   failed, SvelteKit renders `src/error.html` in the browser. The server answered
   the page with 200 and has no error of its own. The dev server prints the
   browser's error (see [browser errors in the dev server
-  output](templates.md#browser-errors-in-the-dev-server-output)), and the trace
-  has the console and network log.
+  output](templates.md#browser-errors-in-the-dev-server-output)), and a trace
+  recorded with `E2E_TRACE=retain-on-failure` has the console and network log.
 
 The error lists the page's URL, status, title, and text, and the page errors,
 console errors, and failed requests seen while waiting.
@@ -358,12 +364,18 @@ Changes made after a measurement:
   and cleans up again; the Outer full run with S3 and SMTP (241 tests,
   `E2E_WORKERS=2`) took 47.6 and 37.2 seconds for the two runs, 85.8 seconds of
   Playwright and 129 seconds in all (2026-10-17).
-- Traces are now recorded for every test and kept for failed ones (see
-  [Failed tests](#failed-tests)). The 12-module app's suite on its built web
-  server (`E2E_WORKERS=2`, 192 and 39 tests in the two runs) took 96 seconds
-  both with `trace: "retain-on-failure"` and with the earlier
-  `"on-first-retry"` (2026-10-19). Against `vite dev` started cold, it took 128
-  seconds.
+- A trace of every test, kept for failed ones (`trace: "retain-on-failure"`),
+  made a larger app's UI tests take 731.6 instead of 438.9 seconds on its
+  `vite dev` stack, and the same 25 UI specs 60 instead of 39.4 seconds
+  (2026-10-19). On an `admin-dashboard` app (`E2E_WORKERS=2`, 110 and 25 UI tests
+  in the two runs, 2026-10-19), the UI tests on `vite dev` took 80.5 and 74.9
+  seconds without a trace and 105.8 and 92.6 seconds with one; the one-worker
+  exclusive run alone took 18.9 and 20.7 against 35.0 and 34.1 seconds. On the
+  built web server they took 49.5 and 50.6 against 57.4 and 57.3 seconds.
+  Traces are now off unless `E2E_TRACE` asks for them, and CI records one on a
+  retry (see [Failed tests](#failed-tests)). `screenshot: "only-on-failure"`
+  still screenshots each page of a browser context a test closes itself, so
+  turning it off saved 3 to 9 seconds of about 50 there; it stays on.
 - npm's delay is inherent. Poll it in the background, for example
   `until npm view @podosoft/podokit@<version> version; do sleep 30; done`.
 

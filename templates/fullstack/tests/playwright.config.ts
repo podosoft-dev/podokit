@@ -1,5 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
-import { e2eRunSettings, loadPlaywrightProjects, withExclusivePhase } from "./playwright.extensions";
+import { e2eRunSettings, e2eTrace, loadPlaywrightProjects, withExclusivePhase } from "./playwright.extensions";
 
 // The suite runs against a live stack: web on E2E_BASE_URL (proxying /api/* to
 // the API). Start it first (see docs/testing.md) — locally via the dev harness,
@@ -8,7 +8,9 @@ import { e2eRunSettings, loadPlaywrightProjects, withExclusivePhase } from "./pl
 // E2E_WORKERS sets the worker count (default 1); tests tagged @exclusive run in
 // `<project>-exclusive` twins after the others, in a second run when run-e2e.ts
 // starts the suite on more workers (see playwright.extensions.ts). A failed test
-// keeps its trace, screenshot, and error context under test-results/.
+// keeps its screenshot and error context under test-results/, and its trace when
+// one was recorded: E2E_TRACE sets the trace mode (default on-first-retry on CI,
+// off elsewhere), so rerun a failed file with E2E_TRACE=retain-on-failure.
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5001";
 const run = e2eRunSettings();
 const coreProjects = [
@@ -27,7 +29,7 @@ export default defineConfig({
   reporter: [["list"], ["html", { open: "never", outputFolder: run.reportFolder }]],
   use: {
     baseURL,
-    trace: "retain-on-failure",
+    trace: e2eTrace(),
     screenshot: "only-on-failure",
   },
   projects: withExclusivePhase([...coreProjects, ...loadPlaywrightProjects(coreProjects)], run.workers, run.phase),

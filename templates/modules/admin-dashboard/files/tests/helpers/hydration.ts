@@ -142,7 +142,8 @@ export function hydrationFailure(
       : `The page threw an uncaught error and had not hydrated ${PAGE_ERROR_GRACE_MS / 1000} s later. When ` +
         "hydration fails and the root error page cannot load either, SvelteKit renders src/error.html in the " +
         "browser, and the server, which answered the page, has no error of its own: the cause is in the " +
-        "browser, below, in the dev server output, and in this test's trace.";
+        "browser, below, in the dev server output, and in the test's trace (rerun the file with " +
+        "E2E_TRACE=retain-on-failure to record one).";
   const shown = page
     ? `${page.url} (status ${page.status || "unknown"}) shows "${page.title}": ${page.text || "(no text)"}`
     : "The page could not be read.";
