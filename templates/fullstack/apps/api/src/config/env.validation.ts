@@ -17,6 +17,13 @@ const podokitShape = {
     (value) => (value === "" ? undefined : value),
     z.coerce.number().int().min(0).max(255).default(35),
   ),
+  // Seconds a stopping API gives in-flight requests before it force-closes them;
+  // the web server reads the same variable with the same default. Streams and
+  // WebSockets close at once. The cap keeps the value within Bun's timer range.
+  SHUTDOWN_TIMEOUT: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.coerce.number().int().min(0).max(2_147_483).default(30),
+  ),
   // Reverse proxies in front of the API whose forwarded header names the client;
   // the generated web proxy is one. 0 uses the socket peer.
   TRUSTED_PROXY_HOPS: z.coerce.number().int().nonnegative().default(0),

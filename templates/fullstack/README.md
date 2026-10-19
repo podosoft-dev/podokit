@@ -207,6 +207,9 @@ If the production API exposes WebSocket endpoints, list their exact paths under
 `exposure.webSocketPaths` in the deployment profile. The Compose driver then keeps a
 single published port, sends only those paths to API, and sends all other traffic to
 web. The external TLS proxy continues to use the same single upstream. Keep
-`trustedProxyCidrs` empty unless that upstream is a known reverse proxy. Large-upload
+`trustedProxyCidrs` empty unless that upstream is a known reverse proxy. Register
+each API WebSocket with the plugin context's `shutdown.onShutdown`, closing it with
+`GOING_AWAY` (1001), so a stopping API closes it at once and the client reconnects
+to another instance instead of holding the old one until it is killed. Large-upload
 routes listed under `exposure.apiPaths` reach the API the same way, with `/api`
 removed; the API then enforces their body limit and origin checks itself.

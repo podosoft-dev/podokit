@@ -450,6 +450,58 @@ compiling, and `API_MAX_REQUEST_BODY_SIZE` and `API_IDLE_TIMEOUT` still apply.
 Invalid values stop the API at startup. Requests through the web app's `/api` proxy are also
 bounded by the web server's `BODY_SIZE_LIMIT`.
 
+### Shutdown
+
+On `SIGTERM` or `SIGINT` the API and the built web server stop the same way:
+
+1. They stop accepting connections. The API's `GET /health/ready` answers `503`
+   `SHUTTING_DOWN` on connections that are still open.
+2. They end server-sent event streams at once, and the API closes the WebSockets
+   that registered for shutdown with code `1001` (Going Away). Streams and
+   sockets never finish on their own, so waiting for them would hold the process
+   until the orchestrator kills it; their clients reconnect to another instance
+   instead. The `sse` module's streams and every stream the web server's `/api`
+   proxy relays end this way.
+3. In-flight requests get up to `SHUTDOWN_TIMEOUT` seconds (30 unless set) to
+   finish. Both servers read the same variable, and the rendered Kubernetes grace
+   period follows it.
+4. Whatever is still open then is closed. The API closes its services (the
+   database pool, Redis, and the others), waiting up to 3 seconds for them, and
+   exits.
+
+A second signal exits at once. A stream or WebSocket of the application's own
+registers through the `SHUTDOWN` service; otherwise it stays open until the
+timeout and is then cut:
+
+```ts
+import { Elysia } from "elysia";
+import type { PodokitModule } from "./core/services";
+import { GOING_AWAY } from "./core/shutdown";
+
+export const terminalModule: PodokitModule = {
+  name: "terminal",
+  plugin: ({ shutdown }) => {
+    const releases = new Map<string, () => void>();
+    return new Elysia().ws("/terminal", {
+      open(ws) {
+        releases.set(ws.id, shutdown.onShutdown(() => ws.close(GOING_AWAY, "Server shutting down")));
+      },
+      close(ws) {
+        releases.get(ws.id)?.();
+        releases.delete(ws.id);
+      },
+    });
+  },
+};
+```
+
+`onShutdown(listener)` runs the listener when shutdown starts, or at once when it
+already has, and returns a function to call when the connection closes on its own.
+Code that takes an `AbortSignal` can use `shutdown.signal`, and code outside a
+plugin resolves the same object with `services.resolve(SHUTDOWN)`. To end a server-sent
+event stream, close its `ReadableStream` controller in the listener, so the
+response ends cleanly and `EventSource` reconnects.
+
 ### Web extension points
 
 The web app's framework files are managed so that `podo update` can keep them

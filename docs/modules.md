@@ -855,6 +855,11 @@ Because the identity is fixed at connect, a stream ends after 30 minutes. The
 client reconnects and is authorized again, so a revoked session or a removed role
 stops receiving events within that time.
 
+When the API starts shutting down, every open stream ends cleanly at once, and a
+stream opened after that ends right after its `retry` line. Clients reconnect to
+another replica instead of holding the stopping process until it is killed; see
+[shutdown](templates.md#shutdown).
+
 #### Wire format
 
 The stream starts with `retry: 3000`. Each data event is a default `message`

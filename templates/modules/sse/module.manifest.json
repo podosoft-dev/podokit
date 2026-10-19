@@ -11,7 +11,8 @@
       "isAdmin(request: Request): Promise<boolean>;",
       "roles(request: Request): Promise<string[]>;",
       "activeOrganizationId(request: Request): Promise<string | undefined>;",
-      "tryResolve<T>(key: ServiceKey<T>): T | undefined {"
+      "tryResolve<T>(key: ServiceKey<T>): T | undefined {",
+      "export const SHUTDOWN = Symbol(\"shutdown\") as ServiceKey<Shutdown>;"
     ]
   },
   "targetApp": "api",

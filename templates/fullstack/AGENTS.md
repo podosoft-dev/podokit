@@ -84,6 +84,13 @@ Merge added module settings from `.env.example` into an existing `.env`.
   API resolves it once per request from `TRUSTED_PROXY_HOPS` (1: the web proxy) and
   `TRUSTED_PROXY_HEADER`; Better Auth sessions, audit entries, and rate limits use
   the same address.
+- On `SIGTERM` the API and the built web server stop accepting connections, end
+  server-sent event streams at once, give in-flight requests up to
+  `SHUTDOWN_TIMEOUT` seconds (30), and exit. Register every API WebSocket or
+  stream of your own with the `shutdown` service of the plugin context
+  (`shutdown.onShutdown(() => ws.close(GOING_AWAY, "Server shutting down"))`, from
+  `apps/api/src/core/shutdown.ts`) and call the returned function when it closes;
+  an unregistered one holds the process until the timeout.
 - `GET /healthz` (`apps/web/src/routes/healthz/+server.ts`) is the web server's own
   health route for the Kubernetes probes, the Compose healthcheck, and the image
   `HEALTHCHECK`. Keep it free of API calls, so an API outage does not take the web
