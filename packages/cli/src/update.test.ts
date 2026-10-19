@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
+import { hashContent } from "@podosoft/podokit-template-engine";
 import {
   mkdtempSync,
   rmSync,
@@ -21,6 +22,7 @@ import {
   planUpdate,
   applyUpdate,
   compareVersions,
+  predictMerges,
   publishedTemplates,
   summarize,
   targetProject,
@@ -96,7 +98,7 @@ describe("planUpdate (dry-run)", () => {
     expect(counts["up-to-date"]).toBeGreaterThan(0);
   });
 
-  it("flags a user-edited managed file as a conflict", () => {
+  it("keeps a user-edited managed file whose template did not change", () => {
     const dir = join(tmp(), "app");
     create({ name: "app", template: "fullstack", templatesDir: REPO_TEMPLATES, targetDir: dir });
     // edit a managed file
@@ -105,7 +107,7 @@ describe("planUpdate (dry-run)", () => {
 
     const plan = planUpdate(dir, REPO_TEMPLATES);
     const change = plan.changes.find((c) => c.path === "apps/api/src/main.ts");
-    expect(change?.action).toBe("conflict");
+    expect(change?.action).toBe("keep");
   });
 
   it("never reports owned files as changes to write", () => {
@@ -364,11 +366,16 @@ describe("external module updates", () => {
     addModule({ projectRoot: project, module: "blog", modulesDir: join(REPO_TEMPLATES, "modules") });
 
     const mainPath = join(project, "apps/api/src/main.ts");
-    writeFileSync(mainPath, `${readFileSync(mainPath, "utf8")}\n// application edit\n`);
+    writeFileSync(mainPath, `// application edit\n${readFileSync(mainPath, "utf8")}`);
     writeFileSync(
       join(packageDir, "package.json"),
       JSON.stringify({ name: "@podosoft/podokit-module-blog", version: "0.2.0" }),
     );
+    // The template changes too, so the edit needs a 3-way merge.
+    const newTemplates = join(tmp(), "new-templates");
+    cpSync(REPO_TEMPLATES, newTemplates, { recursive: true });
+    const templateMain = join(newTemplates, "fullstack/apps/api/src/main.ts");
+    writeFileSync(templateMain, `${readFileSync(templateMain, "utf8")}\n// upstream footer\n`);
 
     const previousRoot = join(tmp(), "previous-modules");
     const previousPackageDir = join(previousRoot, "node_modules/@podosoft/podokit-module-blog");
@@ -383,12 +390,13 @@ describe("external module updates", () => {
       JSON.stringify({ manifestVersion: 1, name: "blog", description: "test", targetApp: "api" }),
     );
 
-    const result = applyUpdate(project, REPO_TEMPLATES, {
+    const result = applyUpdate(project, newTemplates, {
       oldTemplatesDir: REPO_TEMPLATES,
       oldExternalModulesRoot: previousRoot,
     });
     expect(result.merged).toContain("apps/api/src/main.ts");
     expect(readFileSync(mainPath, "utf8")).toContain("// application edit");
+    expect(readFileSync(mainPath, "utf8")).toContain("// upstream footer");
     const manifest = JSON.parse(readFileSync(join(project, ".podokit/manifest.json"), "utf8")) as {
       modules: { name: string; moduleVersion?: string }[];
     };
@@ -903,13 +911,14 @@ describe("applyUpdate", () => {
     const action = (path: string): string | undefined =>
       plan.changes.find((change) => change.path === path)?.action;
     expect(action(updateSkill)).toBe("update");
-    expect(action(deploySkill)).toBe("conflict");
+    // The app edited it and the template did not change, so the edit stays.
+    expect(action(deploySkill)).toBe("keep");
     expect(action(routeSkill)).toBe("skip");
     expect(action(appSkill)).toBeUndefined();
 
     const result = applyUpdate(dir, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
     expect(result.written).toContain(updateSkill);
-    expect(result.merged).toContain(deploySkill);
+    expect(result.kept.map((file) => file.path)).toContain(deploySkill);
     expect(readFileSync(join(dir, updateSkill), "utf8")).toBe(
       readFileSync(join(REPO_TEMPLATES, "fullstack/dot-claude/skills/podokit-update/SKILL.md"), "utf8"),
     );
@@ -922,6 +931,29 @@ describe("applyUpdate", () => {
     expect(lock.files[routeSkill]?.tier).toBe("owned");
     expect(lock.files[appSkill]?.tier).toBe("owned");
     expect(readManifest(dir)?.managedOverrides).toEqual(expect.arrayContaining(DEFAULT_MANAGED_OVERRIDES));
+  });
+
+  it("keeps an owned file's edits when a newer version starts managing it", () => {
+    const dir = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: REPO_TEMPLATES, targetDir: dir });
+    withoutDefaultManagedOverrides(dir);
+    const skill = ".agents/skills/podokit-deploy/SKILL.md";
+    const template = readFileSync(join(dir, skill), "utf8");
+    const edited = `${template}\nLocal note.\n`;
+    writeFileSync(join(dir, skill), edited);
+    // After the edit, podo add or an update recomputed the lock: an owned
+    // entry's outHash follows the working copy, its templateHash the template.
+    const lock = readFilesLock(dir)!;
+    lock.files[skill] = { tier: "owned", outHash: hashContent(edited), templateHash: hashContent(template) };
+    writeFilesLock(dir, lock);
+
+    expect(planUpdate(dir, REPO_TEMPLATES).changes.find((change) => change.path === skill)).toMatchObject({
+      tier: "managed",
+      action: "keep",
+    });
+    applyUpdate(dir, REPO_TEMPLATES);
+    expect(readFileSync(join(dir, skill), "utf8")).toBe(edited);
+    expect(readFilesLock(dir)?.files[skill]?.tier).toBe("managed");
   });
 
   it("promotes pristine module route loaders from owned to managed", () => {
@@ -1029,7 +1061,7 @@ describe("applyUpdate", () => {
     );
 
     const plan = planUpdate(project, REPO_TEMPLATES);
-    expect(plan.changes.find((change) => change.path === usersLoader)?.action).toBe("conflict");
+    expect(plan.changes.find((change) => change.path === usersLoader)?.action).toBe("merge");
 
     const result = applyUpdate(project, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
     const merged = readFileSync(projectLoaderPath, "utf8");
@@ -1075,10 +1107,10 @@ describe("applyUpdate", () => {
     // update must still recognise the merged user header as an edit instead
     // of replacing the whole file with the template.
     const repeated = planUpdate(dir, newTemplates);
-    expect(repeated.changes.find((change) => change.path === "apps/api/src/main.ts")?.action).toBe("conflict");
-    // On the installed version, the installed templates are the merge base.
+    expect(repeated.changes.find((change) => change.path === "apps/api/src/main.ts")?.action).toBe("keep");
+    // With the template unchanged since, the next update keeps the merged file.
     const sameVersion = applyUpdate(dir, newTemplates, { fetchTemplates: unreachableRegistry });
-    expect(sameVersion.merged).toContain("apps/api/src/main.ts");
+    expect(sameVersion.kept.map((file) => file.path)).toContain("apps/api/src/main.ts");
     expect(sameVersion.conflicts).toEqual([]);
     expect(readFileSync(appMain, "utf8")).toBe(merged);
   });
@@ -1132,7 +1164,10 @@ describe("applyUpdate", () => {
     writeManifest(dir, { ...readManifest(dir)!, podokitVersion: "1.5.0" });
     const appMain = join(dir, "apps/api/src/main.ts");
     writeFileSync(appMain, "// my header\n" + readFileSync(appMain, "utf8"));
-    const result = applyUpdate(dir, REPO_TEMPLATES, {
+    const newTemplates = newTemplatesCopy();
+    const tplMain = join(newTemplates, "fullstack/apps/api/src/main.ts");
+    writeFileSync(tplMain, readFileSync(tplMain, "utf8") + "\n// upstream footer\n");
+    const result = applyUpdate(dir, newTemplates, {
       oldTemplatesDir: oldTemplates,
       fetchTemplates: unreachableRegistry,
     });
@@ -1186,10 +1221,10 @@ describe("applyUpdate", () => {
     const result = applyUpdate(dir, REPO_TEMPLATES, { oldTemplatesDir: oldTemplates });
 
     expect(result.conflicts).toEqual([]);
-    expect(result.skipped).toEqual([
+    expect(result.kept).toEqual([
       {
         path: legacy,
-        reason: "removed in this version but edited locally, so it was kept; delete it when you no longer need it",
+        reason: "removed upstream but edited locally; kept, delete it when you no longer need it",
       },
       {
         path: smoke,
@@ -1198,6 +1233,138 @@ describe("applyUpdate", () => {
     ]);
     expect(readFileSync(join(dir, legacy), "utf8")).toBe("export const legacy = false;\n");
     expect(readFileSync(join(dir, smoke), "utf8")).toBe("// the application's own smoke test\n");
+  });
+});
+
+describe("update preview labels", () => {
+  const EXCEPTION = "apps/api/src/common/app-exception.ts";
+  const MAIN = "apps/api/src/main.ts";
+  const OPTIONS = "apps/api/src/config/server-options.ts";
+  const BUILD_SPEC = "apps/api/src/build.spec.ts";
+  const HEALTH = "apps/api/src/health/health.plugin.ts";
+  const KEPT = "edited locally; the template did not change, so your version stays";
+
+  function templatesCopy(name: string): string {
+    const dir = join(tmp(), name);
+    cpSync(REPO_TEMPLATES, dir, { recursive: true });
+    return dir;
+  }
+  function append(path: string, text: string): void {
+    writeFileSync(path, readFileSync(path, "utf8") + text);
+  }
+  function suffixFirstLine(path: string, suffix: string): void {
+    const [first = "", ...rest] = readFileSync(path, "utf8").split("\n");
+    writeFileSync(path, [first + suffix, ...rest].join("\n"));
+  }
+
+  // A project generated from one template set, edited locally, and a next
+  // template set that changes some of the same files.
+  function scenario(): { dir: string; oldTemplates: string; newTemplates: string } {
+    const oldTemplates = templatesCopy("old-templates");
+    const newTemplates = templatesCopy("new-templates");
+    const dir = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: dir });
+    const next = (path: string): string => join(newTemplates, "fullstack", path);
+    append(join(dir, EXCEPTION), "\n// app: local tweak\n");
+    writeFileSync(join(dir, MAIN), `// app header\n${readFileSync(join(dir, MAIN), "utf8")}`);
+    append(next(MAIN), "\n// upstream footer\n");
+    suffixFirstLine(join(dir, OPTIONS), " // app");
+    suffixFirstLine(next(OPTIONS), " // upstream");
+    append(join(dir, BUILD_SPEC), "\n// app: extra case\n");
+    rmSync(next(BUILD_SPEC));
+    append(next(HEALTH), "\n// upstream change\n");
+    return { dir, oldTemplates, newTemplates };
+  }
+
+  it("keeps an edit to a file whose template did not change instead of reporting a conflict", () => {
+    const dir = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: REPO_TEMPLATES, targetDir: dir });
+    append(join(dir, EXCEPTION), "\n// app: local tweak\n");
+
+    const plan = planUpdate(dir, REPO_TEMPLATES);
+    expect(plan.changes.find((change) => change.path === EXCEPTION)).toMatchObject({
+      action: "keep",
+      note: KEPT,
+    });
+    expect(summarize(plan)).toMatchObject({ keep: 1, merge: 0, conflict: 0 });
+  });
+
+  it("tells edits the template also changed apart from edits it did not", () => {
+    const { dir, newTemplates } = scenario();
+    const plan = planUpdate(dir, newTemplates);
+    const change = (path: string): unknown => plan.changes.find((entry) => entry.path === path);
+
+    expect(change(EXCEPTION)).toMatchObject({ action: "keep", note: KEPT });
+    const merge = "edited locally and the template changed; --apply 3-way merges it";
+    expect(change(MAIN)).toMatchObject({ action: "merge", note: merge });
+    expect(change(OPTIONS)).toMatchObject({ action: "merge", note: merge });
+    expect(change(BUILD_SPEC)).toMatchObject({
+      action: "keep",
+      note: "removed upstream but edited locally; kept, delete it when you no longer need it",
+    });
+    expect(change(HEALTH)).toMatchObject({ action: "update", note: "clean update" });
+    expect(summarize(plan)).toMatchObject({ update: 1, merge: 2, keep: 2, conflict: 0 });
+  });
+
+  it("predicts each merge when the previous templates are given", () => {
+    const { dir, oldTemplates, newTemplates } = scenario();
+    const plan = predictMerges(dir, newTemplates, planUpdate(dir, newTemplates), oldTemplates);
+    const change = (path: string): unknown => plan.changes.find((entry) => entry.path === path);
+
+    expect(change(MAIN)).toMatchObject({
+      action: "merge",
+      note: "edited locally and the template changed; merges cleanly",
+    });
+    expect(change(OPTIONS)).toMatchObject({
+      action: "conflict",
+      note: "edited locally and the template changed; the merge leaves conflict markers to resolve",
+    });
+    expect(change(EXCEPTION)).toMatchObject({ action: "keep" });
+    expect(summarize(plan)).toMatchObject({ update: 1, merge: 1, conflict: 1, keep: 2 });
+  });
+
+  it("applies what the preview reported", () => {
+    const { dir, oldTemplates, newTemplates } = scenario();
+    const edited = readFileSync(join(dir, EXCEPTION), "utf8");
+    const plan = predictMerges(dir, newTemplates, planUpdate(dir, newTemplates), oldTemplates);
+    const counts = summarize(plan);
+
+    const result = applyUpdate(dir, newTemplates, { oldTemplatesDir: oldTemplates });
+
+    expect(result.written).toEqual([HEALTH]);
+    expect(result.written.length).toBe(counts.update + counts.add);
+    expect(result.merged).toEqual([MAIN]);
+    expect(result.merged.length).toBe(counts.merge);
+    expect(result.conflicts).toEqual([OPTIONS]);
+    expect(result.conflicts.length).toBe(counts.conflict);
+    expect(result.kept).toEqual(
+      plan.changes
+        .filter((change) => change.action === "keep")
+        .map((change) => ({ path: change.path, reason: change.note })),
+    );
+    expect(result.kept.map((file) => file.path)).toEqual([BUILD_SPEC, EXCEPTION]);
+    expect(readFileSync(join(dir, EXCEPTION), "utf8")).toBe(edited);
+    expect(readFileSync(join(dir, BUILD_SPEC), "utf8")).toContain("// app: extra case");
+
+    // The kept edit is still an edit on the next update, not generated output.
+    expect(planUpdate(dir, newTemplates).changes.find((change) => change.path === EXCEPTION)).toMatchObject({
+      action: "keep",
+    });
+  });
+
+  it("keeps edits the template did not change without the previous templates", () => {
+    const dir = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: REPO_TEMPLATES, targetDir: dir });
+    writeManifest(dir, { ...readManifest(dir)!, podokitVersion: "1.5.0" });
+    append(join(dir, EXCEPTION), "\n// app: local tweak\n");
+    const edited = readFileSync(join(dir, EXCEPTION), "utf8");
+
+    const result = applyUpdate(dir, REPO_TEMPLATES, { fetchTemplates: unreachableRegistry });
+
+    expect(result.kept).toEqual([{ path: EXCEPTION, reason: KEPT }]);
+    expect(result.merged).toEqual([]);
+    expect(readFileSync(join(dir, EXCEPTION), "utf8")).toBe(edited);
+    expect(readManifest(dir)?.podokitVersion).not.toBe("1.5.0");
   });
 });
 

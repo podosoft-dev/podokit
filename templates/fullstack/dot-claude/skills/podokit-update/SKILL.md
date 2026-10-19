@@ -14,7 +14,7 @@ podo diff            # list the PodoKit-managed files you've edited (owned files
 podo diff <path>     # line diff of one file against the template (owned files too)
 podo doctor          # check framework versions vs. the supported ranges
 podo update          # dry-run: preview what a newer version would change (writes nothing)
-podo update --apply  # apply it — clean updates are written; your edits are 3-way merged
+podo update --apply  # apply it — clean updates are written; edits the template also changed are 3-way merged
 podo eject <path>    # take ownership of a managed file so update skips it
 podo restore <path>  # rewrite a managed file from the template; re-manages an ejected file
 ```
@@ -27,6 +27,11 @@ Rules to respect:
   the `// podokit:begin…end` fences.
 - Run `podo update` (dry-run) first and read the plan before `--apply`. Commit or
   stash your work beforehand so a merge is easy to review.
+- In the plan, `keep` is an edited file whose template did not change (or that the
+  new version drops): `--apply` leaves it as it is. `merge` is an edited file whose
+  template changed too: `--apply` 3-way merges it and reports merged or conflict.
+  `podo update --from <previous templates>` runs those merges in the preview and
+  shows the ones that would conflict as `conflict`.
 - In a fresh clone or git worktree, run `bun install` before `podo update` when the
   project uses an external module package (`.podokit/manifest.json` records its
   `packageName`); PodoKit reads that module from `node_modules`.
