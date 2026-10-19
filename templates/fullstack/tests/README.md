@@ -69,6 +69,24 @@ tests not run, and selecting an exclusive test runs every other test first. Use
 Application-owned projects in `playwright.projects.cjs` get twins too. A project
 that another project depends on is a setup project and keeps a single copy.
 
+## Failed tests
+
+A failed test keeps its trace, a screenshot, and a page snapshot
+(`error-context.md`) in its folder under `test-results/`. The trace shows each
+action, the console, and the network log of the failed run:
+
+```bash
+bunx playwright show-trace test-results/<test folder>/trace.zip
+```
+
+Passing tests keep nothing. The hydration helpers in `helpers/hydration.ts`
+(`ready`, `hydrated`), which the `admin-dashboard` module adds, fail at once on
+a page that cannot hydrate: SvelteKit's static error page (`src/error.html`), or
+a page that throws an uncaught error and has not hydrated five seconds later.
+SvelteKit also renders that error page in the browser when hydration fails,
+after a page the server answered with 200. The cause is then in the browser: in
+the helper's error, the dev server output, and the trace.
+
 ## Email tests
 
 The email specs that the `admin-dashboard` module adds read messages from the

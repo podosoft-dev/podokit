@@ -855,6 +855,11 @@ Because the identity is fixed at connect, a stream ends after 30 minutes. The
 client reconnects and is authorized again, so a revoked session or a removed role
 stops receiving events within that time.
 
+When the API starts shutting down, every open stream ends cleanly at once, and a
+stream opened after that ends right after its `retry` line. Clients reconnect to
+another replica instead of holding the stopping process until it is killed; see
+[shutdown](templates.md#shutdown).
+
 #### Wire format
 
 The stream starts with `retry: 3000`. Each data event is a default `message`
@@ -1486,9 +1491,11 @@ domain are specific to each application.
 
 #### Request hook
 
-The managed `hooks.server.ts` loads the runtime context and then calls `appHandle`
-from the application-owned `apps/web/src/lib/server/app-hooks.ts` for every
-request. When it runs, `event.locals` already holds the site settings, the
+The managed `hooks.server.ts` runs the
+[cross-site form check](templates.md#cross-site-form-check), loads the runtime
+context, and then calls `appHandle` from the application-owned
+`apps/web/src/lib/server/app-hooks.ts` for every request the check lets through.
+When it runs, `event.locals` already holds the site settings, the
 signed-in user, the session, and the locale, and the response it returns still
 gets the document language and the search-indexing header. Change `event.locals`,
 add headers, or answer a request there instead of editing `hooks.server.ts`:

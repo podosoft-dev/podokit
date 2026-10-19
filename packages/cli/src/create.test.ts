@@ -151,9 +151,10 @@ describe("create (integration against templates)", () => {
       }
     }
     const apiMain = readFileSync(join(target, "apps/api/src/main.ts"), "utf8");
-    expect(apiMain).toContain("async function bootstrap(): Promise<void>");
-    expect(apiMain).toContain("await services.start()");
-    expect(apiMain).toContain("...apiServerOptions(env)");
+    expect(apiMain).toContain("await serveApi(app, env, services);");
+    const apiServe = readFileSync(join(target, "apps/api/src/core/serve.ts"), "utf8");
+    expect(apiServe).toContain("await services.start()");
+    expect(apiServe).toContain("...apiServerOptions(env)");
     expect(readFileSync(join(target, "apps/api/src/app.extensions.ts"), "utf8"))
       .toContain("export const apiServerOptions: ApiServerOptionsSource = {};");
     // Application-owned API seams that managed files import, seeded empty.
@@ -631,6 +632,8 @@ describe("create (integration against templates)", () => {
       expect(memory, service).toMatch(/^ {4}mem_limit: \$\{[A-Z_]+_MEM_LIMIT:-\d+[mg]\}$/);
       expect(swap?.replace("memswap_limit", "mem_limit"), service).toBe(memory);
     }
+    // A full Playwright run kept the Vite dev server near 1.9 GiB; 2 GiB was OOM-killed.
+    expect(services.get("web")).toContain("    mem_limit: ${WEB_MEM_LIMIT:-3g}");
   });
 
   it("scaffolds the todo template with the CRUD example", () => {

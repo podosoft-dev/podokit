@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import {
   hashContent,
   threeWayMerge,
+  type MergeResult,
   type TemplateVars,
   type VfsTree,
 } from "@podosoft/podokit-template-engine";
@@ -31,7 +32,12 @@ import {
 import type { ProviderCapability, ProviderSelections } from "@podosoft/podokit-runtime";
 import type { Toolchain } from "./toolchain";
 import { NotAProjectError } from "./inspect";
-import { readModuleManifest, resolveModule, selectedProviderModule } from "./add";
+import {
+  readModuleManifest,
+  resolveModule,
+  selectedProviderModule,
+  unresolvedModuleMessage,
+} from "./add";
 import {
   applyModuleMigrations,
   collectPendingMigrations,
@@ -52,16 +58,33 @@ import {
  * merging) is a later step (see ADR-0009).
  */
 
+/**
+ * What an update does to a file. `keep` is an edited file with nothing to merge
+ * into it (its template did not change, or this version stops generating it);
+ * `merge` is an edited file whose template changed too, so applying 3-way
+ * merges it. `conflict` is a known blocker: a module path migration that cannot
+ * apply, or a merge that `predictMerges` found would leave conflict markers.
+ */
 export type Action =
   | "review"
   | "update"
   | "merge"
   | "conflict"
+  | "keep"
   | "add"
   | "move"
   | "remove"
   | "skip"
   | "up-to-date";
+
+const EDITED_TEMPLATE_UNCHANGED = "edited locally; the template did not change, so your version stays";
+const REMOVED_BUT_EDITED = "removed upstream but edited locally; kept, delete it when you no longer need it";
+const MERGES_CLEANLY = "edited locally and the template changed; merges cleanly";
+const MERGE_CONFLICTS = "edited locally and the template changed; the merge leaves conflict markers to resolve";
+
+function noMergeBase(path: string): string {
+  return `the previous version's templates do not generate it, so there is no merge base; compare it with podo diff ${path}`;
+}
 
 export interface FileChange {
   path: string;
@@ -191,9 +214,9 @@ function targetModules(
     const resolved = resolveModule(existing?.packageName ?? name, modulesDir, projectRoot);
     if (!resolved) {
       throw new Error(
-        requiredBy
-          ? `Module "${requiredBy}" requires unknown module "${name}".`
-          : `Cannot resolve module "${name}" while updating the project.`,
+        existing
+          ? unresolvedModuleMessage(existing, projectRoot)
+          : `Module "${requiredBy}" requires unknown module "${name}".`,
       );
     }
 
@@ -501,8 +524,8 @@ export function planUpdate(
       changes.push({
         path,
         tier,
-        action: edited ? "conflict" : "remove",
-        note: edited ? "removed upstream but edited locally" : "removed upstream",
+        action: edited ? "keep" : "remove",
+        note: edited ? REMOVED_BUT_EDITED : "removed upstream",
       });
       continue;
     }
@@ -521,13 +544,24 @@ export function planUpdate(
       continue;
     }
 
-    const edited = !locked || diskHash !== locked.outHash;
-    changes.push({
-      path,
-      tier,
-      action: edited ? "conflict" : "update",
-      note: edited ? "you edited this; update would need a merge" : "clean update",
-    });
+    // What PodoKit generated here last time. A file owned until now records its
+    // template separately, because its outHash follows the working copy.
+    const baseline = locked ? (recordedTemplateHash(locked) ?? locked.outHash) : undefined;
+    if (diskHash === baseline) {
+      changes.push({ path, tier, action: "update", note: "clean update" });
+    } else if (newHash === baseline) {
+      // The 3-way merge would have base == next and return the working copy.
+      changes.push({ path, tier, action: "keep", note: EDITED_TEMPLATE_UNCHANGED });
+    } else {
+      changes.push({
+        path,
+        tier,
+        action: "merge",
+        note: locked
+          ? "edited locally and the template changed; --apply 3-way merges it"
+          : "not in the lock; --apply 3-way merges it",
+      });
+    }
   }
 
   // A configuration file the update creates, such as a missing
@@ -591,12 +625,12 @@ export interface ApplyResult {
   /** Owned files whose template changed; they are left as they are. */
   review: string[];
   /** Edited managed files the update left as they are, and why. */
-  skipped: SkippedFile[];
+  kept: KeptFile[];
   /** Direct API paths added to `.podokit/dev.json` and deployment profiles. */
   apiPaths: ApiPathResult;
 }
 
-export interface SkippedFile {
+export interface KeptFile {
   path: string;
   reason: string;
 }
@@ -817,6 +851,48 @@ export function upstreamChanges(
   });
 }
 
+/** The 3-way merge of an edited file, or null when the previous templates do not generate it. */
+function mergeEdited(
+  projectRoot: string,
+  path: string,
+  next: string,
+  oldTree: VfsTree | null,
+): MergeResult | null {
+  const base = oldTree ? treeText(oldTree, path) : null;
+  if (base === null) return null;
+  const current = readFileSync(join(projectRoot, path), "utf8");
+  return threeWayMerge(base, current, next, { current: "current", next: "podokit" });
+}
+
+/**
+ * Resolve each `merge` in a plan the way `--apply` would, given the previous
+ * version's templates: a clean merge stays `merge`, one that would leave
+ * conflict markers becomes `conflict`, and one without a merge base is `keep`.
+ */
+export function predictMerges(
+  projectRoot: string,
+  templatesDir: string,
+  plan: UpdatePlan,
+  oldTemplatesDir: string,
+  oldExternalModulesRoot?: string,
+): UpdatePlan {
+  if (!plan.changes.some((change) => change.action === "merge")) return plan;
+  const target = targetProject(projectRoot, templatesDir);
+  const oldTree = previousTree(projectRoot, target.manifest, oldTemplatesDir, oldExternalModulesRoot);
+  return {
+    ...plan,
+    changes: plan.changes.map((change): FileChange => {
+      const next = change.action === "merge" ? treeText(target.tree, change.path) : null;
+      if (next === null) return change;
+      const merge = mergeEdited(projectRoot, change.path, next, oldTree);
+      if (!merge) return { ...change, action: "keep", note: noMergeBase(change.path) };
+      return merge.conflicts > 0
+        ? { ...change, action: "conflict", note: MERGE_CONFLICTS }
+        : { ...change, note: MERGES_CLEANLY };
+    }),
+  };
+}
+
 function writeFile(projectRoot: string, path: string, content: string): void {
   const abs = join(projectRoot, path);
   mkdirSync(dirname(abs), { recursive: true });
@@ -895,11 +971,12 @@ function updatedFilesLock(
 
 /**
  * Apply an update to the working copy. Clean updates and additions are written,
- * upstream removals deleted, and user-edited files 3-way merged against the
+ * upstream removals deleted, user-edited files whose template did not change
+ * kept, and user-edited files whose template changed 3-way merged against the
  * templates of the version the project is on, with git-style conflict markers
  * where both sides changed the same lines. Refuses before writing anything when
- * those templates are unavailable. Owned files are never touched. Refreshes the
- * lockfile and stamps the new version.
+ * a merge needs those templates and they are unavailable. Owned files are never
+ * touched. Refreshes the lockfile and stamps the new version.
  */
 export function applyUpdate(
   projectRoot: string,
@@ -962,8 +1039,10 @@ export function applyUpdate(
       managedOverrides.map((glob) => migrateConfiguredPath(glob, pendingMigrations)),
     ),
   ];
+  // Only edits the template also changed need the previous templates; an edit
+  // to a file whose template did not change is kept without them.
   const mergePaths = plan.changes
-    .filter((change) => change.action === "conflict" && treeText(newTree, change.path) !== null)
+    .filter((change) => change.action === "merge" && treeText(newTree, change.path) !== null)
     .map((change) => change.path);
   let oldTree: VfsTree | null = null;
   if (mergePaths.length) {
@@ -978,15 +1057,10 @@ export function applyUpdate(
   if (options.abortOnConflict) {
     const unresolved: string[] = [];
     for (const change of plan.changes) {
-      if (change.action !== "conflict") continue;
+      if (change.action !== "merge") continue;
       const next = treeText(newTree, change.path);
-      const base = oldTree ? treeText(oldTree, change.path) : null;
-      const current = diskContent(projectRoot, change.path)?.toString("utf8") ?? null;
-      if (next === null || base === null || current === null) {
-        unresolved.push(change.path);
-        continue;
-      }
-      if (threeWayMerge(base, current, next).conflicts > 0) unresolved.push(change.path);
+      const merge = next === null ? null : mergeEdited(projectRoot, change.path, next, oldTree);
+      if (!merge || merge.conflicts > 0) unresolved.push(change.path);
     }
     if (unresolved.length) {
       throw new Error(
@@ -1005,7 +1079,7 @@ export function applyUpdate(
     merged: [],
     conflicts: [],
     review: plan.changes.filter((change) => change.action === "review").map((change) => change.path),
-    skipped: [],
+    kept: [],
     apiPaths: { changed: [], skipped: [] },
   };
 
@@ -1017,25 +1091,15 @@ export function applyUpdate(
     } else if (change.action === "remove") {
       rmSync(join(projectRoot, change.path), { force: true });
       result.removed.push(change.path);
-    } else if (change.action === "conflict") {
-      if (newText === null) {
-        result.skipped.push({
-          path: change.path,
-          reason: "removed in this version but edited locally, so it was kept; delete it when you no longer need it",
-        });
-        continue;
-      }
-      const disk = readFileSync(join(projectRoot, change.path), "utf8");
-      const base = oldTree ? treeText(oldTree, change.path) : null;
-      if (base === null) {
+    } else if (change.action === "keep") {
+      result.kept.push({ path: change.path, reason: change.note });
+    } else if (change.action === "merge" && newText !== null) {
+      const merge = mergeEdited(projectRoot, change.path, newText, oldTree);
+      if (!merge) {
         // Nothing to merge against: never clobber the application's version.
-        result.skipped.push({
-          path: change.path,
-          reason: `the previous version's templates do not generate it, so there is no merge base; compare it with podo diff ${change.path}`,
-        });
+        result.kept.push({ path: change.path, reason: noMergeBase(change.path) });
         continue;
       }
-      const merge = threeWayMerge(base, disk, newText, { current: "current", next: "podokit" });
       writeFile(projectRoot, change.path, merge.merged);
       if (merge.conflicts > 0) result.conflicts.push(change.path);
       else result.merged.push(change.path);
@@ -1125,6 +1189,7 @@ export function summarize(plan: UpdatePlan): Record<Action, number> {
     update: 0,
     merge: 0,
     conflict: 0,
+    keep: 0,
     add: 0,
     move: 0,
     remove: 0,

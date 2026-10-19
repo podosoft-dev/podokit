@@ -298,10 +298,13 @@ images include. In an image without it the hook fails, and Kubernetes records a
 `FailedPreStopHook` event and sends `SIGTERM` at once, as it did without a hook.
 
 The pod's `terminationGracePeriodSeconds` counts the hook as well: 5 seconds for it,
-the web server's `SHUTDOWN_TIMEOUT` for open requests to finish (30 seconds unless
-`runtimeConfig` sets it), and 5 more for the web server to close what remains and
-exit, 40 seconds by default. The API gets the same period for its in-flight
-requests, which covers the `/api` proxy's default 30-second wait. Kubernetes kills a container still running when the period ends,
+`SHUTDOWN_TIMEOUT` for in-flight requests to finish (30 seconds unless
+`runtimeConfig` sets it), and 5 more for the server to close what remains and
+exit, 40 seconds by default. The API and the web server read the same
+`SHUTDOWN_TIMEOUT`, which covers the `/api` proxy's default 30-second wait. Both
+end server-sent event streams, and the API its registered WebSockets, as soon as
+`SIGTERM` arrives, so open streams do not hold a pod for the whole period; see
+[shutdown](templates.md#shutdown). Kubernetes kills a container still running when the period ends,
 so raise `SHUTDOWN_TIMEOUT` in `runtimeConfig` when requests may take longer, such
 as uploads under a long [`APP_PROXY_TIMEOUTS`](templates.md#proxy-deadlines-per-route)
 deadline, and the grace period follows it. A replaced pod keeps its database
@@ -362,12 +365,13 @@ by side instead:
    host port itself and a second container cannot bind it, so web is replaced in
    place. The port is closed from the moment the old web server stops accepting
    connections until the old container exits and the new one listens: about a
-   second, or up to the web stop timeout below while a request or stream on the
-   old one is still open. A profile with WebSocket or API paths has the gateway.
+   second, or longer while the old one finishes in-flight requests, up to the web
+   stop timeout below. A profile with WebSocket or API paths has the gateway.
 3. Stop the old web container, then the old API containers, each with Docker's
-   graceful stop: in-flight requests finish, and a process still running when its
-   stop timeout ends is killed. A server that holds a WebSocket or server-sent
-   events stream runs until then; the client reconnects to a new container.
+   graceful stop: server-sent event streams and registered WebSockets end at once
+   and their clients reconnect to a new container, in-flight requests finish
+   within `SHUTDOWN_TIMEOUT`, and a process still running when its stop timeout
+   below ends is killed. See [shutdown](templates.md#shutdown).
 4. Run `compose up --remove-orphans` for the rest. The worker is replaced in place,
    since it receives no traffic. The gateway carries no release label, so it is
    replaced only when its own definition changes, such as its paths, trusted proxy
@@ -382,14 +386,16 @@ Docker otherwise sets to 10 seconds:
 
 | Service | Stop timeout |
 | --- | --- |
-| API and web | `SHUTDOWN_TIMEOUT` from `runtimeConfig` (30 unless set) plus 5 seconds, 35 by default: the web server drains open requests for `SHUTDOWN_TIMEOUT` and then closes what remains, and the API waits for its in-flight requests and gets the same window. This is the Kubernetes grace period without its 5-second `preStop` sleep, so both drivers give a server the same time after `SIGTERM`. Raise `SHUTDOWN_TIMEOUT` when requests may take longer; it sets both services and both drivers |
+| API and web | `SHUTDOWN_TIMEOUT` from `runtimeConfig` (30 unless set) plus 5 seconds, 35 by default: both servers end their event streams at once, drain in-flight requests for `SHUTDOWN_TIMEOUT`, and then close what remains. This is the Kubernetes grace period without its 5-second `preStop` sleep, so both drivers give a server the same time after `SIGTERM`. Raise `SHUTDOWN_TIMEOUT` when requests may take longer; it sets both services and both drivers |
 | Worker | 30 seconds, the default it keeps on Kubernetes, for active jobs to finish |
 | PostgreSQL, Redis, object storage, its init job, and the gateway | Docker's default. A changed definition makes Compose recreate a service, which would restart a database or close the published port on the first apply after an upgrade |
 
 A longer stop timeout does not lengthen an outage behind the gateway, since the old
-containers stop only after the new ones are healthy, but apply waits for them. A
-server that keeps a stream open until it is killed holds the apply, and without the
-gateway the closed port, for its whole stop timeout. The first apply with these
+containers stop only after the new ones are healthy, but apply waits for them. The
+generated servers end their streams at once, so only a request that is still
+running, or an application connection that does not close on the API's
+[shutdown](templates.md#shutdown) signal, holds the apply, and without the gateway
+the closed port, until it finishes or the stop timeout ends. The first apply with these
 stop timeouts recreates the API, web, and worker containers, which a new release
 replaces anyway, and a rollback to a revision applied before them is refused,
 because that revision no longer renders byte for byte; roll forward instead.
@@ -609,13 +615,16 @@ The doctor reports what it renders and warns when the profile contradicts itself
 
 ### Uploads answer 403 "Cross-site POST form submissions are forbidden"
 
-SvelteKit refuses a `POST`, `PUT`, `PATCH`, or `DELETE` that has no content
+The web server refuses a `POST`, `PUT`, `PATCH`, or `DELETE` that has no content
 type or one an HTML form can send (`multipart/form-data`,
-`application/x-www-form-urlencoded`, `text/plain`) unless the browser's `Origin`
-header equals the origin the web server resolved for the request. Browsers send
+`application/x-www-form-urlencoded`, `text/plain`) when its `Origin` header
+differs from the origin the web server resolved for the request (see the
+[cross-site form check](templates.md#cross-site-form-check)). Browsers send
 `Origin` with every same-origin request of these kinds, so in a working
 deployment uploads with `FormData`, form-encoded bodies, and requests without a
-body reach the API through the `/api` proxy unchanged. The generated
+body reach the API through the `/api` proxy unchanged. Clients that are not
+browsers send no `Origin`; their `/api` requests reach the API as well, which
+authenticates them. The generated
 `tests/ui/same-origin-requests.ui.spec.ts` checks this against a running app; like
 the rest of the suite it signs in as the seeded accounts, signing the user up when
 it does not exist, so point it at a staging copy whose administrator was created
@@ -691,7 +700,7 @@ What changes for requests on these paths:
   authenticates them itself, as it already does for proxied requests.
 - They skip everything the web server does for `/api`: the forwarded header
   allowlist (the API receives every request header), `APP_BODY_LIMITS`,
-  SvelteKit's cross-site form check, and any `+server.ts` routes the app added
+  the cross-site form check, and any `+server.ts` routes the app added
   under the prefix. For cookie-authenticated writes, have the API compare the
   `Origin` header with the public origin; the session cookie's `SameSite=Lax`
   already keeps it off most cross-site POSTs.

@@ -12,6 +12,7 @@ import {
   describeDowngrades,
   planUpdate,
   applyUpdate,
+  predictMerges,
   summarize,
   upstreamChanges,
   type UpdatePlan,
@@ -647,7 +648,7 @@ async function main(argv: string[]): Promise<void> {
 
   if (args.command === "dev") {
     try {
-      runDevCommand(process.cwd(), args.name, argv.slice(2));
+      await runDevCommand(process.cwd(), args.name, argv.slice(2));
     } catch (err) {
       fail((err as Error).message);
     }
@@ -852,7 +853,7 @@ async function main(argv: string[]): Promise<void> {
           `Applied: ${result.written.length} written, ${result.moved.length} moved, ` +
             `${result.removed.length} removed, ` +
             `${result.merged.length} merged, ${result.conflicts.length} conflict, ` +
-            `${result.skipped.length} skipped.\n`,
+            `${result.kept.length} kept.\n`,
         );
         writeApiPaths("Direct API paths:", result.apiPaths, "add");
         if (result.conflicts.length) {
@@ -870,16 +871,17 @@ async function main(argv: string[]): Promise<void> {
               "\n",
           );
         }
-        if (result.skipped.length) {
+        if (result.kept.length) {
           process.stdout.write(
-            "\nSkipped edited files, left as they are:\n" +
-              result.skipped.map((file) => `  ${file.path}  (${file.reason})`).join("\n") +
+            "\nKept edited files as they are:\n" +
+              result.kept.map((file) => `  ${file.path}  (${file.reason})`).join("\n") +
               "\n",
           );
         }
         return;
       }
-      const plan = planUpdate(process.cwd(), templatesDir);
+      const planned = planUpdate(process.cwd(), templatesDir);
+      const plan = args.from ? predictMerges(process.cwd(), templatesDir, planned, args.from) : planned;
       const counts = summarize(plan);
       const shown = plan.changes.filter((c) => c.action !== "up-to-date" && c.action !== "skip");
       process.stdout.write(
@@ -912,9 +914,13 @@ async function main(argv: string[]): Promise<void> {
         }
         process.stdout.write(
           `${shown.length ? "\n" : ""}${counts.update} update, ${counts.add} add, ${counts.move} move, ` +
-            `${counts.remove} remove, ${counts.conflict} conflict, ${counts.review} review. ` +
-            `Dry-run — nothing was written. Re-run with --apply to write; it 3-way merges each conflict ` +
-            `against the ${plan.fromVersion} templates, fetched from npm unless --from <dir> gives them.\n`,
+            `${counts.remove} remove, ${counts.merge} merge, ${counts.conflict} conflict, ` +
+            `${counts.keep} keep, ${counts.review} review. ` +
+            `Dry-run — nothing was written. Re-run with --apply to write.\n` +
+            (counts.merge && !args.from
+              ? `It 3-way merges each merge against the ${plan.fromVersion} templates, fetched from npm unless ` +
+                "--from <dir> gives them; with --from, this preview also shows which merges would conflict.\n"
+              : ""),
         );
       }
       writeOwnedTemplateNotes(plan, templatesDir, args.from);

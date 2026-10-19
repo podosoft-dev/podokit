@@ -78,6 +78,30 @@ so and the diff includes the upstream changes.
 memory and prints a per-file plan. `podo doctor` checks declared Elysia, Svelte,
 and Better Auth versions against the supported ranges.
 
+Each file in the plan has one of these labels:
+
+| Label | Meaning | What `--apply` does |
+|---|---|---|
+| `update` | You did not edit the file, and the template changed. | Writes the new version. |
+| `add`, `move`, `remove` | The new version adds, relocates, or drops the file. | Writes, moves, or deletes it. |
+| `keep` | You edited the file and its template did not change, or the new version no longer generates it. | Leaves your file as it is and lists it as kept. |
+| `merge` | You edited the file and its template changed too. | 3-way merges the two. |
+| `conflict` | A module path migration cannot apply, or (with `--from`) the merge leaves conflict markers. | Writes the markers for you to resolve; a migration conflict stops the update. |
+| `review` | The template of a file you own changed. | Leaves it as it is; see below. |
+
+Without the previous version's templates the preview cannot tell how a `merge`
+will come out, so `--apply` reports each one as merged, conflict, or kept when
+the previous templates do not generate the file. Pass those templates with
+`--from` and the preview runs the same merges in memory: a clean one stays
+`merge`, one that leaves conflict markers shows as `conflict`, and one without
+a merge base shows as `keep`. The counts then match what `--apply --from` reports:
+`update` and `add` are written, `merge` merged, `conflict` conflict, and `keep`
+kept.
+
+```bash
+podo update --from ./previous-podokit/templates
+```
+
 Apply only after reviewing the plan:
 
 ```bash
@@ -88,14 +112,19 @@ During apply:
 
 - unchanged managed files are replaced with the new generated version;
 - assembled fenced regions are recomputed from the module graph;
-- edited managed files are 3-way merged against the templates of the version
-  `.podokit/manifest.json` records;
+- edited managed files whose template did not change are kept as they are, with
+  no merge and no need for the previous templates;
+- edited managed files whose template changed are 3-way merged against the
+  templates of the version `.podokit/manifest.json` records;
 - conflicts are written with standard conflict markers and reported;
 - edited files without a merge base, such as a file the previous version did not
-  generate or one this version removes, are left as they are and listed with the
+  generate or one this version removes, are kept as they are and listed with the
   reason at the end;
 - owned files are never modified; and
 - the manifest and lockfile advance only with the applied tree.
+
+A kept or merged file stays recorded as edited, so the next update compares it
+with the template again instead of treating your lines as generated output.
 
 The merge base is the templates of the version the project was last generated or
 updated with. When that is the installed CLI's version, its own templates serve.
@@ -182,7 +211,10 @@ podo update --apply
 
 The manifest records the package name and installed version. If the package is
 missing from `node_modules`, update fails instead of silently removing its
-files. If `node_modules` holds an older version than the manifest records, for
+files. A fresh clone or git worktree has no `node_modules` yet, so run
+`bun install` there first; until then `podo update`, `podo diff <path>`,
+`podo restore`, and `podo remove` stop with a message that names the package and
+asks for it. If `node_modules` holds an older version than the manifest records, for
 example after switching to a branch with an older lockfile, the dry run warns
 and `--apply` refuses instead of writing the older module's files; run
 `bun install` and update again. When a 3-way merge requires a previous external module, registry access
@@ -289,6 +321,14 @@ creates each of them once in an existing app. An app that edited the managed
 `vite.config.ts`, `app.css`, `hooks.server.ts`, `admin-sidebar.svelte`, or
 `search-indexing.ts` gets a merge or a conflict there; move the edit into the
 owned file and take PodoKit's version of the managed one.
+
+`hooks.server.ts` is managed without `admin-dashboard` too: it runs the
+[cross-site form check](templates.md#cross-site-form-check), which the managed
+`vite.config.ts` takes over from SvelteKit. An app without `admin-dashboard`
+that wrote its own `hooks.server.ts` gets a conflict there. Keep the check when
+you resolve it: return `refuseCrossSiteForm(event)` from `#lib/server/csrf.js`
+when it is not null, before the rest of your hook runs; otherwise cross-site
+form submissions are no longer refused.
 
 ### Extending the web proxy
 

@@ -593,10 +593,10 @@ const PROBE_TIMEOUT_SECONDS = 2;
 // are Alpine-based and ship /bin/sleep; an exec hook works on every Kubernetes
 // version, unlike the sleep action.
 const PRE_STOP_SLEEP_SECONDS = 5;
-// The web server drains for SHUTDOWN_TIMEOUT seconds (30 unless set) and then
-// force-closes for up to one more. The API gets the same window for its in-flight
-// requests, which covers the /api proxy's default 30 s wait. The grace period
-// also counts the preStop sleep.
+// The API and web servers end their streams on SIGTERM, drain in-flight requests
+// for SHUTDOWN_TIMEOUT seconds (30 unless set), which covers the /api proxy's
+// default 30 s wait, and then force-close for up to one more; the API then closes
+// its services within three. The grace period also counts the preStop sleep.
 const SHUTDOWN_MARGIN_SECONDS = 5;
 
 function terminationGracePeriodSeconds(runtimeConfig: Record<string, string>): number {

@@ -95,9 +95,26 @@ podo dev watch
 # or use a detached stack:
 podo dev up -d
 
-# Set up the database, and migrate again after adding a module:
+# Migrate by hand, for example to see a failing migration's full output:
 podo dev exec api bun run --cwd apps/api migrate:all
 ```
+
+The API container applies pending migrations itself before every start:
+`podo dev` sets `PODOKIT_DEV_MIGRATE=true` for it, and the API runs
+`migrate:all` (Better Auth's schema and the application migrations) before it
+listens. Compose Watch restarts the API container whenever a file under
+`apps/api/src` changes, so a migration that arrives with a pull or a rebase
+reaches the development database before a request needs it, and so does a module
+you just added. The log names what ran (`Applied 1 migrations: ...`) and how long
+it took; when the auth schema itself is pending, Better Auth first reports a
+schema mismatch as the API loads, and the following lines show it created; with nothing pending it adds about 0.7 s to a restart. A failing
+migration does not stop the API: the error stays in `podo dev logs api` and
+`/api/health/ready` reports a `migrations` check that is down until a restart
+applies it. Write a hand-made migration completely before you save it, because a
+saved migration runs at the next restart; `migration:revert` undoes the last one.
+The flag is ignored in production, where the deployment's migration step owns
+the schema. Set `PODOKIT_DEV_MIGRATE=true` in `apps/api/.env` to get the same
+behaviour from `bun run dev` on the host.
 
 Use `npx @podosoft/podokit dev ...` when `podo` is not installed globally.
 
@@ -163,12 +180,23 @@ Modules that need a direct path add it to both when you run `podo add`: the
 
 `podo dev watch` delegates to Compose Watch. Vite handles web HMR and Bun's
 watch process reloads the Elysia API. Compose Watch syncs edits into the running
-containers, not into their images, so `podo dev up` runs `docker compose up
---build`: when Compose recreates a container, for example after a memory limit or
-`.env.docker` change, the new container runs the current source instead of the
-last built image. This also holds while `podo dev watch` is running, and Watch
-keeps syncing into the recreated containers. Pass `--no-build` to start from the
-existing images. Use `podo dev ps`, `logs`, `exec`, and
+containers, not into their images, and it syncs only edits made after it
+starts. So `podo dev watch` first runs `docker compose up --build --detach` from
+the work tree and then `docker compose watch --no-up`, and `podo dev up` runs
+`docker compose up --build`: when Compose recreates a container, for example
+after a memory limit or `.env.docker` change, the new container runs the current
+source instead of the last built image. While it watches, `podo dev watch` also
+follows the project's container starts. When something else recreates a synced
+service from an image older than its synced files, such as `docker compose up
+--no-build` from another terminal, it prints
+`podo dev: web was recreated from an image older than its synced files` and runs
+`up --build --detach --no-deps` for that service, and Watch keeps syncing into the
+new container. A restart keeps the container and its synced files, so it is not
+checked. Set memory limits in the project's `.env` rather than only in the
+shell of another command, because that rebuild uses `podo dev watch`'s
+environment. Pass `--no-build` to start from the existing images; `podo dev watch
+--no-build` then only reports a stale recreated container. `--no-up` keeps the
+running containers and skips the first `up`. Use `podo dev ps`, `logs`, `exec`, and
 `down` for lifecycle operations. `podo dev down` first stops the Compose Watch
 that `podo dev watch` started for the same project, found by the project's
 `.podokit/runtime/dev.compose.yaml` path in its command line, and waits for it
@@ -179,6 +207,15 @@ Watches of other projects and the shared gateway are not touched. The stopped
 container with `podo dev exec api bun install` when validating Linux-specific
 artifacts.
 
+The generated `vite.config.ts` adds a `podokit:refresh-recreated-files` plugin to
+the development server. Vite keeps a module's last transform when its file is
+deleted and does not drop it when the file is created again, and
+vite-plugin-svelte compares the returning component with that stale result, so a
+component that a rebase or branch switch deleted and re-created kept serving its
+first version to the browser until its next edit. The plugin invalidates the
+file's modules before the other hot-update hooks run. It applies to host
+development (`bun run dev`) as well.
+
 Every service in `compose.dev.yaml` has a memory limit equal to its swap limit.
 A runaway process is OOM-killed inside its container instead of exhausting the
 host. The defaults are:
@@ -186,7 +223,7 @@ host. The defaults are:
 | Variable | Service | Default |
 | --- | --- | --- |
 | `API_MEM_LIMIT` | `api` | `2g` |
-| `WEB_MEM_LIMIT` | `web` | `2g` |
+| `WEB_MEM_LIMIT` | `web` | `3g` |
 | `WORKER_MEM_LIMIT` | `worker` | `1g` |
 | `POSTGRES_MEM_LIMIT` | `postgres` | `1g` |
 | `REDIS_MEM_LIMIT` | `redis` | `256m` |
@@ -204,6 +241,15 @@ API_MEM_LIMIT=3g podo dev up -d
 # or persist it for this project:
 echo "API_MEM_LIMIT=3g" >> .env
 ```
+
+The Vite development server keeps every module it has transformed for the
+browser and for server rendering, so its memory grows with the pages a session
+opens. A full Playwright run against the stack opens nearly all of them: in one
+application with about 530 tests on two workers, the web container peaked at
+1.83 GiB and the former 2 GiB default stopped it twice with an out-of-memory
+kill, so the default is 3 GiB. Raise `WEB_MEM_LIMIT` if the web container of a
+larger application is OOM-killed (`docker inspect <container> --format
+'{{.State.OOMKilled}}'`).
 
 Compose applies a changed limit when it recreates the container, for example on
 the next `podo dev up -d`. The devcontainer attaches the editor to the `api`
@@ -248,6 +294,11 @@ Do not add `--bun` when running Playwright.
 
 For authentication, cookies, browser behavior, queues, Redis, object storage,
 or migrations, also exercise the feature against a live generated stack.
+Request handling differs between the Vite dev server and the built web server:
+the [cross-site form check](templates.md#cross-site-form-check), like SvelteKit's,
+runs only in the build. Check changes to hooks, the `/api` proxy, or form
+submissions against `bun build/index.js`, as `e2e-ci.mjs` does, and not only
+against `bun run dev`.
 Run the full Verdaccio gate once per ready batch:
 
 ```bash

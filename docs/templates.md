@@ -206,6 +206,36 @@ is configured for, because a caller that reaches it directly can send anything.
 A web image built with `PODOKIT_BUILD_ORIGIN` resolves every request to that
 origin, so it reports only that one.
 
+### Cross-site form check
+
+The web server refuses a cross-site form submission with `403 Cross-site POST
+form submissions are forbidden` (or `PUT`, `PATCH`, `DELETE`): a request of one
+of those methods that has no content type or one an HTML form can send
+(`application/x-www-form-urlencoded`, `multipart/form-data`, `text/plain`), and
+whose `Origin` header is neither the site's own origin nor listed in
+`csrf.trustedOrigins` (see [Vite and SvelteKit options](#vite-and-sveltekit-options)).
+A client that sends `Accept: application/json` gets `{ "message": ... }`.
+
+SvelteKit makes this check itself, before any hook or route, and also refuses
+such a request when it has no `Origin` header at all. Scripts, CLIs, and MCP
+clients send none when they call `/api` with a session cookie or an
+`Authorization` header, so SvelteKit's check would refuse a request without a
+body or an upload from them. The managed `vite.config.ts` therefore turns it off
+(`csrf.trustedOrigins: ["*"]`), and the managed `hooks.server.ts` applies the
+same check first, from `apps/web/src/lib/server/csrf.ts`, with one difference:
+a request to `/api` or below without an `Origin` header goes on to the proxy,
+and the API's authentication decides it. Browsers send `Origin` with every
+request of these methods, so a cross-site form or `fetch` is still refused on
+`/api` as on pages, and page form actions keep SvelteKit's rule. Better Auth
+checks origins too: a write under `/api/auth` that carries the session cookie
+but no `Origin` gets `403 MISSING_OR_NULL_ORIGIN` from the API.
+
+Like SvelteKit's, the check does not run on the Vite dev server (`bun run dev`),
+so verify request handling against the built web server (`bun run --cwd
+apps/web build`, then `bun build/index.js` in `apps/web`). The generated
+`tests/api/cross-site-forms.api.spec.ts` checks both sides of the rule and skips
+its refusal test on the dev server.
+
 ### Proxy path rules
 
 `APP_BODY_LIMITS` and `APP_PROXY_TIMEOUTS` below select `/api` routes by
@@ -450,6 +480,58 @@ compiling, and `API_MAX_REQUEST_BODY_SIZE` and `API_IDLE_TIMEOUT` still apply.
 Invalid values stop the API at startup. Requests through the web app's `/api` proxy are also
 bounded by the web server's `BODY_SIZE_LIMIT`.
 
+### Shutdown
+
+On `SIGTERM` or `SIGINT` the API and the built web server stop the same way:
+
+1. They stop accepting connections. The API's `GET /health/ready` answers `503`
+   `SHUTTING_DOWN` on connections that are still open.
+2. They end server-sent event streams at once, and the API closes the WebSockets
+   that registered for shutdown with code `1001` (Going Away). Streams and
+   sockets never finish on their own, so waiting for them would hold the process
+   until the orchestrator kills it; their clients reconnect to another instance
+   instead. The `sse` module's streams and every stream the web server's `/api`
+   proxy relays end this way.
+3. In-flight requests get up to `SHUTDOWN_TIMEOUT` seconds (30 unless set) to
+   finish. Both servers read the same variable, and the rendered Kubernetes grace
+   period follows it.
+4. Whatever is still open then is closed. The API closes its services (the
+   database pool, Redis, and the others), waiting up to 3 seconds for them, and
+   exits.
+
+A second signal exits at once. A stream or WebSocket of the application's own
+registers through the `SHUTDOWN` service; otherwise it stays open until the
+timeout and is then cut:
+
+```ts
+import { Elysia } from "elysia";
+import type { PodokitModule } from "./core/services";
+import { GOING_AWAY } from "./core/shutdown";
+
+export const terminalModule: PodokitModule = {
+  name: "terminal",
+  plugin: ({ shutdown }) => {
+    const releases = new Map<string, () => void>();
+    return new Elysia().ws("/terminal", {
+      open(ws) {
+        releases.set(ws.id, shutdown.onShutdown(() => ws.close(GOING_AWAY, "Server shutting down")));
+      },
+      close(ws) {
+        releases.get(ws.id)?.();
+        releases.delete(ws.id);
+      },
+    });
+  },
+};
+```
+
+`onShutdown(listener)` runs the listener when shutdown starts, or at once when it
+already has, and returns a function to call when the connection closes on its own.
+Code that takes an `AbortSignal` can use `shutdown.signal`, and code outside a
+plugin resolves the same object with `services.resolve(SHUTDOWN)`. To end a server-sent
+event stream, close its `ReadableStream` controller in the listener, so the
+response ends cleanly and `EventSource` reconnects.
+
 ### Web extension points
 
 The web app's framework files are managed so that `podo update` can keep them
@@ -501,7 +583,10 @@ export const appSvelteKitConfig: SvelteKitConfig = {
 ```
 
 A function receives Vite's `{ command, mode }`. `PODOKIT_BUILD_ORIGIN` still sets
-`paths.origin` at build time. The generated `compose.dev.yaml` restarts the web
+`paths.origin` at build time. `csrf.trustedOrigins` keeps SvelteKit's meaning:
+`vite.config.ts` hands the list to the managed
+[cross-site form check](#cross-site-form-check) and sets SvelteKit's own to
+`["*"]`, and `["*"]` in your list turns the check off everywhere. The generated `compose.dev.yaml` restarts the web
 container when the file changes.
 
 #### WebSocket paths in host development
@@ -514,6 +599,19 @@ deployment's edge send the exact paths listed in `webSocketPaths` of
 exact path, with or without a query string, to `BACKEND_INTERNAL_URL`, so a
 WebSocket feature works the same way in both setups without a proxy entry of
 your own. The API must authenticate each upgrade itself.
+
+#### Browser errors in the dev server output
+
+When hydration fails in the browser, for example because a module request
+failed, and the root error page cannot load either, SvelteKit renders
+`src/error.html` in the browser. The server answered the page with 200 and has
+no error of its own to log. The managed `vite.config.ts` therefore sets Vite's
+`server.forwardConsole` to `{ unhandledErrors: true, logLevels: ["error"] }`,
+so the dev server prints the browser's uncaught errors and `console.error`
+messages, such as `[Unhandled rejection] TypeError: Failed to fetch dynamically
+imported module: ...`, with its own output and the container log. Set
+`server.forwardConsole` in `appViteConfig` to change the levels, or to `false`
+to turn it off.
 
 ### Route files and update tiers
 

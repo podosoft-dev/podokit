@@ -217,8 +217,8 @@ podo update --apply
 ```
 
 Always review the dry run before applying. PodoKit updates managed and assembled
-files, 3-way merges edited managed files, and never overwrites owned routes or
-components.
+files, keeps edited managed files whose template did not change, 3-way merges
+the ones whose template changed, and never overwrites owned routes or components.
 
 PodoKit v1 does not convert PodoKit 0.x projects. A legacy manifest is rejected
 with instructions to keep using:

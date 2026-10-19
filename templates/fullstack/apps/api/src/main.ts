@@ -1,31 +1,22 @@
 import { createApp } from "./app";
 import { validateEnv } from "./config/env.validation";
-import { apiServerOptions } from "./config/server-options";
-import { createCoreServices } from "./core/services";
+import { serveApi } from "./core/serve";
+import { createCoreServices, LOGGER, READINESS } from "./core/services";
+import { applyDevelopmentMigrations } from "./database/development-migrations";
+import { MIGRATIONS_READINESS_CHECK } from "./database/migration-readiness";
 
 const env = validateEnv(process.env);
 const services = createCoreServices(env);
 const app = createApp({ env, services });
 
-async function bootstrap(): Promise<void> {
-  try {
-    await services.start();
-    app.listen({ ...apiServerOptions(env), hostname: env.HOST, port: env.PORT });
-    process.stdout.write(`API listening on http://${env.HOST}:${env.PORT}\n`);
-  } catch (error) {
-    await services.close();
-    throw error;
+async function main(): Promise<void> {
+  const migrationFailure = await applyDevelopmentMigrations(env, services.resolve(LOGGER));
+  if (migrationFailure !== null) {
+    services.resolve(READINESS).register(MIGRATIONS_READINESS_CHECK, async () => {
+      throw new Error(migrationFailure);
+    });
   }
+  await serveApi(app, env, services);
 }
 
-void bootstrap();
-
-for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.once(signal, () => {
-    void (async () => {
-      await app.stop();
-      await services.close();
-      process.exit(0);
-    })();
-  });
-}
+void main();

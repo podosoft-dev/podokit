@@ -90,9 +90,17 @@ Run lifecycle and container commands from a second terminal:
 `dev watch` reads `.podokit/manifest.json` and automatically activates `cache`,
 `storage`, and `queue` when installed modules require Redis, Silo, or a worker.
 `dev up` uses the same shared gateway and module profiles without keeping Compose
-Watch attached. It rebuilds the images from the current source first, because Compose
+Watch attached. Both rebuild the images from the current source first, because Compose
 Watch syncs edits into running containers only: a container recreated from an older
-image would lose them. Pass `--no-build` to start from the existing images.
+image would lose them. While it watches, `dev watch` also rebuilds a service that
+another command recreated from an older image. Pass `--no-build` to start from the
+existing images.
+
+The API container applies pending migrations before every start, and Compose Watch
+restarts it when a file under `apps/api/src` changes, so migrations from a pull,
+a rebase, or a new module reach the development database without a manual step.
+A failing migration leaves the API running; read it with `dev logs api` and run
+`dev exec api {{apiRun}} migrate:all` to retry it.
 You can still activate an additional Compose profile explicitly:
 
 ```bash
@@ -199,6 +207,9 @@ If the production API exposes WebSocket endpoints, list their exact paths under
 `exposure.webSocketPaths` in the deployment profile. The Compose driver then keeps a
 single published port, sends only those paths to API, and sends all other traffic to
 web. The external TLS proxy continues to use the same single upstream. Keep
-`trustedProxyCidrs` empty unless that upstream is a known reverse proxy. Large-upload
+`trustedProxyCidrs` empty unless that upstream is a known reverse proxy. Register
+each API WebSocket with the plugin context's `shutdown.onShutdown`, closing it with
+`GOING_AWAY` (1001), so a stopping API closes it at once and the client reconnects
+to another instance instead of holding the old one until it is killed. Large-upload
 routes listed under `exposure.apiPaths` reach the API the same way, with `/api`
 removed; the API then enforces their body limit and origin checks itself.

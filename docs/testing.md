@@ -106,6 +106,42 @@ Install the browser once from the generated project with:
 bunx playwright install chromium
 ```
 
+### Failed tests
+
+A failed test keeps a Playwright trace (`trace.zip`), a screenshot, and a page
+snapshot (`error-context.md`) in its folder under `tests/test-results`
+(`test-results/exclusive` for the exclusive run). The trace holds each action
+with the page before and after it, the console, and the network log, so a
+failure that does not come back on a rerun can still be examined:
+
+```bash
+bunx playwright show-trace test-results/<test folder>/trace.zip
+```
+
+The HTML report (`bun run --cwd tests test:e2e:report`) links the same files.
+Playwright records the trace of every test and deletes it when the test passes,
+so passing runs leave nothing behind. CI retries a failed test twice and keeps
+the trace of each failed attempt.
+
+The UI specs of the `admin-dashboard` module wait for hydration with `ready(page,
+path)` or `hydrated(page)` from `tests/helpers/hydration.ts`. A page that cannot
+hydrate fails that wait at once, instead of at the 30-second test timeout:
+
+- SvelteKit's static error page (`src/error.html`) from the server, which it
+  sends when a server hook or the root layout fails. The web server log has the
+  cause.
+- A page that throws an uncaught error and has not hydrated five seconds later.
+  When hydration fails and the root error page cannot load either, for example
+  because a request for one of the root layout's modules or message catalogs
+  failed, SvelteKit renders `src/error.html` in the browser. The server answered
+  the page with 200 and has no error of its own. The dev server prints the
+  browser's error (see [browser errors in the dev server
+  output](templates.md#browser-errors-in-the-dev-server-output)), and the trace
+  has the console and network log.
+
+The error lists the page's URL, status, title, and text, and the page errors,
+console errors, and failed requests seen while waiting.
+
 ### Email tests
 
 The email specs from the `admin-dashboard` module read messages from the Mailpit
@@ -302,6 +338,12 @@ Changes made after a measurement:
   and cleans up again; the Outer full run with S3 and SMTP (241 tests,
   `E2E_WORKERS=2`) took 47.6 and 37.2 seconds for the two runs, 85.8 seconds of
   Playwright and 129 seconds in all (2026-10-17).
+- Traces are now recorded for every test and kept for failed ones (see
+  [Failed tests](#failed-tests)). The 12-module app's suite on its built web
+  server (`E2E_WORKERS=2`, 192 and 39 tests in the two runs) took 96 seconds
+  both with `trace: "retain-on-failure"` and with the earlier
+  `"on-first-retry"` (2026-10-19). Against `vite dev` started cold, it took 128
+  seconds.
 - npm's delay is inherent. Poll it in the background, for example
   `until npm view @podosoft/podokit@<version> version; do sleep 30; done`.
 
@@ -392,8 +434,13 @@ in a loop can call `signInOnSeparateDevices` from `tests/helpers/devices.ts`.
 ## CI policy
 
 Fast CI runs package tests, type checks, and a Bun-generated application gate.
-Ready pull requests run Outer smoke; nightly and manual workflows run the full
-matrix. New pushes cancel superseded workflow runs.
+The gate also starts the built API and web server for about a second and checks
+that a `POST` without a body or `Origin` header reaches the API through `/api`
+while a cross-site form `POST` gets `403`, because the Vite dev server does not
+make that check (see the
+[cross-site form check](templates.md#cross-site-form-check)). Ready pull
+requests run Outer smoke; nightly and manual workflows run the full matrix. New
+pushes cancel superseded workflow runs.
 
 A changeset version PR uses package-smoke because the source feature PR already
 ran browser behavior. A release is not approved by tests alone: package

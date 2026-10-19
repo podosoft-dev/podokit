@@ -72,6 +72,13 @@ Merge added module settings from `.env.example` into an existing `.env`.
   API resolves it once per request from `TRUSTED_PROXY_HOPS` (1: the web proxy) and
   `TRUSTED_PROXY_HEADER`; Better Auth sessions, audit entries, and rate limits use
   the same address.
+- On `SIGTERM` the API and the built web server stop accepting connections, end
+  server-sent event streams at once, give in-flight requests up to
+  `SHUTDOWN_TIMEOUT` seconds (30), and exit. Register every API WebSocket or
+  stream of your own with the `shutdown` service of the plugin context
+  (`shutdown.onShutdown(() => ws.close(GOING_AWAY, "Server shutting down"))`, from
+  `apps/api/src/core/shutdown.ts`) and call the returned function when it closes;
+  an unregistered one holds the process until the timeout.
 - `GET /healthz` (`apps/web/src/routes/healthz/+server.ts`) is the web server's own
   health route for the Kubernetes probes, the Compose healthcheck, and the image
   `HEALTHCHECK`. Keep it free of API calls, so an API outage does not take the web
@@ -135,8 +142,12 @@ Useful commands:
 - `podo dev watch|up|ps|logs|exec|down` — run container development through the
   shared loopback gateway. `.podokit/dev.json` owns the local/public hosts and the
   exact API WebSocket allowlist; never use a prefix or wildcard for that allowlist.
-  `podo dev up` rebuilds the images from the current source so a recreated
-  container never runs code older than the files Compose Watch synced.
+  `podo dev up` and `podo dev watch` rebuild the images from the current source so
+  a recreated container never runs code older than the files Compose Watch synced,
+  and `podo dev watch` rebuilds a service another command recreated from an older
+  image. The API container applies pending migrations before every start
+  (`PODOKIT_DEV_MIGRATE`, set by `podo dev`), so a new migration needs no manual step
+  there; check `podo dev logs api` when one fails.
   `podo dev down` also stops this project's running `podo dev watch`; do not
   kill Compose processes by hand.
   The containers read the untracked `.env.docker`; `podo dev` creates it from the
@@ -146,7 +157,7 @@ Useful commands:
 - `podo remove <module>` — un-apply a module (inverse of add; refuses if another module needs it, keeps files you edited).
 - `podo provider list` / `podo provider set <capability> <provider> [--apply]` — inspect or switch database, cache, object storage, events, and jobs. Set is dry-run by default and never migrates or deletes provider data. Local providers require one API process.
 - `podo status` / `podo diff` — see your local edits vs. what PodoKit generated.
-- `podo update` — pull in template/module improvements (3-way merges your edits; never touches owned files).
+- `podo update` — pull in template/module improvements (keeps your edits, 3-way merging the ones whose template changed; never touches owned files).
 - `podo deploy` — plan, apply, verify, or roll back an immutable release on Kubernetes or one Docker host. Production API WebSocket paths belong in the deployment profile's exact `exposure.webSocketPaths` allowlist, and API routes that take bodies above the web server's `BODY_SIZE_LIMIT` (file uploads) in `exposure.apiPaths` (and `.podokit/dev.json` `apiPaths` for `podo dev`; `podo add` and `podo deploy init` fill in the paths modules declare), which reach the API without the web proxy, so the API must check their size, session, and `Origin` itself; Compose trusts forwarding headers only from `exposure.trustedProxyCidrs`. Tag `vX.Y.Z` to build and push the images (`.github/workflows/release.yml`; check its runner — GitHub-hosted minutes are free for public repositories only). Use `.agents/skills/podokit-deploy`.
 - `podo deploy sync` — copy local build output into a running Compose deployment and restart it, for iterating without a release. Not a release: no image is published and the next `apply` discards it. Use `.agents/skills/podokit-deploy-fast`.
 

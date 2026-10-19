@@ -8,7 +8,12 @@ import {
   type JsonObject,
   type TemplateVars,
 } from "@podosoft/podokit-template-engine";
-import { modulePackageOverlays, resolveModuleDir, type ModuleManifest } from "./add";
+import {
+  modulePackageOverlays,
+  resolveModuleDir,
+  unresolvedModuleMessage,
+  type ModuleManifest,
+} from "./add";
 import {
   computeFilesLock,
   keepTemplateHashes,
@@ -88,7 +93,7 @@ export function removeModule(options: RemoveOptions): RemoveResult {
   const installedModule = manifest.modules.find((entry) => entry.name === module);
   const moduleDir = resolveModuleDir(installedModule?.packageName ?? module, modulesDir, projectRoot);
   if (!moduleDir) {
-    throw new Error(`Cannot resolve module "${module}" to un-apply it. Is it still installed/bundled?`);
+    throw new Error(unresolvedModuleMessage(installedModule ?? { name: module }, projectRoot));
   }
   const vars: TemplateVars = {
     projectName: projectName(projectRoot),

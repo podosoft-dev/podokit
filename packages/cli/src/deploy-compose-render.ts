@@ -63,9 +63,9 @@ const WEB_DNS_CONFIG: Record<string, string> = { BUN_CONFIG_DNS_TIME_TO_LIVE_SEC
 
 /**
  * Seconds Docker waits after SIGTERM before it kills an application container.
- * Its default is 10, while the web server drains open requests for
- * SHUTDOWN_TIMEOUT (30) and then force-closes for up to one more. API and web get
- * that drain plus a margin, the Kubernetes grace period without its preStop
+ * Its default is 10, while the API and web servers drain in-flight requests for
+ * SHUTDOWN_TIMEOUT (30) and then force-close for up to one more, and the API
+ * closes its services within three. API and web get that drain plus a margin, the Kubernetes grace period without its preStop
  * sleep; the worker gets the 30 s it keeps on Kubernetes. Dependencies and the
  * gateway keep Docker's default: a changed definition makes Compose recreate
  * them, which would restart a database or close the published port on the first

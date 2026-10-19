@@ -8,7 +8,12 @@ import {
   type TemplateVars,
   type VfsTree,
 } from "@podosoft/podokit-template-engine";
-import { modulePackageOverlays, readModuleManifest, resolveModule } from "./add";
+import {
+  modulePackageOverlays,
+  readModuleManifest,
+  resolveModule,
+  unresolvedModuleMessage,
+} from "./add";
 import type { ManifestModule } from "./lockfile";
 import { devTemplateVars } from "./dev";
 
@@ -119,10 +124,11 @@ export function assembleProject(options: AssembleOptions): VfsTree {
       options.projectRoot ?? options.templatesDir,
     );
     if (!resolved) {
-      const label = typeof mod === "string" ? mod : mod.name;
       throw new Error(
-        `Cannot resolve module "${label}" while assembling the project. ` +
-          "Install its package before running podo update.",
+        unresolvedModuleMessage(
+          typeof mod === "string" ? { name: mod } : mod,
+          options.projectRoot ?? options.templatesDir,
+        ),
       );
     }
     applyModuleToTree(tree, resolved.dir, options.answers);
