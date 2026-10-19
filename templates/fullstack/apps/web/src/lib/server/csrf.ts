@@ -12,7 +12,13 @@ import { dev } from "$app/env";
 // so a cross-site form or fetch is still refused on /api as on every other path.
 
 /** `csrf.trustedOrigins` from `appSvelteKitConfig` in vite.extensions.ts, set by vite.config.ts. */
-declare const __PODOKIT_CSRF_TRUSTED_ORIGINS__: readonly string[];
+declare const __PODOKIT_CSRF_TRUSTED_ORIGINS__: readonly string[] | undefined;
+
+// A config the app owns, such as its own vitest.config.ts, may not define it.
+// `typeof` reads an undefined name without throwing, and no trusted origin is the
+// strict default: only this site's own forms pass.
+const TRUSTED_ORIGINS: readonly string[] =
+  typeof __PODOKIT_CSRF_TRUSTED_ORIGINS__ === "undefined" ? [] : __PODOKIT_CSRF_TRUSTED_ORIGINS__;
 
 const FORM_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const FORM_CONTENT_TYPES = new Set([
@@ -35,7 +41,7 @@ function isApiPath(pathname: string): boolean {
 export function isCrossSiteFormSubmission(
   request: Request,
   url: URL,
-  trustedOrigins: readonly string[] = __PODOKIT_CSRF_TRUSTED_ORIGINS__,
+  trustedOrigins: readonly string[] = TRUSTED_ORIGINS,
 ): boolean {
   if (!FORM_METHODS.has(request.method) || trustedOrigins.includes("*")) return false;
   const contentType = request.headers.get("content-type");

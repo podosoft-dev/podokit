@@ -187,6 +187,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `net::ERR_NETWORK_CHANGED`, add a `network-changed` annotation to the test, and
   print the same note with a `[network-changed]` prefix. Any other failure, and a
   second failure, fails the test as before.
+- In an app with its own `apps/web/vitest.config.ts`, the managed `csrf.test.ts`
+  failed with `ReferenceError: __PODOKIT_CSRF_TRUSTED_ORIGINS__ is not defined`.
+  Only the managed `vite.config.ts` defines that name, from `csrf.trustedOrigins`
+  in `vite.extensions.ts`, and Vitest reads an app's own config instead. The
+  generated `src/lib/server/csrf.ts` now trusts no other origin when the name is
+  not defined, so only the site's own forms pass, and a build with the managed
+  config still inlines the configured origins.
 
 ### Upgrade notes
 
