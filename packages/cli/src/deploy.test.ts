@@ -23,7 +23,12 @@ import {
   loadDeploymentProfile,
   profilePath,
 } from "./deploy-profile";
-import { renderDeployment } from "./deploy-render";
+import {
+  renderDependencies,
+  renderDeployment,
+  rolloutChecksum,
+  type RenderedDependency,
+} from "./deploy-render";
 import { APP_PROXY_TIMEOUTS_PATH, NO_APP_PROXY_TIMEOUTS } from "./app-proxy-timeouts";
 import { idleTimeoutConfig } from "./deploy-schema";
 import { initLockfile } from "./lockfile";
@@ -585,6 +590,208 @@ spec:
     expect(revisionTwo.images.api).toContain("@sha256:");
     expect(revisionTwo.targetRevisionManifestDigest).toMatch(/^sha256:/);
     expect(revisionTwo.warnings.join(" ")).toContain("database migrations");
+  });
+});
+
+describe("dependency restarts", () => {
+  /** A live StatefulSet as an apply of `dependency` left it; `recorded: false` as PodoKit 1.6.5 left it. */
+  function liveStatefulSet(
+    dependency: RenderedDependency,
+    options: { recorded?: boolean; rollout?: string } = {},
+  ): Record<string, unknown> {
+    const recorded = options.recorded ?? true;
+    return {
+      apiVersion: "apps/v1",
+      kind: "StatefulSet",
+      metadata: {
+        name: dependency.name,
+        ...(recorded
+          ? {
+              annotations: {
+                "podokit.example.com/secret-checksum": dependency.secretChecksum,
+                "podokit.example.com/definition-checksum": dependency.definitionChecksum,
+              },
+            }
+          : {}),
+      },
+      spec: {
+        template: {
+          metadata: {
+            annotations: {
+              "podokit.example.com/rollout-state-checksum": options.rollout ?? dependency.rolloutChecksum,
+            },
+          },
+          spec: {
+            imagePullSecrets: [{ name: dependency.imagePullSecret }],
+            containers: [{
+              name: "server",
+              image: dependency.image,
+              ...(dependency.args ? { args: dependency.args } : {}),
+              env: [{ name: "PASSWORD", valueFrom: { secretKeyRef: { name: dependency.secretName, key: "PASSWORD" } } }],
+            }],
+          },
+        },
+      },
+    };
+  }
+
+  function dependencyProject(): string {
+    const root = initializedProject();
+    const profile = loadDeploymentProfile(root, "production");
+    profile.dependencies.redis.mode = "inCluster";
+    profile.dependencies.objectStorage.mode = "inCluster";
+    writeFileSync(profilePath(root, "production"), JSON.stringify(profile));
+    return root;
+  }
+
+  function clusterRunner(cluster: { versions: Record<string, string>; live: unknown[] }): CommandRunner {
+    return (_command, args) => {
+      if (args.includes("config")) return { status: 0, stdout: clusterOutput, stderr: "" };
+      if (args.includes("imagetools")) {
+        return { status: 0, stdout: JSON.stringify({ digest: `sha256:${"b".repeat(64)}` }), stderr: "" };
+      }
+      if (args.some((entry) => entry.includes(".metadata.uid"))) {
+        const name = args[args.indexOf("secret") + 1]!;
+        return { status: 0, stdout: `uid-${name}:${cluster.versions[name] ?? "1"}`, stderr: "" };
+      }
+      if (args.includes("statefulsets")) {
+        return {
+          status: 0,
+          stdout: cluster.live.length ? JSON.stringify({ apiVersion: "v1", kind: "List", items: cluster.live }) : "",
+          stderr: "",
+        };
+      }
+      if (args.includes("status")) {
+        return { status: 0, stdout: JSON.stringify({ version: 7, info: { status: "deployed" } }), stderr: "" };
+      }
+      return { status: 0, stdout: "", stderr: "" };
+    };
+  }
+
+  function applied(root: string, cluster: { versions: Record<string, string>; live: unknown[] }) {
+    const plan = planDeployment(root, "production", "v1.2.3", clusterRunner(cluster));
+    return renderDependencies(loadDeploymentProfile(root, "production"), plan.images, plan.rolloutState);
+  }
+
+  it("restarts a dependency only for its own image, definition, or Secret", () => {
+    const root = dependencyProject();
+    const cluster = { versions: {} as Record<string, string>, live: [] as unknown[] };
+    const runner = clusterRunner(cluster);
+    const fresh = planDeployment(root, "production", "v1.2.3", runner);
+    expect(fresh.dependencyRollouts).toEqual([
+      { name: "example-app-postgres", action: "create", reasons: ["it is not running yet"] },
+      { name: "example-app-redis", action: "create", reasons: ["it is not running yet"] },
+      { name: "example-app-minio", action: "create", reasons: ["it is not running yet"] },
+    ]);
+
+    cluster.live = applied(root, cluster).dependencies.map((dependency) => liveStatefulSet(dependency));
+    const steady = planDeployment(root, "production", "v1.2.3", runner);
+    expect(steady.dependencyRollouts.map((rollout) => rollout.action)).toEqual(["keep", "keep", "keep"]);
+    expect(steady.actions[0]?.description).toContain("no running dependency restarts");
+
+    // An application Secret change, such as a new ADMIN_EMAILS, leaves the dependency chart as it was.
+    cluster.versions["example-app-api"] = "2";
+    const appSecret = planDeployment(root, "production", "v1.2.3", runner);
+    expect(appSecret.planHash).not.toBe(steady.planHash);
+    expect(appSecret.dependencyRollouts.map((rollout) => rollout.action)).toEqual(["keep", "keep", "keep"]);
+    expect(appSecret.warnings.join(" ")).not.toContain("restarts");
+    const profile = loadDeploymentProfile(root, "production");
+    expect(renderDependencies(profile, appSecret.images, appSecret.rolloutState).manifest).toBe(
+      renderDependencies(profile, steady.images, steady.rolloutState).manifest,
+    );
+    expect(JSON.stringify(appSecret)).not.toContain("uid-example-app-api");
+
+    cluster.versions["example-app-redis"] = "2";
+    const redisSecret = planDeployment(root, "production", "v1.2.3", runner);
+    expect(redisSecret.dependencyRollouts).toEqual([
+      { name: "example-app-postgres", action: "keep", reasons: [] },
+      {
+        name: "example-app-redis",
+        action: "restart",
+        reasons: ["Secret example-app-redis changed since the last apply"],
+      },
+      { name: "example-app-minio", action: "keep", reasons: [] },
+    ]);
+    expect(redisSecret.actions[0]?.description).toContain("restart example-app-redis");
+    expect(redisSecret.warnings).toContain(
+      "example-app-redis restarts: Secret example-app-redis changed since the last apply. " +
+        "With one replica it refuses connections until its new pod is ready.",
+    );
+
+    cluster.live = applied(root, cluster).dependencies.map((dependency) => liveStatefulSet(dependency));
+    const changedProfile = loadDeploymentProfile(root, "production");
+    changedProfile.dependencies.postgres.image = "postgres:17.6-alpine";
+    changedProfile.dependencies.postgres.maxConnections = 200;
+    writeFileSync(profilePath(root, "production"), JSON.stringify(changedProfile));
+    const definition = planDeployment(root, "production", "v1.2.3", runner);
+    expect(definition.dependencyRollouts[0]).toEqual({
+      name: "example-app-postgres",
+      action: "restart",
+      reasons: [
+        expect.stringMatching(/^its image changes from postgres:.+ to postgres:17\.6-alpine@sha256:b{64}$/),
+        'its arguments change from [] to ["-c","max_connections=200"]',
+      ],
+    });
+    expect(definition.dependencyRollouts.slice(1).map((rollout) => rollout.action)).toEqual(["keep", "keep"]);
+  });
+
+  it("keeps dependencies an earlier version applied running unless a Secret changed since", () => {
+    const root = dependencyProject();
+    const cluster = { versions: {} as Record<string, string>, live: [] as unknown[] };
+    const runner = clusterRunner(cluster);
+    const fresh = planDeployment(root, "production", "v1.2.3", runner);
+    // PodoKit 1.6.5 stamped every workload with one checksum over every referenced Secret.
+    const shared = rolloutChecksum(fresh.rolloutStateDigest);
+    cluster.live = renderDependencies(loadDeploymentProfile(root, "production"), fresh.images, fresh.rolloutState)
+      .dependencies.map((dependency) => liveStatefulSet(dependency, { recorded: false, rollout: shared }));
+
+    const upgraded = planDeployment(root, "production", "v1.2.3", runner);
+    expect(upgraded.dependencyRollouts.map((rollout) => rollout.action)).toEqual(["keep", "keep", "keep"]);
+    expect(upgraded.rolloutState.keep).toEqual({
+      "example-app-postgres": shared,
+      "example-app-redis": shared,
+      "example-app-minio": shared,
+    });
+    expect(
+      renderDependencies(loadDeploymentProfile(root, "production"), upgraded.images, upgraded.rolloutState)
+        .dependencies.map((dependency) => dependency.rolloutChecksum),
+    ).toEqual([shared, shared, shared]);
+
+    // A Secret changed since that apply cannot be traced to one dependency, so all restart once.
+    cluster.versions["example-app-api"] = "2";
+    const changed = planDeployment(root, "production", "v1.2.3", runner);
+    expect(changed.dependencyRollouts.map((rollout) => rollout.action)).toEqual(["restart", "restart", "restart"]);
+    expect(changed.dependencyRollouts[0]?.reasons[0]).toContain("PodoKit 1.6.5 and earlier");
+  });
+
+  it("reports in the doctor which dependencies the next apply restarts", () => {
+    const root = dependencyProject();
+    const cluster = { versions: {} as Record<string, string>, live: [] as unknown[] };
+    cluster.live = applied(root, cluster).dependencies.map((dependency) => liveStatefulSet(dependency));
+    const restarts = () =>
+      doctorDeployment(root, "production", clusterRunner(cluster)).filter((finding) =>
+        finding.code.startsWith("dependency-restart"),
+      );
+
+    expect(restarts().map(({ ok, warning }) => [ok, warning])).toEqual([
+      [true, undefined],
+      [true, undefined],
+      [true, undefined],
+    ]);
+    cluster.versions["example-app-api"] = "2";
+    expect(restarts().every((finding) => !finding.warning)).toBe(true);
+    cluster.versions["example-app-postgres"] = "2";
+    expect(restarts()[0]).toEqual({
+      code: "dependency-restart:example-app-postgres",
+      ok: true,
+      warning: true,
+      message:
+        "On the next apply, example-app-postgres restarts: Secret example-app-postgres changed since the last apply. " +
+        "With one replica it refuses connections until its new pod is ready.",
+    });
+    expect(restarts()[1]?.message).toBe(
+      "On the next apply, example-app-redis keeps running: its image, pod template, and Secret are unchanged.",
+    );
   });
 });
 

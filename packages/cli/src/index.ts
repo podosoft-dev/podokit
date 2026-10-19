@@ -708,7 +708,7 @@ async function main(argv: string[]): Promise<void> {
           profile,
           args.release!,
           plan.images,
-          plan.rolloutStateDigest,
+          plan.rolloutState,
         );
         process.stdout.write(
           args.json

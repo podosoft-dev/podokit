@@ -229,11 +229,17 @@ while a `warn` reports a setting that deploys but probably not as intended:
 | `database-connections` (with PostgreSQL) | `FAIL` when the API and worker processes can open more connections than PostgreSQL allows between rollouts, `warn` when a rollout or the migration can; see [database connections](#database-connections) |
 | `admin-emails` (with `auth` installed) | `FAIL` when `ADMIN_EMAILS` lists an entry that is not an email address or whose domain is reserved and receives no mail (`example.com`, `example.net`, `example.org` and their subdomains, and the `.example`, `.test`, `.invalid`, and `.localhost` names), such as the `admin@example.com` of `.env.example`; a generated API refuses to start in production with such an entry. List the administrators' real addresses, or leave it empty and create administrators with `admin:bootstrap` |
 | `audit-log` (with the module installed) | `warn` when `runtimeConfig` lacks `AUDIT_LOG_ENABLED` or sets it to anything but `"true"`: the audit log then records nothing until an administrator turns it on, or depends on the API's built-in default |
+| `dependency-restart:<name>` (Kubernetes, in-cluster dependencies) | `warn` when the next apply would restart a running PostgreSQL, Redis, or object storage StatefulSet, with the reason; see [which pods a change restarts](#which-pods-a-change-restarts). The doctor compares the profile's image tags, so only the plan, which resolves digests, sees a new image behind the same tag |
 
 The plan resolves every image tag to an immutable registry digest and binds those
 digests, the profile, the rendered output, the current revision, and the identity of
 every referenced secret into one SHA-256 confirmation hash. `latest`, branch tags, and
 empty tags are rejected. Planning does not change the project or the target.
+
+On Kubernetes the plan also lists, under `dependencyRollouts`, whether the apply
+creates, restarts, or keeps running each in-cluster dependency, and why. Every
+restart is also a plan warning, because a single-replica database, Redis, or object
+store refuses connections until its new pod is ready.
 
 After reviewing that plan, apply the exact hash:
 
@@ -302,6 +308,44 @@ deadline, and the grace period follows it. A replaced pod keeps its database
 connections until it exits, which the [connection budget](#database-connections)
 counts. Workers receive no traffic through a Service and keep the Kubernetes
 defaults.
+
+### Which pods a change restarts
+
+A container reads a Secret through its environment once, when it starts, and
+Kubernetes replaces a workload's pods only when their pod template changes. Each
+pod template therefore carries a `podokit.example.com/rollout-state-checksum`
+annotation computed from the Secrets that workload reads, so a changed Secret rolls
+exactly those workloads:
+
+| Workload | Its checksum covers |
+| --- | --- |
+| API and worker | the API Secret (`secrets.api`) |
+| web | the web Secret (`secrets.web`), when the profile has one |
+| PostgreSQL, Redis, object storage | its own Secret (`dependencies.<name>.secretName`) |
+
+Changing an application Secret, such as a new `ADMIN_EMAILS`, rolls the API and
+worker and leaves the dependencies running. The image pull and TLS Secrets restart
+nothing: Kubernetes reads the first only to pull an image, and the ingress controller
+reloads the second. A changed `runtimeConfig` rolls API, web, and worker through
+their `podokit.example.com/runtime-config-checksum`. A dependency also restarts when
+its image or its own definition changes, such as `maxConnections`.
+
+Each dependency StatefulSet records, in annotations on the StatefulSet itself, which
+do not restart pods, the checksum of its Secret (`podokit.example.com/secret-checksum`)
+and of its pod template without the image and the rollout checksum
+(`podokit.example.com/definition-checksum`). The plan and the doctor compare these,
+the image, and the container arguments with the live StatefulSet to report a
+restart and its reason.
+
+PodoKit 1.6.5 and earlier gave every workload one checksum over all referenced
+Secrets, so any Secret change restarted PostgreSQL, Redis, and object storage. The
+first apply after upgrading keeps each dependency's pod template byte for byte when
+its live checksum still matches the release's current Secrets, so nothing restarts
+that would not have restarted before. When a Secret changed after that last apply,
+the old checksum cannot tell which one, so the in-cluster dependencies restart once,
+as they would have with the earlier version, and the plan and the doctor say so. The
+API, web, and worker pods roll once on that first apply, because their checksum
+changes, with the usual surge and `preStop` hook.
 
 ### Rolling updates on Docker Compose
 

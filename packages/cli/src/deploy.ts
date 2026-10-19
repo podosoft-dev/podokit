@@ -21,9 +21,23 @@ import {
   type DeployProfileV1,
 } from "./deploy-profile";
 import {
+  dependencyRollouts,
+  describeDependencyRollout,
+  keptRolloutChecksums,
+  parseLiveDependencies,
+  type DependencyRollout,
+  type LiveDependency,
+} from "./deploy-dependency-rollout";
+import {
+  renderDependencies,
   renderDeployment,
+  rolloutChecksum,
+  secretIdentityDigest,
+  workloadSecretChecksum,
+  workloadSecrets,
   type DeploymentImages,
   type DeploymentRuntime,
+  type KubernetesRolloutState,
 } from "./deploy-render";
 
 export type DeploymentDoctorFinding = DeployFinding;
@@ -49,7 +63,12 @@ export interface DeploymentPlan {
   dependencyRevision: number | null;
   dependencyStatus: string;
   clusterStateDigest: string;
+  /** One checksum over the identity of every referenced Secret. */
   rolloutStateDigest: string;
+  /** What each workload's rollout checksum is rendered from. */
+  rolloutState: KubernetesRolloutState;
+  /** Which in-cluster dependencies the apply creates, restarts, or keeps running, and why. */
+  dependencyRollouts: DependencyRollout[];
   targetRevisionManifestDigest: string | null;
   target: {
     context: string;
@@ -515,7 +534,56 @@ export function doctorDeployment(
           : `StorageClass ${dependency.storageClassName} is missing or inaccessible.`,
     });
   }
+  findings.push(...dependencyRestartFindings(profile, runner));
   return findings;
+}
+
+/**
+ * Which running dependencies the next apply would restart, and why. The doctor
+ * compares the profile's image tags, so a new digest behind the same tag shows
+ * only in the plan, which resolves digests.
+ */
+function dependencyRestartFindings(
+  profile: DeployProfileV1,
+  runner: CommandRunner,
+): DeploymentDoctorFinding[] {
+  if (!inClusterDependencyNames(profile).length) return [];
+  try {
+    const references = secretReferences(profile, runner);
+    // A missing Secret already fails above, and the plan refuses to run without it.
+    if (!references) return [];
+    const live = liveDependencies(profile, runner);
+    const { secrets, legacyRolloutChecksum } = rolloutStateFrom(references);
+    const state = dependencyRolloutState(profile, secrets, legacyRolloutChecksum, live);
+    const { postgres, redis, objectStorage } = profile.dependencies;
+    const rendered = renderDependencies(
+      profile,
+      {
+        postgres: postgres.mode === "inCluster" ? postgres.image : null,
+        redis: redis.mode === "inCluster" ? redis.image : null,
+        objectStorage: objectStorage.mode === "inCluster" ? objectStorage.image : null,
+        objectStorageClient: objectStorage.mode === "inCluster" ? objectStorage.clientImage : null,
+      },
+      state,
+    ).dependencies;
+    return dependencyRollouts(
+      live,
+      rendered,
+      (current, tag) => current === tag || current?.startsWith(`${tag}@`) === true,
+    ).map((rollout) => ({
+      code: `dependency-restart:${rollout.name}`,
+      ok: true,
+      ...(rollout.action === "restart" ? { warning: true as const } : {}),
+      message: `On the next apply, ${describeDependencyRollout(rollout)}`,
+    }));
+  } catch (error) {
+    return [{
+      code: "dependency-restart",
+      ok: true,
+      warning: true,
+      message: `Cannot tell which dependencies the next apply restarts: ${(error as Error).message}`,
+    }];
+  }
 }
 
 function currentHelmStatus(
@@ -565,6 +633,65 @@ function referencedSecretNames(profile: DeployProfileV1): string[] {
   ].filter((name, index, all) => all.indexOf(name) === index).sort();
 }
 
+interface SecretReference {
+  name: string;
+  identity: string;
+}
+
+function secretReference(
+  profile: DeployProfileV1,
+  name: string,
+  runner: CommandRunner,
+): SecretReference | null {
+  const result = runner(
+    "kubectl",
+    kubectlArgs(profile, [
+      "get",
+      "secret",
+      name,
+      "-o",
+      "jsonpath={.metadata.uid}:{.metadata.resourceVersion}",
+    ]),
+    { capture: true },
+  );
+  if (result.status !== 0) return null;
+  const identity = result.stdout.trim();
+  if (!/^[^:]+:[^:]+$/.test(identity)) {
+    throw new Error(`Secret ${name} does not expose a stable Kubernetes identity.`);
+  }
+  return { name, identity };
+}
+
+/** The identity of every referenced Secret, or null when one cannot be read. */
+function secretReferences(profile: DeployProfileV1, runner: CommandRunner): SecretReference[] | null {
+  const references: SecretReference[] = [];
+  for (const name of referencedSecretNames(profile)) {
+    const reference = secretReference(profile, name, runner);
+    if (!reference) return null;
+    references.push(reference);
+  }
+  return references;
+}
+
+/**
+ * Secret identities are uid:resourceVersion, which changes with every write to a
+ * Secret, so a workload restarts to read new values. Only digests leave this
+ * function: the identities themselves never reach a manifest or a plan.
+ */
+function rolloutStateFrom(references: SecretReference[]): {
+  rolloutStateDigest: string;
+  secrets: Record<string, string>;
+  /** The rollout checksum PodoKit 1.6.5 and earlier gave every workload. */
+  legacyRolloutChecksum: string;
+} {
+  const rolloutStateDigest = `sha256:${createHash("sha256")
+    .update(JSON.stringify(references))
+    .digest("hex")}`;
+  const secrets: Record<string, string> = {};
+  for (const { name, identity } of references) secrets[name] = secretIdentityDigest(name, identity);
+  return { rolloutStateDigest, secrets, legacyRolloutChecksum: rolloutChecksum(rolloutStateDigest) };
+}
+
 function clusterState(
   profile: DeployProfileV1,
   runner: CommandRunner,
@@ -573,40 +700,63 @@ function clusterState(
   dependencyStatus: string;
   clusterStateDigest: string;
   rolloutStateDigest: string;
+  secrets: Record<string, string>;
+  legacyRolloutChecksum: string;
 } {
   const dependency = currentHelmStatus(
     profile,
     runner,
     `${profile.target.release}-dependencies`,
   );
-  const secretReferences = referencedSecretNames(profile).map((name) => {
-    const identity = checked(
-      runner,
-      "kubectl",
-      kubectlArgs(profile, [
-        "get",
-        "secret",
-        name,
-        "-o",
-        "jsonpath={.metadata.uid}:{.metadata.resourceVersion}",
-      ]),
-    ).trim();
-    if (!/^[^:]+:[^:]+$/.test(identity)) {
-      throw new Error(`Secret ${name} does not expose a stable Kubernetes identity.`);
-    }
-    return { name, identity };
+  const references = referencedSecretNames(profile).map((name) => {
+    const reference = secretReference(profile, name, runner);
+    if (!reference) throw new Error(`Secret ${name} is missing or inaccessible.`);
+    return reference;
   });
-  const rolloutStateDigest = `sha256:${createHash("sha256")
-    .update(JSON.stringify(secretReferences))
-    .digest("hex")}`;
   return {
     dependencyRevision: dependency.revision,
     dependencyStatus: dependency.status,
-    rolloutStateDigest,
+    ...rolloutStateFrom(references),
     clusterStateDigest: `sha256:${createHash("sha256")
-      .update(JSON.stringify({ dependency, secretReferences }))
+      .update(JSON.stringify({ dependency, secretReferences: references }))
       .digest("hex")}`,
   };
+}
+
+function inClusterDependencyNames(profile: DeployProfileV1): string[] {
+  const release = profile.target.release;
+  return [
+    ...(profile.dependencies.postgres.mode === "inCluster" ? [`${release}-postgres`] : []),
+    ...(profile.dependencies.redis.mode === "inCluster" ? [`${release}-redis`] : []),
+    ...(profile.dependencies.objectStorage.mode === "inCluster" ? [`${release}-minio`] : []),
+  ];
+}
+
+/** The live dependency StatefulSets, read in one request; missing ones are left out. */
+function liveDependencies(profile: DeployProfileV1, runner: CommandRunner): Map<string, LiveDependency> {
+  const names = inClusterDependencyNames(profile);
+  if (!names.length) return new Map();
+  const output = checked(
+    runner,
+    "kubectl",
+    kubectlArgs(profile, ["get", "statefulsets", ...names, "--ignore-not-found=true", "-o", "json"]),
+  );
+  return parseLiveDependencies(output, names);
+}
+
+/** Which dependencies keep their live rollout checksum, and the state to render with. */
+function dependencyRolloutState(
+  profile: DeployProfileV1,
+  secrets: Record<string, string>,
+  legacyRolloutChecksum: string | null,
+  live: Map<string, LiveDependency>,
+): KubernetesRolloutState {
+  const consumed = workloadSecrets(profile);
+  const expected = inClusterDependencyNames(profile).map((name) => ({
+    name,
+    secretChecksum: workloadSecretChecksum({ secrets, keep: {} }, consumed[name] ?? []),
+  }));
+  return { secrets, keep: keptRolloutChecksums(live, expected, legacyRolloutChecksum) };
 }
 
 function resolveImage(reference: string, runner: CommandRunner): string {
@@ -822,7 +972,11 @@ export function planDeployment(
   const clusterFingerprint = assertClusterTarget(profile, runner);
   const current = currentHelmStatus(profile, runner);
   const images = resolveDeploymentImages(profile, release, runner);
-  const state = clusterState(profile, runner);
+  const { secrets, legacyRolloutChecksum, ...state } = clusterState(profile, runner);
+  const live = liveDependencies(profile, runner);
+  const rolloutState = dependencyRolloutState(profile, secrets, legacyRolloutChecksum, live);
+  const rollouts = dependencyRollouts(live, renderDependencies(profile, images, rolloutState).dependencies);
+  const restarts = rollouts.filter((rollout) => rollout.action === "restart");
   const base: Omit<DeploymentPlan, "planHash"> = {
     profile: profileName,
     release,
@@ -830,6 +984,8 @@ export function planDeployment(
     currentRevision: current.revision,
     currentStatus: current.status,
     ...state,
+    rolloutState,
+    dependencyRollouts: rollouts,
     targetRevisionManifestDigest: null,
     target: {
       context: profile.target.context,
@@ -842,7 +998,13 @@ export function planDeployment(
       {
         order: 1,
         kind: "dependencies",
-        description: "Reconcile in-cluster dependencies and wait for readiness.",
+        description: `Reconcile in-cluster dependencies and wait for readiness; ${
+          rollouts.length === 0
+            ? "none run in the cluster"
+            : restarts.length
+              ? `restart ${restarts.map((rollout) => rollout.name).join(", ")}`
+              : "no running dependency restarts"
+        }.`,
       },
       {
         order: 2,
@@ -863,6 +1025,7 @@ export function planDeployment(
     warnings: [
       "Application rollback does not reverse database migrations.",
       "PersistentVolumeClaims and Kubernetes Secrets are never deleted by apply or rollback.",
+      ...restarts.map(describeDependencyRollout),
       ...[connectionBudgetWarning(profile, installedModules(projectRoot))].filter(
         (warning): warning is string => warning !== null,
       ),
@@ -876,7 +1039,7 @@ export function planDeployment(
       profile,
       release,
       images,
-      state.rolloutStateDigest,
+      rolloutState,
       readAppProxyTimeouts(projectRoot),
     );
     return { ...base, planHash: planDigest(base, runtime) };
@@ -1223,7 +1386,7 @@ export async function applyDeployment(
       profile,
       release,
       plan.images,
-      plan.rolloutStateDigest,
+      plan.rolloutState,
     );
     const failureFlag = helmFailureFlag(runner);
     const common = ["--wait", "--timeout", "5m"];
@@ -1461,7 +1624,9 @@ export function planRollback(
   const clusterFingerprint = assertClusterTarget(profile, runner);
   const current = currentHelmStatus(profile, runner);
   if (current.revision === null) throw new Error("Cannot roll back an application that is not installed.");
-  const state = clusterState(profile, runner);
+  const { secrets, legacyRolloutChecksum: _legacy, ...state } = clusterState(profile, runner);
+  // A rollback changes neither the dependencies nor how their checksums are rendered.
+  const rolloutState: KubernetesRolloutState = { secrets, keep: {} };
   const targetManifest = checked(
     runner,
     "helm",
@@ -1495,6 +1660,8 @@ export function planRollback(
     currentRevision: current.revision,
     currentStatus: current.status,
     ...state,
+    rolloutState,
+    dependencyRollouts: [],
     targetRevisionManifestDigest,
     target: {
       context: profile.target.context,

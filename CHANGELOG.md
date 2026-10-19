@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Changing an application Secret on Kubernetes, such as a new `ADMIN_EMAILS` in
+  the API Secret, made the next `podo deploy apply` restart the in-cluster
+  PostgreSQL, Redis, and object storage StatefulSets. Every rendered pod
+  template carried one `podokit.example.com/rollout-state-checksum` over the
+  identity of every Secret the profile references, so any Secret change changed
+  every pod template; a production deployment with one replica of each answered
+  readiness 503 for about 7 seconds. Each workload's checksum now covers only
+  the Secrets it reads through env: the API and worker the API Secret, web the
+  web Secret, and each dependency its own Secret. The image pull and TLS Secrets
+  restart nothing. Each dependency StatefulSet records its Secret checksum and a
+  checksum of its pod template without the image in annotations on the
+  StatefulSet itself, which do not restart pods. `podo deploy plan` lists under
+  `dependencyRollouts` whether each in-cluster dependency is created, restarted,
+  or kept running, and why, and warns for every restart; `podo deploy doctor`
+  reports the same as `dependency-restart:<name>`. On the first apply after
+  upgrading, a dependency whose live checksum still matches the release's
+  current Secrets keeps its pod template byte for byte and is not restarted; if
+  a Secret changed after the last apply, the earlier checksum cannot tell which,
+  so the dependencies restart once, as they would have before. The API, web, and
+  worker pods roll once on that apply.
+
 ## [1.6.5] - 2026-10-19
 
 ### Fixed

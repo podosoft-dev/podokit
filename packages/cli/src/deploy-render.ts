@@ -25,6 +25,7 @@ export interface DeploymentRuntime {
   migrationManifest: string;
   dependencyManifest: string;
   applicationManifest: string;
+  dependencies: RenderedDependency[];
 }
 
 export interface DeploymentImages {
@@ -56,27 +57,92 @@ function digest(parts: string[]): string {
   return `sha256:${hash.digest("hex")}`;
 }
 
-function offlineRolloutStateDigest(profile: DeployProfileV1): string {
-  const secretNames = [
-    profile.secrets.api.name,
-    ...(profile.secrets.web ? [profile.secrets.web.name] : []),
-    profile.secrets.imagePull,
-    ...(profile.exposure.tlsSecretName ? [profile.exposure.tlsSecretName] : []),
-    profile.dependencies.postgres.secretName,
-    profile.dependencies.redis.secretName,
-    profile.dependencies.objectStorage.secretName,
-  ].sort();
-  return digest(["offline-rollout-state", JSON.stringify(secretNames)]);
+/** The pod-template annotation whose change makes Kubernetes replace a workload's pods. */
+export const ROLLOUT_STATE_ANNOTATION = "podokit.example.com/rollout-state-checksum";
+/** Recorded on each dependency StatefulSet: the checksum of the Secret it reads. */
+export const SECRET_CHECKSUM_ANNOTATION = "podokit.example.com/secret-checksum";
+/** Recorded on each dependency StatefulSet: its pod template without the image and rollout checksum. */
+export const DEFINITION_CHECKSUM_ANNOTATION = "podokit.example.com/definition-checksum";
+
+/**
+ * What decides when pods restart for a change Kubernetes cannot see in the
+ * manifest: a Secret read through env is fixed when the container starts.
+ */
+export interface KubernetesRolloutState {
+  /** A digest of each referenced Secret's identity, by Secret name; never the identity itself. */
+  secrets: Record<string, string>;
+  /**
+   * The rollout checksum a dependency StatefulSet keeps, by name: its live value,
+   * when nothing it reads has changed since the last apply.
+   */
+  keep: Record<string, string>;
+}
+
+/** One rendered dependency StatefulSet, as the plan compares it with the live one. */
+export interface RenderedDependency {
+  name: string;
+  image: string;
+  args: string[] | null;
+  secretName: string;
+  imagePullSecret: string;
+  secretChecksum: string;
+  rolloutChecksum: string;
+  definitionChecksum: string;
+}
+
+export function secretIdentityDigest(name: string, identity: string): string {
+  return digest(["secret-identity", name, identity]);
+}
+
+/** The Secrets each workload reads through env, by workload name. */
+export function workloadSecrets(profile: DeployProfileV1): Record<string, string[]> {
+  const release = profile.target.release;
+  const result: Record<string, string[]> = {
+    [`${release}-api`]: [profile.secrets.api.name],
+    [`${release}-web`]: profile.secrets.web ? [profile.secrets.web.name] : [],
+  };
+  if (profile.workloads.worker) result[`${release}-worker`] = [profile.secrets.api.name];
+  if (profile.dependencies.postgres.mode === "inCluster") {
+    result[`${release}-postgres`] = [profile.dependencies.postgres.secretName];
+  }
+  if (profile.dependencies.redis.mode === "inCluster") {
+    result[`${release}-redis`] = [profile.dependencies.redis.secretName];
+  }
+  if (profile.dependencies.objectStorage.mode === "inCluster") {
+    result[`${release}-minio`] = [profile.dependencies.objectStorage.secretName];
+  }
+  return result;
+}
+
+export function workloadSecretChecksum(state: KubernetesRolloutState, names: string[]): string {
+  return digest([
+    "workload-secrets",
+    JSON.stringify([...names].sort().map((name) => [name, state.secrets[name] ?? null])),
+  ]);
+}
+
+/**
+ * The pod-template value for an input checksum. PodoKit 1.6.5 and earlier stamped
+ * every workload with this function of one checksum over all referenced Secrets.
+ */
+export function rolloutChecksum(inputChecksum: string): string {
+  return digest(["rollout-state", inputChecksum]);
+}
+
+function offlineRolloutState(profile: DeployProfileV1): KubernetesRolloutState {
+  const secrets: Record<string, string> = {};
+  for (const name of Object.values(workloadSecrets(profile)).flat()) {
+    secrets[name] = digest(["offline-secret", name]);
+  }
+  return { secrets, keep: {} };
 }
 
 function podTemplateAnnotations(
-  rolloutStateDigest: string,
+  rolloutStateChecksum: string,
   runtimeConfigDigest?: string,
 ): string {
   const annotations = [
-    `podokit.example.com/rollout-state-checksum: ${quote(
-      digest(["rollout-state", rolloutStateDigest]),
-    )}`,
+    `${ROLLOUT_STATE_ANNOTATION}: ${quote(rolloutStateChecksum)}`,
     ...(runtimeConfigDigest
       ? [`podokit.example.com/runtime-config-checksum: ${quote(runtimeConfigDigest)}`]
       : []),
@@ -110,40 +176,100 @@ ${pad}app.kubernetes.io/managed-by: podokit
 `;
 }
 
-function postgresResources(
+interface DependencyResources {
+  manifest: string;
+  rendered: RenderedDependency;
+}
+
+interface DependencyPod {
+  name: string;
+  secretName: string;
+  image: string;
+  args: string[] | null;
+  /** The StatefulSet's `template:` block, starting at its two-space indent. */
+  template: (image: string, rolloutStateChecksum: string) => string;
+  /** The `volumeClaimTemplates:` block and anything after the StatefulSet. */
+  rest: string;
+}
+
+/**
+ * A dependency StatefulSet whose pods restart only for their own changes: their
+ * image, their definition, or the one Secret they read. The rollout checksum is
+ * kept at its live value while that Secret is unchanged, so the pod template stays
+ * byte for byte what was applied, and the StatefulSet's own annotations, which
+ * Kubernetes does not roll pods for, record what the checksum was derived from.
+ */
+function dependencyStatefulSet(
   profile: DeployProfileV1,
-  image: string | null,
-  rolloutStateDigest: string,
-): string {
-  const dependency = profile.dependencies.postgres;
-  if (dependency.mode !== "inCluster") return "";
-  const name = `${profile.target.release}-postgres`;
-  return `apiVersion: v1
-kind: Service
-metadata:
-  name: ${name}
-  labels:
-${labels(name)}spec:
-  selector:
-    app.kubernetes.io/name: ${name}
-  ports:
-    - name: postgres
-      port: 5432
-      targetPort: 5432
----
-apiVersion: apps/v1
+  state: KubernetesRolloutState,
+  pod: DependencyPod,
+): DependencyResources {
+  const secretChecksum = workloadSecretChecksum(state, [pod.secretName]);
+  const rolloutStateChecksum = state.keep[pod.name] ?? rolloutChecksum(secretChecksum);
+  const definitionChecksum = digest([
+    "dependency-definition",
+    pod.template("<image>", "<rollout-state>"),
+  ]);
+  const manifest = `apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: ${name}
+  name: ${pod.name}
+  annotations:
+    ${SECRET_CHECKSUM_ANNOTATION}: ${quote(secretChecksum)}
+    ${DEFINITION_CHECKSUM_ANNOTATION}: ${quote(definitionChecksum)}
 spec:
-  serviceName: ${name}
+  serviceName: ${pod.name}
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: ${name}
-  template:
+      app.kubernetes.io/name: ${pod.name}
+${pod.template(pod.image, rolloutStateChecksum)}${pod.rest}`;
+  return {
+    manifest,
+    rendered: {
+      name: pod.name,
+      image: pod.image,
+      args: pod.args,
+      secretName: pod.secretName,
+      imagePullSecret: profile.secrets.imagePull,
+      secretChecksum,
+      rolloutChecksum: rolloutStateChecksum,
+      definitionChecksum,
+    },
+  };
+}
+
+function volumeClaimTemplates(dependency: StatefulDependencyProfile): string {
+  return `  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+${storageClassLine(dependency)}        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: ${quote(dependency.storageSize)}
+`;
+}
+
+function postgresResources(
+  profile: DeployProfileV1,
+  image: string | null,
+  state: KubernetesRolloutState,
+): DependencyResources | null {
+  const dependency = profile.dependencies.postgres;
+  if (dependency.mode !== "inCluster") return null;
+  const name = `${profile.target.release}-postgres`;
+  const args = dependency.maxConnections === undefined
+    ? null
+    : ["-c", `max_connections=${dependency.maxConnections}`];
+  const statefulSet = dependencyStatefulSet(profile, state, {
+    name,
+    secretName: dependency.secretName,
+    image: image ?? dependency.image,
+    args,
+    template: (podImage, rolloutStateChecksum) => `  template:
     metadata:
-${podTemplateAnnotations(rolloutStateDigest)}
+${podTemplateAnnotations(rolloutStateChecksum)}
       labels:
 ${labels(name, 8)}    spec:
       imagePullSecrets:
@@ -153,9 +279,9 @@ ${labels(name, 8)}    spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: postgres
-          image: ${quote(image ?? dependency.image)}
+          image: ${quote(podImage)}
           imagePullPolicy: IfNotPresent
-${dependency.maxConnections === undefined ? "" : `          args: ["-c", ${quote(`max_connections=${dependency.maxConnections}`)}]\n`}          env:
+${args === null ? "" : `          args: ["-c", ${quote(args[1]!)}]\n`}          env:
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef: { name: ${dependency.secretName}, key: POSTGRES_USER }
@@ -181,50 +307,44 @@ ${dependency.maxConnections === undefined ? "" : `          args: ["-c", ${quote
             limits: { cpu: "2000m", memory: "2Gi" }
           volumeMounts:
             - { name: data, mountPath: /var/lib/postgresql/data }
-  volumeClaimTemplates:
-    - metadata:
-        name: data
-      spec:
-${storageClassLine(dependency)}        accessModes: [ReadWriteOnce]
-        resources:
-          requests:
-            storage: ${quote(dependency.storageSize)}
-`;
+`,
+    rest: volumeClaimTemplates(dependency),
+  });
+  return {
+    ...statefulSet,
+    manifest: `apiVersion: v1
+kind: Service
+metadata:
+  name: ${name}
+  labels:
+${labels(name)}spec:
+  selector:
+    app.kubernetes.io/name: ${name}
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+---
+${statefulSet.manifest}`,
+  };
 }
 
 function redisResources(
   profile: DeployProfileV1,
   image: string | null,
-  rolloutStateDigest: string,
-): string {
+  state: KubernetesRolloutState,
+): DependencyResources | null {
   const dependency = profile.dependencies.redis;
-  if (dependency.mode !== "inCluster") return "";
+  if (dependency.mode !== "inCluster") return null;
   const name = `${profile.target.release}-redis`;
-  return `apiVersion: v1
-kind: Service
-metadata:
-  name: ${name}
-spec:
-  selector:
-    app.kubernetes.io/name: ${name}
-  ports:
-    - name: redis
-      port: 6379
-      targetPort: 6379
----
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: ${name}
-spec:
-  serviceName: ${name}
-  replicas: 1
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: ${name}
-  template:
+  const statefulSet = dependencyStatefulSet(profile, state, {
+    name,
+    secretName: dependency.secretName,
+    image: image ?? dependency.image,
+    args: null,
+    template: (podImage, rolloutStateChecksum) => `  template:
     metadata:
-${podTemplateAnnotations(rolloutStateDigest)}
+${podTemplateAnnotations(rolloutStateChecksum)}
       labels:
 ${labels(name, 8)}    spec:
       imagePullSecrets:
@@ -234,7 +354,7 @@ ${labels(name, 8)}    spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: redis
-          image: ${quote(image ?? dependency.image)}
+          image: ${quote(podImage)}
           imagePullPolicy: IfNotPresent
           command: [sh, -c, 'exec redis-server --appendonly yes --dir /data --requirepass "$REDIS_PASSWORD"']
           env:
@@ -257,31 +377,12 @@ ${labels(name, 8)}    spec:
             limits: { cpu: "500m", memory: "256Mi" }
           volumeMounts:
             - { name: data, mountPath: /data }
-  volumeClaimTemplates:
-    - metadata:
-        name: data
-      spec:
-${storageClassLine(dependency)}        accessModes: [ReadWriteOnce]
-        resources:
-          requests:
-            storage: ${quote(dependency.storageSize)}
-`;
-}
-
-function objectStorageResources(
-  profile: DeployProfileV1,
-  image: string | null,
-  clientImage: string | null,
-  rolloutStateDigest: string,
-): string {
-  const dependency = profile.dependencies.objectStorage;
-  if (dependency.mode !== "inCluster") return "";
-  const name = `${profile.target.release}-minio`;
-  const initializationHash = createHash("sha256")
-    .update(`${clientImage ?? dependency.clientImage}\0${dependency.bucket}`)
-    .digest("hex")
-    .slice(0, 8);
-  return `apiVersion: v1
+`,
+    rest: volumeClaimTemplates(dependency),
+  });
+  return {
+    ...statefulSet,
+    manifest: `apiVersion: v1
 kind: Service
 metadata:
   name: ${name}
@@ -289,21 +390,35 @@ spec:
   selector:
     app.kubernetes.io/name: ${name}
   ports:
-    - { name: api, port: 9000, targetPort: 9000 }
+    - name: redis
+      port: 6379
+      targetPort: 6379
 ---
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: ${name}
-spec:
-  serviceName: ${name}
-  replicas: 1
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: ${name}
-  template:
+${statefulSet.manifest}`,
+  };
+}
+
+function objectStorageResources(
+  profile: DeployProfileV1,
+  image: string | null,
+  clientImage: string | null,
+  state: KubernetesRolloutState,
+): DependencyResources | null {
+  const dependency = profile.dependencies.objectStorage;
+  if (dependency.mode !== "inCluster") return null;
+  const name = `${profile.target.release}-minio`;
+  const initializationHash = createHash("sha256")
+    .update(`${clientImage ?? dependency.clientImage}\0${dependency.bucket}`)
+    .digest("hex")
+    .slice(0, 8);
+  const statefulSet = dependencyStatefulSet(profile, state, {
+    name,
+    secretName: dependency.secretName,
+    image: image ?? dependency.image,
+    args: ["server", "/data"],
+    template: (podImage, rolloutStateChecksum) => `  template:
     metadata:
-${podTemplateAnnotations(rolloutStateDigest)}
+${podTemplateAnnotations(rolloutStateChecksum)}
       labels:
 ${labels(name, 8)}    spec:
       imagePullSecrets:
@@ -313,7 +428,7 @@ ${labels(name, 8)}    spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: minio
-          image: ${quote(image ?? dependency.image)}
+          image: ${quote(podImage)}
           imagePullPolicy: IfNotPresent
           args: [server, /data]
           env:
@@ -337,15 +452,8 @@ ${labels(name, 8)}    spec:
             limits: { cpu: "2000m", memory: "2Gi" }
           volumeMounts:
             - { name: data, mountPath: /data }
-  volumeClaimTemplates:
-    - metadata:
-        name: data
-      spec:
-${storageClassLine(dependency)}        accessModes: [ReadWriteOnce]
-        resources:
-          requests:
-            storage: ${quote(dependency.storageSize)}
----
+`,
+    rest: `${volumeClaimTemplates(dependency)}---
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -392,26 +500,39 @@ ${labels(`${profile.target.release}-minio-initialize`, 8)}    spec:
             - name: S3_SECRET_ACCESS_KEY
               valueFrom:
                 secretKeyRef: { name: ${dependency.secretName}, key: S3_SECRET_ACCESS_KEY }
-`;
+`,
+  });
+  return {
+    ...statefulSet,
+    manifest: `apiVersion: v1
+kind: Service
+metadata:
+  name: ${name}
+spec:
+  selector:
+    app.kubernetes.io/name: ${name}
+  ports:
+    - { name: api, port: 9000, targetPort: 9000 }
+---
+${statefulSet.manifest}`,
+  };
 }
 
-function dependencyManifest(
+/** The dependency chart's resources, and what each StatefulSet was rendered from. */
+export function renderDependencies(
   profile: DeployProfileV1,
-  images: DeploymentImages,
-  rolloutStateDigest: string,
-): string {
-  return [
-    postgresResources(profile, images.postgres, rolloutStateDigest),
-    redisResources(profile, images.redis, rolloutStateDigest),
-    objectStorageResources(
-      profile,
-      images.objectStorage,
-      images.objectStorageClient,
-      rolloutStateDigest,
-    ),
-  ]
-    .filter(Boolean)
-    .join("\n---\n");
+  images: Pick<DeploymentImages, "postgres" | "redis" | "objectStorage" | "objectStorageClient">,
+  state: KubernetesRolloutState,
+): { manifest: string; dependencies: RenderedDependency[] } {
+  const resources = [
+    postgresResources(profile, images.postgres, state),
+    redisResources(profile, images.redis, state),
+    objectStorageResources(profile, images.objectStorage, images.objectStorageClient, state),
+  ].filter((entry): entry is DependencyResources => entry !== null);
+  return {
+    manifest: resources.map((entry) => entry.manifest).join("\n---\n"),
+    dependencies: resources.map((entry) => entry.rendered),
+  };
 }
 
 /** The Ingress controller appends its peer: the client, or the last edge proxy. */
@@ -492,7 +613,7 @@ function deployment(
   kind: "api" | "web",
   workload: WorkloadProfile,
   image: string,
-  rolloutStateDigest: string,
+  rolloutStateChecksum: string,
   runtimeConfigDigest: string,
   gracePeriodSeconds: number,
 ): string {
@@ -546,7 +667,7 @@ ${labels(name)}spec:
       app.kubernetes.io/name: ${name}
   template:
     metadata:
-${podTemplateAnnotations(rolloutStateDigest, runtimeConfigDigest)}
+${podTemplateAnnotations(rolloutStateChecksum, runtimeConfigDigest)}
       labels:
 ${labels(name, 8)}    spec:
       imagePullSecrets:
@@ -587,7 +708,7 @@ spec:
 function workerDeployment(
   profile: DeployProfileV1,
   image: string,
-  rolloutStateDigest: string,
+  rolloutStateChecksum: string,
   runtimeConfigDigest: string,
   command: string[],
 ): string {
@@ -609,7 +730,7 @@ ${labels(name)}spec:
       app.kubernetes.io/name: ${name}
   template:
     metadata:
-${podTemplateAnnotations(rolloutStateDigest, runtimeConfigDigest)}
+${podTemplateAnnotations(rolloutStateChecksum, runtimeConfigDigest)}
       labels:
 ${labels(name, 8)}    spec:
       imagePullSecrets:
@@ -750,12 +871,15 @@ ${apiPathIngress(profile, tls)}`;
 function applicationManifest(
   profile: DeployProfileV1,
   images: DeploymentImages,
-  rolloutStateDigest: string,
+  state: KubernetesRolloutState,
   workerCommand: string[],
   runtimeConfig: Record<string, string>,
 ): string {
   const runtimeConfigDigest = digest(["runtime-config", JSON.stringify(sortedRuntimeConfig(runtimeConfig))]);
   const gracePeriodSeconds = terminationGracePeriodSeconds(runtimeConfig);
+  const secrets = workloadSecrets(profile);
+  const checksum = (kind: "api" | "web" | "worker"): string =>
+    rolloutChecksum(workloadSecretChecksum(state, secrets[`${profile.target.release}-${kind}`] ?? []));
   return [
     configMap(profile, runtimeConfig),
     deployment(
@@ -763,7 +887,7 @@ function applicationManifest(
       "api",
       profile.workloads.api,
       images.api,
-      rolloutStateDigest,
+      checksum("api"),
       runtimeConfigDigest,
       gracePeriodSeconds,
     ),
@@ -772,14 +896,14 @@ function applicationManifest(
       "web",
       profile.workloads.web,
       images.web,
-      rolloutStateDigest,
+      checksum("web"),
       runtimeConfigDigest,
       gracePeriodSeconds,
     ),
     workerDeployment(
       profile,
       images.api,
-      rolloutStateDigest,
+      checksum("worker"),
       runtimeConfigDigest,
       workerCommand,
     ),
@@ -865,7 +989,7 @@ export function renderDeployment(
   profile: DeployProfileV1,
   release: string,
   resolvedImages?: DeploymentImages,
-  rolloutStateDigest?: string,
+  rolloutState?: KubernetesRolloutState,
   // Planning renders into a scratch directory, so it reads these from the project.
   proxyTimeouts: AppProxyTimeouts = readAppProxyTimeouts(projectRoot),
 ): DeploymentRuntime {
@@ -894,15 +1018,14 @@ export function renderDeployment(
   rmSync(root, { recursive: true, force: true });
   const dependencyChart = join(root, "dependencies");
   const applicationChart = join(root, "application");
-  const effectiveRolloutStateDigest =
-    rolloutStateDigest ?? offlineRolloutStateDigest(profile);
-  const dependencies = dependencyManifest(profile, images, effectiveRolloutStateDigest);
+  const state = rolloutState ?? offlineRolloutState(profile);
+  const dependencies = renderDependencies(profile, images, state);
   const toolchain = readManifest(projectRoot)?.toolchain ?? resolveToolchain();
   const runtimeConfig = derivedRuntimeConfig(profile, proxyTimeouts);
   const application = applicationManifest(
     profile,
     images,
-    effectiveRolloutStateDigest,
+    state,
     toolchainWorkerCommand(toolchain),
     runtimeConfig,
   );
@@ -913,7 +1036,7 @@ export function renderDeployment(
     toolchainMigrationCommand(toolchain),
     runtimeConfig,
   );
-  chart(dependencyChart, "podokit-dependencies", dependencies);
+  chart(dependencyChart, "podokit-dependencies", dependencies.manifest);
   chart(applicationChart, "podokit-application", application);
   writeFileSync(join(root, "migration.yaml"), migration);
   return {
@@ -921,7 +1044,8 @@ export function renderDeployment(
     dependencyChart,
     applicationChart,
     migrationManifest: join(root, "migration.yaml"),
-    dependencyManifest: dependencies,
+    dependencyManifest: dependencies.manifest,
     applicationManifest: application,
+    dependencies: dependencies.dependencies,
   };
 }
