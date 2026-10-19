@@ -543,6 +543,7 @@ describe("PodoKit development gateway", () => {
     });
     const images: Record<string, number> = {
       restarted: fileTime - 60_000,
+      oneoff: fileTime - 60_000,
       stale: fileTime - 60_000,
       rebuilt: fileTime + 60_000,
     };
@@ -579,6 +580,7 @@ describe("PodoKit development gateway", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     const events = calls.find((args) => args[0] === "events");
     expect(events).toContain("label=com.docker.compose.project=example-app-dev");
+    expect(events?.at(-1)).toContain('{{index .Actor.Attributes "com.docker.compose.oneoff"}}');
     const rebuilds = (): string[][] => calls.filter((args) => args.includes("--no-deps"));
 
     // A restart keeps the container and the files Watch synced into it.
@@ -586,9 +588,11 @@ describe("PodoKit development gateway", () => {
     // A service without synced paths, and a new container built after the edits.
     emit("db postgres");
     emit("rebuilt web");
+    // A `docker compose run web` container, which is not the service's container.
+    emit("oneoff web True");
     expect(rebuilds()).toEqual([]);
 
-    emit("stale web");
+    emit("stale web False");
     expect(rebuilds()).toHaveLength(1);
     expect(rebuilds()[0]?.slice(-5)).toEqual(["up", "--build", "--detach", "--no-deps", "web"]);
     emit("stale web");

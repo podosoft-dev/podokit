@@ -205,7 +205,8 @@ service from an image older than its synced files, such as `docker compose up
 `podo dev: web was recreated from an image older than its synced files` and runs
 `up --build --detach --no-deps` for that service, and Watch keeps syncing into the
 new container. A restart keeps the container and its synced files, so it is not
-checked. Set memory limits in the project's `.env` rather than only in the
+checked, and neither is a one-off `docker compose run` container, such as a
+second API that a test starts. Set memory limits in the project's `.env` rather than only in the
 shell of another command, because that rebuild uses `podo dev watch`'s
 environment. Pass `--no-build` to start from the existing images; `podo dev watch
 --no-build` then only reports a stale recreated container. `--no-up` keeps the

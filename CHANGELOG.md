@@ -195,6 +195,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   not defined, so only the site's own forms pass, and a build with the managed
   config still inlines the configured origins.
 
+- `podo dev watch` recreated a running service whenever `docker compose run`
+  started a one-off container of it, for example a second API for a test. It
+  took the one-off container, which carries the service's label, for a service
+  container that something else had recreated from an image older than the
+  synced files, and rebuilt the service, so the dev API answered 503 for about
+  8 seconds. Watch now ignores one-off containers.
+
 ### Upgrade notes
 
 - Restart every running `podo dev` stack once after updating the CLI
