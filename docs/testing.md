@@ -434,8 +434,13 @@ in a loop can call `signInOnSeparateDevices` from `tests/helpers/devices.ts`.
 ## CI policy
 
 Fast CI runs package tests, type checks, and a Bun-generated application gate.
-Ready pull requests run Outer smoke; nightly and manual workflows run the full
-matrix. New pushes cancel superseded workflow runs.
+The gate also starts the built API and web server for about a second and checks
+that a `POST` without a body or `Origin` header reaches the API through `/api`
+while a cross-site form `POST` gets `403`, because the Vite dev server does not
+make that check (see the
+[cross-site form check](templates.md#cross-site-form-check)). Ready pull
+requests run Outer smoke; nightly and manual workflows run the full matrix. New
+pushes cancel superseded workflow runs.
 
 A changeset version PR uses package-smoke because the source feature PR already
 ran browser behavior. A release is not approved by tests alone: package

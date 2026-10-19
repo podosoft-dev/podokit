@@ -68,6 +68,14 @@ Merge added module settings from `.env.example` into an existing `.env`.
   `apps/web/vite.extensions.ts`. `bun run dev` proxies the exact
   `webSocketPaths` of `.podokit/dev.json` to the API like the `podo dev` gateway,
   so do not add a WebSocket proxy of your own.
+- The managed `apps/web/src/hooks.server.ts` runs the cross-site form check
+  (`apps/web/src/lib/server/csrf.ts`) before anything else, in place of
+  SvelteKit's: a form-type or body-less `POST`/`PUT`/`PATCH`/`DELETE` from another
+  `Origin` gets 403 everywhere, and one without an `Origin` gets 403 except under
+  `/api`, where the API's authentication decides. List trusted origins in
+  `csrf.trustedOrigins` of `appSvelteKitConfig`; never set SvelteKit's `csrf`
+  elsewhere or drop the check from a hook. The check, like SvelteKit's, does not
+  run under `bun run dev`, so verify request handling against the built web app.
 - Server-side API calls (`serverApiClient`) give up after `BACKEND_TIMEOUT_MS`
   (2000), and the proxy answers 504 `BACKEND_TIMEOUT` when the API sends no
   response headers within `BACKEND_PROXY_TIMEOUT_MS` (30000). Once the API's

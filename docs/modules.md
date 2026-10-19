@@ -1491,9 +1491,11 @@ domain are specific to each application.
 
 #### Request hook
 
-The managed `hooks.server.ts` loads the runtime context and then calls `appHandle`
-from the application-owned `apps/web/src/lib/server/app-hooks.ts` for every
-request. When it runs, `event.locals` already holds the site settings, the
+The managed `hooks.server.ts` runs the
+[cross-site form check](templates.md#cross-site-form-check), loads the runtime
+context, and then calls `appHandle` from the application-owned
+`apps/web/src/lib/server/app-hooks.ts` for every request the check lets through.
+When it runs, `event.locals` already holds the site settings, the
 signed-in user, the session, and the locale, and the response it returns still
 gets the document language and the search-indexing header. Change `event.locals`,
 add headers, or answer a request there instead of editing `hooks.server.ts`:

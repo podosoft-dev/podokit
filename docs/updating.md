@@ -322,6 +322,14 @@ creates each of them once in an existing app. An app that edited the managed
 `search-indexing.ts` gets a merge or a conflict there; move the edit into the
 owned file and take PodoKit's version of the managed one.
 
+`hooks.server.ts` is managed without `admin-dashboard` too: it runs the
+[cross-site form check](templates.md#cross-site-form-check), which the managed
+`vite.config.ts` takes over from SvelteKit. An app without `admin-dashboard`
+that wrote its own `hooks.server.ts` gets a conflict there. Keep the check when
+you resolve it: return `refuseCrossSiteForm(event)` from `#lib/server/csrf.js`
+when it is not null, before the rest of your hook runs; otherwise cross-site
+form submissions are no longer refused.
+
 ### Extending the web proxy
 
 The SvelteKit `/api` proxy, `apps/web/src/lib/server/backend-proxy.ts`, is

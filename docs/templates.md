@@ -206,6 +206,36 @@ is configured for, because a caller that reaches it directly can send anything.
 A web image built with `PODOKIT_BUILD_ORIGIN` resolves every request to that
 origin, so it reports only that one.
 
+### Cross-site form check
+
+The web server refuses a cross-site form submission with `403 Cross-site POST
+form submissions are forbidden` (or `PUT`, `PATCH`, `DELETE`): a request of one
+of those methods that has no content type or one an HTML form can send
+(`application/x-www-form-urlencoded`, `multipart/form-data`, `text/plain`), and
+whose `Origin` header is neither the site's own origin nor listed in
+`csrf.trustedOrigins` (see [Vite and SvelteKit options](#vite-and-sveltekit-options)).
+A client that sends `Accept: application/json` gets `{ "message": ... }`.
+
+SvelteKit makes this check itself, before any hook or route, and also refuses
+such a request when it has no `Origin` header at all. Scripts, CLIs, and MCP
+clients send none when they call `/api` with a session cookie or an
+`Authorization` header, so SvelteKit's check would refuse a request without a
+body or an upload from them. The managed `vite.config.ts` therefore turns it off
+(`csrf.trustedOrigins: ["*"]`), and the managed `hooks.server.ts` applies the
+same check first, from `apps/web/src/lib/server/csrf.ts`, with one difference:
+a request to `/api` or below without an `Origin` header goes on to the proxy,
+and the API's authentication decides it. Browsers send `Origin` with every
+request of these methods, so a cross-site form or `fetch` is still refused on
+`/api` as on pages, and page form actions keep SvelteKit's rule. Better Auth
+checks origins too: a write under `/api/auth` that carries the session cookie
+but no `Origin` gets `403 MISSING_OR_NULL_ORIGIN` from the API.
+
+Like SvelteKit's, the check does not run on the Vite dev server (`bun run dev`),
+so verify request handling against the built web server (`bun run --cwd
+apps/web build`, then `bun build/index.js` in `apps/web`). The generated
+`tests/api/cross-site-forms.api.spec.ts` checks both sides of the rule and skips
+its refusal test on the dev server.
+
 ### Proxy path rules
 
 `APP_BODY_LIMITS` and `APP_PROXY_TIMEOUTS` below select `/api` routes by
@@ -553,7 +583,10 @@ export const appSvelteKitConfig: SvelteKitConfig = {
 ```
 
 A function receives Vite's `{ command, mode }`. `PODOKIT_BUILD_ORIGIN` still sets
-`paths.origin` at build time. The generated `compose.dev.yaml` restarts the web
+`paths.origin` at build time. `csrf.trustedOrigins` keeps SvelteKit's meaning:
+`vite.config.ts` hands the list to the managed
+[cross-site form check](#cross-site-form-check) and sets SvelteKit's own to
+`["*"]`, and `["*"]` in your list turns the check off everywhere. The generated `compose.dev.yaml` restarts the web
 container when the file changes.
 
 #### WebSocket paths in host development

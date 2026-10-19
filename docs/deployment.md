@@ -615,13 +615,16 @@ The doctor reports what it renders and warns when the profile contradicts itself
 
 ### Uploads answer 403 "Cross-site POST form submissions are forbidden"
 
-SvelteKit refuses a `POST`, `PUT`, `PATCH`, or `DELETE` that has no content
+The web server refuses a `POST`, `PUT`, `PATCH`, or `DELETE` that has no content
 type or one an HTML form can send (`multipart/form-data`,
-`application/x-www-form-urlencoded`, `text/plain`) unless the browser's `Origin`
-header equals the origin the web server resolved for the request. Browsers send
+`application/x-www-form-urlencoded`, `text/plain`) when its `Origin` header
+differs from the origin the web server resolved for the request (see the
+[cross-site form check](templates.md#cross-site-form-check)). Browsers send
 `Origin` with every same-origin request of these kinds, so in a working
 deployment uploads with `FormData`, form-encoded bodies, and requests without a
-body reach the API through the `/api` proxy unchanged. The generated
+body reach the API through the `/api` proxy unchanged. Clients that are not
+browsers send no `Origin`; their `/api` requests reach the API as well, which
+authenticates them. The generated
 `tests/ui/same-origin-requests.ui.spec.ts` checks this against a running app; like
 the rest of the suite it signs in as the seeded accounts, signing the user up when
 it does not exist, so point it at a staging copy whose administrator was created
@@ -697,7 +700,7 @@ What changes for requests on these paths:
   authenticates them itself, as it already does for proxied requests.
 - They skip everything the web server does for `/api`: the forwarded header
   allowlist (the API receives every request header), `APP_BODY_LIMITS`,
-  SvelteKit's cross-site form check, and any `+server.ts` routes the app added
+  the cross-site form check, and any `+server.ts` routes the app added
   under the prefix. For cookie-authenticated writes, have the API compare the
   `Origin` header with the public origin; the session cookie's `SameSite=Lax`
   already keeps it off most cross-site POSTs.

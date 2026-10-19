@@ -95,9 +95,16 @@ export default defineConfig((env) =>
           adapter: adapter(),
           preprocess: vitePreprocess(),
           ...appSvelteKitConfig,
+          // SvelteKit's cross-site form check runs before any route and refuses /api
+          // requests without an Origin header. src/lib/server/csrf.ts applies it from
+          // hooks.server.ts instead, with the app's trusted origins defined below.
+          csrf: { trustedOrigins: ["*"] },
           ...(publicOrigin ? { paths: { ...appSvelteKitConfig.paths, origin: publicOrigin } } : {}),
         }),
       ],
+      define: {
+        __PODOKIT_CSRF_TRUSTED_ORIGINS__: JSON.stringify(appSvelteKitConfig.csrf?.trustedOrigins ?? []),
+      },
       server: {
         ...(inDocker ? { host: true, port: 5001, allowedHosts: true } : {}),
         ...(env.command === "serve" ? { proxy: webSocketProxy(readDevConfig()), forwardConsole: BROWSER_ERRORS } : {}),

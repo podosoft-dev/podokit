@@ -294,6 +294,11 @@ Do not add `--bun` when running Playwright.
 
 For authentication, cookies, browser behavior, queues, Redis, object storage,
 or migrations, also exercise the feature against a live generated stack.
+Request handling differs between the Vite dev server and the built web server:
+the [cross-site form check](templates.md#cross-site-form-check), like SvelteKit's,
+runs only in the build. Check changes to hooks, the `/api` proxy, or form
+submissions against `bun build/index.js`, as `e2e-ci.mjs` does, and not only
+against `bun run dev`.
 Run the full Verdaccio gate once per ready batch:
 
 ```bash
