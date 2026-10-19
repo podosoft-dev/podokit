@@ -1,7 +1,16 @@
-import type { ConsoleMessage, Page, Request, Response } from "@playwright/test";
+import { test, type ConsoleMessage, type Page, type Request, type Response } from "@playwright/test";
 
 /** How long a page that threw an uncaught error may still take to hydrate. */
 export const PAGE_ERROR_GRACE_MS = 5_000;
+/**
+ * The error Chromium gives the requests it drops when the host's network
+ * changes, for example when a container starts or stops: Linux then adds or
+ * removes an interface address, and Chromium cancels every request that is
+ * still waiting for a connection.
+ */
+export const NETWORK_CHANGED = "net::ERR_NETWORK_CHANGED";
+/** The annotation a test gets when a page is loaded again after a network change. */
+export const NETWORK_CHANGED_ANNOTATION = "network-changed";
 const HYDRATED = 'html[data-hydrated="true"]';
 const LISTED = 8;
 
@@ -98,6 +107,22 @@ export function verdict(page: PageSnapshot, trouble: PageTrouble): "error-page" 
   return trouble.pageErrors.length > 0 ? "page-error" : "wait";
 }
 
+/** Whether the browser dropped requests of the load with NETWORK_CHANGED. */
+export function networkChanged(trouble: PageTrouble): boolean {
+  return trouble.failedRequests.some((entry) => entry.endsWith(`: ${NETWORK_CHANGED}`));
+}
+
+/** The note a test gets when a page is loaded again after a network change. */
+export function networkChangeNote(url: string, trouble: PageTrouble, failure: unknown): string {
+  const dropped = trouble.failedRequests.filter((entry) => entry.endsWith(`: ${NETWORK_CHANGED}`)).length;
+  const first = (failure instanceof Error ? failure.message : String(failure)).split("\n")[0];
+  return (
+    `${url}: the browser dropped ${dropped} request(s) with ${NETWORK_CHANGED} because the host's network ` +
+    `changed, for example a container started or stopped, so the page was loaded once more. The first load ` +
+    `failed with: ${first}`
+  );
+}
+
 function listed(title: string, entries: string[]): string[] {
   if (entries.length === 0) return [];
   const more = entries.length > LISTED ? [`  ... and ${entries.length - LISTED} more`] : [];
@@ -150,6 +175,43 @@ async function waitForHydration(page: Page, { trouble, pageErrorExpired }: Watch
   throw new Error(hydrationFailure("page-error", shown, trouble));
 }
 
+// One load and the wait for its hydration. Returns what went wrong, or null.
+async function attempt(
+  page: Page,
+  open: (() => Promise<unknown>) | null,
+): Promise<{ failure: unknown; trouble: PageTrouble } | null> {
+  const watching = watch(page);
+  try {
+    if (open) await open();
+    await waitForHydration(page, watching);
+    return null;
+  } catch (failure) {
+    return { failure, trouble: watching.trouble };
+  } finally {
+    watching.stop();
+  }
+}
+
+function note(description: string): void {
+  console.warn(`[${NETWORK_CHANGED_ANNOTATION}] ${description}`);
+  try {
+    test.info().annotations.push({ type: NETWORK_CHANGED_ANNOTATION, description });
+  } catch {
+    // Called outside a test, where there is no report to annotate.
+  }
+}
+
+// A load that failed while the browser dropped requests for a network change gets
+// one more load. Any other failure, and a second failure, is the test's error.
+async function settle(page: Page, open: (() => Promise<unknown>) | null, again: () => Promise<unknown>): Promise<void> {
+  const first = await attempt(page, open);
+  if (!first) return;
+  if (!networkChanged(first.trouble)) throw first.failure;
+  note(networkChangeNote(page.url(), first.trouble, first.failure));
+  const second = await attempt(page, again);
+  if (second) throw second.failure;
+}
+
 /**
  * Waits until SvelteKit has attached the current document's event handlers. The
  * root layout adds this marker from onMount, so no fixed timing assumption is
@@ -161,23 +223,17 @@ async function waitForHydration(page: Page, { trouble, pageErrorExpired }: Watch
  * SvelteKit's static error page, or a page that throws an uncaught error and has
  * not hydrated PAGE_ERROR_GRACE_MS later. The error names what the page shows
  * and the page errors, console errors, and failed requests seen since the call.
+ *
+ * When the load failed because the browser dropped requests with
+ * NETWORK_CHANGED, the page is reloaded once and the test gets a
+ * NETWORK_CHANGED_ANNOTATION annotation that says so.
  */
 export async function hydrated(page: Page): Promise<void> {
-  const watching = watch(page);
-  try {
-    await waitForHydration(page, watching);
-  } finally {
-    watching.stop();
-  }
+  await settle(page, null, () => page.reload());
 }
 
-/** Opens `path` and waits for hydration before a test drives the page. */
+/** Opens `path` and waits for hydration before a test drives the page, as `hydrated` does. */
 export async function ready(page: Page, path: string): Promise<void> {
-  const watching = watch(page);
-  try {
-    await page.goto(path);
-    await waitForHydration(page, watching);
-  } finally {
-    watching.stop();
-  }
+  const open = (): Promise<unknown> => page.goto(path);
+  await settle(page, open, open);
 }

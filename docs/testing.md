@@ -142,6 +142,17 @@ hydrate fails that wait at once, instead of at the 30-second test timeout:
 The error lists the page's URL, status, title, and text, and the page errors,
 console errors, and failed requests seen while waiting.
 
+One failure gets a second load. On Linux, Chromium cancels the requests that are
+still waiting for a connection whenever the host's network changes, and starting
+or stopping a container adds or removes an interface address, so another
+process's `docker run` can fail a page load that has nothing wrong with it. The
+dropped requests fail with `net::ERR_NETWORK_CHANGED`, a module import fails,
+and the page does not hydrate. When the failed load has such a request, `ready`
+opens the page again and `hydrated` reloads it, once. The test gets a
+`network-changed` annotation, which the HTML report shows, and the run prints it
+with a `[network-changed]` prefix. Any other failure, and a second failure, fails
+the test as before.
+
 ### Email tests
 
 The email specs from the `admin-dashboard` module read messages from the Mailpit

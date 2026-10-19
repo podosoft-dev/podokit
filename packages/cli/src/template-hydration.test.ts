@@ -1,11 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   hydrationFailure,
+  NETWORK_CHANGED,
+  networkChanged,
+  networkChangeNote,
   PAGE_ERROR_GRACE_MS,
   verdict,
   type PageSnapshot,
   type PageTrouble,
 } from "../../../templates/modules/admin-dashboard/files/tests/helpers/hydration";
+
+// The helper runs inside Playwright, which this workspace does not install.
+vi.mock("@playwright/test", () => ({ test: {} }));
 
 const quiet: PageTrouble = { pageErrors: [], consoleErrors: [], failedRequests: [] };
 const errorPage = (status: number): PageSnapshot => ({
@@ -64,5 +70,41 @@ describe("generated hydration helper", () => {
 
   it("says so when the page could not be read", () => {
     expect(hydrationFailure("page-error", null, quiet)).toContain("The page could not be read.");
+  });
+
+  it("reloads only a load whose requests the browser dropped for a network change", () => {
+    const dropped = (errorText: string): PageTrouble => ({
+      ...quiet,
+      pageErrors: ["TypeError: Failed to fetch dynamically imported module"],
+      failedRequests: [`GET http://localhost:5001/src/routes/+layout.svelte: ${errorText}`],
+    });
+    expect(NETWORK_CHANGED).toBe("net::ERR_NETWORK_CHANGED");
+    expect(networkChanged(dropped("net::ERR_NETWORK_CHANGED"))).toBe(true);
+    // A broken module, a stopped server, or an aborted request is the test's error.
+    expect(networkChanged(dropped("net::ERR_FAILED"))).toBe(false);
+    expect(networkChanged(dropped("net::ERR_CONNECTION_REFUSED"))).toBe(false);
+    expect(networkChanged(dropped("net::ERR_INTERNET_DISCONNECTED"))).toBe(false);
+    expect(networkChanged({ ...quiet, failedRequests: ["500 GET http://localhost:5001/src/app.ts"] })).toBe(false);
+    expect(networkChanged(quiet)).toBe(false);
+  });
+
+  it("notes the reload with the dropped requests and the first failure", () => {
+    const note = networkChangeNote(
+      "http://localhost:5001/admin/users",
+      {
+        ...quiet,
+        failedRequests: [
+          "GET http://localhost:5001/src/a.ts: net::ERR_NETWORK_CHANGED",
+          "GET http://localhost:5001/src/b.ts: net::ERR_NETWORK_CHANGED",
+          "GET http://localhost:5001/src/c.ts: net::ERR_FAILED",
+        ],
+      },
+      new Error("The page threw an uncaught error and had not hydrated 5 s later.\nmore"),
+    );
+    expect(note).toContain("http://localhost:5001/admin/users: the browser dropped 2 request(s) with net::ERR_NETWORK_CHANGED");
+    expect(note).toContain("so the page was loaded once more");
+    expect(note).toContain("The first load failed with: The page threw an uncaught error and had not hydrated 5 s later.");
+    // Only the first line of the failure: the second load's error, if any, has the rest.
+    expect(note.endsWith("had not hydrated 5 s later.")).toBe(true);
   });
 });
