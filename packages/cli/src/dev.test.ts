@@ -157,6 +157,21 @@ describe("PodoKit development gateway", () => {
     expect(route).not.toContain(`${runtime.alias}-api`);
   });
 
+  it("closes each connection the gateway link answers before it forwards", async () => {
+    const root = project();
+    writeFileSync(
+      join(root, ".podokit", "dev.json"),
+      JSON.stringify({ schemaVersion: 1, hostname: "example-app.localhost", webSocketPaths: ["/events/ws"] }),
+    );
+    const compose = renderRuntimeCompose(resolveDevRuntime(root));
+
+    // A connection the link accepts before it loads its TCP routers is served
+    // as HTTP 404 for its whole life, and the gateway would keep reusing it.
+    for (const name of ["web", "api"]) {
+      expect(compose).toContain(`      - --entrypoints.${name}.transport.keepAliveMaxRequests=1\n`);
+    }
+  });
+
   it("routes only configured exact WebSocket paths to the API", async () => {
     const root = project();
     writeFileSync(

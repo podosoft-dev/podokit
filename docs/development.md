@@ -151,7 +151,10 @@ network it joins, so `podo dev` never attaches web or api to the shared
 small Traefik container whose service name is the project's unique alias
 (`podokit-<name>-<hash>`). The link joins both networks and passes TCP
 connections through to the web container and, for the paths below, to the API, so
-the gateway's `X-Forwarded-*` headers reach them unchanged. Its memory limit is
+the gateway's `X-Forwarded-*` headers reach them unchanged. A request that
+reaches the link in the moment after it starts, before it loads its TCP
+forwards, gets a 404 from the link, which then closes that connection, so the
+next request goes through. Its memory limit is
 128 MiB; set `GATEWAY_LINK_MEM_LIMIT` to change it. Do not attach services of
 your own to `podokit-dev-gateway`: every project's containers there would reach
 them by their plain service names.
