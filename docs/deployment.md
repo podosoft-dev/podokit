@@ -539,8 +539,9 @@ header equals the origin the web server resolved for the request. Browsers send
 deployment uploads with `FormData`, form-encoded bodies, and requests without a
 body reach the API through the `/api` proxy unchanged. The generated
 `tests/ui/same-origin-requests.ui.spec.ts` checks this against a running app; like
-the rest of the suite it signs up its seed accounts, so point it at a staging
-copy:
+the rest of the suite it signs in as the seeded accounts, signing the user up when
+it does not exist, so point it at a staging copy whose administrator was created
+with `admin:bootstrap`:
 
 ```bash
 cd tests && E2E_BASE_URL=https://staging.example.com bunx playwright test same-origin-requests

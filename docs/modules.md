@@ -1102,8 +1102,9 @@ only. Entries name the user even when the request carries no session:
 `auth.logout` names each account whose session the sign-out ended (a sign-out
 without a session records nothing), password resets by link, email code, or text
 message code and email verifications name the account they changed,
-`user.session_revoke` names the owner of the revoked session, and
-`user.stop_impersonate` names the administrator. Nothing else is
+`user.session_revoke` names the owner of the revoked session,
+`user.stop_impersonate` names the administrator, and `user.delete` and
+`account.delete` name the deleted user by the email it had. Nothing else is
 recorded automatically: application
 code records its own semantic events with
 `AuditService.recordRequest()` or `recordAudit()`. Admins read entries at
