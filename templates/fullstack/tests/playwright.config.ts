@@ -7,7 +7,8 @@ import { e2eRunSettings, loadPlaywrightProjects, withExclusivePhase } from "./pl
 // and `ui` (chromium, pages). Files are routed by suffix (*.api/*.ui.spec.ts).
 // E2E_WORKERS sets the worker count (default 1); tests tagged @exclusive run in
 // `<project>-exclusive` twins after the others, in a second run when run-e2e.ts
-// starts the suite on more workers (see playwright.extensions.ts).
+// starts the suite on more workers (see playwright.extensions.ts). A failed test
+// keeps its trace, screenshot, and error context under test-results/.
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5001";
 const run = e2eRunSettings();
 const coreProjects = [
@@ -26,7 +27,7 @@ export default defineConfig({
   reporter: [["list"], ["html", { open: "never", outputFolder: run.reportFolder }]],
   use: {
     baseURL,
-    trace: "on-first-retry",
+    trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
   projects: withExclusivePhase([...coreProjects, ...loadPlaywrightProjects(coreProjects)], run.workers, run.phase),

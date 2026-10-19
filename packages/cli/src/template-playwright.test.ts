@@ -270,4 +270,18 @@ describe("generated Playwright exclusive phase", () => {
     expect(scripts["test:e2e:api"]).toBe("bun run-e2e.ts --project=api --project=api-exclusive");
     expect(scripts["test:e2e:ui"]).toBe("bun run-e2e.ts --project=ui --project=ui-exclusive");
   });
+
+  it("keeps the trace of a test that fails on its first and only attempt", () => {
+    // Local runs make no retries, so a trace recorded only on a retry never exists there.
+    for (const path of [
+      "templates/fullstack/tests/playwright.config.ts",
+      "templates/modules/admin-dashboard/files/tests/playwright.config.ts",
+    ]) {
+      const config = readFileSync(resolve(REPO_ROOT, path), "utf8");
+      expect(config, path).toMatch(/\btrace: "retain-on-failure"/);
+      expect(config, path).not.toMatch(/\btrace: "on-first-retry"/);
+      expect(config, path).toContain('screenshot: "only-on-failure"');
+      expect(config, path).toContain("retries: process.env.CI ? 2 : 0,");
+    }
+  });
 });
