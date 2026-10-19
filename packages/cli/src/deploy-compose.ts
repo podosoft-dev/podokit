@@ -87,6 +87,12 @@ export interface ComposeStatus {
   release: string | null;
   services: Array<{
     name: string;
+    /**
+     * The service's container names. A side-by-side rollout starts new containers
+     * beside the old ones and removes the old, so the numbers in these names grow
+     * with every release: select a service's containers by their Compose labels.
+     */
+    containers: string[];
     running: number;
     desired: number;
     images: string[];
@@ -1054,6 +1060,10 @@ export function getComposeStatus(
             : null;
     services.push({
       name,
+      containers: group
+        .map((entry) => entry.Name)
+        .filter((entry): entry is string => Boolean(entry))
+        .sort((left, right) => left.localeCompare(right, undefined, { numeric: true })),
       running: group.filter((entry) => entry.State === "running").length,
       desired: desiredWorkload?.replicas ?? group.length,
       images,

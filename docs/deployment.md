@@ -379,6 +379,24 @@ If a new container does not become healthy, apply removes the containers it star
 and fails; the old ones keep serving and the release ledger keeps the current
 revision. A service that already runs the new definition is left alone.
 
+Starting new containers beside the old ones also renumbers them. Compose names a
+container after the project, the service, and a number, and numbers a new
+container after the highest one in use. The API service is `<project>-api`, so its
+first container is `<project>-<project>-api-1`; after a release it runs as
+`<project>-<project>-api-2`, or `-3` and `-4` with two replicas, and the numbers
+grow with every release.
+Scripts, backups, and monitors must not use a fixed container name. Select a
+service's containers by their Compose labels instead, or let Compose resolve the
+service:
+
+```bash
+docker ps --filter label=com.docker.compose.project=<project> \
+  --filter label=com.docker.compose.service=<project>-api --format '{{.Names}}'
+docker compose -p <project> exec <project>-api sh
+```
+
+`podo deploy status` lists each service's current container names.
+
 The web server reaches the API through the service name. Bun keeps a resolved
 address for 30 seconds and does not move to another one when it stops answering,
 so the rendered web service sets `BUN_CONFIG_DNS_TIME_TO_LIVE_SECONDS` to `"0"`,
@@ -855,9 +873,10 @@ podo deploy verify --profile production --json
 ```
 
 Status reports the deployed revision, the actual images, ready or running replicas,
-restart totals, and on Kubernetes the last recorded migration (`lastMigration`, see
-the [migration ledger](#migration-ledger)). Verification checks the configured HTTPS origin without changing
-the target.
+restart totals, on Kubernetes the last recorded migration (`lastMigration`, see the
+[migration ledger](#migration-ledger)), and on Docker Compose each service's container
+names (`containers`), which change with every release. Verification checks the
+configured HTTPS origin without changing the target.
 
 On Kubernetes, a Deployment's `restartCount` adds up the container restarts of the
 running pods of its current revision only: the pods whose `pod-template-hash` is that

@@ -15,6 +15,7 @@ import {
 import {
   applyComposeDeployment,
   doctorComposeDeployment,
+  getComposeStatus,
   inspectComposeEndpointFingerprint,
   planComposeDeployment,
 } from "./deploy-compose";
@@ -803,6 +804,32 @@ describe("web service", () => {
     profile.runtimeConfig = { ...profile.runtimeConfig, CONNECTION_IDLE_TIMEOUT: "0", API_IDLE_TIMEOUT: "0" };
     expect(serviceOf(render(), "web")).toContain('      CONNECTION_IDLE_TIMEOUT: "0"\n');
     expect(serviceOf(render(), "api")).toContain('      API_IDLE_TIMEOUT: "0"\n');
+  });
+});
+
+describe("compose status", () => {
+  it("names each service's containers, which side-by-side rollouts renumber", () => {
+    const root = initialized(["auth"]);
+    const psEntry = (name: string, service: string) =>
+      JSON.stringify({ Name: name, Service: service, Image: `${service}:v1.2.3`, State: "running" });
+    const runner = scriptedRunner({
+      "ps --format json": [
+        psEntry("example-app-api-10", "example-app-api"),
+        psEntry("example-app-web-2", "example-app-web"),
+        psEntry("example-app-api-9", "example-app-api"),
+        psEntry("example-app-postgres-1", "example-app-postgres"),
+      ].join("\n"),
+      " inspect ": JSON.stringify({ Image: "sha256:abc", RestartCount: 0, State: { Status: "running" } }),
+    });
+    const status = getComposeStatus(root, "production", runner);
+    const service = (name: string) => status.services.find((entry) => entry.name === name);
+    expect(service("example-app-api")).toMatchObject({
+      containers: ["example-app-api-9", "example-app-api-10"],
+      running: 2,
+      desired: 2,
+    });
+    expect(service("example-app-web")?.containers).toEqual(["example-app-web-2"]);
+    expect(service("example-app-postgres")?.containers).toEqual(["example-app-postgres-1"]);
   });
 });
 

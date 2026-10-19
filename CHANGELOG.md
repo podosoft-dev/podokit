@@ -39,6 +39,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   fails, and `podo deploy status` reports the newest as `lastMigration`. The
   deployment identity needs `get`, `create`, and `patch` on ConfigMaps, which
   Helm's runtime ConfigMap already requires; a failed write is a warning.
+- Tooling that found a Docker Compose deployment's containers by a fixed name,
+  such as `<project>-<project>-api-1`, lost them after the first release with
+  side-by-side rollouts: a release starts new containers beside the old ones and
+  removes the old, so Compose numbers the new ones after the highest in use and
+  the names end in `-2`, `-3`, and higher with every release. `podo deploy status`
+  now lists each service's current container names (`containers`), and
+  `docs/deployment.md` explains the renumbering and how to select a service's
+  containers by their `com.docker.compose.project` and
+  `com.docker.compose.service` labels.
 
 ## [1.6.5] - 2026-10-19
 
