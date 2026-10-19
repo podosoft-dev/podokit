@@ -39,6 +39,8 @@ import {
   type DeploymentRuntime,
   type KubernetesRolloutState,
 } from "./deploy-render";
+import { readManifest } from "./lockfile";
+import { resolveToolchain, toolchainMigrationCommand } from "./toolchain";
 
 export type DeploymentDoctorFinding = DeployFinding;
 
@@ -81,10 +83,28 @@ export interface DeploymentPlan {
   warnings: string[];
 }
 
+/**
+ * One migration Job's outcome. The Job itself is deleted an hour after it
+ * finishes, so apply copies this into a ConfigMap that outlives it.
+ */
+export interface MigrationRecord {
+  release: string;
+  job: string;
+  image: string;
+  command: string[];
+  startedAt: string | null;
+  finishedAt: string | null;
+  /** `incomplete`: apply stopped waiting while the Job still ran, or the Job could not be read. */
+  result: "succeeded" | "failed" | "incomplete";
+  reason?: string;
+}
+
 export interface DeploymentStatus {
   profile: string;
   helmRevision: number | null;
   helmStatus: string;
+  /** The newest entry of the migration ledger, `<release>-migrations`; null before the first one. */
+  lastMigration: MigrationRecord | null;
   deployments: Array<{
     name: string;
     readyReplicas: number;
@@ -1252,6 +1272,150 @@ function waitForDependencies(
   }
 }
 
+const MIGRATION_LEDGER_KEY = "migrations.json";
+const MIGRATION_LEDGER_DEPTH = 20;
+
+export function migrationLedgerName(profile: DeployProfileV1): string {
+  return `${profile.target.release}-migrations`;
+}
+
+function isMigrationRecord(value: unknown): value is MigrationRecord {
+  const optionalText = (entry: unknown) => entry === null || typeof entry === "string";
+  return (
+    isRecord(value) &&
+    typeof value.release === "string" &&
+    typeof value.job === "string" &&
+    typeof value.image === "string" &&
+    Array.isArray(value.command) &&
+    value.command.every((part) => typeof part === "string") &&
+    optionalText(value.startedAt) &&
+    optionalText(value.finishedAt) &&
+    (value.result === "succeeded" || value.result === "failed" || value.result === "incomplete") &&
+    (value.reason === undefined || typeof value.reason === "string")
+  );
+}
+
+/** The recorded migration outcomes, oldest first. */
+export function readMigrationLedger(profile: DeployProfileV1, runner: CommandRunner): MigrationRecord[] {
+  const name = migrationLedgerName(profile);
+  const output = checked(
+    runner,
+    "kubectl",
+    kubectlArgs(profile, ["get", "configmap", name, "--ignore-not-found=true", "-o", "json"]),
+  );
+  if (!output.trim()) return [];
+  const configMap = parseJson<unknown>(output, `ConfigMap ${name}`);
+  const ledger = isRecord(configMap) && isRecord(configMap.data) ? configMap.data[MIGRATION_LEDGER_KEY] : undefined;
+  const parsed = typeof ledger === "string" ? parseJson<unknown>(ledger, `ConfigMap ${name} ${MIGRATION_LEDGER_KEY}`) : null;
+  if (
+    !isRecord(parsed) ||
+    parsed.schemaVersion !== 1 ||
+    !Array.isArray(parsed.entries) ||
+    !parsed.entries.every(isMigrationRecord)
+  ) {
+    throw new Error(`ConfigMap ${name} does not hold a valid migration ledger.`);
+  }
+  return parsed.entries;
+}
+
+function condition(conditions: unknown, type: string): Record<string, unknown> | undefined {
+  return Array.isArray(conditions)
+    ? conditions.find((entry): entry is Record<string, unknown> =>
+        isRecord(entry) && entry.type === type && entry.status === "True")
+    : undefined;
+}
+
+/** What the finished, failed, or still running migration Job reports about itself. */
+function migrationOutcome(
+  profile: DeployProfileV1,
+  release: string,
+  job: string,
+  rendered: { image: string; command: string[] },
+  runner: CommandRunner,
+): MigrationRecord {
+  const text = (value: unknown): string | null => (typeof value === "string" ? value : null);
+  const result = runner("kubectl", kubectlArgs(profile, ["get", "job", job, "-o", "json"]), { capture: true });
+  let resource: unknown = null;
+  try {
+    resource = result.status === 0 ? JSON.parse(result.stdout) as unknown : null;
+  } catch {
+    resource = null;
+  }
+  const status = isRecord(resource) && isRecord(resource.status) ? resource.status : null;
+  const spec = isRecord(resource) && isRecord(resource.spec) && isRecord(resource.spec.template) &&
+    isRecord(resource.spec.template.spec) ? resource.spec.template.spec : null;
+  const container = Array.isArray(spec?.containers) && isRecord(spec.containers[0]) ? spec.containers[0] : null;
+  const command = Array.isArray(container?.command) && container.command.every((part) => typeof part === "string")
+    ? container.command
+    : rendered.command;
+  const record = {
+    release,
+    job,
+    image: text(container?.image) ?? rendered.image,
+    command,
+    startedAt: text(status?.startTime),
+  };
+  if (!status) {
+    return { ...record, finishedAt: null, result: "incomplete", reason: "the Job could not be read" };
+  }
+  const complete = condition(status.conditions, "Complete");
+  if (complete) {
+    return {
+      ...record,
+      finishedAt: text(status.completionTime) ?? text(complete.lastTransitionTime),
+      result: "succeeded",
+    };
+  }
+  const failed = condition(status.conditions, "Failed");
+  if (failed) {
+    return {
+      ...record,
+      finishedAt: text(failed.lastTransitionTime),
+      result: "failed",
+      reason: [text(failed.reason), text(failed.message)].filter(Boolean).join(": ") || "the Job failed",
+    };
+  }
+  return { ...record, finishedAt: null, result: "incomplete", reason: "the Job was still running when apply stopped waiting" };
+}
+
+/**
+ * Appends the migration Job's outcome to the ledger ConfigMap, under the apply's
+ * Lease. A failed write is reported and does not stop the deployment: the
+ * migration has already run, and the ledger only describes it.
+ */
+function recordMigration(profile: DeployProfileV1, record: MigrationRecord, runner: CommandRunner): void {
+  const name = migrationLedgerName(profile);
+  const temporaryRoot = mkdtempSync(join(tmpdir(), "podokit-migration-ledger-"));
+  try {
+    const entries = [...readMigrationLedger(profile, runner), record].slice(-MIGRATION_LEDGER_DEPTH);
+    const path = join(temporaryRoot, "ledger.json");
+    writeFileSync(
+      path,
+      JSON.stringify({
+        apiVersion: "v1",
+        kind: "ConfigMap",
+        metadata: {
+          name,
+          labels: { "app.kubernetes.io/name": name, "app.kubernetes.io/managed-by": "podokit" },
+        },
+        data: { [MIGRATION_LEDGER_KEY]: JSON.stringify({ schemaVersion: 1, entries }, null, 2) },
+      }),
+      { mode: 0o600 },
+    );
+    checked(
+      runner,
+      "kubectl",
+      kubectlArgs(profile, ["apply", "--server-side", "--field-manager=podokit", "--force-conflicts", "-f", path]),
+    );
+  } catch (error) {
+    console.warn(
+      `The migration ${record.result === "succeeded" ? "succeeded" : `result (${record.result})`} could not be recorded in ConfigMap ${name}: ${(error as Error).message}`,
+    );
+  } finally {
+    rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+}
+
 function migrationJobName(profile: DeployProfileV1, release: string): string {
   const slug = release.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   return `${profile.target.release}-migrate-${slug}`;
@@ -1442,12 +1606,25 @@ export async function applyDeployment(
       kubectlArgs(profile, ["apply", "-f", runtime.migrationManifest]),
       false,
     );
-    checked(
+    let migrationError: unknown = null;
+    try {
+      checked(
+        runner,
+        "kubectl",
+        kubectlArgs(profile, ["wait", "--for=condition=complete", `job/${job}`, "--timeout=10m"]),
+        false,
+      );
+    } catch (error) {
+      migrationError = error;
+    }
+    const command = profile.migration?.command ??
+      toolchainMigrationCommand(readManifest(projectRoot)?.toolchain ?? resolveToolchain());
+    recordMigration(
+      profile,
+      migrationOutcome(profile, release, job, { image: plan.images.api, command }, runner),
       runner,
-      "kubectl",
-      kubectlArgs(profile, ["wait", "--for=condition=complete", `job/${job}`, "--timeout=10m"]),
-      false,
     );
+    if (migrationError) throw migrationError;
 
     checked(
       runner,
@@ -1566,6 +1743,7 @@ export function getDeploymentStatus(
     profile: profileName,
     helmRevision: helm.revision,
     helmStatus: helm.status,
+    lastMigration: readMigrationLedger(profile, runner).at(-1) ?? null,
     deployments,
   };
 }

@@ -254,7 +254,8 @@ Apply performs the same steps on both drivers:
    Lease, or a `set -C` lock file in a state volume.
 3. Reconcile and wait for PodoKit-run dependencies. On Compose this includes the
    object storage init job, which must exit 0.
-4. Run the migration with the exact API image digest.
+4. Run the migration with the exact API image digest. On Kubernetes, record its
+   outcome in the [migration ledger](#migration-ledger).
 5. Roll out API, web, and any worker, then wait for health. Old API and web
    containers keep serving until their replacements are healthy, see
    [rolling updates on Kubernetes](#rolling-updates-on-kubernetes) and
@@ -854,7 +855,8 @@ podo deploy verify --profile production --json
 ```
 
 Status reports the deployed revision, the actual images, ready or running replicas,
-and restart totals. Verification checks the configured HTTPS origin without changing
+restart totals, and on Kubernetes the last recorded migration (`lastMigration`, see
+the [migration ledger](#migration-ledger)). Verification checks the configured HTTPS origin without changing
 the target.
 
 On Kubernetes, a Deployment's `restartCount` adds up the container restarts of the
@@ -867,6 +869,42 @@ grace period after `apply` or `rollback` returns, so `previousPods` is often non
 right after a rollout; their restarts do not describe the new release. The Compose
 driver lists only running containers, and apply and rollback remove the containers
 they replace before they return, so it has no previous containers to report.
+
+### Migration ledger
+
+On Kubernetes the migration runs as a Job that Kubernetes deletes, with its pod and
+logs, an hour after it finishes (`ttlSecondsAfterFinished: 3600`). So that its outcome
+can still be checked later, apply appends it, while it holds the Lease, to the
+`migrations.json` key of the ConfigMap `<release>-migrations`, which keeps the latest
+20 runs, and `status` reports the newest one as `lastMigration`:
+
+```json
+{
+  "release": "v1.2.3",
+  "job": "example-app-migrate-v1-2-3",
+  "image": "ghcr.io/example/example-app-api:v1.2.3@sha256:…",
+  "command": ["bun", "run", "migrate:all"],
+  "startedAt": "2026-10-19T07:38:08Z",
+  "finishedAt": "2026-10-19T07:38:14Z",
+  "result": "succeeded"
+}
+```
+
+`result` is `succeeded`, `failed` with the Job's `reason`, or `incomplete` when apply
+stopped waiting while the Job still ran or could not read it. A failed or incomplete
+migration is recorded before apply fails. Deployment evidence collected later can read
+the record with `podo deploy status --profile production --json`, or with read access
+to ConfigMaps only:
+
+```bash
+kubectl -n <namespace> get configmap <release>-migrations -o jsonpath='{.data.migrations\.json}'
+```
+
+The ledger is written with `kubectl apply --server-side`, so the deployment identity
+needs `get`, `create`, and `patch` on ConfigMaps, which Helm's runtime ConfigMap
+already requires. If the write fails, apply warns and continues, since the migration
+has already run. Apply and rollback never delete the ConfigMap; remove it with the
+namespace.
 
 ## Rollback
 

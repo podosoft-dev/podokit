@@ -78,14 +78,20 @@ interface RunnerOptions {
   recordedStorageReadFails?: boolean;
   recordedStorageParseFails?: boolean;
   recordedStorageOutput?: string;
+  migrationJob?: unknown;
+  migrationLedger?: string;
+  failMigrationWait?: boolean;
+  failLedgerWrite?: boolean;
 }
 
 function deploymentRunner(options: RunnerOptions = {}): {
   calls: Array<{ command: string; args: string[] }>;
   leaseTimestamps: Array<{ acquireTime: string; renewTime: string }>;
+  ledgerWrites: unknown[];
   runner: CommandRunner;
 } {
   const calls: Array<{ command: string; args: string[] }> = [];
+  const ledgerWrites: unknown[] = [];
   const leaseTimestamps: Array<{ acquireTime: string; renewTime: string }> = [];
   let holderIdentity = "";
   const runner: CommandRunner = (command, args) => {
@@ -310,9 +316,26 @@ spec:
     ) {
       return { status: 1, stdout: "", stderr: "migration apply failed" };
     }
+    if (options.failMigrationWait && args.includes("wait") && args.some((entry) => entry.startsWith("job/"))) {
+      return { status: 1, stdout: "", stderr: "timed out waiting for the condition" };
+    }
+    if (args.includes("get") && args.includes("job") && args.includes("json")) {
+      return options.migrationJob === undefined
+        ? { status: 1, stdout: "", stderr: "not found" }
+        : { status: 0, stdout: JSON.stringify(options.migrationJob), stderr: "" };
+    }
+    if (args.includes("get") && args.includes("configmap")) {
+      return { status: 0, stdout: options.migrationLedger ?? "", stderr: "" };
+    }
+    if (args.includes("apply") && args.includes("--server-side")) {
+      ledgerWrites.push(JSON.parse(readFileSync(args[args.indexOf("-f") + 1]!, "utf8")) as unknown);
+      return options.failLedgerWrite
+        ? { status: 1, stdout: "", stderr: "configmaps is forbidden" }
+        : { status: 0, stdout: "configmap/example-app-migrations serverside-applied", stderr: "" };
+    }
     return { status: 0, stdout: "", stderr: "" };
   };
-  return { calls, leaseTimestamps, runner };
+  return { calls, leaseTimestamps, ledgerWrites, runner };
 }
 
 function successfulFetcher() {
@@ -517,6 +540,150 @@ describe("deployment mutations", () => {
         ({ args }) => args.includes("delete") && args.includes("lease"),
       ),
     ).toBe(true);
+  });
+
+  describe("migration ledger", () => {
+    function migrationJob(condition: Record<string, string>, completionTime?: string): unknown {
+      return {
+        spec: {
+          template: {
+            spec: {
+              containers: [{
+                name: "migrate",
+                image: `example-api:v1.2.3@sha256:${"b".repeat(64)}`,
+                command: ["bun", "run", "migrate:all"],
+              }],
+            },
+          },
+        },
+        status: {
+          startTime: "2026-10-19T07:38:08Z",
+          ...(completionTime ? { completionTime } : {}),
+          conditions: [{ status: "True", lastTransitionTime: "2026-10-19T07:38:14Z", ...condition }],
+        },
+      };
+    }
+
+    function ledger(entries: number): string {
+      return JSON.stringify({
+        data: {
+          "migrations.json": JSON.stringify({
+            schemaVersion: 1,
+            entries: Array.from({ length: entries }, (_, index) => ({
+              release: `v1.0.${index}`,
+              job: `example-app-migrate-v1-0-${index}`,
+              image: "example-api:v1.0.0",
+              command: ["bun", "run", "migrate:all"],
+              startedAt: null,
+              finishedAt: null,
+              result: "succeeded",
+            })),
+          }),
+        },
+      });
+    }
+
+    function writtenEntries(write: unknown): Array<Record<string, unknown>> {
+      const configMap = write as { metadata: { name: string }; data: Record<string, string> };
+      expect(configMap.metadata.name).toBe("example-app-migrations");
+      return (JSON.parse(configMap.data["migrations.json"]!) as { entries: Array<Record<string, unknown>> }).entries;
+    }
+
+    it("records a finished migration in a ConfigMap that outlives the Job", async () => {
+      const root = initializedProject();
+      const { calls, ledgerWrites, runner } = deploymentRunner({
+        migrationJob: migrationJob({ type: "Complete" }, "2026-10-19T07:38:14Z"),
+        migrationLedger: ledger(20),
+      });
+      const plan = planDeployment(root, "production", "v1.2.3", runner);
+
+      const status = await applyDeployment(root, "production", "v1.2.3", plan.planHash, runner, successfulFetcher());
+
+      expect(ledgerWrites).toHaveLength(1);
+      const entries = writtenEntries(ledgerWrites[0]);
+      expect(entries).toHaveLength(20);
+      expect(entries[0]?.release).toBe("v1.0.1");
+      expect(entries.at(-1)).toEqual({
+        release: "v1.2.3",
+        job: "example-app-migrate-v1-2-3",
+        image: `example-api:v1.2.3@sha256:${"b".repeat(64)}`,
+        command: ["bun", "run", "migrate:all"],
+        startedAt: "2026-10-19T07:38:08Z",
+        finishedAt: "2026-10-19T07:38:14Z",
+        result: "succeeded",
+      });
+      const ledgerWrite = calls.findIndex(({ args }) => args.includes("--server-side"));
+      const applicationUpgrade = calls.findIndex(
+        ({ command, args }) => command === "helm" && args[0] === "upgrade" && args[2] === "example-app",
+      );
+      expect(ledgerWrite).toBeGreaterThan(calls.findIndex(({ args }) => args.includes("wait")));
+      expect(applicationUpgrade).toBeGreaterThan(ledgerWrite);
+      // The runner answers status with the ledger as it was before this apply.
+      expect(status.lastMigration?.release).toBe("v1.0.19");
+    });
+
+    it("records a failed migration and still fails the apply before the rollout", async () => {
+      const root = initializedProject();
+      const { calls, ledgerWrites, runner } = deploymentRunner({
+        failMigrationWait: true,
+        migrationJob: migrationJob({ type: "Failed", reason: "BackoffLimitExceeded", message: "Job has reached the specified backoff limit" }),
+      });
+      const plan = planDeployment(root, "production", "v1.2.3", runner);
+
+      await expect(applyDeployment(root, "production", "v1.2.3", plan.planHash, runner, successfulFetcher()))
+        .rejects.toThrow(/wait --for=condition=complete job\/example-app-migrate-v1-2-3 .* failed with status 1/);
+
+      expect(writtenEntries(ledgerWrites[0])).toEqual([
+        expect.objectContaining({
+          release: "v1.2.3",
+          finishedAt: "2026-10-19T07:38:14Z",
+          result: "failed",
+          reason: "BackoffLimitExceeded: Job has reached the specified backoff limit",
+        }),
+      ]);
+      expect(calls.some(({ command, args }) => command === "helm" && args[2] === "example-app")).toBe(false);
+      expect(calls.at(-1)?.args).toEqual(expect.arrayContaining(["delete", "lease"]));
+    });
+
+    it("records a migration apply stopped waiting for as incomplete", async () => {
+      const root = initializedProject();
+      const { ledgerWrites, runner } = deploymentRunner({
+        failMigrationWait: true,
+        migrationJob: { spec: {}, status: { startTime: "2026-10-19T07:38:08Z", active: 1 } },
+      });
+      const plan = planDeployment(root, "production", "v1.2.3", runner);
+
+      await expect(applyDeployment(root, "production", "v1.2.3", plan.planHash, runner, successfulFetcher()))
+        .rejects.toThrow("failed with status 1");
+
+      expect(writtenEntries(ledgerWrites[0])).toEqual([
+        expect.objectContaining({
+          image: `ghcr.io/example/example-app-api:v1.2.3@sha256:${"b".repeat(64)}`,
+          command: ["bun", "run", "migrate:all"],
+          startedAt: "2026-10-19T07:38:08Z",
+          finishedAt: null,
+          result: "incomplete",
+          reason: "the Job was still running when apply stopped waiting",
+        }),
+      ]);
+    });
+
+    it("warns and keeps deploying when the ledger cannot be written", async () => {
+      const root = initializedProject();
+      const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const { calls, runner } = deploymentRunner({
+        migrationJob: migrationJob({ type: "Complete" }, "2026-10-19T07:38:14Z"),
+        failLedgerWrite: true,
+      });
+      const plan = planDeployment(root, "production", "v1.2.3", runner);
+
+      await applyDeployment(root, "production", "v1.2.3", plan.planHash, runner, successfulFetcher());
+
+      expect(warning).toHaveBeenCalledWith(
+        expect.stringContaining("The migration succeeded could not be recorded in ConfigMap example-app-migrations"),
+      );
+      expect(calls.some(({ command, args }) => command === "helm" && args[2] === "example-app")).toBe(true);
+    });
   });
 
   it("locks rollback, restarts workloads for current Secrets, and verifies", async () => {

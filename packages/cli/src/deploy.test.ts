@@ -1011,6 +1011,43 @@ describe("deployment doctor and verification", () => {
     ]);
   });
 
+  it("reports the newest recorded migration, long after its Job is gone", () => {
+    const root = initializedProject();
+    const base = statusRunner({
+      deployments: { "example-app-api": deploymentResource("example-app-api", "1") },
+      replicaSets: [replicaSet("1", "current")],
+      pods: [pod("current", [0])],
+    });
+    let ledger = "";
+    const runner: CommandRunner = (command, args, options) =>
+      args.includes("configmap") ? { status: 0, stdout: ledger, stderr: "" } : base(command, args, options);
+    const entry = (release: string, result: string) => ({
+      release,
+      job: `example-app-migrate-${release.replace(/\./g, "-")}`,
+      image: `example-api:${release}@sha256:${"b".repeat(64)}`,
+      command: ["bun", "run", "migrate:all"],
+      startedAt: "2026-10-19T07:38:08Z",
+      finishedAt: "2026-10-19T07:38:14Z",
+      result,
+    });
+
+    expect(getDeploymentStatus(root, "production", runner).lastMigration).toBeNull();
+    ledger = JSON.stringify({
+      data: {
+        "migrations.json": JSON.stringify({
+          schemaVersion: 1,
+          entries: [entry("v1.2.2", "failed"), entry("v1.2.3", "succeeded")],
+        }),
+      },
+    });
+    expect(getDeploymentStatus(root, "production", runner).lastMigration).toEqual(entry("v1.2.3", "succeeded"));
+
+    ledger = JSON.stringify({ data: { "migrations.json": JSON.stringify({ schemaVersion: 1, entries: [{ release: 1 }] }) } });
+    expect(() => getDeploymentStatus(root, "production", runner)).toThrow(
+      "ConfigMap example-app-migrations does not hold a valid migration ledger.",
+    );
+  });
+
   it("counts restarts of the current revision's running pods apart from earlier ones", () => {
     const root = initializedProject();
     const calls: string[][] = [];

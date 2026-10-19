@@ -28,6 +28,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   a Secret changed after the last apply, the earlier checksum cannot tell which,
   so the dependencies restart once, as they would have before. The API, web, and
   worker pods roll once on that apply.
+- A Kubernetes migration's outcome could not be checked an hour after the
+  deployment: the migration Job and its logs are deleted then
+  (`ttlSecondsAfterFinished: 3600`), so deployment evidence collected later had
+  nothing to confirm the release's migration with. `podo deploy apply` now
+  appends each migration Job's release, job name, image digest, command, start
+  and finish times, and result (`succeeded`, `failed` with the Job's reason, or
+  `incomplete`) to the `migrations.json` key of the ConfigMap
+  `<release>-migrations`, which keeps the latest 20 runs, before it continues or
+  fails, and `podo deploy status` reports the newest as `lastMigration`. The
+  deployment identity needs `get`, `create`, and `patch` on ConfigMaps, which
+  Helm's runtime ConfigMap already requires; a failed write is a warning.
 
 ## [1.6.5] - 2026-10-19
 
