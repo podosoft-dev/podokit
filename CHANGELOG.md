@@ -201,6 +201,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   container that something else had recreated from an image older than the
   synced files, and rebuilt the service, so the dev API answered 503 for about
   8 seconds. Watch now ignores one-off containers.
+- A development API whose automatic `migrate:all` failed at start, for example
+  because PostgreSQL was down, stayed not ready until it restarted: its
+  `migrations` readiness check failed for good, so `/api/health/ready` answered
+  503 after the database came back. The API now retries `migrate:all` after 1 s,
+  then after twice the previous wait, up to every 10 s, and removes the check
+  once a run succeeds. The retries stop when the API shuts down.
 
 ### Upgrade notes
 

@@ -108,9 +108,11 @@ reaches the development database before a request needs it, and so does a module
 you just added. The log names what ran (`Applied 1 migrations: ...`) and how long
 it took; when the auth schema itself is pending, Better Auth first reports a
 schema mismatch as the API loads, and the following lines show it created; with nothing pending it adds about 0.7 s to a restart. A failing
-migration does not stop the API: the error stays in `podo dev logs api` and
-`/api/health/ready` reports a `migrations` check that is down until a restart
-applies it. Write a hand-made migration completely before you save it, because a
+migration does not stop the API: the error stays in `podo dev logs api`,
+`/api/health/ready` reports a `migrations` check that is down, and the API runs
+`migrate:all` again after 1 s, then after twice the previous wait, up to every
+10 s, until it succeeds. A database that was down while the API started is
+picked up once it is back, without a restart. Write a hand-made migration completely before you save it, because a
 saved migration runs at the next restart; `migration:revert` undoes the last one.
 The flag is ignored in production, where the deployment's migration step owns
 the schema. Set `PODOKIT_DEV_MIGRATE=true` in `apps/api/.env` to get the same
