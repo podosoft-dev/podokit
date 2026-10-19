@@ -567,6 +567,19 @@ exact path, with or without a query string, to `BACKEND_INTERNAL_URL`, so a
 WebSocket feature works the same way in both setups without a proxy entry of
 your own. The API must authenticate each upgrade itself.
 
+#### Browser errors in the dev server output
+
+When hydration fails in the browser, for example because a module request
+failed, and the root error page cannot load either, SvelteKit renders
+`src/error.html` in the browser. The server answered the page with 200 and has
+no error of its own to log. The managed `vite.config.ts` therefore sets Vite's
+`server.forwardConsole` to `{ unhandledErrors: true, logLevels: ["error"] }`,
+so the dev server prints the browser's uncaught errors and `console.error`
+messages, such as `[Unhandled rejection] TypeError: Failed to fetch dynamically
+imported module: ...`, with its own output and the container log. Set
+`server.forwardConsole` in `appViteConfig` to change the levels, or to `false`
+to turn it off.
+
 ### Route files and update tiers
 
 `apps/web/src/routes/**` is application-owned, but modules keep some route

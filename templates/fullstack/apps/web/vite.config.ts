@@ -3,7 +3,14 @@ import adapter from "@sveltejs/adapter-bun";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
-import { defineConfig, mergeConfig, type EnvironmentModuleNode, type Plugin, type ProxyOptions } from "vite";
+import {
+  defineConfig,
+  mergeConfig,
+  type EnvironmentModuleNode,
+  type Plugin,
+  type ProxyOptions,
+  type ServerOptions,
+} from "vite";
 import { appSvelteKitConfig, appViteConfig } from "./vite.extensions.ts";
 
 // Inside the dev container, bind to all interfaces and accept local gateway or
@@ -11,6 +18,14 @@ import { appSvelteKitConfig, appViteConfig } from "./vite.extensions.ts";
 // browser origin so the same configuration works for both entry points.
 const inDocker = process.env.VITE_DOCKER === "1";
 const publicOrigin = process.env.PODOKIT_BUILD_ORIGIN;
+
+/**
+ * The dev server logs the browser's uncaught errors and console errors with its
+ * own output. A page that fails to hydrate, for example because a module request
+ * failed, otherwise leaves nothing in the server log: SvelteKit then renders
+ * src/error.html in the browser.
+ */
+export const BROWSER_ERRORS = { unhandledErrors: true, logLevels: ["error"] } satisfies ServerOptions["forwardConsole"];
 
 /**
  * Dev-server proxies for the exact WebSocket paths in `.podokit/dev.json`. A
@@ -85,7 +100,7 @@ export default defineConfig((env) =>
       ],
       server: {
         ...(inDocker ? { host: true, port: 5001, allowedHosts: true } : {}),
-        ...(env.command === "serve" ? { proxy: webSocketProxy(readDevConfig()) } : {}),
+        ...(env.command === "serve" ? { proxy: webSocketProxy(readDevConfig()), forwardConsole: BROWSER_ERRORS } : {}),
       },
     },
     typeof appViteConfig === "function" ? appViteConfig(env) : appViteConfig,

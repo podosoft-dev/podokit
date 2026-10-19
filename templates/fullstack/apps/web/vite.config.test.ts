@@ -1,9 +1,21 @@
 import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
-import { createServer, type ViteDevServer } from "vite";
+import { createServer, type UserConfig, type ViteDevServer } from "vite";
 import { describe, expect, it } from "vitest";
-import { refreshRecreatedFiles, webSocketProxy } from "./vite.config.ts";
+import config, { refreshRecreatedFiles, webSocketProxy } from "./vite.config.ts";
+
+async function resolved(command: "serve" | "build"): Promise<UserConfig> {
+  return await config({ command, mode: command === "serve" ? "development" : "production" });
+}
+
+describe("dev-server browser errors", () => {
+  it("logs the browser's uncaught errors and console errors with the dev server's output", async () => {
+    // A page that fails to hydrate otherwise leaves nothing in the server log.
+    expect((await resolved("serve")).server?.forwardConsole).toEqual({ unhandledErrors: true, logLevels: ["error"] });
+    expect((await resolved("build")).server?.forwardConsole).toBeUndefined();
+  });
+});
 
 describe("dev-server WebSocket proxy", () => {
   it("sends each exact path in .podokit/dev.json to the API", () => {
