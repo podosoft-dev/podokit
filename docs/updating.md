@@ -86,17 +86,19 @@ Each file in the plan has one of these labels:
 | `add`, `move`, `remove` | The new version adds, relocates, or drops the file. | Writes, moves, or deletes it. |
 | `keep` | You edited the file and its template did not change, or the new version no longer generates it. | Leaves your file as it is and lists it as kept. |
 | `merge` | You edited the file and its template changed too. | 3-way merges the two. |
-| `conflict` | A module path migration cannot apply, or (with `--from`) the merge leaves conflict markers. | Writes the markers for you to resolve; a migration conflict stops the update. |
+| `conflict` | A module path migration cannot apply, or the merge leaves conflict markers. | Writes the markers for you to resolve; a migration conflict stops the update. |
 | `review` | The template of a file you own changed. | Leaves it as it is; see below. |
 
-Without the previous version's templates the preview cannot tell how a `merge`
-will come out, so `--apply` reports each one as merged, conflict, or kept when
-the previous templates do not generate the file. Pass those templates with
-`--from` and the preview runs the same merges in memory: a clean one stays
-`merge`, one that leaves conflict markers shows as `conflict`, and one without
-a merge base shows as `keep`. The counts then match what `--apply --from` reports:
-`update` and `add` are written, `merge` merged, `conflict` conflict, and `keep`
-kept.
+The preview runs each merge in memory against the same merge base as `--apply`
+(see below): a clean one stays `merge`, one that leaves conflict markers shows
+as `conflict`, and one without a merge base shows as `keep`. The counts then
+match what `--apply` reports: `update` and `add` are written, `merge` merged,
+`conflict` conflict, and `keep` kept. When the project is on an older version
+than the CLI, the preview installs that version from npm to get its templates,
+as `--apply` does. If it cannot, the preview still lists the merges but prints
+`WARN the N merge(s) were not checked` with the reason, and `--apply` may leave
+conflict markers in them. Pass the previous templates with `--from` to check
+them offline:
 
 ```bash
 podo update --from ./previous-podokit/templates
