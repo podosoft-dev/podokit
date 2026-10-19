@@ -6,7 +6,7 @@ import {
   initializeDeploymentProfile,
   loadDeploymentProfile,
 } from "./deploy-profile";
-import { renderDeployment } from "./deploy-render";
+import { renderDeployment, type KubernetesRolloutState } from "./deploy-render";
 import { initLockfile, readManifest, writeManifest } from "./lockfile";
 import { resolveToolchain } from "./toolchain";
 
@@ -57,61 +57,153 @@ afterEach(() => {
 });
 
 describe("deployment rollout annotations", () => {
-  it("changes every workload checksum without exposing rollout state", () => {
-    const { root, profile } = initializedProfile();
-    const sensitiveState = "secret-uid:resource-version-with-sensitive-marker";
-    const first = renderDeployment(
-      root,
-      "production",
-      profile,
-      "v1.2.3",
-      undefined,
-      sensitiveState,
+  const secretNames = [
+    "example-app-api",
+    "example-app-postgres",
+    "example-app-redis",
+    "example-app-object-storage",
+  ];
+
+  function state(changed: Record<string, string> = {}, keep: Record<string, string> = {}): KubernetesRolloutState {
+    return {
+      secrets: Object.fromEntries(secretNames.map((name) => [name, changed[name] ?? `sha256:${name}-1`])),
+      keep,
+    };
+  }
+
+  /** The rollout checksum of each workload's pod template, by workload name. */
+  function rolloutChecksums(manifest: string): Record<string, string> {
+    const result: Record<string, string> = {};
+    for (const document of manifest.split(/\n---\n/)) {
+      const name = document.match(/^kind: (?:Deployment|StatefulSet)\nmetadata:\n {2}name: (\S+)/m)?.[1];
+      const value = annotationValues(document, rolloutAnnotation)[0];
+      if (name && value) result[name] = value;
+    }
+    return result;
+  }
+
+  function podTemplate(manifest: string, name: string): string {
+    const document = manifest.split(/\n---\n/).find((entry) =>
+      entry.startsWith(`apiVersion: apps/v1\nkind: StatefulSet\nmetadata:\n  name: ${name}\n`),
     );
+    if (!document) throw new Error(`no StatefulSet ${name}`);
+    return document.slice(document.indexOf("\n  template:\n"), document.indexOf("\n  volumeClaimTemplates:\n"));
+  }
+
+  it("restarts only the workloads that read a changed application Secret", () => {
+    const { root, profile } = initializedProfile();
+    const first = renderDeployment(root, "production", profile, "v1.2.3", undefined, state());
     const second = renderDeployment(
       root,
       "production",
       profile,
       "v1.2.3",
       undefined,
-      "changed-secret-state",
+      state({ "example-app-api": "sha256:example-app-api-2" }),
     );
-    const firstDependency = annotationValues(first.dependencyManifest, rolloutAnnotation);
-    const secondDependency = annotationValues(second.dependencyManifest, rolloutAnnotation);
-    const firstApplication = annotationValues(first.applicationManifest, rolloutAnnotation);
-    const secondApplication = annotationValues(second.applicationManifest, rolloutAnnotation);
 
-    expect(firstDependency).toHaveLength(3);
-    expect(firstApplication).toHaveLength(3);
-    expect(secondDependency).not.toEqual(firstDependency);
-    expect(secondApplication).not.toEqual(firstApplication);
-    expect(first.dependencyManifest).not.toContain(sensitiveState);
-    expect(first.applicationManifest).not.toContain(sensitiveState);
+    expect(second.dependencyManifest).toBe(first.dependencyManifest);
+    const before = rolloutChecksums(first.applicationManifest);
+    const after = rolloutChecksums(second.applicationManifest);
+    expect(Object.keys(before).sort()).toEqual(["example-app-api", "example-app-web", "example-app-worker"]);
+    expect(after["example-app-api"]).not.toBe(before["example-app-api"]);
+    expect(after["example-app-worker"]).not.toBe(before["example-app-worker"]);
+    expect(after["example-app-web"]).toBe(before["example-app-web"]);
+  });
+
+  it("restarts only the dependency whose own Secret changed", () => {
+    const { root, profile } = initializedProfile();
+    const first = renderDeployment(root, "production", profile, "v1.2.3", undefined, state());
+    const second = renderDeployment(
+      root,
+      "production",
+      profile,
+      "v1.2.3",
+      undefined,
+      state({ "example-app-postgres": "sha256:example-app-postgres-2" }),
+    );
+
+    const before = rolloutChecksums(first.dependencyManifest);
+    const after = rolloutChecksums(second.dependencyManifest);
+    expect(Object.keys(before).sort()).toEqual(["example-app-minio", "example-app-postgres", "example-app-redis"]);
+    expect(after["example-app-postgres"]).not.toBe(before["example-app-postgres"]);
+    expect(podTemplate(second.dependencyManifest, "example-app-redis")).toBe(
+      podTemplate(first.dependencyManifest, "example-app-redis"),
+    );
+    expect(podTemplate(second.dependencyManifest, "example-app-minio")).toBe(
+      podTemplate(first.dependencyManifest, "example-app-minio"),
+    );
+    expect(second.applicationManifest).toBe(first.applicationManifest);
+    expect(second.dependencies.find((entry) => entry.name === "example-app-postgres")?.secretChecksum).not.toBe(
+      first.dependencies.find((entry) => entry.name === "example-app-postgres")?.secretChecksum,
+    );
+  });
+
+  it("keeps a dependency's live checksum and records its inputs outside the pod template", () => {
+    const { root, profile } = initializedProfile();
+    const live = "sha256:checksum-an-earlier-version-applied";
+    const kept = renderDeployment(
+      root,
+      "production",
+      profile,
+      "v1.2.3",
+      undefined,
+      state({}, { "example-app-postgres": live }),
+    );
+    const keptAfterChange = renderDeployment(
+      root,
+      "production",
+      profile,
+      "v1.2.3",
+      undefined,
+      state({ "example-app-postgres": "sha256:example-app-postgres-2" }, { "example-app-postgres": live }),
+    );
+
+    expect(rolloutChecksums(kept.dependencyManifest)["example-app-postgres"]).toBe(live);
+    // The pod template is what Kubernetes compares; the StatefulSet's own annotations do not roll pods.
+    expect(podTemplate(keptAfterChange.dependencyManifest, "example-app-postgres")).toBe(
+      podTemplate(kept.dependencyManifest, "example-app-postgres"),
+    );
+    expect(podTemplate(kept.dependencyManifest, "example-app-postgres")).not.toContain("secret-checksum");
+    expect(podTemplate(kept.dependencyManifest, "example-app-postgres")).not.toContain("definition-checksum");
+    expect(kept.dependencyManifest).toMatch(
+      /kind: StatefulSet\nmetadata:\n {2}name: example-app-postgres\n {2}annotations:\n {4}podokit\.example\.com\/secret-checksum: "sha256:[a-f0-9]{64}"\n {4}podokit\.example\.com\/definition-checksum: "sha256:[a-f0-9]{64}"\nspec:/,
+    );
+  });
+
+  it("records a definition checksum that ignores the image and the rollout checksum", () => {
+    const { root, profile } = initializedProfile();
+    const first = renderDeployment(root, "production", profile, "v1.2.3", undefined, state());
+    profile.dependencies.postgres.image = "postgres:17.6-alpine";
+    const newImage = renderDeployment(
+      root,
+      "production",
+      profile,
+      "v1.2.3",
+      undefined,
+      state({ "example-app-postgres": "sha256:example-app-postgres-2" }),
+    );
+    profile.dependencies.postgres.maxConnections = 200;
+    const newArguments = renderDeployment(root, "production", profile, "v1.2.3", undefined, state());
+    const definition = (runtime: typeof first) =>
+      runtime.dependencies.find((entry) => entry.name === "example-app-postgres")?.definitionChecksum;
+
+    expect(definition(newImage)).toBe(definition(first));
+    expect(definition(newArguments)).not.toBe(definition(first));
+    expect(newArguments.dependencies.find((entry) => entry.name === "example-app-postgres")?.args).toEqual([
+      "-c",
+      "max_connections=200",
+    ]);
   });
 
   it("changes application checksums only when derived runtime config changes", () => {
     const { root, profile } = initializedProfile();
-    const first = renderDeployment(
-      root,
-      "production",
-      profile,
-      "v1.2.3",
-      undefined,
-      "stable-secret-state",
-    );
+    const first = renderDeployment(root, "production", profile, "v1.2.3", undefined, state());
     profile.runtimeConfig.PUBLIC_LABEL = "updated";
-    const second = renderDeployment(
-      root,
-      "production",
-      profile,
-      "v1.2.3",
-      undefined,
-      "stable-secret-state",
-    );
+    const second = renderDeployment(root, "production", profile, "v1.2.3", undefined, state());
 
-    expect(annotationValues(second.dependencyManifest, rolloutAnnotation)).toEqual(
-      annotationValues(first.dependencyManifest, rolloutAnnotation),
-    );
+    expect(second.dependencyManifest).toBe(first.dependencyManifest);
+    expect(rolloutChecksums(second.applicationManifest)).toEqual(rolloutChecksums(first.applicationManifest));
     expect(annotationValues(second.applicationManifest, runtimeAnnotation)).not.toEqual(
       annotationValues(first.applicationManifest, runtimeAnnotation),
     );

@@ -15,6 +15,7 @@ import {
 import {
   applyComposeDeployment,
   doctorComposeDeployment,
+  getComposeStatus,
   inspectComposeEndpointFingerprint,
   planComposeDeployment,
 } from "./deploy-compose";
@@ -803,6 +804,78 @@ describe("web service", () => {
     profile.runtimeConfig = { ...profile.runtimeConfig, CONNECTION_IDLE_TIMEOUT: "0", API_IDLE_TIMEOUT: "0" };
     expect(serviceOf(render(), "web")).toContain('      CONNECTION_IDLE_TIMEOUT: "0"\n');
     expect(serviceOf(render(), "api")).toContain('      API_IDLE_TIMEOUT: "0"\n');
+  });
+});
+
+describe("stop grace period", () => {
+  const serviceOf = (document: string, service: string): string =>
+    document.split(`\n  example-app-${service}:\n`)[1]?.split(/\n  \S/)[0] ?? "";
+
+  function everyService() {
+    const profile = composeProfileOf(initialized(["auth", "bullmq", "object-storage-s3"]));
+    profile.exposure.webSocketPaths = ["/agent/ws"];
+    return profile;
+  }
+
+  function render(profile: ReturnType<typeof composeProfileOf>): string {
+    return renderComposeDocument(
+      profile,
+      "v1.2.3",
+      { ...defaultComposeImages(profile, "v1.2.3"), gateway: `caddy:2.10-alpine@${GATEWAY_DIGEST}` },
+      "sha256:0",
+      NO_APP_PROXY_TIMEOUTS,
+    );
+  }
+
+  it("lets the API and web server drain like on Kubernetes, and the worker keep 30 s", () => {
+    const document = render(everyService());
+    expect(serviceOf(document, "api")).toContain("\n    stop_grace_period: 35s\n");
+    expect(serviceOf(document, "web")).toContain("\n    stop_grace_period: 35s\n");
+    expect(serviceOf(document, "worker")).toContain("\n    stop_grace_period: 30s\n");
+  });
+
+  it("follows SHUTDOWN_TIMEOUT from the profile", () => {
+    const profile = everyService();
+    profile.runtimeConfig = { ...profile.runtimeConfig, SHUTDOWN_TIMEOUT: "120" };
+    const document = render(profile);
+    expect(serviceOf(document, "api")).toContain("\n    stop_grace_period: 125s\n");
+    expect(serviceOf(document, "web")).toContain("\n    stop_grace_period: 125s\n");
+    expect(serviceOf(document, "worker")).toContain("\n    stop_grace_period: 30s\n");
+  });
+
+  it("leaves dependencies and the gateway as they were, so an upgrade does not recreate them", () => {
+    const document = render(everyService());
+    for (const service of ["postgres", "redis", "object-storage", "object-storage-init", "gateway"]) {
+      const block = serviceOf(document, service);
+      expect(block, service).toContain("image:");
+      expect(block, service).not.toContain("stop_grace_period");
+    }
+  });
+});
+
+describe("compose status", () => {
+  it("names each service's containers, which side-by-side rollouts renumber", () => {
+    const root = initialized(["auth"]);
+    const psEntry = (name: string, service: string) =>
+      JSON.stringify({ Name: name, Service: service, Image: `${service}:v1.2.3`, State: "running" });
+    const runner = scriptedRunner({
+      "ps --format json": [
+        psEntry("example-app-api-10", "example-app-api"),
+        psEntry("example-app-web-2", "example-app-web"),
+        psEntry("example-app-api-9", "example-app-api"),
+        psEntry("example-app-postgres-1", "example-app-postgres"),
+      ].join("\n"),
+      " inspect ": JSON.stringify({ Image: "sha256:abc", RestartCount: 0, State: { Status: "running" } }),
+    });
+    const status = getComposeStatus(root, "production", runner);
+    const service = (name: string) => status.services.find((entry) => entry.name === name);
+    expect(service("example-app-api")).toMatchObject({
+      containers: ["example-app-api-9", "example-app-api-10"],
+      running: 2,
+      desired: 2,
+    });
+    expect(service("example-app-web")?.containers).toEqual(["example-app-web-2"]);
+    expect(service("example-app-postgres")?.containers).toEqual(["example-app-postgres-1"]);
   });
 });
 

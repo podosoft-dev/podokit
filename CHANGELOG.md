@@ -6,6 +6,63 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Changing an application Secret on Kubernetes, such as a new `ADMIN_EMAILS` in
+  the API Secret, made the next `podo deploy apply` restart the in-cluster
+  PostgreSQL, Redis, and object storage StatefulSets. Every rendered pod
+  template carried one `podokit.example.com/rollout-state-checksum` over the
+  identity of every Secret the profile references, so any Secret change changed
+  every pod template; a production deployment with one replica of each answered
+  readiness 503 for about 7 seconds. Each workload's checksum now covers only
+  the Secrets it reads through env: the API and worker the API Secret, web the
+  web Secret, and each dependency its own Secret. The image pull and TLS Secrets
+  restart nothing. Each dependency StatefulSet records its Secret checksum and a
+  checksum of its pod template without the image in annotations on the
+  StatefulSet itself, which do not restart pods. `podo deploy plan` lists under
+  `dependencyRollouts` whether each in-cluster dependency is created, restarted,
+  or kept running, and why, and warns for every restart; `podo deploy doctor`
+  reports the same as `dependency-restart:<name>`. On the first apply after
+  upgrading, a dependency whose live checksum still matches the release's
+  current Secrets keeps its pod template byte for byte and is not restarted; if
+  a Secret changed after the last apply, the earlier checksum cannot tell which,
+  so the dependencies restart once, as they would have before. The API, web, and
+  worker pods roll once on that apply.
+- A Kubernetes migration's outcome could not be checked an hour after the
+  deployment: the migration Job and its logs are deleted then
+  (`ttlSecondsAfterFinished: 3600`), so deployment evidence collected later had
+  nothing to confirm the release's migration with. `podo deploy apply` now
+  appends each migration Job's release, job name, image digest, command, start
+  and finish times, and result (`succeeded`, `failed` with the Job's reason, or
+  `incomplete`) to the `migrations.json` key of the ConfigMap
+  `<release>-migrations`, which keeps the latest 20 runs, before it continues or
+  fails, and `podo deploy status` reports the newest as `lastMigration`. The
+  deployment identity needs `get`, `create`, and `patch` on ConfigMaps, which
+  Helm's runtime ConfigMap already requires; a failed write is a warning.
+- A Docker Compose deployment killed its API and web containers 10 seconds after
+  `SIGTERM`, Docker's default stop timeout, because the rendered services set no
+  `stop_grace_period`. The web server drains open requests for
+  `SHUTDOWN_TIMEOUT` (30 seconds unless set), and on Kubernetes the same servers
+  get 40 seconds, 35 of them after `SIGTERM`, so a long upload could be cut off
+  during a Compose rollout. The API and web services now render
+  `stop_grace_period` as `SHUTDOWN_TIMEOUT` from `runtimeConfig` plus 5 seconds,
+  35 by default, and the worker 30 seconds, the default it keeps on Kubernetes.
+  PostgreSQL, Redis, object storage, and the gateway keep Docker's default,
+  because a changed definition makes Compose recreate them, which would restart a
+  database or close the published port on the first apply after upgrading. That
+  apply recreates the API, web, and worker containers, and a rollback to a
+  revision applied before it is refused, since that revision no longer renders
+  byte for byte.
+- Tooling that found a Docker Compose deployment's containers by a fixed name,
+  such as `<project>-<project>-api-1`, lost them after the first release with
+  side-by-side rollouts: a release starts new containers beside the old ones and
+  removes the old, so Compose numbers the new ones after the highest in use and
+  the names end in `-2`, `-3`, and higher with every release. `podo deploy status`
+  now lists each service's current container names (`containers`), and
+  `docs/deployment.md` explains the renumbering and how to select a service's
+  containers by their `com.docker.compose.project` and
+  `com.docker.compose.service` labels.
+
 ## [1.6.5] - 2026-10-19
 
 ### Fixed

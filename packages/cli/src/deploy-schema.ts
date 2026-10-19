@@ -468,6 +468,20 @@ export function idleTimeoutConfig(
   return config;
 }
 
+const DEFAULT_SHUTDOWN_TIMEOUT_SECONDS = 30;
+
+/**
+ * How long the web server drains open requests after SIGTERM: SHUTDOWN_TIMEOUT
+ * from runtimeConfig, 30 unless set. The API gets the same window, and both
+ * drivers size their stop timeouts from it.
+ */
+export function shutdownDrainSeconds(runtimeConfig: Record<string, string>): number {
+  const configured = runtimeConfig.SHUTDOWN_TIMEOUT;
+  return configured !== undefined && /^\d+$/.test(configured)
+    ? Number(configured)
+    : DEFAULT_SHUTDOWN_TIMEOUT_SECONDS;
+}
+
 export function validateHttpsOrigin(value: string): void {
   let parsed: URL;
   try {

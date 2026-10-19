@@ -21,10 +21,26 @@ import {
   type DeployProfileV1,
 } from "./deploy-profile";
 import {
+  dependencyRollouts,
+  describeDependencyRollout,
+  keptRolloutChecksums,
+  parseLiveDependencies,
+  type DependencyRollout,
+  type LiveDependency,
+} from "./deploy-dependency-rollout";
+import {
+  renderDependencies,
   renderDeployment,
+  rolloutChecksum,
+  secretIdentityDigest,
+  workloadSecretChecksum,
+  workloadSecrets,
   type DeploymentImages,
   type DeploymentRuntime,
+  type KubernetesRolloutState,
 } from "./deploy-render";
+import { readManifest } from "./lockfile";
+import { resolveToolchain, toolchainMigrationCommand } from "./toolchain";
 
 export type DeploymentDoctorFinding = DeployFinding;
 
@@ -49,7 +65,12 @@ export interface DeploymentPlan {
   dependencyRevision: number | null;
   dependencyStatus: string;
   clusterStateDigest: string;
+  /** One checksum over the identity of every referenced Secret. */
   rolloutStateDigest: string;
+  /** What each workload's rollout checksum is rendered from. */
+  rolloutState: KubernetesRolloutState;
+  /** Which in-cluster dependencies the apply creates, restarts, or keeps running, and why. */
+  dependencyRollouts: DependencyRollout[];
   targetRevisionManifestDigest: string | null;
   target: {
     context: string;
@@ -62,10 +83,28 @@ export interface DeploymentPlan {
   warnings: string[];
 }
 
+/**
+ * One migration Job's outcome. The Job itself is deleted an hour after it
+ * finishes, so apply copies this into a ConfigMap that outlives it.
+ */
+export interface MigrationRecord {
+  release: string;
+  job: string;
+  image: string;
+  command: string[];
+  startedAt: string | null;
+  finishedAt: string | null;
+  /** `incomplete`: apply stopped waiting while the Job still ran, or the Job could not be read. */
+  result: "succeeded" | "failed" | "incomplete";
+  reason?: string;
+}
+
 export interface DeploymentStatus {
   profile: string;
   helmRevision: number | null;
   helmStatus: string;
+  /** The newest entry of the migration ledger, `<release>-migrations`; null before the first one. */
+  lastMigration: MigrationRecord | null;
   deployments: Array<{
     name: string;
     readyReplicas: number;
@@ -515,7 +554,56 @@ export function doctorDeployment(
           : `StorageClass ${dependency.storageClassName} is missing or inaccessible.`,
     });
   }
+  findings.push(...dependencyRestartFindings(profile, runner));
   return findings;
+}
+
+/**
+ * Which running dependencies the next apply would restart, and why. The doctor
+ * compares the profile's image tags, so a new digest behind the same tag shows
+ * only in the plan, which resolves digests.
+ */
+function dependencyRestartFindings(
+  profile: DeployProfileV1,
+  runner: CommandRunner,
+): DeploymentDoctorFinding[] {
+  if (!inClusterDependencyNames(profile).length) return [];
+  try {
+    const references = secretReferences(profile, runner);
+    // A missing Secret already fails above, and the plan refuses to run without it.
+    if (!references) return [];
+    const live = liveDependencies(profile, runner);
+    const { secrets, legacyRolloutChecksum } = rolloutStateFrom(references);
+    const state = dependencyRolloutState(profile, secrets, legacyRolloutChecksum, live);
+    const { postgres, redis, objectStorage } = profile.dependencies;
+    const rendered = renderDependencies(
+      profile,
+      {
+        postgres: postgres.mode === "inCluster" ? postgres.image : null,
+        redis: redis.mode === "inCluster" ? redis.image : null,
+        objectStorage: objectStorage.mode === "inCluster" ? objectStorage.image : null,
+        objectStorageClient: objectStorage.mode === "inCluster" ? objectStorage.clientImage : null,
+      },
+      state,
+    ).dependencies;
+    return dependencyRollouts(
+      live,
+      rendered,
+      (current, tag) => current === tag || current?.startsWith(`${tag}@`) === true,
+    ).map((rollout) => ({
+      code: `dependency-restart:${rollout.name}`,
+      ok: true,
+      ...(rollout.action === "restart" ? { warning: true as const } : {}),
+      message: `On the next apply, ${describeDependencyRollout(rollout)}`,
+    }));
+  } catch (error) {
+    return [{
+      code: "dependency-restart",
+      ok: true,
+      warning: true,
+      message: `Cannot tell which dependencies the next apply restarts: ${(error as Error).message}`,
+    }];
+  }
 }
 
 function currentHelmStatus(
@@ -565,6 +653,65 @@ function referencedSecretNames(profile: DeployProfileV1): string[] {
   ].filter((name, index, all) => all.indexOf(name) === index).sort();
 }
 
+interface SecretReference {
+  name: string;
+  identity: string;
+}
+
+function secretReference(
+  profile: DeployProfileV1,
+  name: string,
+  runner: CommandRunner,
+): SecretReference | null {
+  const result = runner(
+    "kubectl",
+    kubectlArgs(profile, [
+      "get",
+      "secret",
+      name,
+      "-o",
+      "jsonpath={.metadata.uid}:{.metadata.resourceVersion}",
+    ]),
+    { capture: true },
+  );
+  if (result.status !== 0) return null;
+  const identity = result.stdout.trim();
+  if (!/^[^:]+:[^:]+$/.test(identity)) {
+    throw new Error(`Secret ${name} does not expose a stable Kubernetes identity.`);
+  }
+  return { name, identity };
+}
+
+/** The identity of every referenced Secret, or null when one cannot be read. */
+function secretReferences(profile: DeployProfileV1, runner: CommandRunner): SecretReference[] | null {
+  const references: SecretReference[] = [];
+  for (const name of referencedSecretNames(profile)) {
+    const reference = secretReference(profile, name, runner);
+    if (!reference) return null;
+    references.push(reference);
+  }
+  return references;
+}
+
+/**
+ * Secret identities are uid:resourceVersion, which changes with every write to a
+ * Secret, so a workload restarts to read new values. Only digests leave this
+ * function: the identities themselves never reach a manifest or a plan.
+ */
+function rolloutStateFrom(references: SecretReference[]): {
+  rolloutStateDigest: string;
+  secrets: Record<string, string>;
+  /** The rollout checksum PodoKit 1.6.5 and earlier gave every workload. */
+  legacyRolloutChecksum: string;
+} {
+  const rolloutStateDigest = `sha256:${createHash("sha256")
+    .update(JSON.stringify(references))
+    .digest("hex")}`;
+  const secrets: Record<string, string> = {};
+  for (const { name, identity } of references) secrets[name] = secretIdentityDigest(name, identity);
+  return { rolloutStateDigest, secrets, legacyRolloutChecksum: rolloutChecksum(rolloutStateDigest) };
+}
+
 function clusterState(
   profile: DeployProfileV1,
   runner: CommandRunner,
@@ -573,40 +720,63 @@ function clusterState(
   dependencyStatus: string;
   clusterStateDigest: string;
   rolloutStateDigest: string;
+  secrets: Record<string, string>;
+  legacyRolloutChecksum: string;
 } {
   const dependency = currentHelmStatus(
     profile,
     runner,
     `${profile.target.release}-dependencies`,
   );
-  const secretReferences = referencedSecretNames(profile).map((name) => {
-    const identity = checked(
-      runner,
-      "kubectl",
-      kubectlArgs(profile, [
-        "get",
-        "secret",
-        name,
-        "-o",
-        "jsonpath={.metadata.uid}:{.metadata.resourceVersion}",
-      ]),
-    ).trim();
-    if (!/^[^:]+:[^:]+$/.test(identity)) {
-      throw new Error(`Secret ${name} does not expose a stable Kubernetes identity.`);
-    }
-    return { name, identity };
+  const references = referencedSecretNames(profile).map((name) => {
+    const reference = secretReference(profile, name, runner);
+    if (!reference) throw new Error(`Secret ${name} is missing or inaccessible.`);
+    return reference;
   });
-  const rolloutStateDigest = `sha256:${createHash("sha256")
-    .update(JSON.stringify(secretReferences))
-    .digest("hex")}`;
   return {
     dependencyRevision: dependency.revision,
     dependencyStatus: dependency.status,
-    rolloutStateDigest,
+    ...rolloutStateFrom(references),
     clusterStateDigest: `sha256:${createHash("sha256")
-      .update(JSON.stringify({ dependency, secretReferences }))
+      .update(JSON.stringify({ dependency, secretReferences: references }))
       .digest("hex")}`,
   };
+}
+
+function inClusterDependencyNames(profile: DeployProfileV1): string[] {
+  const release = profile.target.release;
+  return [
+    ...(profile.dependencies.postgres.mode === "inCluster" ? [`${release}-postgres`] : []),
+    ...(profile.dependencies.redis.mode === "inCluster" ? [`${release}-redis`] : []),
+    ...(profile.dependencies.objectStorage.mode === "inCluster" ? [`${release}-minio`] : []),
+  ];
+}
+
+/** The live dependency StatefulSets, read in one request; missing ones are left out. */
+function liveDependencies(profile: DeployProfileV1, runner: CommandRunner): Map<string, LiveDependency> {
+  const names = inClusterDependencyNames(profile);
+  if (!names.length) return new Map();
+  const output = checked(
+    runner,
+    "kubectl",
+    kubectlArgs(profile, ["get", "statefulsets", ...names, "--ignore-not-found=true", "-o", "json"]),
+  );
+  return parseLiveDependencies(output, names);
+}
+
+/** Which dependencies keep their live rollout checksum, and the state to render with. */
+function dependencyRolloutState(
+  profile: DeployProfileV1,
+  secrets: Record<string, string>,
+  legacyRolloutChecksum: string | null,
+  live: Map<string, LiveDependency>,
+): KubernetesRolloutState {
+  const consumed = workloadSecrets(profile);
+  const expected = inClusterDependencyNames(profile).map((name) => ({
+    name,
+    secretChecksum: workloadSecretChecksum({ secrets, keep: {} }, consumed[name] ?? []),
+  }));
+  return { secrets, keep: keptRolloutChecksums(live, expected, legacyRolloutChecksum) };
 }
 
 function resolveImage(reference: string, runner: CommandRunner): string {
@@ -822,7 +992,11 @@ export function planDeployment(
   const clusterFingerprint = assertClusterTarget(profile, runner);
   const current = currentHelmStatus(profile, runner);
   const images = resolveDeploymentImages(profile, release, runner);
-  const state = clusterState(profile, runner);
+  const { secrets, legacyRolloutChecksum, ...state } = clusterState(profile, runner);
+  const live = liveDependencies(profile, runner);
+  const rolloutState = dependencyRolloutState(profile, secrets, legacyRolloutChecksum, live);
+  const rollouts = dependencyRollouts(live, renderDependencies(profile, images, rolloutState).dependencies);
+  const restarts = rollouts.filter((rollout) => rollout.action === "restart");
   const base: Omit<DeploymentPlan, "planHash"> = {
     profile: profileName,
     release,
@@ -830,6 +1004,8 @@ export function planDeployment(
     currentRevision: current.revision,
     currentStatus: current.status,
     ...state,
+    rolloutState,
+    dependencyRollouts: rollouts,
     targetRevisionManifestDigest: null,
     target: {
       context: profile.target.context,
@@ -842,7 +1018,13 @@ export function planDeployment(
       {
         order: 1,
         kind: "dependencies",
-        description: "Reconcile in-cluster dependencies and wait for readiness.",
+        description: `Reconcile in-cluster dependencies and wait for readiness; ${
+          rollouts.length === 0
+            ? "none run in the cluster"
+            : restarts.length
+              ? `restart ${restarts.map((rollout) => rollout.name).join(", ")}`
+              : "no running dependency restarts"
+        }.`,
       },
       {
         order: 2,
@@ -863,6 +1045,7 @@ export function planDeployment(
     warnings: [
       "Application rollback does not reverse database migrations.",
       "PersistentVolumeClaims and Kubernetes Secrets are never deleted by apply or rollback.",
+      ...restarts.map(describeDependencyRollout),
       ...[connectionBudgetWarning(profile, installedModules(projectRoot))].filter(
         (warning): warning is string => warning !== null,
       ),
@@ -876,7 +1059,7 @@ export function planDeployment(
       profile,
       release,
       images,
-      state.rolloutStateDigest,
+      rolloutState,
       readAppProxyTimeouts(projectRoot),
     );
     return { ...base, planHash: planDigest(base, runtime) };
@@ -1089,6 +1272,150 @@ function waitForDependencies(
   }
 }
 
+const MIGRATION_LEDGER_KEY = "migrations.json";
+const MIGRATION_LEDGER_DEPTH = 20;
+
+export function migrationLedgerName(profile: DeployProfileV1): string {
+  return `${profile.target.release}-migrations`;
+}
+
+function isMigrationRecord(value: unknown): value is MigrationRecord {
+  const optionalText = (entry: unknown) => entry === null || typeof entry === "string";
+  return (
+    isRecord(value) &&
+    typeof value.release === "string" &&
+    typeof value.job === "string" &&
+    typeof value.image === "string" &&
+    Array.isArray(value.command) &&
+    value.command.every((part) => typeof part === "string") &&
+    optionalText(value.startedAt) &&
+    optionalText(value.finishedAt) &&
+    (value.result === "succeeded" || value.result === "failed" || value.result === "incomplete") &&
+    (value.reason === undefined || typeof value.reason === "string")
+  );
+}
+
+/** The recorded migration outcomes, oldest first. */
+export function readMigrationLedger(profile: DeployProfileV1, runner: CommandRunner): MigrationRecord[] {
+  const name = migrationLedgerName(profile);
+  const output = checked(
+    runner,
+    "kubectl",
+    kubectlArgs(profile, ["get", "configmap", name, "--ignore-not-found=true", "-o", "json"]),
+  );
+  if (!output.trim()) return [];
+  const configMap = parseJson<unknown>(output, `ConfigMap ${name}`);
+  const ledger = isRecord(configMap) && isRecord(configMap.data) ? configMap.data[MIGRATION_LEDGER_KEY] : undefined;
+  const parsed = typeof ledger === "string" ? parseJson<unknown>(ledger, `ConfigMap ${name} ${MIGRATION_LEDGER_KEY}`) : null;
+  if (
+    !isRecord(parsed) ||
+    parsed.schemaVersion !== 1 ||
+    !Array.isArray(parsed.entries) ||
+    !parsed.entries.every(isMigrationRecord)
+  ) {
+    throw new Error(`ConfigMap ${name} does not hold a valid migration ledger.`);
+  }
+  return parsed.entries;
+}
+
+function condition(conditions: unknown, type: string): Record<string, unknown> | undefined {
+  return Array.isArray(conditions)
+    ? conditions.find((entry): entry is Record<string, unknown> =>
+        isRecord(entry) && entry.type === type && entry.status === "True")
+    : undefined;
+}
+
+/** What the finished, failed, or still running migration Job reports about itself. */
+function migrationOutcome(
+  profile: DeployProfileV1,
+  release: string,
+  job: string,
+  rendered: { image: string; command: string[] },
+  runner: CommandRunner,
+): MigrationRecord {
+  const text = (value: unknown): string | null => (typeof value === "string" ? value : null);
+  const result = runner("kubectl", kubectlArgs(profile, ["get", "job", job, "-o", "json"]), { capture: true });
+  let resource: unknown = null;
+  try {
+    resource = result.status === 0 ? JSON.parse(result.stdout) as unknown : null;
+  } catch {
+    resource = null;
+  }
+  const status = isRecord(resource) && isRecord(resource.status) ? resource.status : null;
+  const spec = isRecord(resource) && isRecord(resource.spec) && isRecord(resource.spec.template) &&
+    isRecord(resource.spec.template.spec) ? resource.spec.template.spec : null;
+  const container = Array.isArray(spec?.containers) && isRecord(spec.containers[0]) ? spec.containers[0] : null;
+  const command = Array.isArray(container?.command) && container.command.every((part) => typeof part === "string")
+    ? container.command
+    : rendered.command;
+  const record = {
+    release,
+    job,
+    image: text(container?.image) ?? rendered.image,
+    command,
+    startedAt: text(status?.startTime),
+  };
+  if (!status) {
+    return { ...record, finishedAt: null, result: "incomplete", reason: "the Job could not be read" };
+  }
+  const complete = condition(status.conditions, "Complete");
+  if (complete) {
+    return {
+      ...record,
+      finishedAt: text(status.completionTime) ?? text(complete.lastTransitionTime),
+      result: "succeeded",
+    };
+  }
+  const failed = condition(status.conditions, "Failed");
+  if (failed) {
+    return {
+      ...record,
+      finishedAt: text(failed.lastTransitionTime),
+      result: "failed",
+      reason: [text(failed.reason), text(failed.message)].filter(Boolean).join(": ") || "the Job failed",
+    };
+  }
+  return { ...record, finishedAt: null, result: "incomplete", reason: "the Job was still running when apply stopped waiting" };
+}
+
+/**
+ * Appends the migration Job's outcome to the ledger ConfigMap, under the apply's
+ * Lease. A failed write is reported and does not stop the deployment: the
+ * migration has already run, and the ledger only describes it.
+ */
+function recordMigration(profile: DeployProfileV1, record: MigrationRecord, runner: CommandRunner): void {
+  const name = migrationLedgerName(profile);
+  const temporaryRoot = mkdtempSync(join(tmpdir(), "podokit-migration-ledger-"));
+  try {
+    const entries = [...readMigrationLedger(profile, runner), record].slice(-MIGRATION_LEDGER_DEPTH);
+    const path = join(temporaryRoot, "ledger.json");
+    writeFileSync(
+      path,
+      JSON.stringify({
+        apiVersion: "v1",
+        kind: "ConfigMap",
+        metadata: {
+          name,
+          labels: { "app.kubernetes.io/name": name, "app.kubernetes.io/managed-by": "podokit" },
+        },
+        data: { [MIGRATION_LEDGER_KEY]: JSON.stringify({ schemaVersion: 1, entries }, null, 2) },
+      }),
+      { mode: 0o600 },
+    );
+    checked(
+      runner,
+      "kubectl",
+      kubectlArgs(profile, ["apply", "--server-side", "--field-manager=podokit", "--force-conflicts", "-f", path]),
+    );
+  } catch (error) {
+    console.warn(
+      `The migration ${record.result === "succeeded" ? "succeeded" : `result (${record.result})`} could not be recorded in ConfigMap ${name}: ${(error as Error).message}`,
+    );
+  } finally {
+    rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+}
+
 function migrationJobName(profile: DeployProfileV1, release: string): string {
   const slug = release.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   return `${profile.target.release}-migrate-${slug}`;
@@ -1223,7 +1550,7 @@ export async function applyDeployment(
       profile,
       release,
       plan.images,
-      plan.rolloutStateDigest,
+      plan.rolloutState,
     );
     const failureFlag = helmFailureFlag(runner);
     const common = ["--wait", "--timeout", "5m"];
@@ -1279,12 +1606,25 @@ export async function applyDeployment(
       kubectlArgs(profile, ["apply", "-f", runtime.migrationManifest]),
       false,
     );
-    checked(
+    let migrationError: unknown = null;
+    try {
+      checked(
+        runner,
+        "kubectl",
+        kubectlArgs(profile, ["wait", "--for=condition=complete", `job/${job}`, "--timeout=10m"]),
+        false,
+      );
+    } catch (error) {
+      migrationError = error;
+    }
+    const command = profile.migration?.command ??
+      toolchainMigrationCommand(readManifest(projectRoot)?.toolchain ?? resolveToolchain());
+    recordMigration(
+      profile,
+      migrationOutcome(profile, release, job, { image: plan.images.api, command }, runner),
       runner,
-      "kubectl",
-      kubectlArgs(profile, ["wait", "--for=condition=complete", `job/${job}`, "--timeout=10m"]),
-      false,
     );
+    if (migrationError) throw migrationError;
 
     checked(
       runner,
@@ -1403,6 +1743,7 @@ export function getDeploymentStatus(
     profile: profileName,
     helmRevision: helm.revision,
     helmStatus: helm.status,
+    lastMigration: readMigrationLedger(profile, runner).at(-1) ?? null,
     deployments,
   };
 }
@@ -1461,7 +1802,9 @@ export function planRollback(
   const clusterFingerprint = assertClusterTarget(profile, runner);
   const current = currentHelmStatus(profile, runner);
   if (current.revision === null) throw new Error("Cannot roll back an application that is not installed.");
-  const state = clusterState(profile, runner);
+  const { secrets, legacyRolloutChecksum: _legacy, ...state } = clusterState(profile, runner);
+  // A rollback changes neither the dependencies nor how their checksums are rendered.
+  const rolloutState: KubernetesRolloutState = { secrets, keep: {} };
   const targetManifest = checked(
     runner,
     "helm",
@@ -1495,6 +1838,8 @@ export function planRollback(
     currentRevision: current.revision,
     currentStatus: current.status,
     ...state,
+    rolloutState,
+    dependencyRollouts: [],
     targetRevisionManifestDigest,
     target: {
       context: profile.target.context,

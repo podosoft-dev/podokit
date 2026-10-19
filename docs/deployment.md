@@ -229,11 +229,17 @@ while a `warn` reports a setting that deploys but probably not as intended:
 | `database-connections` (with PostgreSQL) | `FAIL` when the API and worker processes can open more connections than PostgreSQL allows between rollouts, `warn` when a rollout or the migration can; see [database connections](#database-connections) |
 | `admin-emails` (with `auth` installed) | `FAIL` when `ADMIN_EMAILS` lists an entry that is not an email address or whose domain is reserved and receives no mail (`example.com`, `example.net`, `example.org` and their subdomains, and the `.example`, `.test`, `.invalid`, and `.localhost` names), such as the `admin@example.com` of `.env.example`; a generated API refuses to start in production with such an entry. List the administrators' real addresses, or leave it empty and create administrators with `admin:bootstrap` |
 | `audit-log` (with the module installed) | `warn` when `runtimeConfig` lacks `AUDIT_LOG_ENABLED` or sets it to anything but `"true"`: the audit log then records nothing until an administrator turns it on, or depends on the API's built-in default |
+| `dependency-restart:<name>` (Kubernetes, in-cluster dependencies) | `warn` when the next apply would restart a running PostgreSQL, Redis, or object storage StatefulSet, with the reason; see [which pods a change restarts](#which-pods-a-change-restarts). The doctor compares the profile's image tags, so only the plan, which resolves digests, sees a new image behind the same tag |
 
 The plan resolves every image tag to an immutable registry digest and binds those
 digests, the profile, the rendered output, the current revision, and the identity of
 every referenced secret into one SHA-256 confirmation hash. `latest`, branch tags, and
 empty tags are rejected. Planning does not change the project or the target.
+
+On Kubernetes the plan also lists, under `dependencyRollouts`, whether the apply
+creates, restarts, or keeps running each in-cluster dependency, and why. Every
+restart is also a plan warning, because a single-replica database, Redis, or object
+store refuses connections until its new pod is ready.
 
 After reviewing that plan, apply the exact hash:
 
@@ -248,7 +254,8 @@ Apply performs the same steps on both drivers:
    Lease, or a `set -C` lock file in a state volume.
 3. Reconcile and wait for PodoKit-run dependencies. On Compose this includes the
    object storage init job, which must exit 0.
-4. Run the migration with the exact API image digest.
+4. Run the migration with the exact API image digest. On Kubernetes, record its
+   outcome in the [migration ledger](#migration-ledger).
 5. Roll out API, web, and any worker, then wait for health. Old API and web
    containers keep serving until their replacements are healthy, see
    [rolling updates on Kubernetes](#rolling-updates-on-kubernetes) and
@@ -293,15 +300,52 @@ images include. In an image without it the hook fails, and Kubernetes records a
 The pod's `terminationGracePeriodSeconds` counts the hook as well: 5 seconds for it,
 the web server's `SHUTDOWN_TIMEOUT` for open requests to finish (30 seconds unless
 `runtimeConfig` sets it), and 5 more for the web server to close what remains and
-exit, 40 seconds by default. The API waits for its in-flight requests without a
-limit of its own and gets the same period, which covers the `/api` proxy's default
-30-second wait. Kubernetes kills a container still running when the period ends,
+exit, 40 seconds by default. The API gets the same period for its in-flight
+requests, which covers the `/api` proxy's default 30-second wait. Kubernetes kills a container still running when the period ends,
 so raise `SHUTDOWN_TIMEOUT` in `runtimeConfig` when requests may take longer, such
 as uploads under a long [`APP_PROXY_TIMEOUTS`](templates.md#proxy-deadlines-per-route)
 deadline, and the grace period follows it. A replaced pod keeps its database
 connections until it exits, which the [connection budget](#database-connections)
 counts. Workers receive no traffic through a Service and keep the Kubernetes
 defaults.
+
+### Which pods a change restarts
+
+A container reads a Secret through its environment once, when it starts, and
+Kubernetes replaces a workload's pods only when their pod template changes. Each
+pod template therefore carries a `podokit.example.com/rollout-state-checksum`
+annotation computed from the Secrets that workload reads, so a changed Secret rolls
+exactly those workloads:
+
+| Workload | Its checksum covers |
+| --- | --- |
+| API and worker | the API Secret (`secrets.api`) |
+| web | the web Secret (`secrets.web`), when the profile has one |
+| PostgreSQL, Redis, object storage | its own Secret (`dependencies.<name>.secretName`) |
+
+Changing an application Secret, such as a new `ADMIN_EMAILS`, rolls the API and
+worker and leaves the dependencies running. The image pull and TLS Secrets restart
+nothing: Kubernetes reads the first only to pull an image, and the ingress controller
+reloads the second. A changed `runtimeConfig` rolls API, web, and worker through
+their `podokit.example.com/runtime-config-checksum`. A dependency also restarts when
+its image or its own definition changes, such as `maxConnections`.
+
+Each dependency StatefulSet records, in annotations on the StatefulSet itself, which
+do not restart pods, the checksum of its Secret (`podokit.example.com/secret-checksum`)
+and of its pod template without the image and the rollout checksum
+(`podokit.example.com/definition-checksum`). The plan and the doctor compare these,
+the image, and the container arguments with the live StatefulSet to report a
+restart and its reason.
+
+PodoKit 1.6.5 and earlier gave every workload one checksum over all referenced
+Secrets, so any Secret change restarted PostgreSQL, Redis, and object storage. The
+first apply after upgrading keeps each dependency's pod template byte for byte when
+its live checksum still matches the release's current Secrets, so nothing restarts
+that would not have restarted before. When a Secret changed after that last apply,
+the old checksum cannot tell which one, so the in-cluster dependencies restart once,
+as they would have with the earlier version, and the plan and the doctor say so. The
+API, web, and worker pods roll once on that first apply, because their checksum
+changes, with the usual surge and `preStop` hook.
 
 ### Rolling updates on Docker Compose
 
@@ -317,14 +361,13 @@ by side instead:
 2. Behind the gateway, do the same for web. Without the gateway, web publishes the
    host port itself and a second container cannot bind it, so web is replaced in
    place. The port is closed from the moment the old web server stops accepting
-   connections until the new one listens: about a second, or up to the stop
-   timeout below while the old one holds a stream. A profile with WebSocket or
-   API paths has the gateway.
+   connections until the old container exits and the new one listens: about a
+   second, or up to the web stop timeout below while a request or stream on the
+   old one is still open. A profile with WebSocket or API paths has the gateway.
 3. Stop the old web container, then the old API containers, each with Docker's
-   graceful stop: in-flight requests finish, and a process still running when the
-   stop timeout ends, 10 seconds by default, is killed. A server that holds a
-   WebSocket or server-sent events stream runs until then; the client reconnects
-   to a new container.
+   graceful stop: in-flight requests finish, and a process still running when its
+   stop timeout ends is killed. A server that holds a WebSocket or server-sent
+   events stream runs until then; the client reconnects to a new container.
 4. Run `compose up --remove-orphans` for the rest. The worker is replaced in place,
    since it receives no traffic. The gateway carries no release label, so it is
    replaced only when its own definition changes, such as its paths, trusted proxy
@@ -333,6 +376,41 @@ by side instead:
 If a new container does not become healthy, apply removes the containers it started
 and fails; the old ones keep serving and the release ledger keeps the current
 revision. A service that already runs the new definition is left alone.
+
+Each application service carries its own stop timeout (`stop_grace_period`), which
+Docker otherwise sets to 10 seconds:
+
+| Service | Stop timeout |
+| --- | --- |
+| API and web | `SHUTDOWN_TIMEOUT` from `runtimeConfig` (30 unless set) plus 5 seconds, 35 by default: the web server drains open requests for `SHUTDOWN_TIMEOUT` and then closes what remains, and the API waits for its in-flight requests and gets the same window. This is the Kubernetes grace period without its 5-second `preStop` sleep, so both drivers give a server the same time after `SIGTERM`. Raise `SHUTDOWN_TIMEOUT` when requests may take longer; it sets both services and both drivers |
+| Worker | 30 seconds, the default it keeps on Kubernetes, for active jobs to finish |
+| PostgreSQL, Redis, object storage, its init job, and the gateway | Docker's default. A changed definition makes Compose recreate a service, which would restart a database or close the published port on the first apply after an upgrade |
+
+A longer stop timeout does not lengthen an outage behind the gateway, since the old
+containers stop only after the new ones are healthy, but apply waits for them. A
+server that keeps a stream open until it is killed holds the apply, and without the
+gateway the closed port, for its whole stop timeout. The first apply with these
+stop timeouts recreates the API, web, and worker containers, which a new release
+replaces anyway, and a rollback to a revision applied before them is refused,
+because that revision no longer renders byte for byte; roll forward instead.
+
+Starting new containers beside the old ones also renumbers them. Compose names a
+container after the project, the service, and a number, and numbers a new
+container after the highest one in use. The API service is `<project>-api`, so its
+first container is `<project>-<project>-api-1`; after a release it runs as
+`<project>-<project>-api-2`, or `-3` and `-4` with two replicas, and the numbers
+grow with every release.
+Scripts, backups, and monitors must not use a fixed container name. Select a
+service's containers by their Compose labels instead, or let Compose resolve the
+service:
+
+```bash
+docker ps --filter label=com.docker.compose.project=<project> \
+  --filter label=com.docker.compose.service=<project>-api --format '{{.Names}}'
+docker compose -p <project> exec <project>-api sh
+```
+
+`podo deploy status` lists each service's current container names.
 
 The web server reaches the API through the service name. Bun keeps a resolved
 address for 30 seconds and does not move to another one when it stops answering,
@@ -810,8 +888,10 @@ podo deploy verify --profile production --json
 ```
 
 Status reports the deployed revision, the actual images, ready or running replicas,
-and restart totals. Verification checks the configured HTTPS origin without changing
-the target.
+restart totals, on Kubernetes the last recorded migration (`lastMigration`, see the
+[migration ledger](#migration-ledger)), and on Docker Compose each service's container
+names (`containers`), which change with every release. Verification checks the
+configured HTTPS origin without changing the target.
 
 On Kubernetes, a Deployment's `restartCount` adds up the container restarts of the
 running pods of its current revision only: the pods whose `pod-template-hash` is that
@@ -823,6 +903,42 @@ grace period after `apply` or `rollback` returns, so `previousPods` is often non
 right after a rollout; their restarts do not describe the new release. The Compose
 driver lists only running containers, and apply and rollback remove the containers
 they replace before they return, so it has no previous containers to report.
+
+### Migration ledger
+
+On Kubernetes the migration runs as a Job that Kubernetes deletes, with its pod and
+logs, an hour after it finishes (`ttlSecondsAfterFinished: 3600`). So that its outcome
+can still be checked later, apply appends it, while it holds the Lease, to the
+`migrations.json` key of the ConfigMap `<release>-migrations`, which keeps the latest
+20 runs, and `status` reports the newest one as `lastMigration`:
+
+```json
+{
+  "release": "v1.2.3",
+  "job": "example-app-migrate-v1-2-3",
+  "image": "ghcr.io/example/example-app-api:v1.2.3@sha256:…",
+  "command": ["bun", "run", "migrate:all"],
+  "startedAt": "2026-10-19T07:38:08Z",
+  "finishedAt": "2026-10-19T07:38:14Z",
+  "result": "succeeded"
+}
+```
+
+`result` is `succeeded`, `failed` with the Job's `reason`, or `incomplete` when apply
+stopped waiting while the Job still ran or could not read it. A failed or incomplete
+migration is recorded before apply fails. Deployment evidence collected later can read
+the record with `podo deploy status --profile production --json`, or with read access
+to ConfigMaps only:
+
+```bash
+kubectl -n <namespace> get configmap <release>-migrations -o jsonpath='{.data.migrations\.json}'
+```
+
+The ledger is written with `kubectl apply --server-side`, so the deployment identity
+needs `get`, `create`, and `patch` on ConfigMaps, which Helm's runtime ConfigMap
+already requires. If the write fails, apply warns and continues, since the migration
+has already run. Apply and rollback never delete the ConfigMap; remove it with the
+namespace.
 
 ## Rollback
 
