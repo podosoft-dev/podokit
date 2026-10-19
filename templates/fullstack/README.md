@@ -60,7 +60,10 @@ source of truth if you change the hostname: `podo dev` sets `CORS_ORIGIN` and
 `BETTER_AUTH_URL` for the web and API containers from it. The first running PodoKit project starts
 one user-level Traefik gateway on `127.0.0.1:80`; additional projects reuse it and
 route by that hostname. Even a single app uses
-the same topology, with one route and no project-specific host port.
+the same topology, with one route and no project-specific host port. The web and
+API containers stay on this project's own network, where `web` and `api` always
+name this project's services; a small per-project link container is the only one
+that joins the shared gateway network.
 
 When the API exposes WebSocket endpoints, add their exact paths to
 `.podokit/dev.json` under `webSocketPaths`. The shared gateway sends only those paths

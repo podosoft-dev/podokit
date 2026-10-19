@@ -153,6 +153,56 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   still refused on `/api` and on pages, and `csrf.trustedOrigins` in
   `vite.extensions.ts` still applies. The fast CI job now starts the built API and
   web server of its generated app to check both requests.
+- After the update above, `bun run lint` failed in apps whose lockfile held
+  `@types/bun` 1.4.0: the managed `apps/web/src/lib/server/backend-proxy.ts`
+  removed its shutdown signal listener with `process.removeListener`, which that
+  version declares only for `"memoryPressure"` (1.4.1 and later declare the
+  generic overload again). The listener now registers with `process.once` and
+  needs no removal. New apps declare `@types/bun` `^1.4.0`, the Bun version the
+  template pins. The fast CI job type-checks its generated app a second time with
+  the lowest `@types/bun` the app's range allows
+  (`scripts/oldest-bun-types.mjs`), because a fresh install always resolves the
+  newest one.
+- `podo dev` stacks of different projects could reach each other's services on
+  the shared development gateway. Every project's web container joined the shared
+  `podokit-dev-gateway` network, and so did the API of a project with
+  `webSocketPaths` or `apiPaths`. Compose registers each service under its plain
+  name on every network it joins, so `web` and `api` resolved across projects
+  there, and a web container could send its `/api` proxy requests
+  (`BACKEND_INTERNAL_URL=http://api:5002`) to another project's API, which then
+  refused them with its own origin check (`INVALID_ORIGIN`) or rate limit. The
+  web and API containers now stay on their project network. `podo dev` adds one
+  gateway link per project: a Traefik container whose service name is the
+  project's unique alias (`podokit-<name>-<hash>`), which joins both networks and
+  passes TCP connections through to the web and API containers by aliases that
+  exist only on the project network, so the gateway's proxy headers reach them
+  unchanged. Its memory limit is 128 MiB (`GATEWAY_LINK_MEM_LIMIT`).
+
+### Upgrade notes
+
+- Restart every running `podo dev` stack once after updating the CLI
+  (`podo dev down`, then `podo dev watch`). Until then its web container, and the
+  API of a project with `webSocketPaths` or `apiPaths`, stay on the shared gateway
+  network under their plain names, and other projects' web containers that are
+  still on that network can resolve them.
+- `BACKEND_INTERNAL_URL` set to `http://api:5002` in `.env.docker` or
+  `compose.dev.yaml` needs no change: `api` now resolves only on the project
+  network. If an app pointed it, or any other setting, at the gateway alias
+  `http://podokit-<name>-<hash>-api:5002`, use `http://api:5002` instead; that
+  alias now names the API only on the project network. A container on
+  `podokit-dev-gateway` that reached the API there now uses
+  `http://podokit-<name>-<hash>:5002`, which the link serves only when
+  `.podokit/dev.json` lists `webSocketPaths` or `apiPaths`.
+- Remove services of your own from the `podokit-dev-gateway` network, for example
+  a `networks:` entry in `compose.dev.yaml` or another Compose file. Every
+  project's containers on that network reach them by their plain service names.
+  Route paths to the API through `webSocketPaths` or `apiPaths` instead.
+- `podo dev` attaches the web and API aliases to the template's `podokit`
+  network. Keep that network name in an owned `compose.dev.yaml`.
+- Apps that locked `@types/bun` 1.4.0 need no change for the type check. Their
+  `package.json` keeps its range; raise it to `^1.4.0` if you want it to match
+  new apps.
+
 ## [1.6.5] - 2026-10-19
 
 ### Fixed
