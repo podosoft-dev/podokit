@@ -807,6 +807,52 @@ describe("web service", () => {
   });
 });
 
+describe("stop grace period", () => {
+  const serviceOf = (document: string, service: string): string =>
+    document.split(`\n  example-app-${service}:\n`)[1]?.split(/\n  \S/)[0] ?? "";
+
+  function everyService() {
+    const profile = composeProfileOf(initialized(["auth", "bullmq", "object-storage-s3"]));
+    profile.exposure.webSocketPaths = ["/agent/ws"];
+    return profile;
+  }
+
+  function render(profile: ReturnType<typeof composeProfileOf>): string {
+    return renderComposeDocument(
+      profile,
+      "v1.2.3",
+      { ...defaultComposeImages(profile, "v1.2.3"), gateway: `caddy:2.10-alpine@${GATEWAY_DIGEST}` },
+      "sha256:0",
+      NO_APP_PROXY_TIMEOUTS,
+    );
+  }
+
+  it("lets the API and web server drain like on Kubernetes, and the worker keep 30 s", () => {
+    const document = render(everyService());
+    expect(serviceOf(document, "api")).toContain("\n    stop_grace_period: 35s\n");
+    expect(serviceOf(document, "web")).toContain("\n    stop_grace_period: 35s\n");
+    expect(serviceOf(document, "worker")).toContain("\n    stop_grace_period: 30s\n");
+  });
+
+  it("follows SHUTDOWN_TIMEOUT from the profile", () => {
+    const profile = everyService();
+    profile.runtimeConfig = { ...profile.runtimeConfig, SHUTDOWN_TIMEOUT: "120" };
+    const document = render(profile);
+    expect(serviceOf(document, "api")).toContain("\n    stop_grace_period: 125s\n");
+    expect(serviceOf(document, "web")).toContain("\n    stop_grace_period: 125s\n");
+    expect(serviceOf(document, "worker")).toContain("\n    stop_grace_period: 30s\n");
+  });
+
+  it("leaves dependencies and the gateway as they were, so an upgrade does not recreate them", () => {
+    const document = render(everyService());
+    for (const service of ["postgres", "redis", "object-storage", "object-storage-init", "gateway"]) {
+      const block = serviceOf(document, service);
+      expect(block, service).toContain("image:");
+      expect(block, service).not.toContain("stop_grace_period");
+    }
+  });
+});
+
 describe("compose status", () => {
   it("names each service's containers, which side-by-side rollouts renumber", () => {
     const root = initialized(["auth"]);

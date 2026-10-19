@@ -39,6 +39,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   fails, and `podo deploy status` reports the newest as `lastMigration`. The
   deployment identity needs `get`, `create`, and `patch` on ConfigMaps, which
   Helm's runtime ConfigMap already requires; a failed write is a warning.
+- A Docker Compose deployment killed its API and web containers 10 seconds after
+  `SIGTERM`, Docker's default stop timeout, because the rendered services set no
+  `stop_grace_period`. The web server drains open requests for
+  `SHUTDOWN_TIMEOUT` (30 seconds unless set), and on Kubernetes the same servers
+  get 40 seconds, 35 of them after `SIGTERM`, so a long upload could be cut off
+  during a Compose rollout. The API and web services now render
+  `stop_grace_period` as `SHUTDOWN_TIMEOUT` from `runtimeConfig` plus 5 seconds,
+  35 by default, and the worker 30 seconds, the default it keeps on Kubernetes.
+  PostgreSQL, Redis, object storage, and the gateway keep Docker's default,
+  because a changed definition makes Compose recreate them, which would restart a
+  database or close the published port on the first apply after upgrading. That
+  apply recreates the API, web, and worker containers, and a rollback to a
+  revision applied before it is refused, since that revision no longer renders
+  byte for byte.
 - Tooling that found a Docker Compose deployment's containers by a fixed name,
   such as `<project>-<project>-api-1`, lost them after the first release with
   side-by-side rollouts: a release starts new containers beside the old ones and

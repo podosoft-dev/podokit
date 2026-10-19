@@ -9,7 +9,12 @@ import {
   type DockerComposeProfileV1,
 } from "./deploy-compose-profile";
 import { readAppProxyTimeouts, type AppProxyTimeouts } from "./app-proxy-timeouts";
-import { idleTimeoutConfig, profilePath, proxyTrustConfig } from "./deploy-schema";
+import {
+  idleTimeoutConfig,
+  profilePath,
+  proxyTrustConfig,
+  shutdownDrainSeconds,
+} from "./deploy-schema";
 import { readManifest } from "./lockfile";
 import {
   resolveToolchain,
@@ -55,6 +60,28 @@ const CONTAINER_PORT = 3000;
  * would keep calling the old API's address after that container is gone.
  */
 const WEB_DNS_CONFIG: Record<string, string> = { BUN_CONFIG_DNS_TIME_TO_LIVE_SECONDS: "0" };
+
+/**
+ * Seconds Docker waits after SIGTERM before it kills an application container.
+ * Its default is 10, while the web server drains open requests for
+ * SHUTDOWN_TIMEOUT (30) and then force-closes for up to one more. API and web get
+ * that drain plus a margin, the Kubernetes grace period without its preStop
+ * sleep; the worker gets the 30 s it keeps on Kubernetes. Dependencies and the
+ * gateway keep Docker's default: a changed definition makes Compose recreate
+ * them, which would restart a database or close the published port on the first
+ * apply after an upgrade.
+ */
+const SHUTDOWN_MARGIN_SECONDS = 5;
+const WORKER_STOP_GRACE_SECONDS = 30;
+
+export function composeStopGraceSeconds(
+  role: "api" | "web" | "worker",
+  runtimeConfig: Record<string, string>,
+): number {
+  return role === "worker"
+    ? WORKER_STOP_GRACE_SECONDS
+    : shutdownDrainSeconds(runtimeConfig) + SHUTDOWN_MARGIN_SECONDS;
+}
 
 function quote(value: string): string {
   return JSON.stringify(value);
@@ -338,6 +365,7 @@ function applicationService(
     `  ${serviceName(profile, role)}:\n` +
     `    image: ${quote(image)}\n` +
     `    restart: unless-stopped\n` +
+    `    stop_grace_period: ${composeStopGraceSeconds(role, environment)}s\n` +
     (options.command ? `    command: ${options.command}\n` : "") +
     (envFile ? `    env_file:\n      - ${quote(envFile.path)}\n` : "") +
     environmentBlock(environment, "    ") +

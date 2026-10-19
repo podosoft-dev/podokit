@@ -362,14 +362,13 @@ by side instead:
 2. Behind the gateway, do the same for web. Without the gateway, web publishes the
    host port itself and a second container cannot bind it, so web is replaced in
    place. The port is closed from the moment the old web server stops accepting
-   connections until the new one listens: about a second, or up to the stop
-   timeout below while the old one holds a stream. A profile with WebSocket or
-   API paths has the gateway.
+   connections until the old container exits and the new one listens: about a
+   second, or up to the web stop timeout below while a request or stream on the
+   old one is still open. A profile with WebSocket or API paths has the gateway.
 3. Stop the old web container, then the old API containers, each with Docker's
-   graceful stop: in-flight requests finish, and a process still running when the
-   stop timeout ends, 10 seconds by default, is killed. A server that holds a
-   WebSocket or server-sent events stream runs until then; the client reconnects
-   to a new container.
+   graceful stop: in-flight requests finish, and a process still running when its
+   stop timeout ends is killed. A server that holds a WebSocket or server-sent
+   events stream runs until then; the client reconnects to a new container.
 4. Run `compose up --remove-orphans` for the rest. The worker is replaced in place,
    since it receives no traffic. The gateway carries no release label, so it is
    replaced only when its own definition changes, such as its paths, trusted proxy
@@ -378,6 +377,23 @@ by side instead:
 If a new container does not become healthy, apply removes the containers it started
 and fails; the old ones keep serving and the release ledger keeps the current
 revision. A service that already runs the new definition is left alone.
+
+Each application service carries its own stop timeout (`stop_grace_period`), which
+Docker otherwise sets to 10 seconds:
+
+| Service | Stop timeout |
+| --- | --- |
+| API and web | `SHUTDOWN_TIMEOUT` from `runtimeConfig` (30 unless set) plus 5 seconds, 35 by default: the web server drains open requests for `SHUTDOWN_TIMEOUT` and then closes what remains, and the API waits for its in-flight requests and gets the same window. This is the Kubernetes grace period without its 5-second `preStop` sleep, so both drivers give a server the same time after `SIGTERM`. Raise `SHUTDOWN_TIMEOUT` when requests may take longer; it sets both services and both drivers |
+| Worker | 30 seconds, the default it keeps on Kubernetes, for active jobs to finish |
+| PostgreSQL, Redis, object storage, its init job, and the gateway | Docker's default. A changed definition makes Compose recreate a service, which would restart a database or close the published port on the first apply after an upgrade |
+
+A longer stop timeout does not lengthen an outage behind the gateway, since the old
+containers stop only after the new ones are healthy, but apply waits for them. A
+server that keeps a stream open until it is killed holds the apply, and without the
+gateway the closed port, for its whole stop timeout. The first apply with these
+stop timeouts recreates the API, web, and worker containers, which a new release
+replaces anyway, and a rollback to a revision applied before them is refused,
+because that revision no longer renders byte for byte; roll forward instead.
 
 Starting new containers beside the old ones also renumbers them. Compose names a
 container after the project, the service, and a number, and numbers a new
