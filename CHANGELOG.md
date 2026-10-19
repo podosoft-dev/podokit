@@ -207,6 +207,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   503 after the database came back. The API now retries `migrate:all` after 1 s,
   then after twice the previous wait, up to every 10 s, and removes the check
   once a run succeeds. The retries stop when the API shuts down.
+- `podo update` without `--apply` checked its merges for conflicts only when
+  `--from` gave the previous templates, so it could report `0 conflict` for a
+  merge that `--apply` then wrote with conflict markers, such as an app's
+  dependency added on the line above one the template raised in
+  `apps/api/package.json`. The preview now runs each merge against the same base
+  as `--apply`: `--from`, the installed templates, or the recorded version's
+  installed from npm. When it cannot get that base, it lists the merges and
+  prints `WARN the N merge(s) were not checked` with the reason.
 
 ### Upgrade notes
 

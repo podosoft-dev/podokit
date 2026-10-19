@@ -10,9 +10,8 @@ import { status, diff, doctor } from "./inspect";
 import {
   addedModuleReason,
   describeDowngrades,
-  planUpdate,
   applyUpdate,
-  predictMerges,
+  previewUpdate,
   summarize,
   upstreamChanges,
   type UpdatePlan,
@@ -880,8 +879,7 @@ async function main(argv: string[]): Promise<void> {
         }
         return;
       }
-      const planned = planUpdate(process.cwd(), templatesDir);
-      const plan = args.from ? predictMerges(process.cwd(), templatesDir, planned, args.from) : planned;
+      const { plan, mergesUnchecked } = previewUpdate(process.cwd(), templatesDir, { oldTemplatesDir: args.from });
       const counts = summarize(plan);
       const shown = plan.changes.filter((c) => c.action !== "up-to-date" && c.action !== "skip");
       process.stdout.write(
@@ -917,9 +915,9 @@ async function main(argv: string[]): Promise<void> {
             `${counts.remove} remove, ${counts.merge} merge, ${counts.conflict} conflict, ` +
             `${counts.keep} keep, ${counts.review} review. ` +
             `Dry-run — nothing was written. Re-run with --apply to write.\n` +
-            (counts.merge && !args.from
-              ? `It 3-way merges each merge against the ${plan.fromVersion} templates, fetched from npm unless ` +
-                "--from <dir> gives them; with --from, this preview also shows which merges would conflict.\n"
+            (mergesUnchecked
+              ? `WARN the ${counts.merge} merge(s) were not checked, so --apply may still leave conflict markers in them: ` +
+                `${mergesUnchecked}\nPass the ${plan.fromVersion} templates with --from <dir> to check them.\n`
               : ""),
         );
       }

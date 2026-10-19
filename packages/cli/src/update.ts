@@ -893,6 +893,48 @@ export function predictMerges(
   };
 }
 
+export interface UpdatePreview {
+  plan: UpdatePlan;
+  /** Why the merges in the plan were not checked; unset when they were, or when there are none. */
+  mergesUnchecked?: string;
+}
+
+/**
+ * The plan `podo update` shows without `--apply`. Each merge is resolved
+ * against the merge base `--apply` uses (`--from`, the installed templates, or
+ * the recorded version's fetched from npm), so a merge that would leave
+ * conflict markers shows as a conflict. When that base cannot be had, the
+ * merges stay unchecked and `mergesUnchecked` says why.
+ */
+export function previewUpdate(
+  projectRoot: string,
+  templatesDir: string,
+  options: Pick<ApplyOptions, "oldTemplatesDir" | "fetchTemplates" | "oldExternalModulesRoot"> = {},
+): UpdatePreview {
+  const plan = planUpdate(projectRoot, templatesDir);
+  const mergePaths = plan.changes.filter((change) => change.action === "merge").map((change) => change.path);
+  if (!mergePaths.length) return { plan };
+  let base: PreviousTemplates;
+  try {
+    base = mergeBaseTemplates(plan.fromVersion, templatesDir, options, mergePaths);
+  } catch (error) {
+    return { plan, mergesUnchecked: firstLine(error) };
+  }
+  try {
+    return { plan: predictMerges(projectRoot, templatesDir, plan, base.dir, options.oldExternalModulesRoot) };
+  } catch (error) {
+    if (options.oldTemplatesDir) throw error;
+    return { plan, mergesUnchecked: firstLine(error) };
+  } finally {
+    base.cleanup();
+  }
+}
+
+function firstLine(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.split("\n")[0] ?? message;
+}
+
 function writeFile(projectRoot: string, path: string, content: string): void {
   const abs = join(projectRoot, path);
   mkdirSync(dirname(abs), { recursive: true });

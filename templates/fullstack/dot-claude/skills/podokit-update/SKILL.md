@@ -30,8 +30,10 @@ Rules to respect:
 - In the plan, `keep` is an edited file whose template did not change (or that the
   new version drops): `--apply` leaves it as it is. `merge` is an edited file whose
   template changed too: `--apply` 3-way merges it and reports merged or conflict.
-  `podo update --from <previous templates>` runs those merges in the preview and
-  shows the ones that would conflict as `conflict`.
+  The preview runs those merges against the same base and shows the ones that
+  would conflict as `conflict`. When it prints `WARN the N merge(s) were not
+  checked` (it could not get the previous version's templates from npm), pass
+  them with `podo update --from <previous templates>`.
 - In a fresh clone or git worktree, run `bun install` before `podo update` when the
   project uses an external module package (`.podokit/manifest.json` records its
   `packageName`); PodoKit reads that module from `node_modules`.

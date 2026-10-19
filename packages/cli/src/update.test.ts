@@ -23,6 +23,7 @@ import {
   applyUpdate,
   compareVersions,
   predictMerges,
+  previewUpdate,
   publishedTemplates,
   summarize,
   targetProject,
@@ -1350,6 +1351,51 @@ describe("update preview labels", () => {
     expect(planUpdate(dir, newTemplates).changes.find((change) => change.path === EXCEPTION)).toMatchObject({
       action: "keep",
     });
+  });
+
+  it("previews a merge conflict without --from, from the recorded version's templates", () => {
+    // An app adds a dependency on the line above one the template raises, as an
+    // app adding @types/archiver did when the template raised @types/bun.
+    const PACKAGE = "apps/api/package.json";
+    const oldTemplates = templatesCopy("old-templates");
+    const newTemplates = templatesCopy("new-templates");
+    const bun = /"@types\/bun": "[^"]+"/;
+    const oldPackage = join(oldTemplates, "fullstack", PACKAGE);
+    writeFileSync(oldPackage, readFileSync(oldPackage, "utf8").replace(bun, '"@types/bun": "^1.3.0"'));
+    const dir = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: dir });
+    writeManifest(dir, { ...readManifest(dir)!, podokitVersion: "1.5.0" });
+    const appPackage = join(dir, PACKAGE);
+    writeFileSync(
+      appPackage,
+      readFileSync(appPackage, "utf8").replace('    "@types/bun"', '    "@types/archiver": "^6.0.3",\n    "@types/bun"'),
+    );
+    const fetchTemplates = (version: string): PreviousTemplates => {
+      expect(version).toBe("1.5.0");
+      return { dir: oldTemplates, cleanup: () => undefined };
+    };
+
+    // Planning alone, as the preview did without --from, calls it a merge.
+    expect(planUpdate(dir, newTemplates).changes.find((change) => change.path === PACKAGE)?.action).toBe("merge");
+
+    const preview = previewUpdate(dir, newTemplates, { fetchTemplates });
+    expect(preview.mergesUnchecked).toBeUndefined();
+    expect(preview.plan.changes.find((change) => change.path === PACKAGE)).toMatchObject({
+      action: "conflict",
+      note: "edited locally and the template changed; the merge leaves conflict markers to resolve",
+    });
+    expect(summarize(preview.plan).conflict).toBe(1);
+
+    const result = applyUpdate(dir, newTemplates, { fetchTemplates });
+    expect(result.conflicts).toEqual([PACKAGE]);
+  });
+
+  it("says when the preview could not check its merges", () => {
+    const { dir, newTemplates } = scenario();
+    writeManifest(dir, { ...readManifest(dir)!, podokitVersion: "1.5.0" });
+    const preview = previewUpdate(dir, newTemplates, { fetchTemplates: unreachableRegistry });
+    expect(preview.mergesUnchecked).toBe("registry unreachable");
+    expect(summarize(preview.plan)).toMatchObject({ merge: 2, conflict: 0 });
   });
 
   it("keeps edits the template did not change without the previous templates", () => {
