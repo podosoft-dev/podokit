@@ -74,7 +74,85 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `docs/deployment.md` explains the renumbering and how to select a service's
   containers by their `com.docker.compose.project` and
   `com.docker.compose.service` labels.
-
+- `podo dev watch` left new migrations unapplied, so after a pull or a rebase
+  brought one in, requests that needed it failed with 500. `podo dev` now sets
+  `PODOKIT_DEV_MIGRATE=true` for the API container, and the generated API runs
+  `migrate:all` (Better Auth's schema and the application migrations) before it
+  loads the application and listens. Compose Watch restarts the API container when
+  a file under `apps/api/src` changes, so a migration added while it watches is
+  applied too. A failed run leaves the API up, logs the failure, and reports a down
+  `migrations` readiness check. `migrate:all` now prints what it applied. The flag
+  is ignored in production.
+- A web or API container that something recreated during `podo dev watch`, such as
+  `docker compose up --no-build` after a memory limit change, ran the source of its
+  last image build, because Compose Watch syncs only edits made after it starts.
+  `podo dev watch` now runs `docker compose up --build --detach` from the work tree
+  before it watches with `--no-up`, follows the project's container starts, and
+  rebuilds a synced service whose new container came from an image older than its
+  synced files. `runDevCommand` from the package API now returns a promise.
+- The development web server kept serving the first version of a Svelte component
+  that was deleted and created again, as a rebase or branch switch does, until its
+  next edit: Vite keeps a module's transform when its file is deleted, and
+  vite-plugin-svelte compared the returning file with that stale result. The
+  managed `vite.config.ts` adds a `podokit:refresh-recreated-files` plugin that
+  invalidates such a file's modules first.
+- The development web container's default memory limit (`WEB_MEM_LIMIT` in
+  `compose.dev.yaml`) is now 3 GiB. A full Playwright run on two workers kept the
+  Vite dev server of a larger application at 1.83 GiB and the 2 GiB default
+  OOM-killed it twice. Existing projects own `compose.dev.yaml`; set
+  `WEB_MEM_LIMIT=3g` in the project's `.env` or adopt the change from `podo diff`.
+- The generated API and web server lingered after `SIGTERM` while event streams or
+  WebSockets were open: the API waited for every open connection until it was
+  killed, and the web server waited its whole `SHUTDOWN_TIMEOUT` for streams its
+  `/api` proxy relayed. Both now stop accepting connections, end event streams at
+  once so clients reconnect elsewhere, give in-flight requests up to
+  `SHUTDOWN_TIMEOUT` seconds (30, now also read and validated by the API),
+  force-close what remains, and exit; a second signal exits at once. The API closes
+  its services within 3 seconds, answers `503` `SHUTTING_DOWN` on
+  `/health/ready` while stopping, and offers a `SHUTDOWN` service (`shutdown` in
+  the plugin context) through which application WebSockets and streams close on
+  shutdown. The `sse` module ends its streams through it.
+- `podo update` previewed an edited managed file whose template did not change, or
+  that the new version drops, as `conflict … would need a merge`, while `--apply`
+  then reported no conflict. Such a file is now `keep`, and an edited file whose
+  template changed is `merge`. `--apply` keeps the `keep` files without a merge and
+  reports them as kept (the `skipped` count is now `kept`), and it fetches the
+  previous templates only when something needs merging. With `--from`, the preview
+  shows which merges would leave conflict markers.
+- A file that was owned until this version and is managed from now on is compared
+  with the template it came from, so `podo update` keeps or merges earlier edits
+  instead of overwriting them.
+- In a fresh clone or git worktree without `node_modules`, `podo update`,
+  `podo diff <path>`, `podo restore`, and `podo remove` failed with
+  `Cannot resolve module "blog" while updating the project.` They now name the
+  missing external module package and ask to run `bun install` first.
+- Generated Playwright suites recorded a trace only on a retry
+  (`trace: "on-first-retry"`), and local runs make no retries, so a UI test that
+  failed once kept only a screenshot. The managed configs now use
+  `trace: "retain-on-failure"`.
+- The hydration helpers (`ready`, `hydrated`) waited until the 30-second test
+  timeout on a page that cannot hydrate. They now fail at once on SvelteKit's
+  static error page and five seconds after an uncaught page error, and name the
+  page's URL, status, title and text, its page and console errors, and its failed
+  requests.
+- When hydration fails and the root error page cannot load either, for example
+  after a failed module or message-catalog request, SvelteKit draws `src/error.html`
+  with 500 in the browser while the server answered 200 and logged nothing. The
+  managed `vite.config.ts` now sets `server.forwardConsole`, so `vite dev` prints
+  the browser's uncaught errors and `console.error` messages in its own log.
+- A generated app's production web server refused API clients that send no
+  `Origin` header: their POST, PUT, PATCH, or DELETE to `/api` without a body or
+  with a form-type body got `403 Cross-site POST form submissions are forbidden`,
+  since SvelteKit's cross-site form check runs before every hook and route and
+  treats a missing content type as a form, while the Vite dev server never checks.
+  The managed `vite.config.ts` turns the built-in check off, and the managed
+  `hooks.server.ts` (new in the base template, and first in the admin-dashboard
+  one) applies the same rule from `src/lib/server/csrf.ts`, except that a request
+  to `/api` without an `Origin` goes on to the API, which authenticates it.
+  Browsers send `Origin` with these methods, so cross-site forms and fetches are
+  still refused on `/api` and on pages, and `csrf.trustedOrigins` in
+  `vite.extensions.ts` still applies. The fast CI job now starts the built API and
+  web server of its generated app to check both requests.
 ## [1.6.5] - 2026-10-19
 
 ### Fixed
