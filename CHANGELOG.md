@@ -25,6 +25,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `docs/deployment.md` said the suite signs up its seed accounts. Since 1.6.4 the
   seed signs only the user up and signs the administrator in, so a new stack
   needs the administrator from `admin:bootstrap` first.
+- The generated `auth` test "stops a production API whose ADMIN_EMAILS holds a
+  placeholder" (`apps/api/src/auth/admin-emails.spec.ts`) failed in an
+  application whose `env.extensions.ts` requires another variable in
+  production, such as a Redis password. It loaded `auth.ts` in a child process
+  with only `NODE_ENV=production`, `ADMIN_EMAILS`, and the Better Auth
+  variables, so the application's own environment check stopped the child
+  before `auth.ts` read `ADMIN_EMAILS`, for a real address too. The child now
+  loads `auth.ts` with the test's environment, then evaluates `auth.ts` alone
+  again in production, and the test checks only the `ADMIN_EMAILS` error.
 
 ## [1.6.4] - 2026-10-18
 
