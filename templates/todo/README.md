@@ -99,8 +99,9 @@ existing images.
 The API container applies pending migrations before every start, and Compose Watch
 restarts it when a file under `apps/api/src` changes, so migrations from a pull,
 a rebase, or a new module reach the development database without a manual step.
-A failing migration leaves the API running; read it with `dev logs api` and run
-`dev exec api {{apiRun}} migrate:all` to retry it.
+A failing migration leaves the API running and not ready, and the API retries it,
+up to every 10 seconds, until it succeeds; read the error with `dev logs api`, or
+run `dev exec api {{apiRun}} migrate:all` to see it in full.
 You can still activate an additional Compose profile explicitly:
 
 ```bash
