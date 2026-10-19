@@ -200,6 +200,15 @@ bun run build
 bun run --cwd apps/api contract
 ```
 
+A fresh install resolves the newest `@types/bun`, while existing apps keep the
+version their lockfile holds. When a change touches managed TypeScript, also
+type-check with the lowest version the template's range allows, as CI does:
+
+```bash
+node scripts/oldest-bun-types.mjs /tmp/app
+cd /tmp/app && bun install && bun run lint
+```
+
 ### Tier 2: live feature verification
 
 Run the specific API/browser specs against a standing generated stack:
