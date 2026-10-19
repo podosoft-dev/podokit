@@ -300,9 +300,8 @@ images include. In an image without it the hook fails, and Kubernetes records a
 The pod's `terminationGracePeriodSeconds` counts the hook as well: 5 seconds for it,
 the web server's `SHUTDOWN_TIMEOUT` for open requests to finish (30 seconds unless
 `runtimeConfig` sets it), and 5 more for the web server to close what remains and
-exit, 40 seconds by default. The API waits for its in-flight requests without a
-limit of its own and gets the same period, which covers the `/api` proxy's default
-30-second wait. Kubernetes kills a container still running when the period ends,
+exit, 40 seconds by default. The API gets the same period for its in-flight
+requests, which covers the `/api` proxy's default 30-second wait. Kubernetes kills a container still running when the period ends,
 so raise `SHUTDOWN_TIMEOUT` in `runtimeConfig` when requests may take longer, such
 as uploads under a long [`APP_PROXY_TIMEOUTS`](templates.md#proxy-deadlines-per-route)
 deadline, and the grace period follows it. A replaced pod keeps its database

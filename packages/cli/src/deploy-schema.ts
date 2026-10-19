@@ -472,8 +472,8 @@ const DEFAULT_SHUTDOWN_TIMEOUT_SECONDS = 30;
 
 /**
  * How long the web server drains open requests after SIGTERM: SHUTDOWN_TIMEOUT
- * from runtimeConfig, 30 unless set. The API's stop has no bound of its own and
- * gets the same window, so both drivers size their stop timeouts from this.
+ * from runtimeConfig, 30 unless set. The API gets the same window, and both
+ * drivers size their stop timeouts from it.
  */
 export function shutdownDrainSeconds(runtimeConfig: Record<string, string>): number {
   const configured = runtimeConfig.SHUTDOWN_TIMEOUT;

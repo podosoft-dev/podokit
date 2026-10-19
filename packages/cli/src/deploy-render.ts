@@ -10,7 +10,7 @@ import type {
 import { profilePath } from "./deploy-profile";
 import { API_PATH_PREFIX, apiPathBase } from "./api-paths";
 import { readAppProxyTimeouts, type AppProxyTimeouts } from "./app-proxy-timeouts";
-import { idleTimeoutConfig, proxyTrustConfig } from "./deploy-schema";
+import { idleTimeoutConfig, proxyTrustConfig, shutdownDrainSeconds } from "./deploy-schema";
 import { readManifest } from "./lockfile";
 import {
   resolveToolchain,
@@ -594,18 +594,13 @@ const PROBE_TIMEOUT_SECONDS = 2;
 // version, unlike the sleep action.
 const PRE_STOP_SLEEP_SECONDS = 5;
 // The web server drains for SHUTDOWN_TIMEOUT seconds (30 unless set) and then
-// force-closes for up to one more. The API's stop waits for in-flight requests
-// without a bound of its own, so it gets the same window, which covers the /api
-// proxy's default 30 s wait. The grace period also counts the preStop sleep.
-const DEFAULT_SHUTDOWN_TIMEOUT_SECONDS = 30;
+// force-closes for up to one more. The API gets the same window for its in-flight
+// requests, which covers the /api proxy's default 30 s wait. The grace period
+// also counts the preStop sleep.
 const SHUTDOWN_MARGIN_SECONDS = 5;
 
 function terminationGracePeriodSeconds(runtimeConfig: Record<string, string>): number {
-  const configured = runtimeConfig.SHUTDOWN_TIMEOUT;
-  const drain = configured !== undefined && /^\d+$/.test(configured)
-    ? Number(configured)
-    : DEFAULT_SHUTDOWN_TIMEOUT_SECONDS;
-  return PRE_STOP_SLEEP_SECONDS + drain + SHUTDOWN_MARGIN_SECONDS;
+  return PRE_STOP_SLEEP_SECONDS + shutdownDrainSeconds(runtimeConfig) + SHUTDOWN_MARGIN_SECONDS;
 }
 
 function deployment(
