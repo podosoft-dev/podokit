@@ -59,7 +59,9 @@ jobs:
             node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" status --json | grep -q '"runtime": "bun"'
             # The built web server checks cross-site form submissions and `vite dev`
             # does not. A POST without a body or Origin header, as API clients send
-            # it, must reach the API through /api; a cross-site form must not.
+            # it, must reach the API through /api; a cross-site form must not. The
+            # API answers with whatever its missing database and Redis allow, so
+            # only the web server's 403 counts as a refusal.
             (set -a && . ./.env.example && set +a && cd apps/api && PORT=5012 exec bun dist/main.js) \
               < /dev/null > "$RUNNER_TEMP/api.log" 2>&1 &
             api=$!
@@ -76,7 +78,7 @@ jobs:
             cross_site=$(status -X POST -H 'origin: https://cross-site.example' -d note=ping http://127.0.0.1:5011/)
             kill "$api" "$web" 2> /dev/null || true
             echo "POST /api/health without Origin: $no_origin; cross-site form POST /: $cross_site"
-            if [ "$no_origin" != 404 ] || [ "$cross_site" != 403 ]; then
+            if [ "$no_origin" = 403 ] || [ "$no_origin" = 000 ] || [ "$cross_site" != 403 ]; then
               cat "$RUNNER_TEMP/api.log" "$RUNNER_TEMP/web.log"
               exit 1
             fi
