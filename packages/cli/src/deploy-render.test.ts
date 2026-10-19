@@ -369,6 +369,13 @@ describe("deployment migration command", () => {
     );
   });
 
+  it("does not retry a failed migration", () => {
+    const { root, profile } = initializedProfile();
+    const manifest = readFileSync(renderDeployment(root, "production", profile, "v1.2.3").migrationManifest, "utf8");
+
+    expect(manifest).toMatch(/\nspec:\n(?: {2}#[^\n]*\n)* {2}backoffLimit: 0\n {2}ttlSecondsAfterFinished: 3600\n/);
+  });
+
   it("renders the default migration command when the profile omits it", () => {
     const { root, profile } = initializedProfile();
     const runtime = renderDeployment(root, "production", profile, "v1.2.3");

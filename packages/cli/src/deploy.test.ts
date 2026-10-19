@@ -16,6 +16,7 @@ import {
   getDeploymentStatus,
   planDeployment,
   planRollback,
+  redactLogLine,
   verifyDeployment,
 } from "./deploy";
 import {
@@ -590,6 +591,23 @@ spec:
     expect(revisionTwo.images.api).toContain("@sha256:");
     expect(revisionTwo.targetRevisionManifestDigest).toMatch(/^sha256:/);
     expect(revisionTwo.warnings.join(" ")).toContain("database migrations");
+  });
+});
+
+describe("migration log redaction", () => {
+  it.each([
+    ["postgres://app:s3cret@db.internal:5432/app failed", "postgres://app:***@db.internal:5432/app failed"],
+    ["REDIS_URL=redis://:s3cret@redis:6379", "REDIS_URL=redis://:***@redis:6379"],
+    ["POSTGRES_PASSWORD=s3cret next", "POSTGRES_PASSWORD=*** next"],
+    ['client_secret: "two words"', "client_secret: ***"],
+    ["Authorization token=abc", "Authorization token=***"],
+    ["relation \"users\" does not exist", "relation \"users\" does not exist"],
+  ])("masks %s", (line, expected) => {
+    expect(redactLogLine(line)).toBe(expected);
+  });
+
+  it("caps a long line", () => {
+    expect(redactLogLine("x".repeat(400))).toBe(`${"x".repeat(300)}…`);
   });
 });
 

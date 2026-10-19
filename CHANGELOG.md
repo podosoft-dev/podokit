@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- A Kubernetes `podo deploy apply` whose migration failed waited the full 10
+  minutes before it failed. It waited with `kubectl wait
+  --for=condition=complete --timeout=10m`, which returns only when the Job
+  completes, so a migration that exited non-zero held apply until the timeout,
+  and the error said only that the wait timed out; the Job also retried the
+  migration once after a back-off. Apply now stops as soon as the Job completes
+  or fails, within the same 10 minutes overall, and reports a failure with the
+  last 20 log lines of the Job's pod, masking the password of a connection URL
+  and the values of keys such as `*_PASSWORD`, `*_SECRET`, and `*_TOKEN`. A Job
+  still unfinished after 10 minutes is reported with what its pod is waiting
+  for, such as `ImagePullBackOff`. The migration Job no longer retries
+  (`backoffLimit: 0`), so a migration that exits non-zero fails at once.
 - Changing an application Secret on Kubernetes, such as a new `ADMIN_EMAILS` in
   the API Secret, made the next `podo deploy apply` restart the in-cluster
   PostgreSQL, Redis, and object storage StatefulSets. Every rendered pod

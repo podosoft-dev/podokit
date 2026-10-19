@@ -1325,22 +1325,128 @@ function condition(conditions: unknown, type: string): Record<string, unknown> |
     : undefined;
 }
 
+function readJob(profile: DeployProfileV1, job: string, runner: CommandRunner): unknown {
+  const result = runner("kubectl", kubectlArgs(profile, ["get", "job", job, "-o", "json"]), { capture: true });
+  try {
+    return result.status === 0 ? JSON.parse(result.stdout) as unknown : null;
+  } catch {
+    return null;
+  }
+}
+
+function jobFinished(resource: unknown): "succeeded" | "failed" | null {
+  const status = isRecord(resource) && isRecord(resource.status) ? resource.status : null;
+  if (condition(status?.conditions, "Complete")) return "succeeded";
+  if (condition(status?.conditions, "Failed")) return "failed";
+  return null;
+}
+
+const MIGRATION_TIMEOUT_SECONDS = 600;
+const MIGRATION_WAIT_STEP_SECONDS = 5;
+
+/**
+ * Waits until the migration Job completes or fails, whichever comes first, for
+ * up to 10 minutes. `kubectl wait --for=condition=complete` alone returns only
+ * when the Job completes, so a failed migration used to hold apply for the
+ * whole timeout. Each short wait still returns the moment the Job completes,
+ * and the Job is read between them to see a failure within seconds. The step
+ * count bounds the loop when kubectl returns at once.
+ */
+function awaitMigration(profile: DeployProfileV1, job: string, runner: CommandRunner): unknown {
+  const deadline = Date.now() + MIGRATION_TIMEOUT_SECONDS * 1000;
+  let resource: unknown = null;
+  for (let step = 0; step < MIGRATION_TIMEOUT_SECONDS / MIGRATION_WAIT_STEP_SECONDS; step += 1) {
+    runner(
+      "kubectl",
+      kubectlArgs(profile, ["wait", "--for=condition=complete", `job/${job}`, `--timeout=${MIGRATION_WAIT_STEP_SECONDS}s`]),
+      { capture: true },
+    );
+    resource = readJob(profile, job, runner);
+    if (jobFinished(resource) || Date.now() >= deadline) break;
+  }
+  return resource;
+}
+
+const SECRET_ASSIGNMENT = /\b([A-Z0-9_]*(?:PASSWORD|PASSWD|SECRET|TOKEN|PRIVATE_KEY|API_KEY)[A-Z0-9_]*)(\s*[=:]\s*)("[^"]*"|'[^']*'|\S+)/gi;
+const URL_PASSWORD = /(\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]*:)[^\s@/]+@/gi;
+
+/** Masks credentials a failing migration may print, such as a connection URL. */
+export function redactLogLine(line: string): string {
+  const redacted = line.replace(URL_PASSWORD, "$1***@").replace(SECRET_ASSIGNMENT, "$1$2***");
+  return redacted.length > 300 ? `${redacted.slice(0, 300)}…` : redacted;
+}
+
+/** The newest pod of the migration Job: its name, why it is waiting, and its last log lines. */
+function migrationPod(
+  profile: DeployProfileV1,
+  job: string,
+  runner: CommandRunner,
+  withLogs: boolean,
+): { name: string; waiting: string | null; logs: string[] } | null {
+  const listed = runner(
+    "kubectl",
+    kubectlArgs(profile, ["get", "pods", "-l", `job-name=${job}`, "-o", "json"]),
+    { capture: true },
+  );
+  let items: unknown[] = [];
+  try {
+    const parsed = listed.status === 0 ? JSON.parse(listed.stdout) as unknown : null;
+    items = isRecord(parsed) && Array.isArray(parsed.items) ? parsed.items : [];
+  } catch {
+    items = [];
+  }
+  const pods = items
+    .filter((item): item is Record<string, unknown> & { metadata: Record<string, unknown> } =>
+      isRecord(item) && isRecord(item.metadata) && typeof item.metadata.name === "string")
+    .sort((left, right) =>
+      String(left.metadata.creationTimestamp ?? "").localeCompare(String(right.metadata.creationTimestamp ?? "")));
+  const pod = pods.at(-1);
+  if (!pod) return null;
+  const name = pod.metadata.name as string;
+  const statuses = isRecord(pod.status) && Array.isArray(pod.status.containerStatuses) ? pod.status.containerStatuses : [];
+  const state = isRecord(statuses[0]) && isRecord(statuses[0].state) ? statuses[0].state : null;
+  const waiting = isRecord(state?.waiting) && typeof state.waiting.reason === "string"
+    ? [state.waiting.reason, typeof state.waiting.message === "string" ? state.waiting.message : ""]
+        .filter(Boolean).join(": ")
+    : null;
+  let logs: string[] = [];
+  if (withLogs) {
+    const output = runner("kubectl", kubectlArgs(profile, ["logs", name, "--tail=20"]), { capture: true });
+    logs = output.status === 0
+      ? output.stdout.split(/\r?\n/).filter((line) => line.trim()).map(redactLogLine)
+      : [];
+  }
+  return { name, waiting: waiting === null ? null : redactLogLine(waiting), logs };
+}
+
+/** Why the migration stopped the apply, with what its pod printed last. */
+function migrationFailure(
+  profile: DeployProfileV1,
+  job: string,
+  record: MigrationRecord,
+  runner: CommandRunner,
+): Error {
+  const pod = migrationPod(profile, job, runner, true);
+  const logs = pod?.logs.length
+    ? `\nLast log lines of pod ${pod.name}:\n${pod.logs.map((line) => `  ${line}`).join("\n")}`
+    : pod ? `\nPod ${pod.name} printed no log lines.` : "";
+  if (record.result === "failed") {
+    return new Error(`Migration Job ${job} failed: ${record.reason ?? "the Job failed"}.${logs}`);
+  }
+  return new Error(
+    `Migration Job ${job} did not finish within ${MIGRATION_TIMEOUT_SECONDS / 60} minutes` +
+      `${pod?.waiting ? `; its pod is waiting: ${pod.waiting}` : ""}. Inspect it with kubectl -n ${profile.target.namespace} describe job ${job}.${logs}`,
+  );
+}
+
 /** What the finished, failed, or still running migration Job reports about itself. */
 function migrationOutcome(
-  profile: DeployProfileV1,
   release: string,
   job: string,
   rendered: { image: string; command: string[] },
-  runner: CommandRunner,
+  resource: unknown,
 ): MigrationRecord {
   const text = (value: unknown): string | null => (typeof value === "string" ? value : null);
-  const result = runner("kubectl", kubectlArgs(profile, ["get", "job", job, "-o", "json"]), { capture: true });
-  let resource: unknown = null;
-  try {
-    resource = result.status === 0 ? JSON.parse(result.stdout) as unknown : null;
-  } catch {
-    resource = null;
-  }
   const status = isRecord(resource) && isRecord(resource.status) ? resource.status : null;
   const spec = isRecord(resource) && isRecord(resource.spec) && isRecord(resource.spec.template) &&
     isRecord(resource.spec.template.spec) ? resource.spec.template.spec : null;
@@ -1606,25 +1712,16 @@ export async function applyDeployment(
       kubectlArgs(profile, ["apply", "-f", runtime.migrationManifest]),
       false,
     );
-    let migrationError: unknown = null;
-    try {
-      checked(
-        runner,
-        "kubectl",
-        kubectlArgs(profile, ["wait", "--for=condition=complete", `job/${job}`, "--timeout=10m"]),
-        false,
-      );
-    } catch (error) {
-      migrationError = error;
-    }
     const command = profile.migration?.command ??
       toolchainMigrationCommand(readManifest(projectRoot)?.toolchain ?? resolveToolchain());
-    recordMigration(
-      profile,
-      migrationOutcome(profile, release, job, { image: plan.images.api, command }, runner),
-      runner,
+    const migration = migrationOutcome(
+      release,
+      job,
+      { image: plan.images.api, command },
+      awaitMigration(profile, job, runner),
     );
-    if (migrationError) throw migrationError;
+    recordMigration(profile, migration, runner);
+    if (migration.result !== "succeeded") throw migrationFailure(profile, job, migration, runner);
 
     checked(
       runner,

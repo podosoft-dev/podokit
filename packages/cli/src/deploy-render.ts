@@ -936,7 +936,9 @@ metadata:
   namespace: ${profile.target.namespace}
   labels:
 ${labels(`${profile.target.release}-migration`)}spec:
-  backoffLimit: 1
+  # A failed migration is not retried: apply reports it with the pod's log
+  # instead of starting it again after a back-off.
+  backoffLimit: 0
   ttlSecondsAfterFinished: 3600
   template:
     metadata:
