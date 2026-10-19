@@ -631,6 +631,8 @@ describe("create (integration against templates)", () => {
       expect(memory, service).toMatch(/^ {4}mem_limit: \$\{[A-Z_]+_MEM_LIMIT:-\d+[mg]\}$/);
       expect(swap?.replace("memswap_limit", "mem_limit"), service).toBe(memory);
     }
+    // A full Playwright run kept the Vite dev server near 1.9 GiB; 2 GiB was OOM-killed.
+    expect(services.get("web")).toContain("    mem_limit: ${WEB_MEM_LIMIT:-3g}");
   });
 
   it("scaffolds the todo template with the CRUD example", () => {

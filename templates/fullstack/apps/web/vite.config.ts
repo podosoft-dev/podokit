@@ -3,7 +3,7 @@ import adapter from "@sveltejs/adapter-bun";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
-import { defineConfig, mergeConfig, type ProxyOptions } from "vite";
+import { defineConfig, mergeConfig, type EnvironmentModuleNode, type Plugin, type ProxyOptions } from "vite";
 import { appSvelteKitConfig, appViteConfig } from "./vite.extensions.ts";
 
 // Inside the dev container, bind to all interfaces and accept local gateway or
@@ -36,6 +36,31 @@ export function webSocketProxy(
   );
 }
 
+/**
+ * Drops the cached transform of a file that was deleted or created again. Vite
+ * keeps a module's last transform when its file is deleted and does not drop it
+ * when the file returns, and vite-plugin-svelte compares the returning
+ * component with that cached result. A component deleted and re-created, as a
+ * rebase or branch switch does, kept serving its first version to the browser
+ * until its next edit. This runs before the other hot-update hooks.
+ */
+export function refreshRecreatedFiles(): Plugin {
+  return {
+    name: "podokit:refresh-recreated-files",
+    apply: "serve",
+    hotUpdate: {
+      order: "pre",
+      handler({ type, modules, timestamp }) {
+        if (type === "update") return;
+        const invalidated = new Set<EnvironmentModuleNode>();
+        for (const module of modules) {
+          this.environment.moduleGraph.invalidateModule(module, invalidated, timestamp, true);
+        }
+      },
+    },
+  };
+}
+
 function readDevConfig(): string | null {
   try {
     return readFileSync(new URL("../../.podokit/dev.json", import.meta.url), "utf8");
@@ -49,6 +74,7 @@ export default defineConfig((env) =>
   mergeConfig(
     {
       plugins: [
+        refreshRecreatedFiles(),
         tailwindcss(),
         sveltekit({
           adapter: adapter(),

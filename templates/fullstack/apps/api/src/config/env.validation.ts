@@ -40,6 +40,12 @@ const podokitShape = {
   DB_IDLE_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(30000),
   DB_QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
   DB_AUTH_POOL_MAX: z.coerce.number().int().positive().default(10),
+  // Set by podo dev for the API container: apply pending migrations before each
+  // development start. Ignored in production.
+  PODOKIT_DEV_MIGRATE: z
+    .enum(["true", "false", ""])
+    .optional()
+    .transform((value) => value === "true"),
   READINESS_CHECK_TIMEOUT_MS: z.coerce.number().int().positive().default(800),
   READINESS_CACHE_MS: z.coerce.number().int().nonnegative().default(2000),
 } satisfies z.ZodRawShape;

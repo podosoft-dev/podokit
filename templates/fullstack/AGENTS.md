@@ -155,8 +155,12 @@ Useful commands:
 - `podo dev watch|up|ps|logs|exec|down` — run container development through the
   shared loopback gateway. `.podokit/dev.json` owns the local/public hosts and the
   exact API WebSocket allowlist; never use a prefix or wildcard for that allowlist.
-  `podo dev up` rebuilds the images from the current source so a recreated
-  container never runs code older than the files Compose Watch synced.
+  `podo dev up` and `podo dev watch` rebuild the images from the current source so
+  a recreated container never runs code older than the files Compose Watch synced,
+  and `podo dev watch` rebuilds a service another command recreated from an older
+  image. The API container applies pending migrations before every start
+  (`PODOKIT_DEV_MIGRATE`, set by `podo dev`), so a new migration needs no manual step
+  there; check `podo dev logs api` when one fails.
   `podo dev down` also stops this project's running `podo dev watch`; do not
   kill Compose processes by hand.
   The containers read the untracked `.env.docker`; `podo dev` creates it from the

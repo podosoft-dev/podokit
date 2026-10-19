@@ -647,7 +647,7 @@ async function main(argv: string[]): Promise<void> {
 
   if (args.command === "dev") {
     try {
-      runDevCommand(process.cwd(), args.name, argv.slice(2));
+      await runDevCommand(process.cwd(), args.name, argv.slice(2));
     } catch (err) {
       fail((err as Error).message);
     }
