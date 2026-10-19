@@ -115,7 +115,46 @@ describe("PodoKit development gateway", () => {
     expect(route).not.toContain("docker.sock");
     expect(compose).toContain("profiles: [podokit-legacy-proxy]");
     expect(compose).toContain("external: true");
-    expect(compose).not.toContain(`${runtime.alias}-api`);
+    expect(compose).toContain(`                - address: ${runtime.alias}-web:5001\n`);
+    // Without WebSocket or API paths the link forwards nothing to the API.
+    expect(compose).not.toContain("--entrypoints.api.address");
+    expect(compose).not.toContain(`address: ${runtime.alias}-api`);
+  });
+
+  it("keeps web and api off the shared gateway network", async () => {
+    const root = project();
+    writeFileSync(
+      join(root, ".podokit", "dev.json"),
+      JSON.stringify({ schemaVersion: 1, hostname: "example-app.localhost", webSocketPaths: ["/events/ws"] }),
+    );
+    const runtime = resolveDevRuntime(root);
+    const compose = renderRuntimeCompose(runtime);
+    const service = (name: string): string => {
+      const start = compose.indexOf(`\n  ${name}:\n`);
+      const end = compose.slice(start + 1).search(/\n(?: {2}[^ ]|[^ ])/);
+      return compose.slice(start + 1, start + 1 + end + 1);
+    };
+
+    // Compose adds each service's plain name as an alias on every network it
+    // joins, so a web container on the gateway resolved `api` to any project's API.
+    expect(service("web")).toContain(`    networks:\n      podokit:\n        aliases: [${runtime.alias}-web]\n`);
+    expect(service("web")).not.toContain("podokit-dev-gateway");
+    expect(service("api")).toContain(`    networks:\n      podokit:\n        aliases: [${runtime.alias}-api]\n`);
+    expect(service("api")).not.toContain("podokit-dev-gateway");
+    expect(service("web")).toContain(`    depends_on: [${runtime.alias}]\n`);
+    // Only the link, named after the project's unique alias, joins the gateway.
+    expect(compose.match(/podokit-dev-gateway\]/g)).toHaveLength(1);
+    expect(service(runtime.alias)).toContain("    networks: [podokit, podokit-dev-gateway]\n");
+    expect(service(runtime.alias)).toContain("    image: traefik:v3.5\n");
+    expect(compose).toContain("            rule: HostSNI(`*`)\n");
+    expect(compose).toContain(`                - address: ${runtime.alias}-web:5001\n`);
+    expect(compose).toContain(`                - address: ${runtime.alias}-api:5002\n`);
+    expect(compose).toContain("      - --entrypoints.api.address=:5002\n");
+    // The gateway reaches both through the link.
+    const route = renderRoute(runtime);
+    expect(route).toContain(`url: http://${runtime.alias}:5001`);
+    expect(route).toContain(`url: http://${runtime.alias}:5002`);
+    expect(route).not.toContain(`${runtime.alias}-api`);
   });
 
   it("routes only configured exact WebSocket paths to the API", async () => {
@@ -138,9 +177,9 @@ describe("PodoKit development gateway", () => {
       "(Host(`example-app.localhost`) || Host(`ws.example.com`)) && (Path(`/events/ws`) || Path(`/notifications/socket`))",
     );
     expect(route).toContain("priority: 100");
-    expect(route).toContain(`url: http://${runtime.alias}-api:5002`);
+    expect(route).toContain(`url: http://${runtime.alias}:5002`);
     expect(route).not.toContain("PathPrefix");
-    expect(compose).toContain(`aliases: [${runtime.alias}-api]`);
+    expect(compose).toContain(`address: ${runtime.alias}-api:5002`);
   });
 
   it("routes configured API paths to the API without the /api prefix", async () => {
@@ -167,10 +206,10 @@ describe("PodoKit development gateway", () => {
     );
     expect(route).toContain("Path(`/events/ws`)");
     expect(route.match(new RegExp(`${runtime.routeId}-api:\n`, "g"))).toHaveLength(1);
-    expect(route).toContain(`url: http://${runtime.alias}-api:5002`);
+    expect(route).toContain(`url: http://${runtime.alias}:5002`);
     // Everything else still reaches the web service, which proxies /api itself.
     expect(route).toContain(`url: http://${runtime.alias}:5001`);
-    expect(compose).toContain(`aliases: [${runtime.alias}-api]`);
+    expect(compose).toContain(`address: ${runtime.alias}-api:5002`);
   });
 
   it("joins the API network for API paths without WebSocket paths", async () => {
@@ -181,7 +220,7 @@ describe("PodoKit development gateway", () => {
     );
     const runtime = resolveDevRuntime(root);
 
-    expect(renderRuntimeCompose(runtime)).toContain(`aliases: [${runtime.alias}-api]`);
+    expect(renderRuntimeCompose(runtime)).toContain(`address: ${runtime.alias}-api:5002`);
     expect(renderRoute(runtime)).not.toContain("-websocket:");
   });
 
@@ -811,13 +850,13 @@ describe("development origins from .podokit/dev.json", () => {
       '    environment:\n' +
       '      CORS_ORIGIN: "http://shop.localhost,https://shop-dev.example.com,http://localhost"\n' +
       '      BETTER_AUTH_URL: "http://shop.localhost"\n';
-    expect(compose).toContain(`  web:\n${environment}    networks:`);
+    expect(compose).toContain(`  web:\n${environment}    depends_on:`);
     expect(compose).toContain(`  api:\n${environment}`);
   });
 
   it("asks only the API container to apply pending migrations before it starts", async () => {
     const compose = renderRuntimeCompose(resolveDevRuntime(renamed()));
-    const api = compose.slice(compose.indexOf("  api:\n"), compose.indexOf("\nnetworks:"));
+    const api = compose.slice(compose.indexOf("  api:\n"), compose.indexOf("\nconfigs:"));
     const web = compose.slice(compose.indexOf("  web:\n"), compose.indexOf("  api:\n"));
     expect(api).toContain('      PODOKIT_DEV_MIGRATE: "true"');
     expect(web).not.toContain("PODOKIT_DEV_MIGRATE");

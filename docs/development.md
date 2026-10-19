@@ -141,6 +141,19 @@ without `podo dev`, such as from the devcontainer, and are rendered from
 `.podokit/dev.json` too. SvelteKit proxies
 `/api/*` internally to Elysia, so browsers use one origin.
 
+Every project's containers stay on the project's own Compose network, so `web`
+and `api` (and `BACKEND_INTERNAL_URL=http://api:5002`) always name the same
+project's services. Compose registers a service under its plain name on every
+network it joins, so `podo dev` never attaches web or api to the shared
+`podokit-dev-gateway` network. Instead it adds one gateway link per project: a
+small Traefik container whose service name is the project's unique alias
+(`podokit-<name>-<hash>`). The link joins both networks and passes TCP
+connections through to the web container and, for the paths below, to the API, so
+the gateway's `X-Forwarded-*` headers reach them unchanged. Its memory limit is
+128 MiB; set `GATEWAY_LINK_MEM_LIMIT` to change it. Do not attach services of
+your own to `podokit-dev-gateway`: every project's containers there would reach
+them by their plain service names.
+
 If the API exposes a WebSocket endpoint, add its exact path to the same file:
 
 ```json
