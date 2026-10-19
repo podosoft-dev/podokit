@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { anonState } from "../helpers/accounts";
-import { PAGE_ERROR_GRACE_MS, ready } from "../helpers/hydration";
+import { NETWORK_CHANGED_ANNOTATION, PAGE_ERROR_GRACE_MS, ready } from "../helpers/hydration";
 
 // The hydration helper every UI spec starts with fails on a page that cannot
 // hydrate instead of waiting for the test timeout, and says why.
@@ -13,6 +13,11 @@ async function failure(run: Promise<void>): Promise<string> {
     () => "hydrated",
     (error: unknown) => String(error),
   );
+}
+
+// Only requests the browser dropped for a network change earn a second load.
+function reloadedForNetworkChange(): boolean {
+  return test.info().annotations.some((annotation) => annotation.type === NETWORK_CHANGED_ANNOTATION);
 }
 
 test("ready() waits for an error page rendered inside the app", async ({ page }) => {
@@ -27,9 +32,11 @@ test("ready() fails at once on the server's static error page", async ({ page })
   const errorPage = readFileSync(join(__dirname, "../../apps/web/src/error.html"), "utf8")
     .replace(/%sveltekit\.status%/g, "500")
     .replace(/%sveltekit\.error\.message%/g, "Internal Error");
-  await page.route("**/hydration-check-error-page", (route) =>
-    route.fulfill({ status: 500, contentType: "text/html", body: errorPage }),
-  );
+  let loads = 0;
+  await page.route("**/hydration-check-error-page", (route) => {
+    loads++;
+    return route.fulfill({ status: 500, contentType: "text/html", body: errorPage });
+  });
 
   const started = Date.now();
   const message = await failure(ready(page, "/hydration-check-error-page"));
@@ -37,6 +44,8 @@ test("ready() fails at once on the server's static error page", async ({ page })
   expect(message).toContain("The server sent SvelteKit's static error page (src/error.html)");
   expect(message).toContain("/hydration-check-error-page (status 500)");
   expect(Date.now() - started).toBeLessThan(5_000);
+  expect(loads).toBe(1);
+  expect(reloadedForNetworkChange()).toBe(false);
 });
 
 test.describe("signed out", () => {
@@ -44,9 +53,11 @@ test.describe("signed out", () => {
 
   test("ready() names the failed requests of a page that never hydrates", async ({ page }) => {
     // Without its scripts the server-rendered page stays visible but never hydrates.
-    await page.route("**/*", (route) =>
-      route.request().resourceType() === "script" ? route.abort() : route.continue(),
-    );
+    let loads = 0;
+    await page.route("**/*", (route) => {
+      if (route.request().resourceType() === "document") loads++;
+      return route.request().resourceType() === "script" ? route.abort() : route.continue();
+    });
 
     const started = Date.now();
     const message = await failure(ready(page, "/login"));
@@ -56,5 +67,7 @@ test.describe("signed out", () => {
     expect(message).toContain("Page errors:");
     expect(message).toMatch(/Failed requests:\n {2}GET \S+: net::ERR_FAILED/);
     expect(Date.now() - started).toBeLessThan(PAGE_ERROR_GRACE_MS + 10_000);
+    expect(loads).toBe(1);
+    expect(reloadedForNetworkChange()).toBe(false);
   });
 });

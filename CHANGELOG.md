@@ -177,6 +177,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   passes TCP connections through to the web and API containers by aliases that
   exist only on the project network, so the gateway's proxy headers reach them
   unchanged. Its memory limit is 128 MiB (`GATEWAY_LINK_MEM_LIMIT`).
+- A UI test on Linux failed with a static 500 page when another process started
+  or stopped a container on the same host. Each container start or stop adds or
+  removes an interface address, and Chromium then cancels every request still
+  waiting for a connection with `net::ERR_NETWORK_CHANGED`; a page from the Vite
+  dev server makes about 270 module requests, so a module import failed and the
+  page did not hydrate. The hydration helpers (`ready`, `hydrated`) now load such
+  a page once more when the failed load had a request dropped with
+  `net::ERR_NETWORK_CHANGED`, add a `network-changed` annotation to the test, and
+  print the same note with a `[network-changed]` prefix. Any other failure, and a
+  second failure, fails the test as before.
 
 ### Upgrade notes
 

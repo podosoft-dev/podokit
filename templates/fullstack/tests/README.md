@@ -87,6 +87,11 @@ SvelteKit also renders that error page in the browser when hydration fails,
 after a page the server answered with 200. The cause is then in the browser: in
 the helper's error, the dev server output, and the trace.
 
+On Linux, a container that starts or stops on the same host changes the
+network, and Chromium drops the page's waiting requests with
+`net::ERR_NETWORK_CHANGED`. The helpers load such a page once more and add a
+`network-changed` annotation to the test; any other failure fails the test.
+
 ## Email tests
 
 The email specs that the `admin-dashboard` module adds read messages from the
