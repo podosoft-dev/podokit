@@ -593,16 +593,14 @@ function endEventStreamsAtShutdown(): void {
   let enders = scope[EVENT_STREAM_ENDERS];
   if (!enders) {
     const registered = new Set<() => void>();
+    // A once listener is already removed when it runs, so no other listener
+    // left means this one alone kept the signal from ending the process.
     const onSignal = (signal: NodeJS.Signals): void => {
       for (const end of registered) end();
-      // Alone, this listener would keep the signal from ending the process.
-      if (process.listenerCount(signal) === 1) {
-        process.removeListener(signal, onSignal);
-        process.kill(process.pid, signal);
-      }
+      if (process.listenerCount(signal) === 0) process.kill(process.pid, signal);
     };
-    process.on("SIGTERM", onSignal);
-    process.on("SIGINT", onSignal);
+    process.once("SIGTERM", onSignal);
+    process.once("SIGINT", onSignal);
     enders = registered;
     scope[EVENT_STREAM_ENDERS] = registered;
   }

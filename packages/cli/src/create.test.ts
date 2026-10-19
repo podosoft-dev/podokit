@@ -687,7 +687,7 @@ describe("create (integration against templates)", () => {
       ) as { devDependencies: Record<string, string> };
 
       expect(rootPkg.overrides["@sveltejs/kit"]?.cookie).toBe("2.0.1");
-      expect(apiPkg.devDependencies["@types/bun"]).toBe("^1.3.9");
+      expect(apiPkg.devDependencies["@types/bun"]).toBe("^1.4.0");
       expect(webPkg.devDependencies["@sveltejs/vite-plugin-svelte"]).toBe("^7.3.0");
       expect(webPkg.devDependencies["@sveltejs/adapter-bun"]).toBe("1.0.0-next.1");
       expect(webPkg.devDependencies["@sveltejs/adapter-node"]).toBeUndefined();

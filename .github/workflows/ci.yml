@@ -82,4 +82,9 @@ jobs:
               cat "$RUNNER_TEMP/api.log" "$RUNNER_TEMP/web.log"
               exit 1
             fi
+            # Existing apps keep the @types/bun they locked, so the managed code
+            # must also type-check with the lowest version the template allows.
+            node "$GITHUB_WORKSPACE/scripts/oldest-bun-types.mjs" .
+            bun install
+            bun run lint
           )

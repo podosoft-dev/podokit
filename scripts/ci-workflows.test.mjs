@@ -97,3 +97,11 @@ test("links unpublished workspace packages in generated app CI", () => {
   assert.match(ci, /test "\$\(bun apps\/api\/dist\/scripts\/app-task\.js\)" = "app task"/);
   assert.doesNotMatch(ci, /node packages\/cli\/dist\/index\.js create app/);
 });
+
+test("type-checks the generated app again with the oldest @types/bun it allows", () => {
+  const firstLint = ci.indexOf("bun run lint");
+  const pin = ci.indexOf('node "$GITHUB_WORKSPACE/scripts/oldest-bun-types.mjs" .');
+  assert.ok(firstLint >= 0);
+  assert.ok(pin > firstLint);
+  assert.match(ci.slice(pin), /^\s+bun install\n\s+bun run lint\n/m);
+});
