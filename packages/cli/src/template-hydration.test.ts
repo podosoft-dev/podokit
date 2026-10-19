@@ -62,6 +62,8 @@ describe("generated hydration helper", () => {
     });
     expect(message).toContain(`had not hydrated ${PAGE_ERROR_GRACE_MS / 1000} s later`);
     expect(message).toContain("SvelteKit renders src/error.html in the browser, and the server");
+    // Local runs record no trace unless asked, so the message says how to get one.
+    expect(message).toContain("rerun the file with E2E_TRACE=retain-on-failure to record one");
     expect(message).toContain("Page errors:\n  TypeError: Failed to fetch dynamically imported module");
     expect(message).toContain("Console errors:\n  TypeError");
     expect(message).toContain("  GET http://localhost:5001/m7.js: net::ERR_FAILED\n  ... and 2 more");
