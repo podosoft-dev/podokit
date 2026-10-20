@@ -1,5 +1,15 @@
 # @podosoft/podokit-mcp
 
+## 1.0.5
+
+### Patch Changes
+
+- [#280](https://github.com/podosoft-dev/podokit/pull/280) [`8d06b70`](https://github.com/podosoft-dev/podokit/commit/8d06b703e90b3a738dbd3cc30bfd2e6fbfd9115f) Thanks [@korone00](https://github.com/korone00)! - Update Better Auth and its API key, passkey, and OAuth provider plugins to 1.7.10 in the authentication module and the API client, and Zod to 4.6.7 in the MCP server. The Better Auth releases fix failed password resets consuming reset links, sessions left inconsistent when secondary storage fails during sign-up or passkey registration, missing multi-session device sessions after cache eviction, and several OAuth provider token, PKCE, and DPoP errors. New applications get the new versions; existing applications can raise the same ranges and regenerate their lockfile.
+
+- [#278](https://github.com/podosoft-dev/podokit/pull/278) [`e6143e4`](https://github.com/podosoft-dev/podokit/commit/e6143e436214bcd719194fea65e34ad6706243b2) Thanks [@korone00](https://github.com/korone00)! - Pin generated applications to Bun 1.4.3 so the containerized Vite dev server no longer stalls when a request arrives while it starts. Before it listens, Vite binds and closes a bare probe server on each wildcard address; on Bun 1.4.0 a request that reached the web container during a probe left a paused socket whose end was never seen, so `server.close()` never called back, the log stopped after `(ssr) connected.`, and the dev gateway answered 502 until the container restarted. Bun 1.4.1 fixed it. `packageManager`, `engines`, every `oven/bun` image, and the generated CI now use 1.4.3, and `podo update` records the new version in the manifest.
+- Updated dependencies [[`8d06b70`](https://github.com/podosoft-dev/podokit/commit/8d06b703e90b3a738dbd3cc30bfd2e6fbfd9115f), [`e6143e4`](https://github.com/podosoft-dev/podokit/commit/e6143e436214bcd719194fea65e34ad6706243b2), [`e6143e4`](https://github.com/podosoft-dev/podokit/commit/e6143e436214bcd719194fea65e34ad6706243b2)]:
+  - @podosoft/podokit@1.6.7
+
 ## 1.0.4
 
 ### Patch Changes
