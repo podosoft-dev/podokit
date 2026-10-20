@@ -361,12 +361,8 @@ by side instead:
 1. Start the new API containers beside the running ones from the new definition
    (`compose up --no-deps --no-recreate --scale`), and wait until they are healthy.
    Old and new containers both answer to the service name on the project network.
-2. Behind the gateway, do the same for web. Without the gateway, web publishes the
-   host port itself and a second container cannot bind it, so web is replaced in
-   place. The port is closed from the moment the old web server stops accepting
-   connections until the old container exits and the new one listens: about a
-   second, or longer while the old one finishes in-flight requests, up to the web
-   stop timeout below. A profile with WebSocket or API paths has the gateway.
+2. Do the same for web. The gateway, not web, holds the published port, so a
+   second web container can start beside the first.
 3. Stop the old web container, then the old API containers, each with Docker's
    graceful stop: server-sent event streams and registered WebSockets end at once
    and their clients reconnect to a new container, in-flight requests finish
@@ -394,8 +390,8 @@ A longer stop timeout does not lengthen an outage behind the gateway, since the 
 containers stop only after the new ones are healthy, but apply waits for them. The
 generated servers end their streams at once, so only a request that is still
 running, or an application connection that does not close on the API's
-[shutdown](templates.md#shutdown) signal, holds the apply, and without the gateway
-the closed port, until it finishes or the stop timeout ends. The first apply with these
+[shutdown](templates.md#shutdown) signal, holds the apply until it finishes or the
+stop timeout ends. The first apply with these
 stop timeouts recreates the API, web, and worker containers, which a new release
 replaces anyway, and a rollback to a revision applied before them is refused,
 because that revision no longer renders byte for byte; roll forward instead.
@@ -426,11 +422,17 @@ value.
 
 On a profile with the gateway, the first apply with this behavior replaces the
 gateway once, because its labels change, which closes the port for a few seconds.
-An apply that adds the first WebSocket or API path, or removes the last, moves the
-published port between web and the gateway, so the port is closed until the old
-holder has stopped and the new one listens.
-A rollback to a revision applied before this behavior is refused, because the
-revision no longer renders byte for byte; roll forward with a new release instead.
+
+Every Compose profile now runs the gateway. Releases before it published the port
+from web when a profile listed no WebSocket or API path. On such a deployment the
+first apply moves the port from web to the gateway: the new web server starts
+beside the old one, and the gateway starts right after the old web server stops,
+so the port is closed from the moment that server stops accepting connections
+until the gateway listens. That is a second or two, or longer while the old web
+server finishes in-flight requests, up to its stop timeout. The plan warns when
+this apply moves the port. Later applies replace web side by side. A rollback to a
+revision applied before the gateway is refused, because the revision no longer
+renders byte for byte; roll forward with a new release instead.
 
 ### Database connections
 
@@ -528,11 +530,16 @@ For Docker Compose:
 ```
 
 The list is empty by default. Kubernetes renders `pathType: Exact` routes. Compose
-inserts a small internal gateway on the one published port: exact listed paths go to
-API and every other request goes to web. The external TLS reverse proxy therefore
-keeps one upstream and does not need to duplicate the path split. Planning resolves
-the gateway image to an immutable digest like every other image. With an empty list,
-Compose keeps the previous layout and publishes web directly without a gateway.
+always runs a small internal gateway on the one published port, so web can be
+replaced side by side; with listed paths, exact listed paths go to API and every
+other request goes to web. The external TLS reverse proxy therefore keeps one
+upstream and does not need to duplicate the path split. Planning resolves the
+gateway image to an immutable digest like every other image, so every plan looks the
+image up in its registry; behind Docker Hub's anonymous pull limit, set
+`gatewayImage` to a digest reference (`caddy:2.10-alpine@sha256:...`) or a mirror. With no listed path
+and no `trustedProxyCidrs`, the gateway is transparent: it sends every request to
+web and appends its peer to `X-Forwarded-For`, as an Ingress controller does (see
+[client addresses](#client-addresses)).
 
 Root, wildcard, query, fragment, encoded-separator, and traversal values are rejected
 while the profile is loaded, so a sibling path cannot reach API accidentally. On
@@ -577,15 +584,17 @@ loopback for a reverse proxy on the host.
 | --- | --- |
 | `kubernetes-helm`, Ingress | `edgeProxies` + 1: the controller appends its peer, the client or the last edge proxy |
 | `kubernetes-helm`, NodePort | `edgeProxies` |
-| `docker-compose`, web published directly | `edgeProxies` |
-| `docker-compose` with the gateway | 1: the gateway sends one address, resolved with `trustedProxyCidrs` |
+| `docker-compose`, transparent gateway (no WebSocket or API paths, no `trustedProxyCidrs`) | `edgeProxies` + 1: the gateway appends its peer, the client or the last edge proxy |
+| `docker-compose`, gateway with paths or `trustedProxyCidrs` | 1: the gateway sends one address, resolved with `trustedProxyCidrs` |
 
 Behind at least one proxy the web server also takes its public origin from
 `X-Forwarded-Proto` and `X-Forwarded-Host` (`PROTOCOL_HEADER`, `HOST_HEADER`),
 which keeps SvelteKit's same-origin form protection correct for uploads and other
-form posts; with none it trusts no forwarded header at all. A Compose gateway
-that does not trust the edge proxy in front writes its own plain-HTTP values, so
-then the web server keeps its default origin, `https` and the `Host` header. The web server sends
+form posts; with none it trusts no forwarded header at all. A transparent Compose
+gateway passes the edge proxies' headers on, so the web server trusts them exactly
+when `edgeProxies` is above 0. A Compose gateway with paths or CIDRs that does not
+trust the edge proxy in front writes its own plain-HTTP values, so then the web
+server keeps its default origin, `https` and the `Host` header. The web server sends
 the API the one address it resolved, so the API trusts one hop
 (`TRUSTED_PROXY_HOPS` 1) on every path. `runtimeConfig` refuses `ADDRESS_HEADER`,
 `XFF_DEPTH`, `TRUSTED_PROXY_HOPS`, and `TRUSTED_PROXY_HEADER` with a message that
@@ -600,8 +609,8 @@ address and origin.
 
 The doctor reports what it renders and warns when the profile contradicts itself:
 
-- Compose with the gateway and `edgeProxies` above 0 but no `trustedProxyCidrs`:
-  the gateway reports the nearest edge proxy as every client.
+- Compose with WebSocket or API paths and `edgeProxies` above 0 but no
+  `trustedProxyCidrs`: the gateway reports the nearest edge proxy as every client.
 - Compose with `trustedProxyCidrs` but `edgeProxies` 0.
 - Kubernetes with an Ingress, `edgeProxies` above 0, and WebSocket or direct API
   paths: those requests skip the web server, so the API receives the edge
@@ -685,7 +694,7 @@ still in place, so authentication requests always go through the web proxy.
 | Driver | Routing |
 | --- | --- |
 | `kubernetes-helm` | Requires `exposure.mode: "ingress"` and an IngressClass served by Traefik. The application chart adds a second Ingress, `<release>-api-paths`, with an `Exact` rule for each path and an `ImplementationSpecific` rule for the path with a trailing slash, plus a Traefik `Middleware`, `<release>-strip-api-prefix`, that removes `/api`. `podo deploy doctor` checks that the `middlewares.traefik.io` CRD exists. |
-| `docker-compose` | Listed paths start the same internal Caddy gateway as WebSocket paths. It removes `/api` with `uri strip_prefix` before proxying to the API, and `trustedProxyCidrs` applies to these requests too. |
+| `docker-compose` | The internal Caddy gateway routes listed paths as it does WebSocket paths. It removes `/api` with `uri strip_prefix` before proxying to the API, and `trustedProxyCidrs` applies to these requests too. |
 
 The plan's rollout step names the direct paths, and the confirmation hash covers
 them through the profile digest and the rendered Ingress or Caddy configuration.

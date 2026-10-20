@@ -35,6 +35,8 @@ export interface Capabilities {
   passkey: boolean;
   /** Organizations: multi-tenant teams with members and invitations. */
   organization: boolean;
+  /** Teams inside organizations; true only while organizations are on as well. */
+  teams: boolean;
   /** Act as an OIDC identity provider (issue tokens to registered clients). */
   oidcProvider: boolean;
   /** Every signed-in user must enrol in two-factor authentication before using the app. */

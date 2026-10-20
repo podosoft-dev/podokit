@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { CommandRunner } from "./dev";
 import { initializeComposeProfile, parseComposeProfile } from "./deploy-compose-profile";
-import { getComposeStatus, inspectComposeEndpointFingerprint } from "./deploy-compose";
+import { getComposeStatus, inspectComposeEndpointFingerprint, planComposeRollback } from "./deploy-compose";
 import {
   composeSyncArtifacts,
   excludesWithin,
@@ -396,6 +396,9 @@ describe("drift and revert", () => {
     const up = lines.find((line) => line.includes("up -d --force-recreate"));
     expect(up).toContain("--wait");
     expect(up?.startsWith("ssh podo@localhost")).toBe(true);
+    // The entry predates the gateway, whose port the rendered web no longer publishes.
+    const gatewayUp = lines.findIndex((line) => line.endsWith("up -d --no-deps --wait example-app-gateway"));
+    expect(gatewayUp).toBeGreaterThan(lines.indexOf(up ?? ""));
 
     // The file it copies across has to name the release being restored. Trusting the
     // file already on the target instead is what made the first revert attempt try to
@@ -406,6 +409,13 @@ describe("drift and revert", () => {
     );
     expect(rendered).toContain(":v1.4.0");
     expect(rendered).not.toContain(":v0.0.0");
+  });
+
+  it("refuses to roll back to a revision applied before the gateway held the port", () => {
+    const { runner } = recordingRunner({ "releases.json": ledger("v1.4.0") });
+    expect(() => planComposeRollback(initialized(), "production", 1, runner)).toThrow(
+      "applied before the gateway held the published port",
+    );
   });
 
   it("refuses to revert a deployment that has never had a release applied", async () => {

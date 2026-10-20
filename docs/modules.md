@@ -1452,7 +1452,7 @@ OAuth, SMTP, and sign-up approval configuration.
 - **/admin** — overview.
 - **/admin/users** (admin only) — list, filter & search users, approve pending registrations, ban/unban, set role, revoke sessions, create/delete.
 - **/admin/sessions** (admin only) — active sessions across all users, newest first, searchable by user email or name (revoke one session or all of a user's sessions).
-- **/admin/organizations** (admin only) — organizations, members, and invitations.
+- **/admin/organizations** (admin only) — organizations, members, and invitations, plus teams while the **Teams** setting is on.
 - **/admin/audit** (admin only) — the audit log of security-relevant actions.
 - **/admin/settings** (admin only) — enable/disable sign-in methods and configure OAuth providers, SMTP, sign-up approval, automatic logout, and other server toggles at runtime (see below), plus the **Appearance** tab for the runtime theme (see "Appearance").
 - **/account** — the signed-in user's profile and profile image, password, 2FA, passkeys, API keys, and sessions without the admin shell. While an administrator impersonates the user, the managed `AccountPage` shows a banner with the way back to the administrator session.
@@ -1813,7 +1813,7 @@ on the corresponding lifecycle events). Treat deactivation as a soft-disable (ba
 sessions) rather than a hard delete. This lives entirely in your app code; PodoKit only
 provides the identity tables it writes to.
 
-#### Organizations: hierarchy & managers
+#### Organizations: hierarchy, managers & teams
 
 Organizations (multi-tenant teams) come from better-auth, extended where it falls short:
 
@@ -1826,6 +1826,20 @@ Organizations (multi-tenant teams) come from better-auth, extended where it fall
   managers**. Assign existing users as managers when creating an org, or from the manage
   dialog. Because better-auth's `addMember` is server-only, the app exposes it through a
   thin `POST /account/org-member` endpoint that delegates org authorization to better-auth.
+
+- **Teams** — better-auth's organization teams are always mounted
+  (`teams: { enabled: true }` in `auth.ts`), so the `team` and `teamMember` tables exist
+  after `migrate:all`. The **Teams** switch on the admin Settings page (off by default,
+  stored as the `teams` flag) opens them: while it or **Organizations** is off, the team
+  endpoints (`/api/auth/organization/create-team`, `update-team`, `remove-team`,
+  `list-teams`, `add-team-member`, `remove-team-member`, `list-team-members`,
+  `list-user-teams`, `set-active-team`) answer 404 and `capabilities.teams` is `false`.
+  Organizations start without a team and the last team can be removed. The **Teams**
+  action on `/admin/organizations` lists an organization's teams, creates, renames, and
+  deletes them, and adds or removes members chosen from the organization's members.
+  better-auth's `list-team-members` answers only members of that team, so the dialog
+  reads `GET /account/team-members?organizationId=…&teamId=…`, which any member of the
+  organization may call. Owners, admins, and managers can manage teams.
 
 Add your own org fields/roles the same way: extend `additionalFields` and the
 `org-permissions.ts` roles, then re-run the better-auth migration.
@@ -1850,7 +1864,7 @@ hand-written list. Inspect the complete result at `/api-docs` or
 | --- | --- |
 | Core | `GET /health`<br>`GET /health/ready` |
 | `todo` template | `GET /todos`<br>`GET /todos/{id}`<br>`POST /todos`<br>`PATCH /todos/{id}`<br>`DELETE /todos/{id}` |
-| `auth` application routes | `GET /account/me`<br>`GET /account/require-2fa`<br>`GET /account/capabilities`<br>`PUT /account/settings`<br>`GET /account/auth-config`<br>`PUT /account/auth-config`<br>`POST /account/org-member`<br>`GET /api/auth/get-session`<br>`POST /api/auth/sign-in/email` |
+| `auth` application routes | `GET /account/me`<br>`GET /account/require-2fa`<br>`GET /account/capabilities`<br>`PUT /account/settings`<br>`GET /account/auth-config`<br>`PUT /account/auth-config`<br>`POST /account/org-member`<br>`GET /account/team-members`<br>`GET /api/auth/get-session`<br>`POST /api/auth/sign-in/email` |
 | `admin-dashboard` | `GET /site/settings`<br>`PUT /site/settings`<br>`POST /site/favicon`<br>`GET /site/favicon`<br>`POST /account/profile-image`<br>`DELETE /account/profile-image`<br>`GET /profile-images/{fileName}`<br>`GET /admin/sessions`<br>`DELETE /admin/sessions/{id}` |
 | `api-key-auth` | `GET /machine/ping` |
 | `audit-log` | `GET /audit-logs`<br>`GET /audit-logs/actions` |

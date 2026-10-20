@@ -96,7 +96,7 @@ class FakeHost {
           this.add(oneShot[1] ?? "", "init", false);
           return reply("");
         }
-        const inPlace = /^up -d --no-deps --wait --remove-orphans (\S+)$/.exec(compose);
+        const inPlace = /^up -d --no-deps --wait (\S+)$/.exec(compose);
         if (inPlace) {
           this.replaceInPlace(inPlace[1] ?? "");
           return reply("");
@@ -250,23 +250,27 @@ describe("compose rollout", () => {
     expect(host.containers.filter((c) => c.service === WEB).map((c) => c.hash)).toEqual(["web-new"]);
   });
 
-  it("replaces a web server that publishes the port only after the new API is healthy", async () => {
+  it("moves the port from a web server that published it to the gateway right after it stops", async () => {
     const root = initialized();
     const host = previousRelease();
 
     await apply(root, host);
 
-    const apiScale = firstIndex(host, `--scale ${API}=4 ${API}`);
-    const webInPlace = firstIndex(host, `up -d --no-deps --wait --remove-orphans ${WEB}`);
+    // Web is replaced side by side even without direct routes: the gateway holds the port.
+    const webScale = firstIndex(host, `--scale ${WEB}=2 ${WEB}`);
+    const stopWeb = firstIndex(host, "stop c003");
+    const gatewayUp = firstIndex(host, `up -d --no-deps --wait ${GATEWAY}`);
     const stopApi = firstIndex(host, "stop c001 c002");
-    expect(firstIndex(host, `--scale ${WEB}=`)).toBe(-1);
-    expect(apiScale).toBeGreaterThan(0);
-    expect(webInPlace).toBeGreaterThan(apiScale);
-    expect(stopApi).toBeGreaterThan(webInPlace);
+    expect(webScale).toBeGreaterThan(firstIndex(host, `--scale ${API}=4 ${API}`));
+    expect(stopWeb).toBeGreaterThan(webScale);
+    // The gateway binds the port as soon as the old web server let it go, before the API is touched.
+    expect(gatewayUp).toBeGreaterThan(stopWeb);
+    expect(stopApi).toBeGreaterThan(gatewayUp);
     const rollout = host.log.slice(firstIndex(host, "run --rm --no-deps migrate"));
     for (const entry of rollout) {
       expect(entry.running.some((name) => name.startsWith(`${API}:`)), entry.line).toBe(true);
     }
+    expect(host.running(GATEWAY)).toHaveLength(1);
   });
 
   it("leaves a service alone when it already runs the new definition", async () => {

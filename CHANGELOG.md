@@ -6,6 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Organization teams. The authentication module mounts Better Auth's
+  organization teams, a **Teams** switch on the admin Settings page (off by
+  default) opens their endpoints, and the admin organizations page gains a
+  **Teams** dialog that lists, creates, renames, and deletes teams and adds or
+  removes team members. `capabilities.teams` reports the setting, and
+  `GET /account/team-members` lists a team's members for any member of its
+  organization. Existing applications get the `team` and `teamMember` tables
+  from `migrate:all`; the owned organizations and settings pages show the new
+  controls after they are regenerated or updated by hand.
+
+### Changed
+
+- Docker Compose deployments always run the internal Caddy gateway on the
+  published port, so web is replaced side by side like the API instead of in
+  place. Before, a profile without WebSocket or API paths published the port
+  from web, and every apply closed it from the moment the old web server
+  stopped until the new one listened: about 0.3 seconds, or up to the web stop
+  timeout while a stream or request was open. Without paths or
+  `trustedProxyCidrs` the gateway is transparent: it trusts every peer,
+  appends it to `X-Forwarded-For`, and passes the edge proxies' headers on, and
+  the web server counts it as one more hop (`XFF_DEPTH` is `edgeProxies` + 1),
+  as on a Kubernetes Ingress, so sessions, audit entries, and rate limits record
+  the same client address as before. `trustedProxyCidrs` no longer requires a
+  WebSocket or API path. On an existing deployment the first apply moves the
+  port from web to the gateway once, which the plan warns about; the gateway
+  starts right after the old web server stops. A rollback to a revision applied
+  before the gateway is refused; roll forward instead.
+
 ## [1.6.7] - 2026-10-20
 
 ### Changed

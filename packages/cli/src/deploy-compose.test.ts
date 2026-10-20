@@ -164,7 +164,7 @@ describe("docker-compose profile", () => {
     expect(() => loadAnyDeploymentProfile(root, "production")).toThrow(message);
   });
 
-  it("rejects trusted proxy CIDRs when the gateway is disabled", () => {
+  it("accepts trusted proxy CIDRs without direct routes, since the gateway always runs", () => {
     const root = initialized();
     const file = profilePath(root, "production");
     const value = JSON.parse(readFileSync(file, "utf8")) as {
@@ -172,9 +172,7 @@ describe("docker-compose profile", () => {
     };
     value.exposure.trustedProxyCidrs = ["127.0.0.1/32"];
     writeFileSync(file, JSON.stringify(value));
-    expect(() => loadAnyDeploymentProfile(root, "production")).toThrow(
-      "requires at least one exposure.webSocketPaths or exposure.apiPaths entry",
-    );
+    expect(loadAnyDeploymentProfile(root, "production").exposure.trustedProxyCidrs).toEqual(["127.0.0.1/32"]);
   });
 
   it("enables Redis and a worker only when a module needs them", () => {
@@ -269,7 +267,7 @@ function composeProfileOf(root: string) {
 }
 
 describe("compose rendering", () => {
-  it("publishes only the web service, on the configured bind address", () => {
+  it("publishes only a transparent gateway, on the configured bind address, without direct routes", () => {
     const profile = composeProfileOf(initialized());
     const document = renderComposeDocument(
       profile,
@@ -278,8 +276,35 @@ describe("compose rendering", () => {
       "sha256:0",
       NO_APP_PROXY_TIMEOUTS,
     );
-    expect(document).toContain('"127.0.0.1:8080:3000"');
+    const web = document.split("example-app-web:")[1]?.split("example-app-gateway:")[0] ?? "";
+    const gateway = document.split("example-app-gateway:")[1] ?? "";
+    expect(web).not.toContain("ports:");
+    expect(gateway).toContain('"127.0.0.1:8080:3000"');
     expect(document.match(/ports:/g)).toHaveLength(1);
+    // Every peer is trusted and appended to X-Forwarded-For, as an Ingress does,
+    // so the web server counts the gateway as one more hop.
+    expect(gateway).toContain("trusted_proxies static 0.0.0.0/0 ::/0");
+    expect(gateway).not.toContain("trusted_proxies_strict");
+    expect(gateway).not.toContain("header_up");
+    expect(gateway).toContain("  handle {\\n    reverse_proxy example-app-web:3000\\n  }\\n");
+    expect(document).toContain("XFF_DEPTH: \"2\"");
+  });
+
+  it("resolves the client at the gateway once trusted proxy CIDRs are listed", () => {
+    const profile = composeProfileOf(initialized());
+    profile.exposure.trustedProxyCidrs = ["10.0.0.0/8"];
+    const document = renderComposeDocument(
+      profile,
+      "v1.2.3",
+      defaultComposeImages(profile, "v1.2.3"),
+      "sha256:0",
+      NO_APP_PROXY_TIMEOUTS,
+    );
+    const web = document.split("example-app-web:")[1]?.split("example-app-gateway:")[0] ?? "";
+    const gateway = document.split("example-app-gateway:")[1] ?? "";
+    expect(gateway).toContain("trusted_proxies static 10.0.0.0/8");
+    expect(gateway).toContain("header_up X-Forwarded-For {client_ip}");
+    expect(document).toContain("XFF_DEPTH: \"1\"");
   });
 
   it("routes exact WebSocket paths to API through the published gateway", () => {
@@ -617,13 +642,30 @@ describe("compose plan", () => {
 
     const plan = planComposeDeployment(root, "production", "v1.2.3", scriptedRunner());
 
-    expect(first.images.gateway).toBeNull();
+    expect(first.images.gateway).toBe(`caddy:2.10-alpine@${GATEWAY_DIGEST}`);
     expect(plan.images.gateway).toBe(`caddy:2.10-alpine@${GATEWAY_DIGEST}`);
     expect(plan.actions.find((action) => action.kind === "application")?.description).toBe(
       "Start the new api and web beside the running containers and wait for health, then stop the old containers; " +
         "the gateway is replaced only when its definition changes. Route /api/files/uploads/ directly to the API without /api.",
     );
     expect(plan.planHash).not.toBe(first.planHash);
+  });
+
+  it("warns once that the published port moves from web to the gateway", () => {
+    const root = initialized();
+    const ps = (services: string[]) =>
+      services.map((service) => JSON.stringify({ Service: `example-app-${service}`, Name: `example-app-${service}-1` })).join("\n");
+    const moving = planComposeDeployment(root, "production", "v1.2.3", scriptedRunner({ " ps --format json": ps(["api", "web"]) }));
+    expect(moving.warnings.join(" ")).toContain("moves port 8080 from web to the gateway");
+    const moved = planComposeDeployment(
+      root,
+      "production",
+      "v1.2.3",
+      scriptedRunner({ " ps --format json": ps(["api", "web", "gateway"]) }),
+    );
+    expect(moved.warnings.join(" ")).not.toContain("to the gateway");
+    const first = planComposeDeployment(root, "production", "v1.2.3", scriptedRunner());
+    expect(first.warnings.join(" ")).not.toContain("to the gateway");
   });
 
   it("warns when the deployment can open more PostgreSQL connections than the server allows", () => {

@@ -194,7 +194,8 @@ export function createApiClient(options: ApiClientOptions = {}) {
         phoneNumberClient(),
         apiKeyClient(),
         passkeyClient(),
-        organizationClient(),
+        // Teams are typed on the client; the server setting decides whether they answer.
+        organizationClient({ teams: { enabled: true } }),
         inferAdditionalFields({
           user: {
             signupApproved: { type: "boolean", required: false, defaultValue: true, input: false },

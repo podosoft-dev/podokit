@@ -283,7 +283,7 @@ describe("podo remove with module apiPaths", () => {
     expect(devApiPaths(project)).toEqual([]);
   });
 
-  it("keeps a path a Compose profile still needs for its trusted proxies", () => {
+  it("removes the last path from a Compose profile with trusted proxies, whose gateway stays", () => {
     const project = generate();
     composeProfile(project);
     addModule({ projectRoot: project, module: "file-upload", modulesDir: MODULES });
@@ -293,14 +293,8 @@ describe("podo remove with module apiPaths", () => {
 
     const result = removeModule({ projectRoot: project, module: "file-upload", modulesDir: MODULES });
 
-    expect(result.apiPaths.skipped).toEqual([
-      expect.objectContaining({
-        file: ".podokit/deploy/compose.json",
-        path: UPLOADS,
-        reason: expect.stringContaining("trustedProxyCidrs requires"),
-      }),
-    ]);
-    expect(profileApiPaths(project, "compose")).toEqual([UPLOADS]);
+    expect(result.apiPaths.skipped).toEqual([]);
+    expect(profileApiPaths(project, "compose")).toEqual([]);
     expect(devApiPaths(project)).toEqual([]);
   });
 });
