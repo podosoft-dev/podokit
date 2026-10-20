@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.6.7] - 2026-10-20
+
+### Changed
+
+- The authentication module and the API client now use Better Auth and its API
+  key, passkey, and OAuth provider plugins 1.7.10, and the MCP server uses Zod
+  4.6.7. The Better Auth releases fix failed password resets consuming reset
+  links, sessions left inconsistent when secondary storage fails during sign-up
+  or passkey registration, and missing multi-session device sessions after
+  cache eviction. Existing applications can raise the same ranges and
+  regenerate their lockfile.
+
 ### Fixed
 
 - The containerized Vite dev server could stop after `(ssr) connected.` and
