@@ -187,7 +187,7 @@ after its dependents back in front of them.
 
 ## Bun-only v1 boundary
 
-PodoKit v1 manifests declare Bun 1.4.0. The removed `podo runtime set` command
+PodoKit v1 manifests declare Bun 1.4 (new projects pin 1.4.3). The removed `podo runtime set` command
 is not a migration mechanism. A PodoKit 0.x manifest is rejected with a message
 to use the final 0.x CLI:
 

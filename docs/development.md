@@ -35,7 +35,7 @@ bun install
 ```
 
 The PodoKit monorepo itself continues to use npm and Node-based release tooling.
-Generated PodoKit v1 applications use Bun 1.4.0.
+Generated PodoKit v1 applications use Bun 1.4.3.
 
 ### SvelteKit source imports
 
@@ -297,7 +297,7 @@ bun run build
 bun run --cwd apps/api contract
 ```
 
-The API build, runtime, migrations, worker, and unit tests must use Bun 1.4.0.
+The API build, runtime, migrations, worker, and unit tests must use Bun 1.4.3.
 The contract command assembles the actual Elysia application, merges Better
 Auth's generated OpenAPI schema, and verifies every expected template/module
 route. Keep parameter names consistent at each structural position across the

@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM oven/bun:1.4.0-alpine AS manifests
+FROM oven/bun:1.4.3-alpine AS manifests
 WORKDIR /src
 COPY . .
 RUN mkdir -p /app \
@@ -8,12 +8,12 @@ RUN mkdir -p /app \
     && find . -name package.json -not -path "*/node_modules/*" \
          -exec sh -c 'mkdir -p "/app/$(dirname "$1")" && cp "$1" "/app/$1"' _ {} \;
 
-FROM oven/bun:1.4.0-alpine AS deps
+FROM oven/bun:1.4.3-alpine AS deps
 WORKDIR /app
 COPY --from=manifests /app ./
 RUN bun ci
 
-FROM oven/bun:1.4.0-alpine AS build
+FROM oven/bun:1.4.3-alpine AS build
 WORKDIR /app
 ARG PODOKIT_BUILD_ORIGIN
 ENV PODOKIT_BUILD_ORIGIN=${PODOKIT_BUILD_ORIGIN}
@@ -28,7 +28,7 @@ RUN if [ -d packages ]; then \
 RUN bun run --cwd apps/web build
 RUN mkdir -p /app/packages
 
-FROM oven/bun:1.4.0-alpine AS runtime
+FROM oven/bun:1.4.3-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV BODY_SIZE_LIMIT=3M

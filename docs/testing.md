@@ -5,7 +5,7 @@ workspace with template/module tests included under `tests/`.
 
 ## Runtime boundary
 
-The generated API, worker, builds, migrations, and unit tests use Bun 1.4.0.
+The generated API, worker, builds, migrations, and unit tests use Bun 1.4.3.
 SvelteKit build and Vitest run through Bun as well.
 
 Playwright is the single Node-runtime test-tool exception. Playwright's
@@ -266,7 +266,7 @@ node scripts/e2e-ci.mjs --grep "magic link"
 
 The harness publishes the template engine, contracts, auth helpers, API client,
 CLI, MCP server, and external modules to Verdaccio. It then uses the real CLI,
-installs the generated workspace with Bun 1.4.0, empties the `POSTGRES_DB`
+installs the generated workspace with Bun 1.4.3, empties the `POSTGRES_DB`
 database (it drops and recreates the `public` schema, so point the harness only
 at a database it may wipe), runs Better Auth and TypeORM migrations, creates the
 seeded administrator with `admin:bootstrap`, verifies the OpenAPI contract,
@@ -449,7 +449,10 @@ address. Create the administrator first: for the default accounts, run
 `ADMIN_BOOTSTRAP_EMAIL=admin@example.com ADMIN_BOOTSTRAP_PASSWORD='Podokit3e-Str0ng!pw' ADMIN_BOOTSTRAP_NAME=Admin bun run --cwd apps/api admin:bootstrap`
 with `admin@example.com` in `ADMIN_EMAILS`, as `scripts/e2e-ci.mjs` does after the
 migrations. Set `E2E_UNCLAIMED_ADMIN_EMAIL` to an `ADMIN_EMAILS` address without an
-account to run the test that a sign-up cannot claim it. Specs of modules that do
+account to run the test that a sign-up cannot claim it. If the address already
+has an account, or the running API does not list it in `ADMIN_EMAILS`, that
+test fails with a message saying so and removes any account its sign-up
+created, so the other user tests do not see it. Specs of modules that do
 not require `admin-dashboard`, such as the object storage and SSE specs, sign
 in as the administrator through `tests/helpers/seeded-admin.ts`, which reads the
 same values and skips those tests in an app without that module.

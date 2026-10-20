@@ -51,7 +51,7 @@ headings — they map directly onto how we triage. Delete the italic hints.
 - Template: *fullstack | todo | base*
 - Modules added: *e.g. auth, admin-dashboard — or "none"*
 - Run mode: *host runtime script | `podo dev` (note the local hostname and any HTTPS tunnel)*
-- OS / runtime / package manager: *e.g. macOS 15 / Bun 1.4.0, or Linux / Bun 1.4.0*
+- OS / runtime / package manager: *e.g. macOS 15 / Bun 1.4.3, or Linux / Bun 1.4.3*
 
 ## Steps to reproduce
 1. *exact command, starting from `npx @podosoft/podokit create …`*
