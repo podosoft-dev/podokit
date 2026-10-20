@@ -375,8 +375,8 @@ for those accounts rather than guessing an identity.
 
 ### Better Auth 1.7.7 security update
 
-New authentication modules and the API client require at least 1.7.7 for Better
-Auth and their matching integrations. Existing applications should upgrade the
+New authentication modules and the API client now require at least 1.7.10 for
+Better Auth and their matching integrations, which includes this update. Existing applications should upgrade the
 server, API key, passkey, and OAuth provider packages together and regenerate
 their dependency lockfile.
 

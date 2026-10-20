@@ -217,7 +217,7 @@ curl -c cookies.txt -XPOST localhost:5002/api/auth/sign-up/email \
 curl -b cookies.txt localhost:5002/account/me
 ```
 
-The authentication module requires Better Auth 1.7.7 and uses the version
+The authentication module requires Better Auth 1.7.10 or newer and uses the version
 installed by the application for migrations. Before applying the current
 schema, it checks duplicate `(providerId, accountId)` identities and cleans up
 obsolete 1.7.0–1.7.2 issuer constraints in PostgreSQL or SQLite. Back up existing
