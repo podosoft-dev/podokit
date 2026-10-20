@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Organization teams. The authentication module mounts Better Auth's
+  organization teams, a **Teams** switch on the admin Settings page (off by
+  default) opens their endpoints, and the admin organizations page gains a
+  **Teams** dialog that lists, creates, renames, and deletes teams and adds or
+  removes team members. `capabilities.teams` reports the setting, and
+  `GET /account/team-members` lists a team's members for any member of its
+  organization. Existing applications get the `team` and `teamMember` tables
+  from `migrate:all`; the owned organizations and settings pages show the new
+  controls after they are regenerated or updated by hand.
+
 ### Changed
 
 - Docker Compose deployments always run the internal Caddy gateway on the
