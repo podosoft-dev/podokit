@@ -362,7 +362,9 @@ by side instead:
    (`compose up --no-deps --no-recreate --scale`), and wait until they are healthy.
    Old and new containers both answer to the service name on the project network.
 2. Do the same for web. The gateway, not web, holds the published port, so a
-   second web container can start beside the first.
+   second web container can start beside the first, and `workloads.web.replicas`
+   can be above 1: the gateway reaches every web container through the service
+   name.
 3. Stop the old web container, then the old API containers, each with Docker's
    graceful stop: server-sent event streams and registered WebSockets end at once
    and their clients reconnect to a new container, in-flight requests finish

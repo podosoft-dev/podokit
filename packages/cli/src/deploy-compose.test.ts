@@ -1068,7 +1068,7 @@ describe("published port and replicas", () => {
     expect(profile.workloads.web.replicas).toBe(1);
   });
 
-  it("refuses more than one replica of the service that publishes the port", () => {
+  it("runs several web replicas behind the gateway, which alone publishes the port", () => {
     const root = initialized();
     const file = profilePath(root, "production");
     const value = JSON.parse(readFileSync(file, "utf8")) as {
@@ -1076,10 +1076,18 @@ describe("published port and replicas", () => {
     };
     value.workloads.web.replicas = 2;
     writeFileSync(file, JSON.stringify(value));
-    // Compose cannot share a host port, so the second replica fails to bind and
-    // takes the rollout down with it.
-    expect(() => loadAnyDeploymentProfile(root, "production")).toThrow(
-      "workloads.web.replicas must be 1",
+    const profile = composeProfileOf(root);
+    expect(profile.workloads.web.replicas).toBe(2);
+    const document = renderComposeDocument(
+      profile,
+      "v1.2.3",
+      defaultComposeImages(profile, "v1.2.3"),
+      "sha256:0",
+      NO_APP_PROXY_TIMEOUTS,
     );
+    const web = document.split("\n  example-app-web:\n")[1]?.split("\n  example-app-gateway:\n")[0] ?? "";
+    expect(web).toContain("replicas: 2");
+    expect(web).not.toContain("ports:");
+    expect(document.match(/ports:/g)).toHaveLength(1);
   });
 });
