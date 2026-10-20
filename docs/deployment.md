@@ -367,7 +367,8 @@ by side instead:
    second and picks a container per request in turn, so one client on a
    kept-alive connection is spread over all of them too. A container that stopped
    since the last lookup fails to connect, and the gateway retries the request on
-   another one, whatever its method, for up to 5 seconds.
+   another one, whatever its method, for up to 5 seconds; such a request waits up
+   to the 500 ms connection timeout first.
 3. Stop the old web container, then the old API containers, each with Docker's
    graceful stop: server-sent event streams and registered WebSockets end at once
    and their clients reconnect to a new container, in-flight requests finish
@@ -376,7 +377,8 @@ by side instead:
 4. Run `compose up --remove-orphans` for the rest. The worker is replaced in place,
    since it receives no traffic. The gateway carries no release label, so it is
    replaced only when its own definition changes, such as its paths, trusted proxy
-   CIDRs, or image.
+   CIDRs, or image. That closes the published port for a few seconds, measured
+   at about 3, so the plan warns when the running gateway's definition differs.
 
 If a new container does not become healthy, apply removes the containers it started
 and fails; the old ones keep serving and the release ledger keeps the current

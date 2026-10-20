@@ -39,7 +39,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   resolves the web and API service names every second and picks a container
   per request, so a client on one kept-alive connection reaches every replica,
   and a request to a container that stopped since the last lookup is retried
-  on another.
+  on another. The plan warns when an apply replaces a running gateway whose
+  definition changed, such as new paths or CIDRs, since that closes the port
+  for a few seconds; this release changes every gateway's definition once.
 
 ## [1.6.7] - 2026-10-20
 

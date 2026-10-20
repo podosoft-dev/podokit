@@ -7,6 +7,7 @@ import { APP_PROXY_TIMEOUTS_PATH, NO_APP_PROXY_TIMEOUTS } from "./app-proxy-time
 import { initializeComposeProfile, parseComposeProfile } from "./deploy-compose-profile";
 import {
   defaultComposeImages,
+  composeGatewayDefinitionDigest,
   renderComposeDeployment,
   renderComposeDocument,
   renderMigrationDocument,
@@ -275,7 +276,7 @@ function proxyTo(service: string, resolving: boolean): string {
     "    reverse_proxy {\\n" +
     `      dynamic a ${service} 3000 {\\n        refresh 1s\\n      }\\n` +
     "      lb_policy round_robin\\n      lb_try_duration 5s\\n      lb_try_interval 250ms\\n" +
-    "      fail_duration 10s\\n      transport http {\\n        dial_timeout 1s\\n      }\\n" +
+    "      fail_duration 10s\\n      transport http {\\n        dial_timeout 500ms\\n      }\\n" +
     (resolving ? "      header_up X-Forwarded-For {client_ip}\\n" : "") +
     "    }\\n"
   );
@@ -680,6 +681,25 @@ describe("compose plan", () => {
     expect(moved.warnings.join(" ")).not.toContain("to the gateway");
     const first = planComposeDeployment(root, "production", "v1.2.3", scriptedRunner());
     expect(first.warnings.join(" ")).not.toContain("to the gateway");
+  });
+
+  it("warns when the apply replaces a running gateway whose definition changed", () => {
+    const root = initialized();
+    const gatewayImage = `caddy:2.10-alpine@${GATEWAY_DIGEST}`;
+    const current = composeGatewayDefinitionDigest(composeProfileOf(root), gatewayImage);
+    const label = "io.podokit.gateway-definition";
+    const plan = (definition: string | null) =>
+      planComposeDeployment(
+        root,
+        "production",
+        "v1.2.3",
+        scriptedRunner(definition === null ? {} : { [label]: `abc123\t${definition}\n` }),
+      ).warnings.join(" ");
+    expect(plan(current)).not.toContain("replaces the gateway");
+    expect(plan("sha256:old")).toContain("replaces the gateway, whose definition changed");
+    // A gateway from before the label: its definition is unknown, so warn.
+    expect(plan("")).toContain("replaces the gateway");
+    expect(plan(null)).not.toContain("replaces the gateway");
   });
 
   it("warns when the deployment can open more PostgreSQL connections than the server allows", () => {
