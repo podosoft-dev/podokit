@@ -35,7 +35,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   port from web to the gateway once, which the plan warns about; the gateway
   starts right after the old web server stops. A rollback to a revision applied
   before the gateway is refused; roll forward instead. Since web no longer
-  publishes the port, `workloads.web.replicas` may be above 1.
+  publishes the port, `workloads.web.replicas` may be above 1. The gateway
+  resolves the web and API service names every second and picks a container
+  per request, so a client on one kept-alive connection reaches every replica,
+  and a request to a container that stopped since the last lookup is retried
+  on another.
 
 ## [1.6.7] - 2026-10-20
 

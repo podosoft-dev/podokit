@@ -410,17 +410,33 @@ function gatewayService(profile: DockerComposeProfileV1, image: string): string 
 }
 `
     : "";
-  const api = `${serviceName(profile, "api")}:${CONTAINER_PORT}`;
+  const api = serviceName(profile, "api");
+  // A service name with several containers is one static upstream to Caddy, and
+  // Caddy keeps reusing its kept-alive connections to whichever container the
+  // first lookup returned, so a client sending one request at a time never
+  // reaches the others. Resolve the name as a dynamic upstream instead and pick
+  // a container per request. A container that stopped since the last refresh
+  // fails to dial, which Caddy retries on another one for any method, and the
+  // passive check keeps it out until the next refresh drops it.
+  //
   // Caddy appends the peer to X-Forwarded-For, so behind a trusted proxy web and
   // API would get "client, proxy" and record the proxy at one trusted hop. Send
   // the client address Caddy resolved instead: the client behind a trusted proxy,
   // the peer otherwise.
-  const reverseProxy = (upstream: string): string =>
-    transparent
-      ? `    reverse_proxy ${upstream}\n`
-      : `    reverse_proxy ${upstream} {\n` +
-        `      header_up X-Forwarded-For {client_ip}\n` +
-        `    }\n`;
+  const reverseProxy = (service: string): string =>
+    `    reverse_proxy {\n` +
+    `      dynamic a ${service} ${CONTAINER_PORT} {\n` +
+    `        refresh 1s\n` +
+    `      }\n` +
+    `      lb_policy round_robin\n` +
+    `      lb_try_duration 5s\n` +
+    `      lb_try_interval 250ms\n` +
+    `      fail_duration 10s\n` +
+    `      transport http {\n` +
+    `        dial_timeout 1s\n` +
+    `      }\n` +
+    (transparent ? "" : `      header_up X-Forwarded-For {client_ip}\n`) +
+    `    }\n`;
   const webSocketRoutes = profile.exposure.webSocketPaths.length
     ? `  @api_websockets path ${profile.exposure.webSocketPaths.join(" ")}\n` +
       `  handle @api_websockets {\n` +
@@ -442,7 +458,7 @@ function gatewayService(profile: DockerComposeProfileV1, image: string): string 
     webSocketRoutes +
     apiPathRoutes +
     `  handle {\n` +
-    reverseProxy(`${serviceName(profile, "web")}:${CONTAINER_PORT}`) +
+    reverseProxy(serviceName(profile, "web")) +
     `  }\n` +
     `}\n`;
   const start =

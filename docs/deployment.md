@@ -363,8 +363,11 @@ by side instead:
    Old and new containers both answer to the service name on the project network.
 2. Do the same for web. The gateway, not web, holds the published port, so a
    second web container can start beside the first, and `workloads.web.replicas`
-   can be above 1: the gateway reaches every web container through the service
-   name.
+   can be above 1. The gateway resolves the web and API service names every
+   second and picks a container per request in turn, so one client on a
+   kept-alive connection is spread over all of them too. A container that stopped
+   since the last lookup fails to connect, and the gateway retries the request on
+   another one, whatever its method, for up to 5 seconds.
 3. Stop the old web container, then the old API containers, each with Docker's
    graceful stop: server-sent event streams and registered WebSockets end at once
    and their clients reconnect to a new container, in-flight requests finish

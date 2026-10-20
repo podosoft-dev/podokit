@@ -266,6 +266,21 @@ function composeProfileOf(root: string) {
   return profile;
 }
 
+/**
+ * The gateway's reverse_proxy block for a service, as it appears inside the
+ * rendered Compose string, where newlines are escaped.
+ */
+function proxyTo(service: string, resolving: boolean): string {
+  return (
+    "    reverse_proxy {\\n" +
+    `      dynamic a ${service} 3000 {\\n        refresh 1s\\n      }\\n` +
+    "      lb_policy round_robin\\n      lb_try_duration 5s\\n      lb_try_interval 250ms\\n" +
+    "      fail_duration 10s\\n      transport http {\\n        dial_timeout 1s\\n      }\\n" +
+    (resolving ? "      header_up X-Forwarded-For {client_ip}\\n" : "") +
+    "    }\\n"
+  );
+}
+
 describe("compose rendering", () => {
   it("publishes only a transparent gateway, on the configured bind address, without direct routes", () => {
     const profile = composeProfileOf(initialized());
@@ -286,7 +301,9 @@ describe("compose rendering", () => {
     expect(gateway).toContain("trusted_proxies static 0.0.0.0/0 ::/0");
     expect(gateway).not.toContain("trusted_proxies_strict");
     expect(gateway).not.toContain("header_up");
-    expect(gateway).toContain("  handle {\\n    reverse_proxy example-app-web:3000\\n  }\\n");
+    // Each request picks a web container: a single client on one kept-alive
+    // connection must not stay on one of them.
+    expect(gateway).toContain(`  handle {\\n${proxyTo("example-app-web", false)}  }\\n`);
     expect(document).toContain("XFF_DEPTH: \"2\"");
   });
 
@@ -327,8 +344,8 @@ describe("compose rendering", () => {
     // Web and API each get the one address Caddy resolved from the trusted
     // chain, never "client, proxy", so one trusted hop finds the client.
     const forwardOne = "header_up X-Forwarded-For {client_ip}\\n";
-    expect(gateway).toContain(`reverse_proxy example-app-api:3000 {\\n      ${forwardOne}    }`);
-    expect(gateway).toContain(`reverse_proxy example-app-web:3000 {\\n      ${forwardOne}    }`);
+    expect(gateway).toContain(proxyTo("example-app-api", true));
+    expect(gateway).toContain(proxyTo("example-app-web", true));
     expect(gateway.split(forwardOne)).toHaveLength(3);
     expect(gateway).toContain('"127.0.0.1:8080:3000"');
     expect(document.match(/ports:/g)).toHaveLength(1);
@@ -350,13 +367,10 @@ describe("compose rendering", () => {
       "  @api_paths path /api/files/uploads /api/files/uploads/* /api/imports /api/imports/*\\n" +
         "  handle @api_paths {\\n" +
         "    uri strip_prefix /api\\n" +
-        "    reverse_proxy example-app-api:3000 {\\n" +
-        "      header_up X-Forwarded-For {client_ip}\\n" +
-        "    }\\n" +
+        proxyTo("example-app-api", true) +
         "  }\\n" +
         "  handle {\\n" +
-        "    reverse_proxy example-app-web:3000 {\\n" +
-        "      header_up X-Forwarded-For {client_ip}\\n",
+        proxyTo("example-app-web", true),
     );
     expect(gateway).not.toContain("@api_websockets");
     expect(gateway).toContain('"127.0.0.1:8080:3000"');
@@ -376,7 +390,7 @@ describe("compose rendering", () => {
 
     expect(gateway).toContain(
       "  @api_websockets path /events/ws\\n  handle @api_websockets {\\n" +
-        "    reverse_proxy example-app-api:3000 {\\n      header_up X-Forwarded-For {client_ip}\\n    }\\n" +
+        proxyTo("example-app-api", true) +
         "  }\\n  @api_paths",
     );
   });
