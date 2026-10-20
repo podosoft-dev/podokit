@@ -534,7 +534,9 @@ always runs a small internal gateway on the one published port, so web can be
 replaced side by side; with listed paths, exact listed paths go to API and every
 other request goes to web. The external TLS reverse proxy therefore keeps one
 upstream and does not need to duplicate the path split. Planning resolves the
-gateway image to an immutable digest like every other image. With no listed path
+gateway image to an immutable digest like every other image, so every plan looks the
+image up in its registry; behind Docker Hub's anonymous pull limit, set
+`gatewayImage` to a digest reference (`caddy:2.10-alpine@sha256:...`) or a mirror. With no listed path
 and no `trustedProxyCidrs`, the gateway is transparent: it sends every request to
 web and appends its peer to `X-Forwarded-For`, as an Ingress controller does (see
 [client addresses](#client-addresses)).
