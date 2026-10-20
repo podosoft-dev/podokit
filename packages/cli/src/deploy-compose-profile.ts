@@ -392,16 +392,9 @@ export function parseComposeProfile(value: unknown): DockerComposeProfileV1 {
       : requiredString(exposure, "gatewayImage");
   validateImage(gatewayImage, "exposure.gatewayImage");
 
+  // The gateway holds the published port, so web can run several replicas: it
+  // reaches them through the service name, as web reaches the API.
   const web = parseComposeWorkload(requiredRecord(workloads, "web"), "workloads.web");
-  // Compose has no load balancer. Two replicas of the service that publishes the
-  // host port means the second one cannot bind it, and the deployment fails half
-  // way through the rollout with "port is already allocated". Scaling the public
-  // tier is what the kubernetes-helm driver is for.
-  if (web.replicas > 1) {
-    throw new Error(
-      "Deployment workloads.web.replicas must be 1: the web service publishes a host port, and Compose cannot share one across replicas.",
-    );
-  }
 
   const objectStorageRecord = requiredRecord(dependencies, "objectStorage");
   const objectStorage: ComposeObjectStorageProfile = {

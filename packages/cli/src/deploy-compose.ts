@@ -35,7 +35,9 @@ import {
   type DockerComposeProfileV1,
 } from "./deploy-compose-profile";
 import {
+  composeGatewayDefinitionDigest,
   defaultComposeImages,
+  GATEWAY_DEFINITION_LABEL,
   renderComposeDeployment,
   rolloutStateDigest,
   serviceName,
@@ -684,6 +686,17 @@ export function planComposeDeployment(
         "the moment the old web server stops until the gateway starts, once. Later applies replace web side by side.",
     );
   }
+  const gatewayDefinitions = runningGatewayDefinitions(profile, runner);
+  if (
+    images.gateway &&
+    gatewayDefinitions.length > 0 &&
+    gatewayDefinitions.some((definition) => definition !== composeGatewayDefinitionDigest(profile, images.gateway ?? ""))
+  ) {
+    warnings.push(
+      `This apply replaces the gateway, whose definition changed: port ${profile.exposure.port} refuses ` +
+        "connections from the moment the old gateway stops until the new one listens, a few seconds.",
+    );
+  }
   const budgetWarning = connectionBudgetWarning(profile, installedModules(projectRoot));
   if (budgetWarning) warnings.push(budgetWarning);
 
@@ -733,6 +746,33 @@ function rolloutDescription(profile: DockerComposeProfileV1): string {
     (profile.workloads.worker ? "replace worker in place, " : "") +
     "then stop the old containers; the gateway is replaced only when its definition changes."
   );
+}
+
+/**
+ * The definition digest each existing gateway container carries; an empty string
+ * for one created before the label existed. Read with `docker ps` through the
+ * context, so planning copies nothing to the target.
+ */
+function runningGatewayDefinitions(profile: DockerComposeProfileV1, runner: CommandRunner): string[] {
+  const result = runner(
+    "docker",
+    dockerArgs(profile, [
+      "ps",
+      "-a",
+      "--filter",
+      `label=com.docker.compose.project=${profile.target.project}`,
+      "--filter",
+      `label=com.docker.compose.service=${serviceName(profile, "gateway")}`,
+      "--format",
+      `{{.ID}}\t{{.Label "${GATEWAY_DEFINITION_LABEL}"}}`,
+    ]),
+    { capture: true },
+  );
+  if (result.status !== 0) return [];
+  return result.stdout
+    .split("\n")
+    .map((line) => line.trim().split("\t"))
+    .flatMap(([id, definition]) => (id ? [definition ?? ""] : []));
 }
 
 /**

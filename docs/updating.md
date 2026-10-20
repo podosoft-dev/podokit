@@ -373,6 +373,30 @@ manual cleanup. Microsoft accounts may still need a trusted `sub`-to-`oid` mappi
 follow the [official upgrade guide](https://github.com/better-auth/better-auth/blob/main/docs/content/docs/guides/1-7-upgrade-guide.mdx)
 for those accounts rather than guessing an identity.
 
+### Organization teams
+
+The authentication module mounts Better Auth's organization teams behind a
+`teams` setting that is off by default. After `podo update --apply`, run the
+migrations, which add the `team` and `teamMember` tables, the session and
+invitation team columns, and the setting:
+
+```bash
+bun run --cwd apps/api migrate:all
+```
+
+The admin Settings and organizations pages are owned, so the update leaves
+them as they are. Until you copy the new controls in, an administrator turns
+teams on through the API (`PUT /api/account/settings` with `{"teams": true}`),
+and the managed `teams.ui.spec.ts` tests skip because the pages have no Teams
+controls. To add the UI, compare each page with its template (`podo diff <path>`):
+
+- `apps/web/src/routes/(admin)/admin/settings/+page.svelte`: `"teams"` in
+  `EditableFlag`, the `locked` parameter of `flagCard`, and the Teams row,
+  locked while Organizations is off.
+- `apps/web/src/routes/(admin)/admin/organizations/+page.svelte`: the
+  `OrganizationTeamsDialog` and `page` (`$app/state`) imports, the
+  `teamsEnabled` value, the Teams button on each row, and the dialog.
+
 ### Better Auth 1.7.7 security update
 
 New authentication modules and the API client now require at least 1.7.10 for

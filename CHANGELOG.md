@@ -34,7 +34,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   WebSocket or API path. On an existing deployment the first apply moves the
   port from web to the gateway once, which the plan warns about; the gateway
   starts right after the old web server stops. A rollback to a revision applied
-  before the gateway is refused; roll forward instead.
+  before the gateway is refused; roll forward instead. Since web no longer
+  publishes the port, `workloads.web.replicas` may be above 1. The gateway
+  resolves the web and API service names every second and picks a container
+  per request, so a client on one kept-alive connection reaches every replica,
+  and a request to a container that stopped since the last lookup is retried
+  on another. The plan warns when an apply replaces a running gateway whose
+  definition changed, such as new paths or CIDRs, since that closes the port
+  for a few seconds; this release changes every gateway's definition once.
 
 ## [1.6.7] - 2026-10-20
 
