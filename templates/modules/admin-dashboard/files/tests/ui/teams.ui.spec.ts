@@ -38,6 +38,11 @@ test("settings: the Teams switch waits for Organizations and gates the Teams act
     await page.getByRole("tab", { name: "Authentication" }).click();
   };
 
+  // The settings page is application-owned: an app updated from a version
+  // without teams keeps its own page until it adds the switch.
+  await openAuthentication();
+  test.skip((await teamsSwitch.count()) === 0, "the settings page does not render the Teams switch");
+
   try {
     // Organizations off: the Teams switch is locked.
     await setFlags(page, baseURL, { organization: false, teams: false });
@@ -121,7 +126,13 @@ test("organization teams: create, rename, add and remove a member, delete", { ta
 
     await setTeams(page, baseURL, true);
     await ready(page, "/admin/organizations");
-    await page.getByRole("row", { name: new RegExp(orgName) }).getByRole("button", { name: "Teams", exact: true }).click();
+    const teamsRow = page.getByRole("row", { name: new RegExp(orgName) });
+    await expect(teamsRow.getByRole("button", { name: "Manage" })).toBeVisible();
+    // The organizations page is application-owned: an app updated from a version
+    // without teams keeps its own page until it renders the Teams dialog.
+    const teamsAction = teamsRow.getByRole("button", { name: "Teams", exact: true });
+    test.skip((await teamsAction.count()) === 0, "the organizations page does not render the Teams action");
+    await teamsAction.click();
     const dialog = page.getByRole("dialog", { name: new RegExp(orgName) });
     await expect(dialog.getByText("No teams yet.")).toBeVisible();
 
