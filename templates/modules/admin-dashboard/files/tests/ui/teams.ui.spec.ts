@@ -10,6 +10,84 @@ async function setTeams(page: Page, baseURL: string | undefined, on: boolean): P
     .toBe(on);
 }
 
+async function setFlags(page: Page, baseURL: string | undefined, flags: { organization?: boolean; teams?: boolean }): Promise<void> {
+  const res = await page.request.put("/api/account/settings", { data: flags, headers: { origin: baseURL ?? "" } });
+  expect(res.ok(), await res.text()).toBeTruthy();
+  await expect
+    .poll(async () => {
+      const caps = await (await page.request.get("/api/account/capabilities")).json();
+      return (flags.organization === undefined || caps.organization === flags.organization)
+        && (flags.teams === undefined || caps.teams === (flags.teams && caps.organization));
+    }, { timeout: 8000 })
+    .toBe(true);
+}
+
+// Toggles the server-wide organization and teams settings.
+test("settings: the Teams switch waits for Organizations and gates the Teams action", { tag: "@exclusive" }, async ({ page, baseURL }) => {
+  test.slow();
+  const headers = { origin: baseURL ?? "" };
+  const initial = await (await page.request.get("/api/account/capabilities")).json();
+  test.skip(initial?.organization === undefined, "organizations not installed");
+
+  const stamp = Date.now();
+  const orgName = `Teams switch ${stamp}`;
+  let organizationId: string | undefined;
+  const teamsSwitch = page.getByRole("switch", { name: "Teams", exact: true });
+  const openAuthentication = async (): Promise<void> => {
+    await ready(page, "/admin/settings");
+    await page.getByRole("tab", { name: "Authentication" }).click();
+  };
+
+  try {
+    // Organizations off: the Teams switch is locked.
+    await setFlags(page, baseURL, { organization: false, teams: false });
+    await openAuthentication();
+    await expect(teamsSwitch).toBeDisabled();
+    await expect(teamsSwitch).not.toBeChecked();
+
+    await setFlags(page, baseURL, { organization: true });
+    const created = await page.request.post("/api/auth/organization/create", {
+      data: { name: orgName, slug: `teams-switch-${stamp}` },
+      headers,
+    });
+    expect(created.ok(), await created.text()).toBeTruthy();
+    organizationId = (await created.json()).id as string;
+    const listTeams = (): Promise<number> =>
+      page.request.get(`/api/auth/organization/list-teams?organizationId=${organizationId}`).then((r) => r.status());
+
+    // Turn Teams on from the switch.
+    await openAuthentication();
+    await expect(teamsSwitch).toBeEnabled();
+    await expect(teamsSwitch).not.toBeChecked();
+    await teamsSwitch.click();
+    await expect(page.getByText("Setting updated").first()).toBeVisible();
+    await expect(teamsSwitch).toBeChecked();
+    await expect
+      .poll(async () => (await (await page.request.get("/api/account/capabilities")).json()).teams, { timeout: 8000 })
+      .toBe(true);
+    await expect.poll(listTeams, { timeout: 8000 }).toBe(200);
+    await ready(page, "/admin/organizations");
+    await expect(page.getByRole("row", { name: new RegExp(orgName) }).getByRole("button", { name: "Teams", exact: true })).toBeVisible();
+
+    // And off again.
+    await openAuthentication();
+    await expect(teamsSwitch).toBeChecked();
+    await teamsSwitch.click();
+    await expect(teamsSwitch).not.toBeChecked();
+    await expect
+      .poll(async () => (await (await page.request.get("/api/account/capabilities")).json()).teams, { timeout: 8000 })
+      .toBe(false);
+    await expect.poll(listTeams, { timeout: 8000 }).toBe(404);
+    await ready(page, "/admin/organizations");
+    const row = page.getByRole("row", { name: new RegExp(orgName) });
+    await expect(row.getByRole("button", { name: "Manage" })).toBeVisible();
+    await expect(row.getByRole("button", { name: "Teams", exact: true })).toHaveCount(0);
+  } finally {
+    await setFlags(page, baseURL, { organization: initial.organization !== false, teams: false });
+    if (organizationId) await page.request.post("/api/auth/organization/delete", { data: { organizationId }, headers });
+  }
+});
+
 // admin storageState (project default). Toggles the server-wide teams setting.
 test("organization teams: create, rename, add and remove a member, delete", { tag: "@exclusive" }, async ({ page, baseURL }) => {
   test.slow();
