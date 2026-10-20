@@ -230,7 +230,7 @@ See [Updating](docs/updating.md).
 
 ## Deploy
 
-Production API and web images use `oven/bun:1.4.0-alpine`. Initialize a profile,
+Production API and web images use `oven/bun:1.4.3-alpine`. Initialize a profile,
 review an immutable plan, and apply the exact confirmation hash it prints:
 
 ```bash

@@ -5,7 +5,7 @@ can be launched by Node or Bun, but the generated application is Bun-only.
 
 ## Prerequisites
 
-- Bun 1.4.0 exactly
+- Bun 1.4.3 exactly
 - Docker for containerized development or locally hosted PostgreSQL, Redis, and
   Silo-backed S3 storage; a host-process app with only local providers does not
   need Docker
@@ -232,7 +232,7 @@ when you want to adopt Bun and Elysia.
 
 ## Deploy
 
-Both production images are based on Bun 1.4.0 Alpine:
+Both production images are based on Bun 1.4.3 Alpine:
 
 ```bash
 docker build -f apps/api/Dockerfile -t registry.example.com/my-app-api:v1.2.3 .

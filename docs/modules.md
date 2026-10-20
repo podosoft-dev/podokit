@@ -8,7 +8,7 @@ cd my-app
 npx @podosoft/podokit add <module>
 ```
 
-Generated PodoKit v1 applications use Bun 1.4.0. Install dependencies with
+Generated PodoKit v1 applications use Bun 1.4.3. Install dependencies with
 `bun install`, invoke package CLIs with `bunx`, use `bun run` for root scripts,
 and run API scripts as `bun run --cwd apps/api <script>`.
 

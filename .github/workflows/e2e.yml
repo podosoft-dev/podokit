@@ -112,7 +112,7 @@ jobs:
           cache: npm
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.0
+          bun-version: 1.4.3
       - name: Start Silo
         run: |
           docker run --detach --name podokit-e2e-minio \

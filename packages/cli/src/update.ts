@@ -30,7 +30,7 @@ import {
   type PodokitManifest,
 } from "./lockfile";
 import type { ProviderCapability, ProviderSelections } from "@podosoft/podokit-runtime";
-import type { Toolchain } from "./toolchain";
+import { BUN_VERSION, type Toolchain } from "./toolchain";
 import { NotAProjectError } from "./inspect";
 import {
   readModuleManifest,
@@ -1201,7 +1201,8 @@ export function applyUpdate(
   writeManifest(projectRoot, {
     ...manifest,
     answers: options.targetAnswers ?? manifestTemplateVars(manifest),
-    toolchain: options.targetToolchain ?? manifest.toolchain,
+    // The applied templates pin the current Bun release, so record it too.
+    toolchain: options.targetToolchain ?? { ...manifest.toolchain, runtimeVersion: BUN_VERSION },
     ownedGlobs: migratedOwnedGlobs,
     managedOverrides: migratedManagedOverrides,
     modules: refreshedModules,

@@ -30,6 +30,7 @@ import {
   type PreviousTemplates,
 } from "./update";
 import { templateDiff } from "./template-files";
+import { BUN_VERSION } from "./toolchain";
 import {
   computeDrift,
   computeFilesLock,
@@ -85,6 +86,17 @@ describe("assembleProject", () => {
 
     const diskAppModule = readFileSync(join(onDisk, "apps/api/src/app.ts"), "utf8");
     expect(String(tree.get("apps/api/src/app.ts")?.content)).toBe(diskAppModule);
+  });
+});
+
+describe("applyUpdate toolchain", () => {
+  it("records the Bun release the updated templates pin", () => {
+    const dir = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: REPO_TEMPLATES, targetDir: dir });
+    const manifest = readManifest(dir)!;
+    writeManifest(dir, { ...manifest, toolchain: { ...manifest.toolchain, runtimeVersion: "1.4.0" } });
+    applyUpdate(dir, REPO_TEMPLATES);
+    expect(readManifest(dir)?.toolchain).toEqual({ runtime: "bun", runtimeVersion: BUN_VERSION, packageManager: "bun" });
   });
 });
 

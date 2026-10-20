@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- The containerized Vite dev server could stop after `(ssr) connected.` and
+  never listen when a request reached the web container while Vite was
+  starting, so the dev gateway answered 502 until the container restarted.
+  Before it listens, Vite binds and closes a bare probe server on each wildcard
+  address; on Bun 1.4.0 a connection that sent a request during a probe left a
+  paused socket whose end was never seen, so the probe's `server.close()` never
+  called back. Bun 1.4.1 fixed this. Generated applications now pin Bun 1.4.3
+  (`packageManager`, `engines`, every `oven/bun` image, and CI), and `podo
+  update` records the new version in the manifest.
+  `scripts/bun-port-probe-repro.mjs` reproduces the hang for a given Bun version.
+- The generated `a sign-up cannot claim an ADMIN_EMAILS address` test left a
+  real account behind when `E2E_UNCLAIMED_ADMIN_EMAIL` named an address the
+  running API did not list in `ADMIN_EMAILS`. The account then also matched the
+  user search tests for `admin@example.com`. The test now refuses to run for an
+  address that already has an account, removes any account its sign-up
+  created, and fails with a message naming the missing `ADMIN_EMAILS` entry.
+  The user table tests match email cells exactly.
+
 ## [1.6.6] - 2026-10-19
 
 ### Fixed

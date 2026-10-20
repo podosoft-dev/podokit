@@ -7,11 +7,11 @@ import {
 } from "./toolchain";
 
 describe("toolchain", () => {
-  it("pins Bun 1.4.0 and emits Bun-only commands", () => {
+  it("pins Bun 1.4.3 and emits Bun-only commands", () => {
     const toolchain = resolveToolchain();
     expect(toolchain).toEqual({
       runtime: "bun",
-      runtimeVersion: "1.4.0",
+      runtimeVersion: "1.4.3",
       packageManager: "bun",
     });
     expect(toolchainTemplateVars(toolchain)).toMatchObject({

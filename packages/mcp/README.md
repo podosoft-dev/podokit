@@ -23,7 +23,7 @@ Your editor/agent spawns the server on demand and talks to it over stdio.
 | Tool | Does |
 |---|---|
 | `list_templates` | List the project templates (`fullstack`, `todo`, `base`). |
-| `create_project` | **Scaffold a Bun 1.4.0 project from scratch** (`podo create`). |
+| `create_project` | **Scaffold a Bun 1.4.3 project from scratch** (`podo create`). |
 | `list_modules` | List the feature modules you can add (`podo add`). |
 | `add_module` | Add a module — overlays files, merges deps, wires it in. |
 | `project_status` | Version, modules, file tiers, and your local edits (`podo status`). |

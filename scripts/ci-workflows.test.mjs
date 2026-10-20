@@ -38,7 +38,7 @@ test("uses package-only verification for the generated Changesets PR", () => {
   assert.match(e2e, /node scripts\/e2e-ci\.mjs --smoke/);
   assert.doesNotMatch(e2e, /Cache generated app Bun downloads/);
   assert.doesNotMatch(e2e, /E2E_BUN_CACHE:/);
-  assert.match(e2e, /bun-version: 1\.4\.0/);
+  assert.match(e2e, /bun-version: 1\.4\.3/);
   assert.match(version, /actions: write/);
   assert.match(ci, /node-version: 22\.22\.1/);
   assert.match(release, /node-version: 22\.22\.1/);
