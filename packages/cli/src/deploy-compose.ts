@@ -31,7 +31,6 @@ import {
 } from "./deploy-compose-exec";
 import { readComposeSyncDrift, type ComposeSyncDrift } from "./deploy-compose-sync";
 import {
-  composeHasGateway,
   composeProfileDigest,
   type DockerComposeProfileV1,
 } from "./deploy-compose-profile";
@@ -679,6 +678,12 @@ export function planComposeDeployment(
   warnings.push(
     "The migration runs before the new containers start, so it must be compatible with the release currently serving traffic.",
   );
+  if (publishedPortMovesToGateway(profile, psOutput)) {
+    warnings.push(
+      `This apply moves port ${profile.exposure.port} from web to the gateway: connections are refused from ` +
+        "the moment the old web server stops until the gateway starts, once. Later applies replace web side by side.",
+    );
+  }
   const budgetWarning = connectionBudgetWarning(profile, installedModules(projectRoot));
   if (budgetWarning) warnings.push(budgetWarning);
 
@@ -712,30 +717,43 @@ export function planComposeDeployment(
 }
 
 /**
- * Which application services are replaced side by side.
- *
- * The API always is. Web is only behind the gateway: without one it publishes the
- * host port itself, and a second container cannot bind it.
+ * Which application services are replaced side by side: API and web, since the
+ * gateway, not web, holds the published port.
  */
 function sideBySideServices(profile: DockerComposeProfileV1): Array<{ service: string; replicas: number }> {
   return [
     { service: serviceName(profile, "api"), replicas: profile.workloads.api.replicas },
-    ...(composeHasGateway(profile)
-      ? [{ service: serviceName(profile, "web"), replicas: profile.workloads.web.replicas }]
-      : []),
+    { service: serviceName(profile, "web"), replicas: profile.workloads.web.replicas },
   ];
 }
 
 function rolloutDescription(profile: DockerComposeProfileV1): string {
-  const replacedInPlace = [
-    ...(composeHasGateway(profile) ? [] : ["web"]),
-    ...(profile.workloads.worker ? ["worker"] : []),
-  ];
   return (
-    `Start the new ${composeHasGateway(profile) ? "api and web" : "api"} beside the running containers and wait for health, ` +
-    (replacedInPlace.length ? `replace ${replacedInPlace.join(" and ")} in place, ` : "") +
-    `then stop the old containers${composeHasGateway(profile) ? "; the gateway is replaced only when its definition changes" : ""}.`
+    "Start the new api and web beside the running containers and wait for health, " +
+    (profile.workloads.worker ? "replace worker in place, " : "") +
+    "then stop the old containers; the gateway is replaced only when its definition changes."
   );
+}
+
+/**
+ * Whether a web container from a release before the gateway still publishes the
+ * port. The gateway can bind it only once that container stops, so this one
+ * apply refuses connections in between.
+ */
+function publishedPortMovesToGateway(profile: DockerComposeProfileV1, psOutput: string): boolean {
+  const services = new Set(
+    psOutput
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        try {
+          return (JSON.parse(line) as ComposePsEntry).Service ?? "";
+        } catch {
+          return "";
+        }
+      }),
+  );
+  return services.has(serviceName(profile, "web")) && !services.has(serviceName(profile, "gateway"));
 }
 
 interface ServiceContainer {
@@ -869,44 +887,39 @@ function removeContainers(profile: DockerComposeProfileV1, ids: string[], runner
  * Replaces the application containers without leaving a moment with nothing to
  * answer.
  *
- * The new API, and the new web server behind the gateway, start beside the running
- * ones. Only when all of them are healthy do the old ones get a graceful stop, web
- * before API so an old web server never outlives the API it was talking to. The
- * worker, a web server that publishes the port itself, and a changed gateway are
- * replaced in place by the final `compose up`, which also removes orphans. If a new
- * container fails its healthcheck, the containers this rollout started are removed
- * and the old ones keep serving.
+ * The new API and web server start beside the running ones. Only when all of them
+ * are healthy do the old ones get a graceful stop, web before API so an old web
+ * server never outlives the API it was talking to. The worker and a changed gateway
+ * are replaced in place by the final `compose up`, which also removes orphans. A
+ * gateway that does not exist yet starts right after the old web server stops,
+ * since that container held the port it binds. If a new container fails its
+ * healthcheck, the containers this rollout started are removed and the old ones
+ * keep serving.
  */
 function rollOutApplication(
   profile: DockerComposeProfileV1,
   runtime: ComposeRuntime,
   runner: CommandRunner,
 ): void {
+  const gateway = serviceName(profile, "gateway");
+  const gatewayMissing = serviceContainers(profile, gateway, runner).length === 0;
   const sideBySide: SideBySide[] = [];
   try {
     for (const { service, replicas } of sideBySideServices(profile)) {
       sideBySide.push(startBeside(profile, runtime, service, replicas, runner));
-    }
-    if (!composeHasGateway(profile)) {
-      // `--remove-orphans`: a gateway left from a profile that had one still holds
-      // the port this web server publishes.
-      runCompose(
-        profile,
-        runtime,
-        "compose",
-        ["up", "-d", "--no-deps", "--wait", "--remove-orphans", serviceName(profile, "web")],
-        runner,
-        false,
-      );
     }
   } catch (error) {
     for (const entry of sideBySide) removeContainers(profile, entry.started, runner);
     throw error;
   }
   for (const entry of [...sideBySide].reverse()) {
-    if (!entry.replaced.length) continue;
-    checked(runner, "docker", dockerArgs(profile, ["stop", ...entry.replaced]));
-    checked(runner, "docker", dockerArgs(profile, ["rm", ...entry.replaced]));
+    if (entry.replaced.length) {
+      checked(runner, "docker", dockerArgs(profile, ["stop", ...entry.replaced]));
+      checked(runner, "docker", dockerArgs(profile, ["rm", ...entry.replaced]));
+    }
+    if (gatewayMissing && entry.replaced.length && entry.service === serviceName(profile, "web")) {
+      runCompose(profile, runtime, "compose", ["up", "-d", "--no-deps", "--wait", gateway], runner, false);
+    }
   }
   runCompose(profile, runtime, "compose", ["up", "-d", "--wait", "--remove-orphans"], runner, false);
 }
@@ -1145,6 +1158,12 @@ export function planComposeRollback(
   if (!target) {
     const known = ledger.entries.map((entry) => entry.revision).join(", ") || "none";
     throw new Error(`Revision ${revision} is not in the release ledger. Known revisions: ${known}.`);
+  }
+  if (!target.images.gateway) {
+    throw new Error(
+      `Revision ${revision} was applied before the gateway held the published port, so it cannot be ` +
+        "reproduced byte for byte. Roll forward with a new release instead.",
+    );
   }
   const runtime = renderComposeDeployment(
     projectRoot,

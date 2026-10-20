@@ -386,11 +386,6 @@ export function parseComposeProfile(value: unknown): DockerComposeProfileV1 {
     exposure.trustedProxyCidrs ?? [],
     "exposure.trustedProxyCidrs",
   );
-  if (trustedProxyCidrs.length > 0 && webSocketPaths.length === 0 && apiPaths.length === 0) {
-    throw new Error(
-      "Deployment exposure.trustedProxyCidrs requires at least one exposure.webSocketPaths or exposure.apiPaths entry.",
-    );
-  }
   const gatewayImage =
     exposure.gatewayImage === undefined
       ? "caddy:2.10-alpine"
@@ -655,9 +650,18 @@ export function initializeComposeProfile(
   return { name, path, profile: validated };
 }
 
-/** The gateway runs only when some path must bypass the web service. */
-export function composeHasGateway(profile: DockerComposeProfileV1): boolean {
-  return profile.exposure.webSocketPaths.length > 0 || profile.exposure.apiPaths.length > 0;
+/**
+ * Whether the gateway forwards requests the way an Ingress does: it trusts every
+ * peer and appends it to X-Forwarded-For, so the web server counts one more hop.
+ *
+ * The gateway always holds the published port, so web can be replaced side by
+ * side. With no direct API route and no trusted CIDR it has nothing to resolve
+ * and stays transparent, which keeps the client address the web server records
+ * exactly what it was before the gateway stood in front of it.
+ */
+export function composeGatewayIsTransparent(profile: DockerComposeProfileV1): boolean {
+  const { webSocketPaths, apiPaths, trustedProxyCidrs } = profile.exposure;
+  return webSocketPaths.length === 0 && apiPaths.length === 0 && trustedProxyCidrs.length === 0;
 }
 
 export function composeProfileDigest(profile: DockerComposeProfileV1): string {

@@ -369,17 +369,19 @@ describe("client address settings", () => {
     expect(addressFinding(root)?.message).toContain("takes the client address from the connection");
   });
 
-  it("trusts the edge proxies in front of the published web port, and one gateway hop", () => {
+  it("counts the transparent gateway on top of the edge proxies, and one hop for a resolving gateway", () => {
     const root = project("docker-compose", ["auth"]);
-    expect(addressSettings(root)).toEqual(trusting(1));
+    expect(addressSettings(root)).toEqual(trusting(2));
     edit(root, (value) => {
       value.exposure.edgeProxies = 2;
     });
-    expect(addressSettings(root)).toEqual(trusting(2));
+    expect(addressSettings(root)).toEqual(trusting(3));
     edit(root, (value) => {
       value.exposure.edgeProxies = 0;
     });
-    expect(addressSettings(root)).toEqual(ignoring);
+    // The gateway's own entry is the client; the client's forwarded origin is not trusted.
+    expect(addressSettings(root)).toEqual({ ...trusting(1), PROTOCOL_HEADER: undefined, HOST_HEADER: undefined });
+    expect(addressFinding(root)?.warning).toBeUndefined();
     edit(root, (value) => {
       value.exposure = { ...value.exposure, edgeProxies: 2, apiPaths: ["/api/files/uploads/"], trustedProxyCidrs: ["10.0.0.0/8"] };
     });

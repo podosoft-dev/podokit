@@ -184,8 +184,7 @@ export function addApiPaths(
 
 /**
  * Remove exactly these paths from `.podokit/dev.json` and every deployment
- * profile. A file that would stop validating without them, such as a Compose
- * profile whose `trustedProxyCidrs` needs a direct path, is left unchanged.
+ * profile. A file that would stop validating without them is left unchanged.
  */
 export function removeApiPaths(
   projectRoot: string,

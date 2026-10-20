@@ -1,5 +1,5 @@
 import { readAppProxyTimeouts, type AppProxyTimeouts } from "./app-proxy-timeouts";
-import { composeHasGateway } from "./deploy-compose-profile";
+import { composeGatewayIsTransparent } from "./deploy-compose-profile";
 import { composeProxyTrust } from "./deploy-compose-render";
 import type { AnyDeployProfile } from "./deploy-driver";
 import { kubernetesProxyTrust } from "./deploy-render";
@@ -281,12 +281,12 @@ function clientAddressFinding(profile: AnyDeployProfile): DeployFinding {
   if (profile.driver === "docker-compose") {
     rendered = composeProxyTrust(profile);
     const cidrs = profile.exposure.trustedProxyCidrs;
-    if (composeHasGateway(profile) && edge > 0 && cidrs.length === 0) {
+    if (!composeGatewayIsTransparent(profile) && edge > 0 && cidrs.length === 0) {
       problems.push(
         `exposure.edgeProxies is ${edge} but exposure.trustedProxyCidrs is empty, so the gateway sends the ` +
           "nearest edge proxy's address as every request's client; list that proxy's CIDR.",
       );
-    } else if (composeHasGateway(profile) && edge === 0 && cidrs.length > 0) {
+    } else if (edge === 0 && cidrs.length > 0) {
       problems.push(
         "exposure.trustedProxyCidrs trusts forwarded headers from a proxy, but exposure.edgeProxies is 0; " +
           "set it to the number of proxies in front of the published port.",

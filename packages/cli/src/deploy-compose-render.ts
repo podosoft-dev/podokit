@@ -3,7 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { API_PATH_PREFIX, apiPathBase } from "./api-paths";
 import {
-  composeHasGateway,
+  composeGatewayIsTransparent,
   type ComposeDependencyProfile,
   type ComposeWorkloadProfile,
   type DockerComposeProfileV1,
@@ -129,16 +129,19 @@ export function derivedRuntimeConfig(
 }
 
 /**
- * The gateway replaces X-Forwarded-For with the one address it resolved. It keeps
- * a trusted proxy's X-Forwarded-Proto and X-Forwarded-Host and otherwise writes its
- * own, which name its plain-HTTP listener: behind an edge proxy it does not trust,
- * the web server keeps its default origin (https and the Host header) instead.
+ * A transparent gateway appends its peer to X-Forwarded-For and passes the edge
+ * proxies' forwarded headers on, so the web server counts it as one more hop and
+ * trusts the forwarded origin only behind an edge proxy, as it would without it.
+ * Otherwise the gateway replaces X-Forwarded-For with the one address it resolved.
+ * It keeps a trusted proxy's X-Forwarded-Proto and X-Forwarded-Host and otherwise
+ * writes its own, which name its plain-HTTP listener: behind an edge proxy it does
+ * not trust, the web server keeps its default origin (https and the Host header).
  */
 export function composeProxyTrust(profile: DockerComposeProfileV1): Record<string, string> {
   const { edgeProxies, trustedProxyCidrs } = profile.exposure;
-  return composeHasGateway(profile)
-    ? proxyTrustConfig(1, edgeProxies === 0 || trustedProxyCidrs.length > 0)
-    : proxyTrustConfig(edgeProxies);
+  return composeGatewayIsTransparent(profile)
+    ? proxyTrustConfig(edgeProxies + 1, edgeProxies > 0)
+    : proxyTrustConfig(1, edgeProxies === 0 || trustedProxyCidrs.length > 0);
 }
 
 function sortedEnvironment(config: Record<string, string>): [string, string][] {
@@ -341,7 +344,7 @@ function applicationService(
   release: string,
   stateDigest: string,
   environment: Record<string, string>,
-  options: { command?: string; healthcheckPath?: string; publish?: boolean },
+  options: { command?: string; healthcheckPath?: string },
 ): string {
   const workload = role === "worker" ? profile.workloads.worker : profile.workloads[role];
   if (!workload) return "";
@@ -374,11 +377,6 @@ function applicationService(
           .map(([name, condition]) => `      ${name}:\n        condition: ${condition}\n`)
           .join("")}`
       : "") +
-    (options.publish
-      ? `    ports:\n      - ${quote(
-          `${profile.exposure.bindAddress}:${profile.exposure.port}:${CONTAINER_PORT}`,
-        )}\n`
-      : "") +
     `    networks: [${profile.target.project}]\n` +
     resourceBlock(workload, "    ") +
     (options.healthcheckPath
@@ -393,7 +391,17 @@ function applicationService(
 }
 
 function gatewayService(profile: DockerComposeProfileV1, image: string): string {
-  const globalOptions = profile.exposure.trustedProxyCidrs.length
+  const transparent = composeGatewayIsTransparent(profile);
+  // Transparent: trust every peer, so Caddy keeps the forwarded headers it receives
+  // and appends its peer to X-Forwarded-For instead of replacing them.
+  const globalOptions = transparent
+    ? `{
+  servers {
+    trusted_proxies static 0.0.0.0/0 ::/0
+  }
+}
+`
+    : profile.exposure.trustedProxyCidrs.length
     ? `{
   servers {
     trusted_proxies static ${profile.exposure.trustedProxyCidrs.join(" ")}
@@ -408,9 +416,11 @@ function gatewayService(profile: DockerComposeProfileV1, image: string): string 
   // the client address Caddy resolved instead: the client behind a trusted proxy,
   // the peer otherwise.
   const reverseProxy = (upstream: string): string =>
-    `    reverse_proxy ${upstream} {\n` +
-    `      header_up X-Forwarded-For {client_ip}\n` +
-    `    }\n`;
+    transparent
+      ? `    reverse_proxy ${upstream}\n`
+      : `    reverse_proxy ${upstream} {\n` +
+        `      header_up X-Forwarded-For {client_ip}\n` +
+        `    }\n`;
   const webSocketRoutes = profile.exposure.webSocketPaths.length
     ? `  @api_websockets path ${profile.exposure.webSocketPaths.join(" ")}\n` +
       `  handle @api_websockets {\n` +
@@ -471,7 +481,6 @@ export function renderComposeDocument(
 ): string {
   const environment = derivedRuntimeConfig(profile, proxyTimeouts);
   const services: string[] = [];
-  const hasGateway = composeHasGateway(profile);
   if (profile.dependencies.postgres.mode === "managed" && images.postgres) {
     services.push(postgresService(profile, images.postgres));
   }
@@ -494,15 +503,10 @@ export function renderComposeDocument(
     applicationService(profile, "web", images.web, release, stateDigest, webEnvironment, {
       // The web server's own route: an API outage must not mark it unhealthy.
       healthcheckPath: "/healthz",
-      publish: !hasGateway,
     }),
   );
-  if (hasGateway) {
-    if (!images.gateway) {
-      throw new Error("A resolved gateway image is required when WebSocket or API paths are configured.");
-    }
-    services.push(gatewayService(profile, images.gateway));
-  }
+  if (!images.gateway) throw new Error("A resolved gateway image is required.");
+  services.push(gatewayService(profile, images.gateway));
   if (profile.workloads.worker) {
     // The worker runs the API image with a different entry point, exactly as the
     // Kubernetes driver does.
@@ -568,7 +572,7 @@ export function defaultComposeImages(
   return {
     api: `${profile.release.apiRepository}:${release}`,
     web: `${profile.release.webRepository}:${release}`,
-    gateway: composeHasGateway(profile) ? profile.exposure.gatewayImage : null,
+    gateway: profile.exposure.gatewayImage,
     postgres:
       profile.dependencies.postgres.mode === "managed"
         ? profile.dependencies.postgres.image

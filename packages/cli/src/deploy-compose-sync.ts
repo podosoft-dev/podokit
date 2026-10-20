@@ -626,12 +626,16 @@ export async function revertComposeSync(
       "No release has been applied to this deployment, so there is no image state to restore.",
     );
   }
+  // A revision applied before the gateway held the port recorded no gateway image.
+  // Its web server published the port, which the web server rendered now does not,
+  // so the revert has to start the gateway too.
+  const images = { ...current.images, gateway: current.images.gateway ?? profile.exposure.gatewayImage };
   const runtime = renderComposeDeployment(
     projectRoot,
     profileName,
     profile,
     current.release,
-    current.images,
+    images,
     current.rolloutStateDigest,
   );
   const services = rolesOf(profile).map((role) => serviceName(profile, role));
@@ -640,6 +644,15 @@ export async function revertComposeSync(
     runtime,
     "compose",
     ["up", "-d", "--force-recreate", "--wait", ...services],
+    runner,
+    false,
+  );
+  // Not force-recreated: a running gateway keeps the port open while web restarts.
+  runCompose(
+    profile,
+    runtime,
+    "compose",
+    ["up", "-d", "--no-deps", "--wait", serviceName(profile, "gateway")],
     runner,
     false,
   );
