@@ -53,11 +53,11 @@ const authConfigUpdateSchema = t.Object({
     from: t.Optional(t.String()),
   })),
   server: t.Optional(t.Object({
-    requireEmailVerification: t.Optional(t.Boolean()),
-    requireSignupApproval: t.Optional(t.Boolean()),
-    allowDelete: t.Optional(t.Boolean()),
-    hibp: t.Optional(t.Boolean()),
-    auditLog: t.Optional(t.Boolean()),
+    requireEmailVerification: t.Optional(t.Nullable(t.Boolean())),
+    requireSignupApproval: t.Optional(t.Nullable(t.Boolean())),
+    allowDelete: t.Optional(t.Nullable(t.Boolean())),
+    hibp: t.Optional(t.Nullable(t.Boolean())),
+    auditLog: t.Optional(t.Nullable(t.Boolean())),
     sessionIdleTimeoutMinutes: t.Optional(t.Nullable(t.Number())),
   })),
 });
