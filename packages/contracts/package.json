@@ -1,6 +1,6 @@
 {
   "name": "@podosoft/podokit-contracts",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Shared PodoKit contracts: capability flags, the REST error envelope, and stable error codes used by both the Elysia backend and the SvelteKit frontend.",
   "license": "Apache-2.0",
   "repository": {
