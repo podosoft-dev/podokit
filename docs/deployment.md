@@ -609,8 +609,12 @@ trust the edge proxy in front writes its own plain-HTTP values, so then the web
 server keeps its default origin, `https` and the `Host` header. The web server sends
 the API the one address it resolved, so the API trusts one hop
 (`TRUSTED_PROXY_HOPS` 1) on every path. `runtimeConfig` refuses `ADDRESS_HEADER`,
-`XFF_DEPTH`, `TRUSTED_PROXY_HOPS`, and `TRUSTED_PROXY_HEADER` with a message that
-points at `edgeProxies`, and `PROTOCOL_HEADER` and `HOST_HEADER` as managed keys.
+`XFF_DEPTH`, `TRUSTED_PROXY_HOPS`, and `TRUSTED_PROXY_HEADER`, and their older
+names `RATE_LIMIT_TRUSTED_PROXY_HOPS` and `RATE_LIMIT_PROXY_HEADER`, with a message
+that points at `edgeProxies`, and `PROTOCOL_HEADER` and `HOST_HEADER` as managed
+keys. `podo update` lists profiles that still set any of these, since only you
+know how many proxies to count; remove them and set `edgeProxies` before the next
+`podo deploy`.
 
 Every counted proxy must pass the client's address on: a Traefik Ingress behind
 an edge proxy appends it only when `forwardedHeaders.trustedIPs` lists that

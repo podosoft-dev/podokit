@@ -22,9 +22,11 @@ import {
   planUpdate,
   applyUpdate,
   compareVersions,
+  describeRetiredDeploymentKeys,
   predictMerges,
   previewUpdate,
   publishedTemplates,
+  retiredDeploymentKeys,
   summarize,
   targetProject,
   type PreviousTemplates,
@@ -2245,5 +2247,28 @@ describe("audit hook registration", () => {
     const auth = readFileSync(authPath, "utf8");
     expect(auth).toContain("// application note\nconst webOrigins = ");
     expectPluginOnly(auth);
+  });
+});
+
+describe("retired deployment keys", () => {
+  it("names each profile that still sets a client address key the release derives", () => {
+    const dir = tmp();
+    mkdirSync(join(dir, ".podokit", "deploy"), { recursive: true });
+    writeFileSync(
+      join(dir, ".podokit", "deploy", "production.json"),
+      JSON.stringify({ runtimeConfig: { RATE_LIMIT_TRUSTED_PROXY_HOPS: "2", TRUSTED_PROXY_HOPS: "2", APP_NAME: "x" } }),
+    );
+    writeFileSync(join(dir, ".podokit", "deploy", "staging.json"), JSON.stringify({ runtimeConfig: { APP_NAME: "x" } }));
+    writeFileSync(join(dir, ".podokit", "deploy", "broken.json"), "{");
+
+    const found = retiredDeploymentKeys(dir);
+
+    expect(found).toEqual([
+      { file: ".podokit/deploy/production.json", keys: ["RATE_LIMIT_TRUSTED_PROXY_HOPS", "TRUSTED_PROXY_HOPS"] },
+    ]);
+    const report = describeRetiredDeploymentKeys(found);
+    expect(report).toContain(".podokit/deploy/production.json  runtimeConfig RATE_LIMIT_TRUSTED_PROXY_HOPS, TRUSTED_PROXY_HOPS");
+    expect(report).toContain("set exposure.edgeProxies");
+    expect(describeRetiredDeploymentKeys(retiredDeploymentKeys(tmp()))).toBe("");
   });
 });
