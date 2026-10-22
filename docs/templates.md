@@ -686,6 +686,15 @@ bunx --bun shadcn-svelte@latest add accordion progress
 `#lib` import map, so vendored components import `#lib/utils.js` like the
 shipped ones.
 
+`Textarea` grows with its content (`field-sizing-content`, at least `min-h-16`),
+so the browser ignores `rows`. For a fixed height, such as a message field, turn
+content sizing off and set the height through `class`:
+
+```svelte
+<Textarea rows={6} class="field-sizing-fixed" />
+<Textarea class="min-h-40" />
+```
+
 Application components should wrap the vendored primitives rather than editing
 `src/lib/components/ui/**`. Colors and radius are CSS variables in the managed
 `app.css`, which imports the application-owned `src/app.extensions.css` last.
