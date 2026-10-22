@@ -1,5 +1,19 @@
 # @podosoft/podokit
 
+## 1.7.0
+
+### Minor Changes
+
+- [#282](https://github.com/podosoft-dev/podokit/pull/282) [`eb72ccb`](https://github.com/podosoft-dev/podokit/commit/eb72ccb3d827707e781024c66c5263889bfcfa82) Thanks [@korone00](https://github.com/korone00)! - Docker Compose deployments always run the internal gateway on the published port, so web is replaced side by side like the API. A profile without WebSocket or API paths and without trusted proxy CIDRs gets a transparent gateway that appends its peer to X-Forwarded-For, and the web server counts it as one more hop, so recorded client addresses stay the same. The first apply on an existing deployment moves the port from web to the gateway once, and a rollback to a revision applied before that is refused.
+
+- [#284](https://github.com/podosoft-dev/podokit/pull/284) [`70d4fa2`](https://github.com/podosoft-dev/podokit/commit/70d4fa20e19401902124540d350e4ec74c5e1059) Thanks [@korone00](https://github.com/korone00)! - Docker Compose profiles accept more than one web replica, since the gateway now holds the published port. The gateway resolves the web and API service names as dynamic upstreams and balances per request, retrying a container that stopped since the last lookup on another one.
+
+- [#282](https://github.com/podosoft-dev/podokit/pull/282) [`eb72ccb`](https://github.com/podosoft-dev/podokit/commit/eb72ccb3d827707e781024c66c5263889bfcfa82) Thanks [@korone00](https://github.com/korone00)! - Add organization teams. The authentication module mounts Better Auth's organization teams (organizations start without a team, and the last team can be removed), and a new `teams` setting, off by default and seeded by a migration, gates their endpoints: while it or `organization` is off, they answer 404. The admin Settings page has a **Teams** switch, and the admin organizations page has a **Teams** dialog that lists, creates, renames, and deletes teams and adds or removes members chosen from the organization's members. `Capabilities` gains `teams`, the API client types the team methods, and `GET /account/team-members` lists a team's members for any member of its organization, since Better Auth's own listing answers only members of the team. Organization managers can manage teams. Existing applications get the `team` and `teamMember` tables from `migrate:all`; the owned organizations and settings pages show the new controls once they are regenerated or edited to render them.
+
+### Patch Changes
+
+- [#284](https://github.com/podosoft-dev/podokit/pull/284) [`70d4fa2`](https://github.com/podosoft-dev/podokit/commit/70d4fa20e19401902124540d350e4ec74c5e1059) Thanks [@korone00](https://github.com/korone00)! - Skip the generated organization teams UI tests in an application whose owned settings or organizations page does not render the Teams controls yet. After `podo update` from a version without teams, the managed tests arrived but the application-owned `/admin/settings` and `/admin/organizations` pages stayed as they were, so the tests failed looking for the Teams switch and the Teams action. They now skip with the reason until the pages render them, and still run in full in new applications.
+
 ## 1.6.7
 
 ### Patch Changes
