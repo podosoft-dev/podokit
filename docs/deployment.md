@@ -436,7 +436,12 @@ first apply moves the port from web to the gateway: the new web server starts
 beside the old one, and the gateway starts right after the old web server stops,
 so the port is closed from the moment that server stops accepting connections
 until the gateway listens. That is a second or two, or longer while the old web
-server finishes in-flight requests, up to its stop timeout. The plan warns when
+server finishes in-flight requests, up to its stop timeout. A web server generated
+before 1.6.6 does not close its event streams on `SIGTERM`, so with a stream open
+it keeps the port until the adapter's shutdown timeout, about 30 seconds
+(measured: 30.5 seconds). Run that apply when a short outage is acceptable, or
+update the application's templates first (`podo update`) so the old web server
+closes its streams at once. The plan warns when
 this apply moves the port. Later applies replace web side by side. A rollback to a
 revision applied before the gateway is refused, because the revision no longer
 renders byte for byte; roll forward with a new release instead.
