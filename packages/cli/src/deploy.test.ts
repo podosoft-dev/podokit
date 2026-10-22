@@ -159,7 +159,7 @@ describe("deployment profiles", () => {
     profile.runtimeConfig = { RATE_LIMIT_TRUSTED_PROXY_HOPS: "1" };
     writeFileSync(path, JSON.stringify(profile));
     expect(() => loadDeploymentProfile(root, "production"))
-      .toThrow('"RATE_LIMIT_TRUSTED_PROXY_HOPS" was renamed to "TRUSTED_PROXY_HOPS"');
+      .toThrow('"RATE_LIMIT_TRUSTED_PROXY_HOPS" is derived from exposure.edgeProxies');
   });
 
   it("accepts registry ports but rejects tagged release repositories", () => {

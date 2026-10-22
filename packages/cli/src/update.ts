@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
@@ -32,6 +32,7 @@ import {
 import type { ProviderCapability, ProviderSelections } from "@podosoft/podokit-runtime";
 import { BUN_VERSION, type Toolchain } from "./toolchain";
 import { NotAProjectError } from "./inspect";
+import { retiredClientAddressKeys } from "./deploy-schema";
 import {
   readModuleManifest,
   resolveModule,
@@ -1241,4 +1242,47 @@ export function summarize(plan: UpdatePlan): Record<Action, number> {
   };
   for (const change of plan.changes) counts[change.action] += 1;
   return counts;
+}
+
+export interface RetiredDeploymentKeys {
+  /** The profile, relative to the project root. */
+  file: string;
+  keys: string[];
+}
+
+/**
+ * Deployment profiles whose runtimeConfig still sets a client address key that
+ * this release derives from exposure.edgeProxies. The update leaves profiles as
+ * they are, since only the operator knows how many proxies sit in front of the
+ * deployment, and reports them so `podo deploy` does not refuse them first.
+ */
+export function retiredDeploymentKeys(projectRoot: string): RetiredDeploymentKeys[] {
+  const directory = join(projectRoot, ".podokit", "deploy");
+  if (!existsSync(directory)) return [];
+  const found: RetiredDeploymentKeys[] = [];
+  for (const entry of readdirSync(directory).filter((name) => name.endsWith(".json")).sort()) {
+    let profile: unknown;
+    try {
+      profile = JSON.parse(readFileSync(join(directory, entry), "utf8")) as unknown;
+    } catch {
+      continue; // podo deploy reports a profile it cannot read
+    }
+    const runtimeConfig = typeof profile === "object" && profile !== null
+      ? (profile as { runtimeConfig?: unknown }).runtimeConfig
+      : undefined;
+    const keys = retiredClientAddressKeys(runtimeConfig);
+    if (keys.length) found.push({ file: `.podokit/deploy/${entry}`, keys });
+  }
+  return found;
+}
+
+/** The report for retiredDeploymentKeys, or an empty string when there is none. */
+export function describeRetiredDeploymentKeys(found: RetiredDeploymentKeys[]): string {
+  if (!found.length) return "";
+  return (
+    "WARN deployment profiles set client address keys that PodoKit now derives from exposure.edgeProxies:\n" +
+    found.map((entry) => `  ${entry.file}  runtimeConfig ${entry.keys.join(", ")}`).join("\n") +
+    "\nRemove them from runtimeConfig and set exposure.edgeProxies to the number of reverse proxies in front " +
+    "of the deployment (1 when omitted); podo deploy refuses the profile until then.\n"
+  );
 }

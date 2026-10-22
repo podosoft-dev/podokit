@@ -247,6 +247,12 @@ migration Job before a rolling deployment.
   injection in production). With `NODE_ENV=production` the API refuses to start with an unset
   or placeholder `BETTER_AUTH_SECRET`, or a `BETTER_AUTH_URL` that is not `https:` unless it
   is a loopback address such as `http://127.0.0.1:5002` (a desktop shell, for example).
+- **Handing a toggle back to the environment.** Once saved, a server toggle keeps its stored
+  value whatever its environment variable says (for example `AUTH_ALLOW_DELETE`).
+  `GET /account/auth-config` lists the stored ones in `serverOverrides`, and
+  `PUT /account/auth-config` with the toggle set to `null` (`{ "server": { "allowDelete": null } }`)
+  removes the stored value, so the environment decides again. The generated end-to-end tests that
+  change a toggle restore it this way, so running them leaves the server's settings as they were.
 - **Starting before the migrations.** Better Auth checks the database schema and keeps a
   mismatch it found, such as missing tables when the API started before `migrate:all`. While it
   holds one, the API rebuilds the auth instance at most every 2 seconds on a request, so the first

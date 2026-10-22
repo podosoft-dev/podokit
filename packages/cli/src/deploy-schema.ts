@@ -88,11 +88,22 @@ export function proxyTrustConfig(
   };
 }
 
-/** Keys the generated API no longer reads; it refuses to start while they are set. */
-const RENAMED_RUNTIME_CONFIG_KEYS: Record<string, string> = {
-  RATE_LIMIT_TRUSTED_PROXY_HOPS: "TRUSTED_PROXY_HOPS",
-  RATE_LIMIT_PROXY_HEADER: "TRUSTED_PROXY_HEADER",
-};
+/**
+ * Client address keys a profile may still carry from an older release: the four
+ * PodoKit now derives, and the names the generated API read before them, which it
+ * refuses to start with. exposure.edgeProxies replaces all of them.
+ */
+export const RETIRED_CLIENT_ADDRESS_KEYS = [
+  ...CLIENT_ADDRESS_KEYS,
+  "RATE_LIMIT_TRUSTED_PROXY_HOPS",
+  "RATE_LIMIT_PROXY_HEADER",
+];
+
+/** The retired client address keys a profile's runtimeConfig sets. */
+export function retiredClientAddressKeys(runtimeConfig: unknown): string[] {
+  if (typeof runtimeConfig !== "object" || runtimeConfig === null || Array.isArray(runtimeConfig)) return [];
+  return Object.keys(runtimeConfig).filter((key) => RETIRED_CLIENT_ADDRESS_KEYS.includes(key));
+}
 
 export function containsUrlCredentials(value: string): boolean {
   if (!value.includes("://")) return false;
@@ -275,15 +286,11 @@ export function parseRuntimeConfig(runtimeConfig: Record<string, unknown>): Reco
     if (MANAGED_RUNTIME_CONFIG_KEYS.includes(key)) {
       throw new Error(`Deployment runtimeConfig key "${key}" is managed by PodoKit.`);
     }
-    if (CLIENT_ADDRESS_KEYS.includes(key)) {
+    if (RETIRED_CLIENT_ADDRESS_KEYS.includes(key)) {
       throw new Error(
         `Deployment runtimeConfig key "${key}" is derived from exposure.edgeProxies, the number of reverse ` +
           "proxies in front of the deployment; remove it and set exposure.edgeProxies instead.",
       );
-    }
-    const renamed = RENAMED_RUNTIME_CONFIG_KEYS[key];
-    if (renamed) {
-      throw new Error(`Deployment runtimeConfig key "${key}" was renamed to "${renamed}".`);
     }
     if (typeof entry !== "string") {
       throw new Error(`Deployment runtimeConfig value "${key}" must be a string.`);

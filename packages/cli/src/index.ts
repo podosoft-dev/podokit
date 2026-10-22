@@ -10,8 +10,10 @@ import { status, diff, doctor } from "./inspect";
 import {
   addedModuleReason,
   describeDowngrades,
+  describeRetiredDeploymentKeys,
   applyUpdate,
   previewUpdate,
+  retiredDeploymentKeys,
   summarize,
   upstreamChanges,
   type UpdatePlan,
@@ -855,6 +857,8 @@ async function main(argv: string[]): Promise<void> {
             `${result.kept.length} kept.\n`,
         );
         writeApiPaths("Direct API paths:", result.apiPaths, "add");
+        const retiredKeys = describeRetiredDeploymentKeys(retiredDeploymentKeys(process.cwd()));
+        if (retiredKeys) process.stdout.write(`\n${retiredKeys}`);
         if (result.conflicts.length) {
           process.stdout.write(
             "\nResolve the following, then commit:\n" +
@@ -922,6 +926,8 @@ async function main(argv: string[]): Promise<void> {
         );
       }
       writeOwnedTemplateNotes(plan, templatesDir, args.from);
+      const retiredKeys = describeRetiredDeploymentKeys(retiredDeploymentKeys(process.cwd()));
+      if (retiredKeys) process.stdout.write(`\n${retiredKeys}`);
     } catch (err) {
       fail((err as Error).message);
     }
