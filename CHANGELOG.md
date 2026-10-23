@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.7.3] - 2026-10-23
+
+### Security
+
+- The mailer module depends on `nodemailer ^10.2.1`. Nodemailer 9 has
+  published advisories that 10.0.9 and later fix: remote denial of service
+  through quadratic address and DKIM header parsing, a TLS `servername` reused
+  across transports by the process-wide DNS cache, and malformed envelope
+  recipients from quoted local parts. The generated mailer code is unchanged.
+- Generated web apps require `vite ^8.3.5` and `vitest ^4.1.12`, so a lockfile
+  can no longer keep a Vite 8.2.0–8.2.3 dev server or an older
+  `@vitest/mocker`, both covered by development-server advisories.
+
+### Fixed
+
+- `podo update --apply` records the new Bun release in the manifest's template
+  answers as well as its toolchain, so the manifest no longer names two Bun
+  releases after an update.
+
+### Documentation
+
+- The updating guide explains that `Dockerfile.dev` is owned by the project:
+  `podo update` lists it under `review`, and its `oven/bun` tags are changed by
+  hand.
+
 ## [1.7.2] - 2026-10-23
 
 ### Security
