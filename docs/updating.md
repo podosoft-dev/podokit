@@ -187,7 +187,13 @@ after its dependents back in front of them.
 
 ## Bun-only v1 boundary
 
-PodoKit v1 manifests declare Bun 1.4 (new projects pin 1.4.4). The removed `podo runtime set` command
+PodoKit v1 manifests declare Bun 1.4 (new projects pin 1.4.4). `podo update --apply` moves an
+existing project to the Bun release the CLI pins: it rewrites the managed `package.json`, Dockerfiles,
+Compose file, and CI workflow, and records the version in `.podokit/manifest.json`. `Dockerfile.dev`
+is owned by the project, so the update lists it under `review` and leaves it alone; change its
+`oven/bun` tags yourself (`podo diff Dockerfile.dev` shows the template's version).
+
+The removed `podo runtime set` command
 is not a migration mechanism. A PodoKit 0.x manifest is rejected with a message
 to use the final 0.x CLI:
 
