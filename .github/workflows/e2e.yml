@@ -141,6 +141,26 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      # Playwright installs Chromium's system packages with apt on every run. The runner's
+      # Ubuntu mirror serves them at about 200 kB/s (2 minutes for 26 MB, 11 minutes on a bad
+      # day), so keep the downloaded packages in the Actions cache instead.
+      - name: Keep apt packages for the Playwright system dependencies
+        if: >-
+          (github.event_name != 'pull_request' || github.head_ref != 'changeset-release/main') &&
+          (github.event_name != 'workflow_dispatch' || inputs.mode != 'package-smoke')
+        run: |
+          mkdir -p "$HOME/.cache/apt-archives/partial"
+          printf 'Dir::Cache::Archives "%s/.cache/apt-archives";\nAPT::Keep-Downloaded-Packages "true";\nBinary::apt::APT::Keep-Downloaded-Packages "true";\nAcquire::Retries "3";\n' "$HOME" \
+            | sudo tee /etc/apt/apt.conf.d/90podokit-playwright-archives
+      - name: Cache apt packages for Playwright
+        if: >-
+          (github.event_name != 'pull_request' || github.head_ref != 'changeset-release/main') &&
+          (github.event_name != 'workflow_dispatch' || inputs.mode != 'package-smoke')
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/apt-archives
+          key: playwright-apt-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: playwright-apt-${{ runner.os }}-
       - name: Verify version package installation
         if: >-
           (github.event_name == 'pull_request' && github.head_ref == 'changeset-release/main') ||
@@ -167,3 +187,6 @@ jobs:
       - name: Stop Silo
         if: always()
         run: docker rm --force podokit-e2e-minio || true
+      - name: Let the cache step read the apt packages
+        if: always()
+        run: sudo chown -R "$(id -u):$(id -g)" "$HOME/.cache/apt-archives" 2>/dev/null || true
