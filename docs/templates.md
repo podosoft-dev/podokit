@@ -53,12 +53,12 @@ apps/
       common/              # AppException and standard error envelope
     scripts/build.mjs      # Bun.build API, worker, and migrations (+ migrations.json)
     scripts/run-migrations.mjs # migrate:all: source in development, dist in production
-    Dockerfile             # oven/bun:1.4.3-alpine
+    Dockerfile             # oven/bun:1.4.4-alpine
   web/
     src/routes/            # SvelteKit pages, API proxy, and GET /healthz
     src/lib/i18n/          # English and Korean JSON catalogs
     src/lib/components/ui/ # vendored shadcn-svelte primitives
-    Dockerfile             # oven/bun:1.4.3-alpine
+    Dockerfile             # oven/bun:1.4.4-alpine
 infra/
   docker/                  # provider-aware development services
   k3s/                     # reference resources

@@ -1,6 +1,6 @@
 # Generated examples
 
-PodoKit generates examples through the CLI. Applications use Bun 1.4.3,
+PodoKit generates examples through the CLI. Applications use Bun 1.4.4,
 Elysia, SvelteKit, and native `Bun.SQL`. Start with the
 [creation guide](../docs/getting-started.md), then add features to the generated
 project. Each example below describes its provider requirements.

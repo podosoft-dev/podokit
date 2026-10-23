@@ -84,12 +84,12 @@ server.registerTool(
   "create_project",
   {
     description:
-      "Scaffold a new Bun 1.4.3 PodoKit project from scratch (= `podo create`). Creates the app files in a new directory; then run `add_module` for features and install with Bun. Use this to start a project in an empty folder.",
+      "Scaffold a new Bun 1.4.4 PodoKit project from scratch (= `podo create`). Creates the app files in a new directory; then run `add_module` for features and install with Bun. Use this to start a project in an empty folder.",
     inputSchema: {
       name: z.string().describe("Project name (also the default directory name)"),
       template: z.string().optional().describe("Template: fullstack (default), todo, or base"),
-      runtime: z.literal("bun").optional().describe("Runtime: Bun 1.4.3"),
-      packageManager: z.literal("bun").optional().describe("Package manager: Bun 1.4.3"),
+      runtime: z.literal("bun").optional().describe("Runtime: Bun 1.4.4"),
+      packageManager: z.literal("bun").optional().describe("Package manager: Bun 1.4.4"),
       targetDir: z.string().optional().describe("Where to create it; defaults to <cwd>/<name>"),
       ai: z.boolean().optional().describe("Include AI agent guidance (AGENTS.md, skills, .mcp.json). Default true."),
     },

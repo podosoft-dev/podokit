@@ -1,6 +1,6 @@
 # @podosoft/podokit
 
-PodoKit is an opinionated Bun 1.4.3 full-stack starter and CLI. It generates an
+PodoKit is an opinionated Bun 1.4.4 full-stack starter and CLI. It generates an
 Elysia API, a SvelteKit web application, selectable PostgreSQL/SQLite integration
 through native `Bun.SQL`, Tailwind CSS v4, shadcn-svelte, Docker, and k3s assets.
 
@@ -156,7 +156,7 @@ must pin `@podosoft/podokit@0.17.4` for maintenance. Start a new v1 project when
 adopting the Bun and Elysia architecture.
 
 The generated application runtime, builds, migrations, and unit tests all use
-Bun 1.4.3. Playwright remains a Node-based test-tool exception because its
+Bun 1.4.4. Playwright remains a Node-based test-tool exception because its
 officially supported runtime is Node; `bunx playwright` respects the package's
 Node shebang.
 
@@ -172,12 +172,12 @@ my-app/
 │   └── k3s/        # deployments, services, ingress, and examples
 ├── tests/          # Playwright API and browser tests
 ├── .podokit/       # assembly and managed-file metadata
-└── package.json    # Bun workspace pinned to Bun 1.4.3
+└── package.json    # Bun workspace pinned to Bun 1.4.4
 ```
 
 The API provides typed Elysia validation, a stable error envelope, liveness and
 readiness endpoints, merged OpenAPI documentation, and an executable route
-contract check. Production API and worker images use `oven/bun:1.4.3-alpine`.
+contract check. Production API and worker images use `oven/bun:1.4.4-alpine`.
 
 ## License
 

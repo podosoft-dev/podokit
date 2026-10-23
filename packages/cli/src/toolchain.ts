@@ -1,6 +1,6 @@
 import type { TemplateVars } from "@podosoft/podokit-template-engine";
 
-export const BUN_VERSION = "1.4.3";
+export const BUN_VERSION = "1.4.4";
 
 export type Runtime = "bun";
 export type PackageManager = "bun";
@@ -36,7 +36,7 @@ export function toolchainTemplateVars(toolchain: Toolchain): TemplateVars {
     packageExecutor: "bunx --bun",
     packageExecutorCommand: "bunx",
     packageExecutorArgs: '"--bun", ',
-    ciSetup: "- uses: oven-sh/setup-bun@v2\n        with:\n          bun-version: 1.4.3",
+    ciSetup: "- uses: oven-sh/setup-bun@v2\n        with:\n          bun-version: 1.4.4",
     ciInstallCommand: "bun ci",
     ciLintCommand: "bun run lint",
     ciTestCommand: "bun run test",

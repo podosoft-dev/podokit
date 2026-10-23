@@ -1,6 +1,6 @@
 # PodoKit documentation
 
-PodoKit v1 generates Bun 1.4.3 applications with an Elysia API and SvelteKit web
+PodoKit v1 generates Bun 1.4.4 applications with an Elysia API and SvelteKit web
 app. The CLI can run under Node or Bun; the application uses Bun.
 
 ## Start a project
