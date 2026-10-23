@@ -1,5 +1,15 @@
 # @podosoft/podokit
 
+## 1.7.3
+
+### Patch Changes
+
+- [#295](https://github.com/podosoft-dev/podokit/pull/295) [`142bf6c`](https://github.com/podosoft-dev/podokit/commit/142bf6c6eda80703b90f2c540ef9003c9cfe3fd7) Thanks [@korone00](https://github.com/korone00)! - The mailer module depends on `nodemailer ^10.2.1`. Nodemailer 9 has published advisories that 10.0.9 and later fix: remote denial of service through quadratic address and DKIM header parsing, a TLS `servername` reused across transports by the process-wide DNS cache, and malformed envelope recipients from quoted local parts. Nodemailer 10 requires Node.js 20 or Bun and keeps the `@types/nodemailer` type layout, so the generated mailer code is unchanged. Existing projects pick up the new range with `podo update`.
+
+- [#295](https://github.com/podosoft-dev/podokit/pull/295) [`142bf6c`](https://github.com/podosoft-dev/podokit/commit/142bf6c6eda80703b90f2c540ef9003c9cfe3fd7) Thanks [@korone00](https://github.com/korone00)! - Generated web apps require `vite ^8.3.5` and `vitest ^4.1.12`. The old floors (`^8.2.1`, `^4.1.10`) allowed a lockfile to keep a Vite 8.2.0–8.2.3 dev server or a `@vitest/mocker` older than 4.1.12, both of which have published security advisories for the development server. Fresh installs already resolved the fixed releases.
+
+- [#293](https://github.com/podosoft-dev/podokit/pull/293) [`d4ff71f`](https://github.com/podosoft-dev/podokit/commit/d4ff71fcb338469a7ac7b19189cffd6d007a6d29) Thanks [@korone00](https://github.com/korone00)! - `podo update --apply` records the new Bun release in the manifest's template answers as well as its toolchain. Before, `answers.runtimeVersion` kept the version the project was created with, so the manifest named two different Bun releases. The updating guide now says that `Dockerfile.dev` is owned by the project and needs its `oven/bun` tags changed by hand.
+
 ## 1.7.2
 
 ### Patch Changes
