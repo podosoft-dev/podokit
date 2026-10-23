@@ -96,9 +96,15 @@ describe("applyUpdate toolchain", () => {
     const dir = join(tmp(), "app");
     create({ name: "app", template: "fullstack", templatesDir: REPO_TEMPLATES, targetDir: dir });
     const manifest = readManifest(dir)!;
-    writeManifest(dir, { ...manifest, toolchain: { ...manifest.toolchain, runtimeVersion: "1.4.0" } });
+    writeManifest(dir, {
+      ...manifest,
+      answers: { ...manifest.answers, runtimeVersion: "1.4.0" },
+      toolchain: { ...manifest.toolchain, runtimeVersion: "1.4.0" },
+    });
     applyUpdate(dir, REPO_TEMPLATES);
-    expect(readManifest(dir)?.toolchain).toEqual({ runtime: "bun", runtimeVersion: BUN_VERSION, packageManager: "bun" });
+    const updated = readManifest(dir);
+    expect(updated?.toolchain).toEqual({ runtime: "bun", runtimeVersion: BUN_VERSION, packageManager: "bun" });
+    expect(updated?.answers.runtimeVersion).toBe(BUN_VERSION);
   });
 });
 

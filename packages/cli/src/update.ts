@@ -1199,11 +1199,12 @@ export function applyUpdate(
       ...(appliedApiPaths.length ? { appliedApiPaths } : {}),
     };
   });
+  // The applied templates pin the current Bun release, so record it too.
+  const toolchain = options.targetToolchain ?? { ...manifest.toolchain, runtimeVersion: BUN_VERSION };
   writeManifest(projectRoot, {
     ...manifest,
-    answers: options.targetAnswers ?? manifestTemplateVars(manifest),
-    // The applied templates pin the current Bun release, so record it too.
-    toolchain: options.targetToolchain ?? { ...manifest.toolchain, runtimeVersion: BUN_VERSION },
+    answers: options.targetAnswers ?? manifestTemplateVars({ ...manifest, toolchain }),
+    toolchain,
     ownedGlobs: migratedOwnedGlobs,
     managedOverrides: migratedManagedOverrides,
     modules: refreshedModules,
