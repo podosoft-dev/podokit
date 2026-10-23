@@ -177,7 +177,7 @@ describe("create (integration against templates)", () => {
       expect(dockerfile).toContain("RUN bun ci");
       if (workspace === "api") {
         expect(dockerfile).toContain(
-          "RUN bun install --production --frozen-lockfile --filter './apps/api'",
+          "RUN bun install --production --omit=peer --frozen-lockfile --filter './apps/api'",
         );
       } else {
         expect(dockerfile).not.toContain("bun install --production");

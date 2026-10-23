@@ -16,7 +16,7 @@ RUN bun ci
 FROM oven/bun:1.4.4-alpine AS prod-deps
 WORKDIR /app
 COPY --from=manifests /app ./
-RUN bun install --production --frozen-lockfile --filter './apps/api'
+RUN bun install --production --omit=peer --frozen-lockfile --filter './apps/api'
 
 FROM oven/bun:1.4.4-alpine AS build
 WORKDIR /app
