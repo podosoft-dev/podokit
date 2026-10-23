@@ -39,6 +39,9 @@ test("uses package-only verification for the generated Changesets PR", () => {
   assert.doesNotMatch(e2e, /Cache generated app Bun downloads/);
   assert.doesNotMatch(e2e, /E2E_BUN_CACHE:/);
   assert.match(e2e, /bun-version: 1\.4\.4/);
+  assert.match(e2e, /Dir::Cache::Archives "%s\/\.cache\/apt-archives"/);
+  assert.match(e2e, /path: ~\/\.cache\/apt-archives/);
+  assert.match(e2e, /sudo chown -R "\$\(id -u\):\$\(id -g\)" "\$HOME\/\.cache\/apt-archives"/);
   assert.match(version, /actions: write/);
   assert.match(ci, /node-version: 22\.23\.4/);
   assert.match(release, /node-version: 22\.23\.4/);
