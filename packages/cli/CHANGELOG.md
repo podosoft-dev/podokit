@@ -1,5 +1,13 @@
 # @podosoft/podokit
 
+## 1.7.2
+
+### Patch Changes
+
+- [#290](https://github.com/podosoft-dev/podokit/pull/290) [`9e2ec14`](https://github.com/podosoft-dev/podokit/commit/9e2ec1464311fd4cba67d38115d17e37ab0bddcb) Thanks [@korone00](https://github.com/korone00)! - Pin generated applications to Bun 1.4.4 for its security fixes. Bun 1.4.3 and earlier build a Brotli decoder without the fix for CVE-2026-111497, an out-of-bounds write that the Node.js October 2026 security release rates as possible remote code execution. A Bun server reaches that decoder from `fetch()` on any `Content-Encoding: br` response, from `node:zlib`, and from `DecompressionStream`. Bun 1.4.4 updates Brotli to 1.2.1 and also ships fixes for TLS, WebSocket, the database clients, and the package manager. `packageManager`, `engines`, every `oven/bun` image, and the generated CI now use 1.4.4, and `podo update` records the new version in the manifest. The repository workflows move to Node 22.23.4, which carries the same Node.js release.
+
+- [#290](https://github.com/podosoft-dev/podokit/pull/290) [`9e2ec14`](https://github.com/podosoft-dev/podokit/commit/9e2ec1464311fd4cba67d38115d17e37ab0bddcb) Thanks [@korone00](https://github.com/korone00)! - Keep the generated API type check passing with `@types/bun` 1.4.4. That release types a `Bun.SQL` query result as its rows plus `ResultMetadata` (`count`, `command`, and others), so the managed database pool and session expiry tests no longer type-checked when they compared a result with a plain array. They now compare the rows alone. A fresh install resolves `^1.4.0` to 1.4.4, so this failed for new projects even before the Bun pin moved.
+
 ## 1.7.1
 
 ### Patch Changes
