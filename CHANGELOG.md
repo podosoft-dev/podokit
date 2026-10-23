@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-10-23
+
+### Security
+
+- Generated applications run on Bun 1.4.4. Bun 1.4.3 and earlier ship a Brotli
+  decoder without the fix for CVE-2026-111497, an out-of-bounds write that the
+  Node.js October 2026 security release rates as possible remote code
+  execution. A Bun server reaches that decoder from `fetch()` on a
+  `Content-Encoding: br` response, from `node:zlib`, and from
+  `DecompressionStream`. Bun 1.4.4 updates Brotli to 1.2.1 and also fixes
+  issues in TLS, WebSocket, the database clients, and the package manager.
+  `packageManager`, `engines`, every `oven/bun` image, and the generated CI
+  use 1.4.4, and `podo update` records the new version in the manifest.
+- The repository workflows run on Node 22.23.4, which includes the same Node.js
+  security release.
+
+### Fixed
+
+- The managed database pool and session expiry tests type-check with
+  `@types/bun` 1.4.4, which types a `Bun.SQL` result as its rows plus
+  `ResultMetadata`. A fresh install resolves `^1.4.0` to 1.4.4, so new projects
+  failed `lint` even before the Bun pin moved.
+
 ## [1.7.1] - 2026-10-22
 
 ### Fixed
