@@ -273,6 +273,24 @@ describe("compose rollout", () => {
     expect(host.running(GATEWAY)).toHaveLength(1);
   });
 
+  it("recreates a changed gateway on its own, without waiting for its dependencies", async () => {
+    const root = initialized(withGateway);
+    const host = previousRelease();
+    host.add(GATEWAY, "gateway-old");
+
+    await apply(root, host);
+
+    // Brought up alone once the application rollout is done, not by the final
+    // compose up, which would stop it and then walk its whole depends_on chain.
+    const gatewayUp = firstIndex(host, `up -d --no-deps --wait ${GATEWAY}`);
+    const finalUp = firstIndex(host, "up -d --wait --remove-orphans");
+    expect(gatewayUp).toBeGreaterThan(firstIndex(host, "stop c001 c002"));
+    expect(finalUp).toBeGreaterThan(gatewayUp);
+    expect(host.log[finalUp]?.running).toContain(`${GATEWAY}:gateway`);
+    expect(host.log[gatewayUp]?.running).toContain(`${GATEWAY}:gateway-old`);
+    expect(host.containers.filter((c) => c.service === GATEWAY).map((c) => c.hash)).toEqual(["gateway"]);
+  });
+
   it("leaves a service alone when it already runs the new definition", async () => {
     const root = initialized(withGateway);
     const host = new FakeHost("example-app", { [API]: "api-new", [WEB]: "web-new", [GATEWAY]: "gateway" });

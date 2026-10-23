@@ -694,7 +694,7 @@ export function planComposeDeployment(
   ) {
     warnings.push(
       `This apply replaces the gateway, whose definition changed: port ${profile.exposure.port} refuses ` +
-        "connections from the moment the old gateway stops until the new one listens, a few seconds.",
+        "connections from the moment the old gateway stops until the new one listens, usually under a second.",
     );
   }
   const budgetWarning = connectionBudgetWarning(profile, installedModules(projectRoot));
@@ -929,12 +929,20 @@ function removeContainers(profile: DockerComposeProfileV1, ids: string[], runner
  *
  * The new API and web server start beside the running ones. Only when all of them
  * are healthy do the old ones get a graceful stop, web before API so an old web
- * server never outlives the API it was talking to. The worker and a changed gateway
- * are replaced in place by the final `compose up`, which also removes orphans. A
- * gateway that does not exist yet starts right after the old web server stops,
- * since that container held the port it binds. If a new container fails its
- * healthcheck, the containers this rollout started are removed and the old ones
- * keep serving.
+ * server never outlives the API it was talking to. A gateway that does not exist
+ * yet starts right after the old web server stops, since that container held the
+ * port it binds. An existing gateway is brought up on its own next, which Compose
+ * turns into a recreate only when its definition changed. The worker is replaced
+ * in place by the final `compose up`, which also removes orphans. If a new
+ * container fails its healthcheck, the containers this rollout started are
+ * removed and the old ones keep serving.
+ *
+ * ⚠ A changed gateway used to be left to that final `compose up`. Compose stopped
+ * the old gateway first and started the new one only after walking its whole
+ * `depends_on` chain (api and web, then the databases, object storage and its
+ * init job), so the published port stayed closed for about 13 s on a production
+ * host with object storage instead of the stop and start alone. `--no-deps`
+ * skips that walk: the dependencies are already running and healthy here.
  */
 function rollOutApplication(
   profile: DockerComposeProfileV1,
@@ -960,6 +968,9 @@ function rollOutApplication(
     if (gatewayMissing && entry.replaced.length && entry.service === serviceName(profile, "web")) {
       runCompose(profile, runtime, "compose", ["up", "-d", "--no-deps", "--wait", gateway], runner, false);
     }
+  }
+  if (!gatewayMissing) {
+    runCompose(profile, runtime, "compose", ["up", "-d", "--no-deps", "--wait", gateway], runner, false);
   }
   runCompose(profile, runtime, "compose", ["up", "-d", "--wait", "--remove-orphans"], runner, false);
 }

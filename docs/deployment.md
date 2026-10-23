@@ -377,11 +377,17 @@ by side instead:
    and their clients reconnect to a new container, in-flight requests finish
    within `SHUTDOWN_TIMEOUT`, and a process still running when its stop timeout
    below ends is killed. See [shutdown](templates.md#shutdown).
-4. Run `compose up --remove-orphans` for the rest. The worker is replaced in place,
-   since it receives no traffic. The gateway carries no release label, so it is
-   replaced only when its own definition changes, such as its paths, trusted proxy
-   CIDRs, or image. That closes the published port for a few seconds, measured
-   at about 3, so the plan warns when the running gateway's definition differs.
+4. Bring the gateway up on its own (`compose up --no-deps`). It carries no release
+   label, so Compose recreates it only when its own definition changes, such as its
+   paths, trusted proxy CIDRs, or image. That closes the published port from the
+   moment the old gateway stops until the new one listens, measured at under a
+   second, so the plan warns when the running gateway's definition differs.
+   `--no-deps` matters: left to a full `compose up`, the old gateway stops first and
+   the new one starts only after Compose has walked its whole `depends_on` chain,
+   including a fresh run of the object storage init job, which kept the port closed
+   for about 13 seconds on one host.
+5. Run `compose up --remove-orphans` for the rest. The worker is replaced in place,
+   since it receives no traffic.
 
 If a new container does not become healthy, apply removes the containers it started
 and fails; the old ones keep serving and the release ledger keeps the current
