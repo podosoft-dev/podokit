@@ -104,11 +104,14 @@ docker push registry.example.com/example-app-api:v1.2.3
 docker push registry.example.com/example-app-web:v1.2.3
 ```
 
-The generated Bun production Dockerfiles install only the target application
-workspace. The Bun 1.4.4 profile uses its pinned Alpine image and
-`bun install --production --frozen-lockfile --filter './apps/api'` (or
-`./apps/web`) so one image does not carry the other application's runtime
-dependencies.
+The generated Bun production Dockerfiles use the pinned `oven/bun:1.4.4-alpine`
+image. The API runtime stage installs only the API workspace with
+`bun install --production --omit=peer --frozen-lockfile --filter './apps/api'`.
+`--omit=peer` matters: without it Bun also installs peer dependencies that other
+workspaces resolved in the lockfile, such as the optional `vitest`, `svelte`, and
+`@sveltejs/kit` peers of Better Auth, so the API image carried development
+packages it never loads. The web image ships its build output and needs no
+separate production install.
 
 **Build for the architecture the target runs.** Building on an arm64 laptop and
 deploying to an amd64 host produces `exec format error` at rollout — after the
