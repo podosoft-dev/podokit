@@ -1,7 +1,7 @@
 # PodoKit
 
 > An opinionated but extensible starter toolkit and CLI for full-stack TypeScript
-> apps with Bun 1.4.3, Elysia, SvelteKit, TailwindCSS, shadcn-svelte,
+> apps with Bun 1.4.4, Elysia, SvelteKit, TailwindCSS, shadcn-svelte,
 > PostgreSQL, Redis,
 > Docker, and k3s. `podo create` scaffolds a production-minded foundation;
 > `podo add` layers in feature modules; `podo update` keeps projects current.

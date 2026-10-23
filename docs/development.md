@@ -35,7 +35,7 @@ bun install
 ```
 
 The PodoKit monorepo itself continues to use npm and Node-based release tooling.
-Generated PodoKit v1 applications use Bun 1.4.3.
+Generated PodoKit v1 applications use Bun 1.4.4.
 
 ### SvelteKit source imports
 
@@ -297,7 +297,7 @@ bun run build
 bun run --cwd apps/api contract
 ```
 
-The API build, runtime, migrations, worker, and unit tests must use Bun 1.4.3.
+The API build, runtime, migrations, worker, and unit tests must use Bun 1.4.4.
 The contract command assembles the actual Elysia application, merges Better
 Auth's generated OpenAPI schema, and verifies every expected template/module
 route. Keep parameter names consistent at each structural position across the
@@ -489,7 +489,7 @@ up, instead of a version bump per merge.
 The Release workflow uses npm
 [trusted publishing](https://docs.npmjs.com/trusted-publishers/) with GitHub
 Actions OIDC. It runs on a GitHub-hosted runner with `id-token: write` and installs
-the pinned npm 11.17.0 before installing or publishing packages. Node 22.22.1
+the pinned npm 11.17.0 before installing or publishing packages. Node 22.23.4
 bundles npm 10, while trusted publishing requires npm 11.5.1 or later. No npm
 publishing token is supplied to the workflow.
 

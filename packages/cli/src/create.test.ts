@@ -90,7 +90,7 @@ describe("create (integration against templates)", () => {
       engines: { bun: string };
     };
     expect(pkg.name).toBe("my-app");
-    expect(pkg.engines.bun).toBe("1.4.3");
+    expect(pkg.engines.bun).toBe("1.4.4");
     expect(existsSync(join(target, ".gitignore"))).toBe(true);
     expect(existsSync(join(target, ".env.example"))).toBe(true);
     expect(readFileSync(join(target, "README.md"), "utf8")).toContain("my-app");
@@ -107,7 +107,7 @@ describe("create (integration against templates)", () => {
     expect(existsSync(join(target, ".podokit", "files.lock"))).toBe(true);
   });
 
-  it("scaffolds a Bun 1.4.3 project without Node command fallbacks", () => {
+  it("scaffolds a Bun 1.4.4 project without Node command fallbacks", () => {
     const target = join(tmp(), "bun-app");
     const result = create({
       name: "bun-app",
@@ -118,7 +118,7 @@ describe("create (integration against templates)", () => {
 
     expect(result.toolchain).toEqual({
       runtime: "bun",
-      runtimeVersion: "1.4.3",
+      runtimeVersion: "1.4.4",
       packageManager: "bun",
     });
     const rootPackage = JSON.parse(readFileSync(join(target, "package.json"), "utf8")) as {
@@ -126,8 +126,8 @@ describe("create (integration against templates)", () => {
       engines: Record<string, string>;
       trustedDependencies: string[];
     };
-    expect(rootPackage.packageManager).toBe("bun@1.4.3");
-    expect(rootPackage.engines).toEqual({ bun: "1.4.3" });
+    expect(rootPackage.packageManager).toBe("bun@1.4.4");
+    expect(rootPackage.engines).toEqual({ bun: "1.4.4" });
     expect(rootPackage.trustedDependencies).toBeUndefined();
     expect(readFileSync(join(target, "bunfig.toml"), "utf8")).toContain('auto = "disable"');
     expect(readFileSync(join(target, "apps/api/package.json"), "utf8")).toContain(
@@ -173,7 +173,7 @@ describe("create (integration against templates)", () => {
     expect(landingPage).not.toMatch(/\b(?:Bun|Elysia|SvelteKit)\b/);
     for (const workspace of ["api", "web"]) {
       const dockerfile = readFileSync(join(target, `apps/${workspace}/Dockerfile`), "utf8");
-      expect(dockerfile).toContain("FROM oven/bun:1.4.3-alpine");
+      expect(dockerfile).toContain("FROM oven/bun:1.4.4-alpine");
       expect(dockerfile).toContain("RUN bun ci");
       if (workspace === "api") {
         expect(dockerfile).toContain(
@@ -189,7 +189,7 @@ describe("create (integration against templates)", () => {
     }
     const workflow = readFileSync(join(target, ".github/workflows/release.yml"), "utf8");
     expect(workflow).toContain("oven-sh/setup-bun@v2");
-    expect(workflow).toContain("bun-version: 1.4.3");
+    expect(workflow).toContain("bun-version: 1.4.4");
     expect(workflow).not.toContain("actions/setup-node");
     const developmentCompose = readFileSync(join(target, "compose.dev.yaml"), "utf8");
     expect(developmentCompose).toContain(
@@ -198,7 +198,7 @@ describe("create (integration against templates)", () => {
     expect(developmentCompose).toContain("pgsty/silo:RELEASE.2026-09-16T00-00-00Z");
     expect(developmentCompose).toContain("pgsty/mc:RELEASE.2026-09-16T00-00-00Z");
     const devDockerfile = readFileSync(join(target, "Dockerfile.dev"), "utf8");
-    expect(devDockerfile).toContain("FROM oven/bun:1.4.3-alpine");
+    expect(devDockerfile).toContain("FROM oven/bun:1.4.4-alpine");
     expect(devDockerfile).toContain(
       "RUN apk add --no-cache git python3 make g++ ca-certificates",
     );
@@ -207,7 +207,7 @@ describe("create (integration against templates)", () => {
       join(target, "infra/docker/docker-compose.yml"),
       "utf8",
     );
-    expect(infrastructure).toContain("image: oven/bun:1.4.3-alpine");
+    expect(infrastructure).toContain("image: oven/bun:1.4.4-alpine");
     expect(infrastructure).toContain('command: ["bun", "/app/sms-sink.mjs"]');
     expect(infrastructure).not.toContain("image: node:");
     const devcontainer = JSON.parse(
@@ -253,7 +253,7 @@ describe("create (integration against templates)", () => {
       targetDir: target,
     });
 
-    expect(readFileSync(join(target, "package.json"), "utf8")).toContain('"bun@1.4.3"');
+    expect(readFileSync(join(target, "package.json"), "utf8")).toContain('"bun@1.4.4"');
     expect(readFileSync(join(target, "bunfig.toml"), "utf8")).toContain('linker = "hoisted"');
     const guidance = readFileSync(join(target, "AGENTS.md"), "utf8");
     expect(guidance).toContain("bun install");
@@ -261,7 +261,7 @@ describe("create (integration against templates)", () => {
     expect(guidance).not.toContain("npm install");
     if (template === "todo") {
       expect(readFileSync(join(target, "apps/web/Dockerfile"), "utf8")).toContain(
-        "oven/bun:1.4.3-alpine",
+        "oven/bun:1.4.4-alpine",
       );
       const landingPage = readFileSync(join(target, "apps/web/src/routes/+page.svelte"), "utf8");
       expect(landingPage).toContain("Create, complete, and remove items.");
@@ -360,14 +360,14 @@ describe("create (integration against templates)", () => {
 
     for (const workspace of ["api", "web"]) {
       const dockerfile = readFileSync(join(target, "apps", workspace, "Dockerfile"), "utf8");
-      expect(dockerfile).toContain("FROM oven/bun:1.4.3-alpine AS deps");
+      expect(dockerfile).toContain("FROM oven/bun:1.4.4-alpine AS deps");
       expect(dockerfile).toContain("RUN bun ci");
       expect(dockerfile).toContain(`RUN bun run --cwd apps/${workspace} build`);
       expect(dockerfile).not.toContain("FROM node:");
 
       // Every workspace manifest must reach `bun ci`. Listing them by hand silently
       // installs a different tree for a project that adds one.
-      expect(dockerfile).toContain("FROM oven/bun:1.4.3-alpine AS manifests");
+      expect(dockerfile).toContain("FROM oven/bun:1.4.4-alpine AS manifests");
       expect(dockerfile).toContain('find . -name package.json -not -path "*/node_modules/*"');
       // The whole install output, not just the root node_modules, so nested
       // directories Bun creates for unhoistable versions survive into the build.
@@ -384,7 +384,7 @@ describe("create (integration against templates)", () => {
         // symlinks to them, and a dangling link fails at boot rather than at build.
         expect(dockerfile).toContain("COPY --from=build /app/packages ./packages");
         // The API runtime tree comes from prod-deps, never from a stage holding dev deps.
-        expect(dockerfile).toContain("FROM oven/bun:1.4.3-alpine AS prod-deps");
+        expect(dockerfile).toContain("FROM oven/bun:1.4.4-alpine AS prod-deps");
         expect(dockerfile).toContain("COPY --from=prod-deps /app/node_modules ./node_modules");
         expect(dockerfile).toContain("--frozen-lockfile");
         expect(dockerfile).toContain(
@@ -407,7 +407,7 @@ describe("create (integration against templates)", () => {
     const rootPkg = JSON.parse(readFileSync(join(target, "package.json"), "utf8")) as {
       engines: { bun: string };
     };
-    expect(rootPkg.engines.bun).toBe("1.4.3");
+    expect(rootPkg.engines.bun).toBe("1.4.4");
 
     const healthPlugin = readFileSync(join(target, "apps", "api", "src", "health", "health.plugin.ts"), "utf8");
     expect(healthPlugin).toContain('"/health/ready"');

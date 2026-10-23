@@ -9,7 +9,7 @@ describe("resolveCreateOptions", () => {
   it("uses the Bun fullstack defaults without prompting", async () => {
     await expect(resolveCreateOptions({}, never, false)).resolves.toEqual({
       template: "fullstack",
-      toolchain: { runtime: "bun", runtimeVersion: "1.4.3", packageManager: "bun" },
+      toolchain: { runtime: "bun", runtimeVersion: "1.4.4", packageManager: "bun" },
     });
   });
 

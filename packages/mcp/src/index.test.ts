@@ -81,7 +81,7 @@ describe("podokit-mcp server", () => {
     })) as TextResult;
     expect(r.isError ?? false).toBe(false);
     expect(r.content[0].text).toContain("bun install");
-    expect(readFileSync(join(target, "package.json"), "utf8")).toContain('"bun@1.4.3"');
+    expect(readFileSync(join(target, "package.json"), "utf8")).toContain('"bun@1.4.4"');
     expect(readFileSync(join(target, ".podokit", "manifest.json"), "utf8")).toContain(
       '"runtime": "bun"',
     );

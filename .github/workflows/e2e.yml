@@ -108,11 +108,11 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 22.22.1
+          node-version: 22.23.4
           cache: npm
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.3
+          bun-version: 1.4.4
       - name: Start Silo
         run: |
           docker run --detach --name podokit-e2e-minio \

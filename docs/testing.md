@@ -5,7 +5,7 @@ workspace with template/module tests included under `tests/`.
 
 ## Runtime boundary
 
-The generated API, worker, builds, migrations, and unit tests use Bun 1.4.3.
+The generated API, worker, builds, migrations, and unit tests use Bun 1.4.4.
 SvelteKit build and Vitest run through Bun as well.
 
 Playwright is the single Node-runtime test-tool exception. Playwright's
@@ -266,7 +266,7 @@ node scripts/e2e-ci.mjs --grep "magic link"
 
 The harness publishes the template engine, contracts, auth helpers, API client,
 CLI, MCP server, and external modules to Verdaccio. It then uses the real CLI,
-installs the generated workspace with Bun 1.4.3, empties the `POSTGRES_DB`
+installs the generated workspace with Bun 1.4.4, empties the `POSTGRES_DB`
 database (it drops and recreates the `public` schema, so point the harness only
 at a database it may wipe), runs Better Auth and TypeORM migrations, creates the
 seeded administrator with `admin:bootstrap`, verifies the OpenAPI contract,
