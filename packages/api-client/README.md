@@ -84,7 +84,7 @@ also re-exported so account UIs can display the exact limits enforced by the API
 
 ## Authentication upgrades
 
-The client requires Better Auth 1.7.10 or newer within the 1.x release line, with
+The client requires Better Auth 1.7.12 or newer within the 1.x release line, with
 matching API key and passkey plugins. Upgrade the backend and its integrations
 together. The 1.7.7 security update changes verification-record namespaces and
 OAuth state encryption; pending Magic Links and OAuth/SAML sign-ins must be

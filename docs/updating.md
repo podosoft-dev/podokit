@@ -403,9 +403,19 @@ controls. To add the UI, compare each page with its template (`podo diff <path>`
   `OrganizationTeamsDialog` and `page` (`$app/state`) imports, the
   `teamsEnabled` value, the Teams button on each row, and the dialog.
 
+### Better Auth 1.7.12 security update
+
+Better Auth 1.7.12 verifies JWTs with the stored key's algorithm, runs the full
+OAuth callback checks for callbacks completed through the OAuth Proxy, and
+rejects ID token sign-in for a provider without a client ID. New authentication
+modules and the API client require 1.7.12 for Better Auth and its API key,
+passkey, and OAuth provider plugins. PodoKit only enables social providers that
+have a client ID, so generated applications need no configuration change.
+Upgrade the four packages together and regenerate the dependency lockfile.
+
 ### Better Auth 1.7.7 security update
 
-New authentication modules and the API client now require at least 1.7.10 for
+New authentication modules and the API client now require at least 1.7.12 for
 Better Auth and their matching integrations, which includes this update. Existing applications should upgrade the
 server, API key, passkey, and OAuth provider packages together and regenerate
 their dependency lockfile.
