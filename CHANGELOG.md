@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.7.4] - 2026-10-26
+
+### Security
+
+- New authentication modules and `@podosoft/podokit-api-client` 0.10.1 require
+  Better Auth 1.7.12 with matching API key, passkey, and OAuth provider
+  plugins. The release verifies JWTs with the stored key's algorithm, applies
+  the full callback checks to OAuth Proxy callbacks, and rejects ID token
+  sign-in for providers without a client ID. Generated applications only
+  enable social providers that have a client ID, so no configuration change is
+  needed.
+
+### Fixed
+
+- The generated API Dockerfile installs runtime dependencies with
+  `bun install --production --omit=peer`, so the API image no longer carries
+  test and web build tools pulled in through optional peers. An app with auth,
+  admin, and mailer modules drops from 420 MB to 300 MB.
+- Compose apply and rollback recreate a changed gateway on its own with
+  `compose up --no-deps`, which keeps the published port closed for well under
+  a second instead of about 13 seconds.
+
 ## [1.7.3] - 2026-10-23
 
 ### Security
