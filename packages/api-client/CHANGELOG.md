@@ -1,5 +1,11 @@
 # @podosoft/podokit-api-client
 
+## 0.10.1
+
+### Patch Changes
+
+- [#301](https://github.com/podosoft-dev/podokit/pull/301) [`524330b`](https://github.com/podosoft-dev/podokit/commit/524330bd6d5e274056ac088c69ef592dc4e1f525) Thanks [@dependabot](https://github.com/apps/dependabot)! - New authentication modules and the API client now require Better Auth 1.7.12 with matching API key, passkey, and OAuth provider plugins. The release verifies JWTs with the stored key's algorithm, applies the full callback checks to OAuth Proxy callbacks, and rejects ID token sign-in for providers without a client ID. Generated applications only enable social providers that have a client ID, so no configuration change is needed.
+
 ## 0.10.0
 
 ### Minor Changes

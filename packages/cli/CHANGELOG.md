@@ -1,5 +1,15 @@
 # @podosoft/podokit
 
+## 1.7.4
+
+### Patch Changes
+
+- [#297](https://github.com/podosoft-dev/podokit/pull/297) [`b7296c9`](https://github.com/podosoft-dev/podokit/commit/b7296c99b72e2eded6d69eff409b5aac93b54ebd) Thanks [@korone00](https://github.com/korone00)! - The generated API Dockerfile installs runtime dependencies with `bun install --production --omit=peer`. Without `--omit=peer`, Bun also installed peer dependencies that other workspaces had resolved in the lockfile, so the API image carried `vitest`, `vite`, `svelte`, `@sveltejs/kit`, and `typescript` through Better Auth's optional peers. In a generated app with auth, admin, and mailer modules the API image drops from 420 MB to 300 MB (`node_modules` 180 MB to 87 MB, 263 to 177 packages), and the API still migrates, starts, and serves authentication. Existing projects pick up the managed Dockerfile with `podo update`.
+
+- [#301](https://github.com/podosoft-dev/podokit/pull/301) [`524330b`](https://github.com/podosoft-dev/podokit/commit/524330bd6d5e274056ac088c69ef592dc4e1f525) Thanks [@dependabot](https://github.com/apps/dependabot)! - New authentication modules and the API client now require Better Auth 1.7.12 with matching API key, passkey, and OAuth provider plugins. The release verifies JWTs with the stored key's algorithm, applies the full callback checks to OAuth Proxy callbacks, and rejects ID token sign-in for providers without a client ID. Generated applications only enable social providers that have a client ID, so no configuration change is needed.
+
+- [#300](https://github.com/podosoft-dev/podokit/pull/300) [`18b5796`](https://github.com/podosoft-dev/podokit/commit/18b57968a9c0caf2c2037bb915abccd453e70d38) Thanks [@korone00](https://github.com/korone00)! - Compose apply and rollback now recreate a changed gateway on its own with `compose up --no-deps` once the application rollout is done. The final `compose up` stopped the old gateway and started the new one only after walking its dependencies, including a fresh object storage init run, which kept the published port closed for about 13 seconds on a production host instead of well under a second.
+
 ## 1.7.3
 
 ### Patch Changes
