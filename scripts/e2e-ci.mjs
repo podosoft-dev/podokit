@@ -23,6 +23,7 @@ import {
   playwrightWorkers,
   resolveE2eOptions,
   retryTransientInstall,
+  VERDACCIO_PACKAGE,
 } from "./e2e-ci-lib.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -164,7 +165,7 @@ async function main() {
 
   step(`start Verdaccio on ${registry}`);
   rmSync(join(repoRoot, ".verdaccio-storage"), { recursive: true, force: true });
-  bg("npx", ["verdaccio", "--config", "scripts/verdaccio.yaml", "--listen", env.REGISTRY_PORT], { cwd: repoRoot });
+  bg("npx", ["--yes", VERDACCIO_PACKAGE, "--config", "scripts/verdaccio.yaml", "--listen", env.REGISTRY_PORT], { cwd: repoRoot });
   await waitFor(`${registry}/-/ping`, "verdaccio");
 
   step("publish packages to the local registry");

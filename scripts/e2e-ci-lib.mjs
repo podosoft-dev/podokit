@@ -86,6 +86,11 @@ export function assertCleanMigrationOutput(output) {
   }
 }
 
+// The local registry the Outer loop publishes to. Verdaccio 7 verifies bearer
+// tokens on the package API and rejects the dummy token the publish step uses
+// (E401), so the version stays exact rather than following npm's latest.
+export const VERDACCIO_PACKAGE = "verdaccio@6.11.1";
+
 // Waits before each retry of an install that failed on a registry or network
 // error. The first wait outlasts the uplink fail_timeout in verdaccio.yaml, so
 // Verdaccio asks npm again instead of answering from its offline state.
