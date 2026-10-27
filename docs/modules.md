@@ -1323,8 +1323,9 @@ services.tryResolve(RATE_LIMIT_ROUTES)?.register({
   every module is configured.
 
 The built-in budgets are registered the same way: general at `/`, auth at
-`/api/auth`, and the runtime budget for `GET /api/auth/get-session` and
-`GET /site/settings`, with `GET /api/auth/admin` on the general budget. A
+`/api/auth`, and the runtime budget for `GET /api/auth/get-session`,
+`GET /site/settings`, and `GET /account/capabilities` (the reads behind every
+server-rendered page), with `GET /api/auth/admin` on the general budget. A
 module's longer prefix inside `/api/auth` therefore takes precedence over the
 auth budget, and registering `/api/auth` itself replaces it. The names
 `general`, `auth`, and `runtime` keep their configured limits. `GET /health`,

@@ -17,7 +17,7 @@
     "# stricter ceiling for authentication writes (admin reads use RATE_LIMIT_MAX)",
     "RATE_LIMIT_AUTH_TTL=60",
     "RATE_LIMIT_AUTH_MAX=20",
-    "# higher ceiling for SSR runtime settings and session reads",
+    "# higher ceiling for SSR runtime settings, session, and capability reads",
     "RATE_LIMIT_RUNTIME_MAX=1000",
     "RATE_LIMIT_STORAGE_TIMEOUT_MS=1000",
     "RATE_LIMIT_UNAVAILABLE_RETRY_AFTER=1"
