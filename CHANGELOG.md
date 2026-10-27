@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.7.5] - 2026-10-27
+
+### Security
+
+- Generated API workspaces depend on `zod ^4.6.7` instead of `^3.23.8`. Zod 3
+  and Zod 4 before 4.6.6 can exhaust memory while validating oversized
+  constrained collections (GHSA-mrhx-c7xc-m3w5), and there is no Zod 3 fix.
+  The managed environment validation works unchanged; review application code
+  that imports `zod`, including `env.extensions.ts`, against the Zod 4
+  changelog after `podo update` (see `docs/updating.md`).
+
 ## [1.7.4] - 2026-10-26
 
 ### Security
