@@ -403,6 +403,18 @@ controls. To add the UI, compare each page with its template (`podo diff <path>`
   `OrganizationTeamsDialog` and `page` (`$app/state`) imports, the
   `teamsEnabled` value, the Teams button on each row, and the dialog.
 
+### Zod 4 in the API
+
+New API workspaces depend on `zod ^4.6.7`. Zod 3 and Zod 4 before 4.6.6 can
+exhaust memory while validating oversized constrained collections
+(GHSA-mrhx-c7xc-m3w5), and the advisory has no Zod 3 fix. The managed
+`env.validation.ts` works unchanged on Zod 4. After `podo update`, check the
+owned `env.extensions.ts` and any other application code that imports `zod`
+against the [Zod 4 changelog](https://zod.dev/v4/changelog): error
+customization moved from `message` and `errorMap` to `error`, and
+string formats such as `z.string().email()` are now top-level functions such as
+`z.email()` (the old forms still work but are deprecated).
+
 ### Better Auth 1.7.12 security update
 
 Better Auth 1.7.12 verifies JWTs with the stored key's algorithm, runs the full

@@ -13,6 +13,7 @@ import {
   resolveE2eOptions,
   retryTransientInstall,
   transientInstallFailure,
+  VERDACCIO_PACKAGE,
 } from "./e2e-ci-lib.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -387,4 +388,8 @@ test("lets Verdaccio ask npm again before the first install retry", () => {
 
   assert.ok(failTimeout, "the npm uplink sets fail_timeout in seconds");
   assert.ok(Number(failTimeout[1]) * 1000 < INSTALL_RETRY_DELAYS_MS[0]);
+});
+
+test("starts an exact Verdaccio 6 release for the local registry", () => {
+  assert.match(VERDACCIO_PACKAGE, /^verdaccio@6\.\d+\.\d+$/);
 });
