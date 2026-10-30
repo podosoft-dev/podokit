@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.7.6] - 2026-10-30
+
+### Security
+
+- New web workspaces depend on stable SvelteKit 3 (`@sveltejs/kit ^3.1.1`,
+  `@sveltejs/adapter-bun ^1.0.0`, `svelte ^5.57.1`) instead of the
+  3.0.0-next.25 prerelease. The prerelease has no fix for an open redirect
+  through enhanced form actions on routes that accept paths beginning with
+  `//` (GHSA-pfhg-q3qv-9q6r) or for unescaped `cache-control` values in
+  prerendered pages (GHSA-27mw-82g8-phjj). Existing applications set the same
+  ranges and regenerate their lockfile (see `docs/updating.md`).
+
+### Fixed
+
+- The rate-limit module counts `GET /account/capabilities` in the runtime
+  budget with session and site-settings reads. The web server reads
+  capabilities on every server-rendered page, so on the general budget fast
+  admin browsing or a two-worker Playwright run reached `RATE_LIMIT_MAX` and
+  received 429 on ordinary requests.
+
 ## [1.7.5] - 2026-10-27
 
 ### Security
