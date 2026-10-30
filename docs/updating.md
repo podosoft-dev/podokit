@@ -403,6 +403,19 @@ controls. To add the UI, compare each page with its template (`podo diff <path>`
   `OrganizationTeamsDialog` and `page` (`$app/state`) imports, the
   `teamsEnabled` value, the Teams button on each row, and the dialog.
 
+### SvelteKit 3 stable
+
+New web workspaces depend on `@sveltejs/kit ^3.1.1`, `@sveltejs/adapter-bun
+^1.0.0`, and `svelte ^5.57.1`. Earlier templates pinned the 3.0.0-next.25
+prerelease and the 1.0.0-next.1 adapter, which have no fix for two SvelteKit
+advisories: an open redirect through enhanced form actions on routes that
+accept paths beginning with `//` (GHSA-pfhg-q3qv-9q6r), and unescaped
+`cache-control` values in prerendered pages (GHSA-27mw-82g8-phjj). Set the
+three ranges in `apps/web/package.json`, run `bun install` to regenerate the
+lockfile, and rebuild the web image. The managed web code needs no change.
+Application routes should drop query parameters that begin with
+`x-sveltekit-`, which SvelteKit 3 now rejects.
+
 ### Zod 4 in the API
 
 New API workspaces depend on `zod ^4.6.7`. Zod 3 and Zod 4 before 4.6.6 can
