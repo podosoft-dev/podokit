@@ -1,5 +1,13 @@
 # @podosoft/podokit
 
+## 1.7.6
+
+### Patch Changes
+
+- [#306](https://github.com/podosoft-dev/podokit/pull/306) [`9764937`](https://github.com/podosoft-dev/podokit/commit/9764937f470773631644281eab10bb80b017cadc) Thanks [@korone00](https://github.com/korone00)! - The rate-limit module counts `GET /account/capabilities` in the runtime budget with session and site-settings reads. The web server reads capabilities on every server-rendered page, so on the general budget an administrator browsing quickly, or a two-worker Playwright run against `podo dev`, reached `RATE_LIMIT_MAX` and received 429 on ordinary admin requests.
+
+- [#308](https://github.com/podosoft-dev/podokit/pull/308) [`ae48dd3`](https://github.com/podosoft-dev/podokit/commit/ae48dd38bc71dbc6126cb0ea0863d7167fcf861f) Thanks [@korone00](https://github.com/korone00)! - New applications use the stable SvelteKit 3 release (`@sveltejs/kit` ^3.1.1, `@sveltejs/adapter-bun` ^1.0.0, `svelte` ^5.57.1) instead of the 3.0.0-next.25 prerelease. The prerelease has no fix for two SvelteKit advisories: an open redirect through enhanced form actions on routes that accept paths beginning with `//` (GHSA-pfhg-q3qv-9q6r), and unescaped `cache-control` values in prerendered pages (GHSA-27mw-82g8-phjj). Existing applications should apply the same ranges and regenerate their lockfile; see "SvelteKit 3 stable" in the updating guide.
+
 ## 1.7.5
 
 ### Patch Changes
