@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `notifier` module: operator alerts through Pushover, email, and a generic
+  JSON webhook. `notifyOperators()` runs every enabled channel in parallel with a
+  5-second timeout each, never throws, and logs failures with the channel name
+  and reason only. With auth and admin-dashboard installed, Settings →
+  Operator notifications stores the channel settings (secrets encrypted, applied
+  without a restart) and sends a test notification with per-channel results.
+  Environment variables are the field-wise fallback.
+- The mailer's `sendMail` accepts an optional `replyTo`.
+- The development SMS sink also captures requests posted to `/hooks/<name>`
+  (`GET /hooks`) for webhook and Pushover tests.
+
 ## [1.7.6] - 2026-10-30
 
 ### Security
