@@ -25,7 +25,7 @@
       "file": "AGENTS.md",
       "marker": "<!-- podokit:end:agents-modules -->",
       "optional": true,
-      "text": "### mailer\n- Send email with `import { sendMail, actionEmail } from \"../mail/mailer\"` (path relative to your file). `sendMail({ to, subject, text, html? })`.\n- SMTP comes from the admin Settings page (when auth is installed) or `SMTP_*` env; with neither, messages are logged to the console (dev links are grabbable from logs).\n- To use a provider SDK instead of SMTP, call `setMailTransport(...)` from `apps/api/src/app.extensions.ts`.\n"
+      "text": "### mailer\n- Send email with `import { sendMail, actionEmail } from \"../mail/mailer\"` (path relative to your file). `sendMail({ to, subject, text, html?, replyTo? })`.\n- SMTP comes from the admin Settings page (when auth is installed) or `SMTP_*` env; with neither, messages are logged to the console (dev links are grabbable from logs).\n- To use a provider SDK instead of SMTP, call `setMailTransport(...)` from `apps/api/src/app.extensions.ts`.\n"
     }
   ],
   "instructions": [
