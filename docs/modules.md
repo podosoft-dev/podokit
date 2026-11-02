@@ -384,6 +384,8 @@ npx @podosoft/podokit add mailer
 ```ts
 import { sendMail, actionEmail } from "../mail/mailer"; // path relative to your file
 await sendMail({ to: "a@example.com", subject: "Hi", text: "Hello", html: actionEmail(...) });
+// Optional Reply-To, e.g. the visitor who filled in a form:
+await sendMail({ to: "ops@example.com", subject: "Inquiry", text: "...", replyTo: "visitor@example.com" });
 ```
 
 - **SMTP resolution** (applied live through the shared settings snapshot, within
@@ -395,6 +397,75 @@ await sendMail({ to: "a@example.com", subject: "Hi", text: "Hello", html: action
 - **Override the transport** (e.g. a provider SDK) from the owned DI slot
   `apps/api/src/app.extensions.ts`: `import { setMailTransport } from "./mail/mailer"; setMailTransport(myTransport)`.
 
+
+### `notifier`
+
+Operator alerts — messages for the people who run the app (a new inquiry, a
+sign-up awaiting approval, a failed job), not for end users. Requires `mailer`.
+
+```bash
+npx @podosoft/podokit add notifier   # also adds mailer
+```
+
+```ts
+import { notifyOperators } from "../notify/notifier"; // path relative to your file
+const result = await notifyOperators({
+  title: "New inquiry",
+  message: "A visitor sent the contact form.",
+  url: "https://example.com/admin/inquiries/42",
+  urlTitle: "Open inquiry",
+  priority: 0, // -2 (lowest) … 1 (high); values outside are clamped
+});
+// result: { ok, channels: [{ channel: "pushover" | "email" | "webhook", ok, skipped, error? }] }
+```
+
+- **Never throws.** Every enabled channel runs in parallel with a 5-second
+  timeout (`AbortSignal.timeout`); one failing channel does not affect the
+  others. Failures are logged with the channel name and a short reason only,
+  never the message body. Link to an admin page with `url` rather than copying
+  personal data into `message`.
+- **Channels:** Pushover (form POST to `api.pushover.net`; title ≤ 250,
+  message ≤ 1024, url ≤ 512, url title ≤ 100 characters — longer text is cut,
+  a longer URL is dropped), email to every operator recipient through
+  `sendMail`, and a webhook that receives a JSON body
+  `{ "title", "message", "url", "priority" }`. A non-2xx response is a failure.
+- **Configuration** (runtime settings convention): with `auth` installed, rows
+  `notify.pushover`, `notify.email`, and `notify.webhook` in `auth_config`. The
+  Pushover token and user key and the webhook URL are encrypted with the key
+  derived from `BETTER_AUTH_SECRET` and never returned — the admin API reports
+  `hasToken`, `hasUserKey`, and `hasUrl`. Changes apply without a restart (other
+  replicas within about 3 seconds). Each field falls back to its environment
+  variable: `PUSHOVER_APP_TOKEN`, `PUSHOVER_USER_KEY`, `NOTIFY_EMAIL_TO`
+  (comma-separated), `NOTIFY_WEBHOOK_URL`. Without `auth`, the environment is the
+  only source. A channel without its settings is skipped.
+- **Admin Settings** (`admin-dashboard`): the *Notifications* tab has Pushover,
+  Email, and Webhook cards with enable switches and a *Send test notification*
+  button that shows each channel's result. Install `admin-dashboard` before
+  `notifier` so the tab is registered.
+- **Endpoints** (administrators only): `GET /admin/notifier/config`,
+  `PUT /admin/notifier/config` (a secret set to `null` is removed so its
+  environment variable applies again; a blank secret keeps the stored value),
+  and `POST /admin/notifier/test`.
+- **Custom channels** from `apps/api/src/app.extensions.ts`:
+
+  ```ts
+  import { setNotifyChannel, NotifyChannelError } from "./notify/notifier";
+  setNotifyChannel("slack", {
+    send: async (n, signal) => {
+      const res = await fetch("https://example.com/slack-hook", { method: "POST", body: JSON.stringify({ text: n.title }), signal });
+      if (!res.ok) throw new NotifyChannelError(`HTTP ${res.status}`);
+    },
+  });
+  setNotifyChannel("email", null); // remove a built-in channel
+  ```
+
+  Throw `NotifyChannelError` for a reason that is safe to log and show; other
+  errors are reported by their name or code only.
+- **Tests:** the shipped specs post the webhook and a Pushover stand-in to the
+  development sink (`/hooks/<name>`; start the API with
+  `PUSHOVER_API_URL=http://localhost:8095/hooks/pushover`) and read email from
+  Mailpit.
+- Delivery is inline. Retrying through a job queue is not built in yet.
 
 ### `bullmq`
 
@@ -1881,6 +1952,7 @@ hand-written list. Inspect the complete result at `/api-docs` or
 | `jobs-local` | `POST /jobs`<br>`GET /jobs/{id}` |
 | `file-upload` | `POST /files`<br>`GET /files/{key}/url`<br>`POST /files/uploads`<br>`GET /files/uploads/{id}`<br>`PUT /files/uploads/{id}/parts/{partNumber}`<br>`POST /files/uploads/{id}/complete`<br>`DELETE /files/uploads/{id}` |
 | `job-progress` | `POST /progress` |
+| `notifier` | `GET /admin/notifier/config`<br>`PUT /admin/notifier/config`<br>`POST /admin/notifier/test` |
 | `object-storage-s3` | `PUT /storage/{key}`<br>`GET /storage/{key}`<br>`GET /storage/{key}/presigned` |
 | `object-storage-local` | `GET /files/content/*`<br>`PUT /storage/{key}`<br>`GET /storage/{key}`<br>`GET /storage/{key}/presigned` |
 | `redis` | `PUT /cache/{key}`<br>`GET /cache/{key}` |

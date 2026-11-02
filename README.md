@@ -177,6 +177,11 @@ profile images, audit views, and runtime Settings for authentication providers,
 SMTP, sign-up policy, and feature flags. Secrets are encrypted in the selected database
 and never returned to the browser.
 
+The `notifier` module alerts operators about events such as new inquiries
+through Pushover, email, and a webhook: `notifyOperators({ title, message })`
+never throws, and administrators configure the channels and send a test from
+the same Settings page.
+
 ## Runtime providers
 
 Inspect the selected providers and available alternatives, or preview and apply

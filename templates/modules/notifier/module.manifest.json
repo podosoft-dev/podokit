@@ -1,0 +1,58 @@
+{
+  "name": "notifier",
+  "description": "Operator alerts (not end-user mail) through Pushover, email, and a generic webhook. notifyOperators() runs every enabled channel in parallel with a timeout and never throws. With auth installed, administrators configure the channels on the admin Settings page (stored encrypted in the DB, applied live); otherwise PUSHOVER_*/NOTIFY_* env.",
+  "requires": ["mailer"],
+  "targetApp": "api",
+  "dependencies": {
+    "@podosoft/podokit-auth": "^0.6.0"
+  },
+  "env": [
+    "# ── Operator notifications (notifier) — optional ──",
+    "# Alerts for the people who run the app: new inquiries, sign-ups awaiting",
+    "# approval, failed jobs. With auth installed, configure the channels on the",
+    "# admin Settings page (Operator notifications); these env vars are a field-wise",
+    "# fallback. A channel without its settings is skipped.",
+    "# PUSHOVER_APP_TOKEN=",
+    "# PUSHOVER_USER_KEY=",
+    "# NOTIFY_EMAIL_TO=ops@example.com,owner@example.com",
+    "# NOTIFY_WEBHOOK_URL=https://example.com/hooks/operators",
+    "# Tests only: send Pushover requests to a mock instead of api.pushover.net",
+    "# PUSHOVER_API_URL=http://localhost:8095/hooks/pushover"
+  ],
+  "inject": [
+    {
+      "file": "apps/api/src/app.ts",
+      "marker": "// podokit:end:imports",
+      "text": "import { notifierModule } from \"./notify/notifier.module\";"
+    },
+    {
+      "file": "apps/api/src/app.ts",
+      "marker": "// podokit:end:modules",
+      "text": "notifierModule,"
+    },
+    {
+      "file": "apps/web/src/lib/admin/registry.svelte.ts",
+      "marker": "// podokit:end:admin-nav-imports",
+      "optional": true,
+      "text": "import NotifierSettings from \"#lib/components/settings/notifier-settings.svelte\";"
+    },
+    {
+      "file": "apps/web/src/lib/admin/registry.svelte.ts",
+      "marker": "// podokit:end:admin-settings",
+      "optional": true,
+      "text": "  { value: \"notifications\", label: (t) => t.settings.notifier.tab, component: NotifierSettings },"
+    },
+    {
+      "file": "AGENTS.md",
+      "marker": "<!-- podokit:end:agents-modules -->",
+      "optional": true,
+      "text": "### notifier\n- Alert operators (not end users) with `import { notifyOperators } from \"../notify/notifier\"` (path relative to your file): `await notifyOperators({ title, message, url?, urlTitle?, priority? })`. It never throws and returns each channel's result, so call it after the work it reports has succeeded.\n- Keep personal data out of notifications where you can: link to the admin page (`url`) instead of copying form contents into `message`.\n- Channels: Pushover, email (through the mailer), and a JSON webhook. Administrators configure them under Settings → Operator notifications (auth + admin-dashboard) and can send a test; `PUSHOVER_APP_TOKEN`, `PUSHOVER_USER_KEY`, `NOTIFY_EMAIL_TO`, and `NOTIFY_WEBHOOK_URL` are the env fallback.\n- Add or replace a channel (e.g. Slack) with `setNotifyChannel(name, channel)` from `apps/api/src/app.extensions.ts`; `null` removes one.\n"
+    }
+  ],
+  "instructions": [
+    "Notify operators from anywhere in the API:  import { notifyOperators } from \"../notify/notifier\"  then  await notifyOperators({ title: \"New inquiry\", message: \"...\", url: \"https://example.com/admin/...\" }).",
+    "With auth and admin-dashboard installed, configure Pushover, email recipients, and a webhook under /admin/settings → Operator notifications, then press Send test notification. Install admin-dashboard before notifier so the Settings tab is registered.",
+    "Without auth, set PUSHOVER_APP_TOKEN/PUSHOVER_USER_KEY, NOTIFY_EMAIL_TO, or NOTIFY_WEBHOOK_URL in .env. Email uses the mailer's SMTP settings.",
+    "Add a channel from apps/api/src/app.extensions.ts:  import { setNotifyChannel } from \"./notify/notifier\";  setNotifyChannel(\"slack\", { send: async (n, signal) => { ... } })."
+  ]
+}

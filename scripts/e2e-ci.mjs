@@ -192,7 +192,7 @@ async function main() {
   // Blog pulls in rate-limit. Auth and runtime traffic receive high ceilings in
   // the shared suite, while the ordinary limit stays at its production default
   // so the rate-limit spec can exercise a real 200 -> 429 transition.
-  for (const mod of ["redis", "bullmq", "sse", "file-upload", "api-key-auth", "job-progress"]) {
+  for (const mod of ["redis", "bullmq", "sse", "file-upload", "api-key-auth", "job-progress", "notifier"]) {
     run("npx", ["--yes", "@podosoft/podokit", "add", mod], { cwd: target, env: npmEnv });
   }
   writeFileSync(
@@ -260,6 +260,7 @@ async function main() {
       // Route phone-number OTPs to the SMS sink when present so its spec can read
       // the code back; otherwise the app logs it and the spec skips.
       ...(process.env.SMS_WEBHOOK_URL ? [`SMS_WEBHOOK_URL=${process.env.SMS_WEBHOOK_URL}`] : []),
+      ...(process.env.PUSHOVER_API_URL ? [`PUSHOVER_API_URL=${process.env.PUSHOVER_API_URL}`] : []),
       // Redis (redis/bullmq/job-progress specs) and S3/Silo (storage/file-upload
       // specs) are wired only when the CI service is present; otherwise those specs
       // self-skip. The api-key spec always has its static key.
@@ -307,6 +308,8 @@ async function main() {
     RATE_LIMIT_RUNTIME_MAX: "10000",
     // Route phone-number OTPs to the local SMS sink so the phone spec can read them.
     SMS_WEBHOOK_URL: `${smsSinkURL}/sms`,
+    // The notifier spec checks Pushover requests captured by the same sink.
+    PUSHOVER_API_URL: `${smsSinkURL}/hooks/pushover`,
     // Backend-module runtime config (present only when the CI service is up).
     ...(process.env.REDIS_URL
       ? { REDIS_URL: process.env.REDIS_URL, SSE_TRANSPORT: "redis" }
