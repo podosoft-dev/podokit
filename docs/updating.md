@@ -440,7 +440,7 @@ Upgrade the four packages together and regenerate the dependency lockfile.
 
 ### Better Auth 1.7.7 security update
 
-New authentication modules and the API client now require at least 1.7.12 for
+New authentication modules and the API client now require at least 1.7.14 for
 Better Auth and their matching integrations, which includes this update. Existing applications should upgrade the
 server, API key, passkey, and OAuth provider packages together and regenerate
 their dependency lockfile.
