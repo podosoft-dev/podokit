@@ -1,5 +1,11 @@
 # @podosoft/podokit-api-client
 
+## 0.10.2
+
+### Patch Changes
+
+- [#310](https://github.com/podosoft-dev/podokit/pull/310) [`98528e5`](https://github.com/podosoft-dev/podokit/commit/98528e5a7069fab80cf3b5b73dbea3d902659e68) Thanks [@dependabot](https://github.com/apps/dependabot)! - New authentication modules and the API client now require Better Auth 1.7.14 with matching API key, passkey, and OAuth provider plugins. The release accepts imported two-factor TOTP secrets stored as `base32:<secret>`, and type declarations no longer list type-only exports as values. No configuration change is needed.
+
 ## 0.10.1
 
 ### Patch Changes

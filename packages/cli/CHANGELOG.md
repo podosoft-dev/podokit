@@ -1,5 +1,15 @@
 # @podosoft/podokit
 
+## 1.8.0
+
+### Minor Changes
+
+- [#312](https://github.com/podosoft-dev/podokit/pull/312) [`52b5bf8`](https://github.com/podosoft-dev/podokit/commit/52b5bf8f2b15abc6c121fd773f32fc056d77699b) Thanks [@korone00](https://github.com/korone00)! - Add the `notifier` module for operator alerts. `notifyOperators({ title, message, url?, urlTitle?, priority? })` sends to Pushover, email (through the mailer), and a JSON webhook in parallel, with a 5-second timeout per channel; it never throws and returns each channel's result. With auth installed, administrators configure the channels under Settings → Operator notifications (secrets encrypted in `auth_config`, applied without a restart) and send a test notification; `PUSHOVER_APP_TOKEN`, `PUSHOVER_USER_KEY`, `NOTIFY_EMAIL_TO`, and `NOTIFY_WEBHOOK_URL` are the field-wise fallback. Apps add or replace channels with `setNotifyChannel`. The mailer's `Mail` type gains an optional `replyTo`, and the development SMS sink also captures requests posted to `/hooks/<name>`.
+
+### Patch Changes
+
+- [#310](https://github.com/podosoft-dev/podokit/pull/310) [`98528e5`](https://github.com/podosoft-dev/podokit/commit/98528e5a7069fab80cf3b5b73dbea3d902659e68) Thanks [@dependabot](https://github.com/apps/dependabot)! - New authentication modules and the API client now require Better Auth 1.7.14 with matching API key, passkey, and OAuth provider plugins. The release accepts imported two-factor TOTP secrets stored as `base32:<secret>`, and type declarations no longer list type-only exports as values. No configuration change is needed.
+
 ## 1.7.6
 
 ### Patch Changes
