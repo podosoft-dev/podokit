@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Align authentication module and API client dependencies on Better Auth
+  1.7.17 and matching integrations. New API workspaces require Elysia 1.4.31;
+  file-upload download URLs decode keys once before checking ownership, and
+  reject malformed or double-encoded keys. Resumable upload part numbers are
+  converted in the handler so Bun's native router can serve them.
+
 ### Added
 
 - `notifier` module: operator alerts through Pushover, email, and a generic

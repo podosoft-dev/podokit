@@ -513,6 +513,27 @@ describe("chunked upload routes", () => {
     });
   }
 
+  it("accepts a part number through the native Bun HTTP router", async () => {
+    const { uploads } = await harness();
+    const created = await uploads.create("user_1", { filename: "a.bin", size: 10 });
+    const listener = new Elysia()
+      .use(chunkedUploadRoutes(uploads, caller("user_1"), [WEB]))
+      .listen({ hostname: "localhost", port: 0 });
+    try {
+      const server = listener.server;
+      if (!server) throw new Error("The test HTTP server did not start");
+      const response = await fetch(new URL(`/files/uploads/${created.id}/parts/1`, server.url), {
+        method: "PUT",
+        headers: { origin: WEB, "content-type": "application/octet-stream" },
+        body: content(10).slice(),
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ partNumber: 1, size: 10 });
+    } finally {
+      await listener.stop();
+    }
+  });
+
   it("runs an upload over HTTP", async () => {
     const { handle, store } = await app();
     const file = content(PART + 3);
