@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-11-10
+
 ### Fixed
 
 - Align authentication module and API client dependencies on Better Auth
@@ -13,6 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   file-upload download URLs decode keys once before checking ownership, and
   reject malformed or double-encoded keys. Resumable upload part numbers are
   converted in the handler so Bun's native router can serve them.
+
+## [1.8.0] - 2026-11-03
 
 ### Added
 

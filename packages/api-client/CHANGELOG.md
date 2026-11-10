@@ -1,5 +1,11 @@
 # @podosoft/podokit-api-client
 
+## 0.10.3
+
+### Patch Changes
+
+- [#314](https://github.com/podosoft-dev/podokit/pull/314) [`4c7c0b9`](https://github.com/podosoft-dev/podokit/commit/4c7c0b9297f9c09db9a94b4f85d7060e847af2be) Thanks [@dependabot](https://github.com/apps/dependabot)! - Require Better Auth 1.7.17 with matching API key, passkey, and OAuth provider plugins. New API workspaces require Elysia 1.4.31, and file-upload download URLs decode their key once before ownership checks, preserving URL-encoded upload keys while rejecting malformed and double-encoded values. Resumable upload routes convert numeric part numbers in the handler so Bun's native router does not need to mutate its path parameters.
+
 ## 0.10.2
 
 ### Patch Changes
