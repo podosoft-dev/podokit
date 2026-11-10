@@ -95,3 +95,34 @@ test("file upload: users cannot presign another user's file", async ({ playwrigh
     await other.ctx.dispose();
   }
 });
+
+test("file upload: presign rejects double-encoded keys and traversal", async ({ playwright }) => {
+  const { ctx } = await session(playwright);
+  try {
+    for (const key of [
+      encodeURIComponent(encodeURIComponent("uploads/user_1/a.txt")),
+      encodeURIComponent("uploads/user_1/../user_2/a.txt"),
+    ]) {
+      const response = await ctx.get(`/api/files/${key}/url`);
+      expect(response.status()).toBe(404);
+      expect(await response.json()).toMatchObject({ error: { code: "FILE_NOT_FOUND" } });
+    }
+  } finally {
+    await ctx.dispose();
+  }
+});
+
+test("file upload: the API rejects malformed key escapes", async ({ playwright }) => {
+  const apiBase = process.env.E2E_API_URL;
+  test.skip(!apiBase, "requires a direct API URL for malformed path escapes");
+  const { ctx } = await session(playwright);
+  try {
+    for (const key of ["uploads%2Fuser_1%2F%ZZ", "uploads%2Fuser_1%2F%FF"]) {
+      const response = await ctx.get(`${apiBase}/files/${key}/url`);
+      expect(response.status()).toBe(404);
+      expect(await response.json()).toMatchObject({ error: { code: "FILE_NOT_FOUND" } });
+    }
+  } finally {
+    await ctx.dispose();
+  }
+});

@@ -139,4 +139,25 @@ describe("file upload routes", () => {
     expect((await presign(store, caller("user_1"), legacy)).status).toBe(403);
     expect((await presign(store, caller("admin_1", true), legacy)).status).toBe(200);
   });
+
+  it("rejects malformed escapes, double encoding, and traversal before presigning", async () => {
+    const store = memoryStore();
+    const keys: string[] = [];
+    store.getDownloadUrl = async (key): Promise<string> => {
+      keys.push(key);
+      return `https://example.com/${key}`;
+    };
+    for (const [key, status] of [
+      ["uploads%2Fuser_1%2F%ZZ", 422],
+      ["uploads%2Fuser_1%2F%FF", 422],
+      [encodeURIComponent(encodeURIComponent("uploads/user_1/a.txt")), 404],
+      [encodeURIComponent("uploads/user_1/../user_2/a.txt"), 404],
+    ] as const) {
+      const reply = await send(store, caller("admin_1", true), new Request(`http://localhost/files/${key}/url`));
+      expect(reply.status).toBe(status);
+      if (status === 404) expect(reply.body).toEqual({ code: "FILE_NOT_FOUND" });
+      else expect(reply.body.type).toBe("validation");
+    }
+    expect(keys).toEqual([]);
+  });
 });

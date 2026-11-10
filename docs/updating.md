@@ -428,6 +428,28 @@ customization moved from `message` and `errorMap` to `error`, and
 string formats such as `z.string().email()` are now top-level functions such as
 `z.email()` (the old forms still work but are deprecated).
 
+### Better Auth 1.7.17 and Elysia 1.4.31
+
+New authentication modules and the API client require Better Auth 1.7.17 or
+newer, with matching API key, passkey, and OAuth provider plugins. Upgrade the
+four packages together and regenerate the dependency lockfile. This includes
+the revoked-session, email verification, OTP, and passkey origin fixes in
+[1.7.16](https://github.com/better-auth/better-auth/releases/tag/v1.7.16) and the
+session refresh and two-factor fixes in
+[1.7.17](https://github.com/better-auth/better-auth/releases/tag/v1.7.17).
+Email-change OTPs issued before the upgrade must be requested again. If the
+application uses custom phone-number permissions or passkey origin settings,
+review the upstream 1.7.16 migration notes.
+
+New API workspaces also require Elysia 1.4.31. Its encoded path handling keeps
+reserved separators encoded, so the file-upload module decodes a download key
+from the original URL once before checking ownership. Upgrade Elysia and the
+managed file-upload routes together; existing clients keep sending keys as one
+URL-encoded path segment. Resumable upload routes validate part numbers as
+numeric strings and convert them in the handler, avoiding the native Bun
+router's read-only parameter mutation reported in
+[Elysia #2045](https://github.com/elysiajs/elysia/issues/2045).
+
 ### Better Auth 1.7.12 security update
 
 Better Auth 1.7.12 verifies JWTs with the stored key's algorithm, runs the full
@@ -440,7 +462,7 @@ Upgrade the four packages together and regenerate the dependency lockfile.
 
 ### Better Auth 1.7.7 security update
 
-New authentication modules and the API client now require at least 1.7.14 for
+New authentication modules and the API client now require at least 1.7.17 for
 Better Auth and their matching integrations, which includes this update. Existing applications should upgrade the
 server, API key, passkey, and OAuth provider packages together and regenerate
 their dependency lockfile.

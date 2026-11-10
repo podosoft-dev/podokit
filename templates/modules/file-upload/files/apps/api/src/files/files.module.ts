@@ -30,8 +30,17 @@ export function filesRoutes(storage: ObjectStore, identity: RequestIdentity): El
       body: t.Object({ file: t.File() }),
       detail: { tags: ["files"], summary: "Upload a file" },
     })
-    .get("/files/:key/url", async ({ request, params }) => {
-      const access = uploadAccess(params.key, {
+    .get("/files/:key/url", async ({ request }) => {
+      let key: string;
+      try {
+        // Elysia decodes some escapes in params but preserves encoded slashes.
+        // Read the original segment so percent escapes are decoded only once.
+        const segment = new URL(request.url).pathname.replace(/\/$/, "").split("/").at(-2);
+        key = decodeURIComponent(segment ?? "");
+      } catch {
+        throw new AppException("FILE_NOT_FOUND", "File not found", 404);
+      }
+      const access = uploadAccess(key, {
         userId: await identity.userId(request),
         admin: await identity.isAdmin(request),
       });
@@ -39,7 +48,7 @@ export function filesRoutes(storage: ObjectStore, identity: RequestIdentity): El
       if (access === "forbidden") {
         throw new AppException("FILE_FORBIDDEN", "You cannot access this file", 403);
       }
-      return { url: await storage.getDownloadUrl(params.key) };
+      return { url: await storage.getDownloadUrl(key) };
     }, {
       params: t.Object({ key: t.String({ minLength: 1, maxLength: 1024 }) }),
       detail: {

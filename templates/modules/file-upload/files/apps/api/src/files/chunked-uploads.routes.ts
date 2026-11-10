@@ -94,14 +94,14 @@ export function chunkedUploadRoutes(
       uploads.putPart(
         await identity.userId(request),
         params.id,
-        params.partNumber,
+        Number(params.partNumber),
         declaredLength(request),
         request.body,
       ), {
       // The body is streamed to storage as it arrives, never parsed or buffered here.
       parse: "none",
       transform: guard(origins, BINARY_TYPE),
-      params: t.Object({ id: t.String({ minLength: 1, maxLength: 64 }), partNumber: t.Numeric() }),
+      params: t.Object({ id: t.String({ minLength: 1, maxLength: 64 }), partNumber: t.String({ format: "numeric" }) }),
       detail: {
         tags: ["files"],
         summary: "Store one part of a resumable upload",
