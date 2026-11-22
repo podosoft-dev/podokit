@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.8.2] - 2026-11-22
+
+### Fixed
+
+- Generated authentication modules and API client 0.10.4 require Better Auth
+  1.7.22 or newer with matching API key, passkey, and OAuth provider plugins.
+  Better Auth 1.7.22 expires the current session cookie on revocation and
+  clears expired sessions from the request context.
+
 ## [1.8.1] - 2026-11-10
 
 ### Fixed
@@ -2952,7 +2961,8 @@ see [Updating](docs/updating.md) for the compatibility boundary.
 ### Fixed
 - `fullstack-nest-svelte`: add missing `@types/express` so the generated API builds cleanly. Verified end-to-end: install, build (API + web), API starts, `/health` returns 200.
 
-[Unreleased]: https://github.com/podosoft-dev/podokit/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/podosoft-dev/podokit/compare/v1.8.2...HEAD
+[1.8.2]: https://github.com/podosoft-dev/podokit/compare/v1.8.1...v1.8.2
 [0.6.0]: https://github.com/podosoft-dev/podokit/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/podosoft-dev/podokit/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/podosoft-dev/podokit/compare/v0.3.0...v0.5.0
