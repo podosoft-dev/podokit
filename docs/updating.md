@@ -428,12 +428,19 @@ customization moved from `message` and `errorMap` to `error`, and
 string formats such as `z.string().email()` are now top-level functions such as
 `z.email()` (the old forms still work but are deprecated).
 
+### Better Auth 1.7.22
+
+New authentication modules and the API client require Better Auth 1.7.22 or
+newer. For existing applications, update the Better Auth, API key, passkey, and
+OAuth provider dependencies together and regenerate the lockfile with
+`bun install`. [Better Auth 1.7.22](https://github.com/better-auth/better-auth/releases/tag/v1.7.22)
+expires session cookies when the current session is revoked and clears expired
+sessions from the request context.
+
 ### Better Auth 1.7.17 and Elysia 1.4.31
 
-New authentication modules and the API client require Better Auth 1.7.17 or
-newer, with matching API key, passkey, and OAuth provider plugins. Upgrade the
-four packages together and regenerate the dependency lockfile. This includes
-the revoked-session, email verification, OTP, and passkey origin fixes in
+The Better Auth 1.7.17 upgrade includes the revoked-session, email
+verification, OTP, and passkey origin fixes in
 [1.7.16](https://github.com/better-auth/better-auth/releases/tag/v1.7.16) and the
 session refresh and two-factor fixes in
 [1.7.17](https://github.com/better-auth/better-auth/releases/tag/v1.7.17).
@@ -454,18 +461,16 @@ router's read-only parameter mutation reported in
 
 Better Auth 1.7.12 verifies JWTs with the stored key's algorithm, runs the full
 OAuth callback checks for callbacks completed through the OAuth Proxy, and
-rejects ID token sign-in for a provider without a client ID. New authentication
-modules and the API client require 1.7.12 for Better Auth and its API key,
-passkey, and OAuth provider plugins. PodoKit only enables social providers that
-have a client ID, so generated applications need no configuration change.
-Upgrade the four packages together and regenerate the dependency lockfile.
+rejects ID token sign-in for a provider without a client ID. PodoKit only enables
+social providers that have a client ID, so generated applications need no
+configuration change for these fixes. Upgrade the four packages together and
+regenerate the dependency lockfile.
 
 ### Better Auth 1.7.7 security update
 
-New authentication modules and the API client now require at least 1.7.17 for
-Better Auth and their matching integrations, which includes this update. Existing applications should upgrade the
-server, API key, passkey, and OAuth provider packages together and regenerate
-their dependency lockfile.
+Existing applications upgrading from before 1.7.7 should upgrade the server,
+API key, passkey, and OAuth provider packages together and regenerate their
+dependency lockfile.
 
 When API instances share verification storage, upgrade them in the same
 cutover. Request new Magic Links and restart OAuth or cookie-backed SAML sign-ins
