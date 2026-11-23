@@ -1,5 +1,11 @@
 # @podosoft/podokit
 
+## 1.8.3
+
+### Patch Changes
+
+- [#318](https://github.com/podosoft-dev/podokit/pull/318) [`b5d587b`](https://github.com/podosoft-dev/podokit/commit/b5d587ba2722c744ca7a31b9517a8cca387de3e8) Thanks [@dependabot](https://github.com/apps/dependabot)! - Require Better Auth 1.7.26 or newer in the API client and generated auth module, with matching API key, passkey, and OAuth provider integrations. The update rejects expired two-factor challenges before sending an OTP and includes OAuth signing-key fixes.
+
 ## 1.8.2
 
 ### Patch Changes
