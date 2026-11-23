@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.8.3] - 2026-11-23
+
+### Fixed
+
+- Generated authentication modules and API client 0.10.5 require Better Auth
+  1.7.26 or newer with matching API key, passkey, and OAuth provider plugins.
+  The update rejects expired two-factor challenges before sending an OTP and
+  includes OAuth signing-key fixes.
+
 ## [1.8.2] - 2026-11-22
 
 ### Fixed
@@ -2961,7 +2970,8 @@ see [Updating](docs/updating.md) for the compatibility boundary.
 ### Fixed
 - `fullstack-nest-svelte`: add missing `@types/express` so the generated API builds cleanly. Verified end-to-end: install, build (API + web), API starts, `/health` returns 200.
 
-[Unreleased]: https://github.com/podosoft-dev/podokit/compare/v1.8.2...HEAD
+[Unreleased]: https://github.com/podosoft-dev/podokit/compare/v1.8.3...HEAD
+[1.8.3]: https://github.com/podosoft-dev/podokit/compare/v1.8.2...v1.8.3
 [1.8.2]: https://github.com/podosoft-dev/podokit/compare/v1.8.1...v1.8.2
 [0.6.0]: https://github.com/podosoft-dev/podokit/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/podosoft-dev/podokit/compare/v0.5.0...v0.5.1
