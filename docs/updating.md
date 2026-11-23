@@ -428,12 +428,26 @@ customization moved from `message` and `errorMap` to `error`, and
 string formats such as `z.string().email()` are now top-level functions such as
 `z.email()` (the old forms still work but are deprecated).
 
-### Better Auth 1.7.22
+### Better Auth 1.7.26
 
-New authentication modules and the API client require Better Auth 1.7.22 or
+New authentication modules and the API client require Better Auth 1.7.26 or
 newer. For existing applications, update the Better Auth, API key, passkey, and
 OAuth provider dependencies together and regenerate the lockfile with
-`bun install`. [Better Auth 1.7.22](https://github.com/better-auth/better-auth/releases/tag/v1.7.22)
+`bun install`. [Better Auth 1.7.26](https://github.com/better-auth/better-auth/releases/tag/v1.7.26)
+rejects expired two-factor sign-in challenges before sending an OTP or
+counting a failed attempt.
+
+Custom OAuth integrations should review the upstream signing-key changes.
+`oauthProviderResourceClient(auth)` reads keys from the local auth instance by
+default and uses HTTP when configured with `jwksUrl`.
+The OAuth provider calls a custom JWT `adapter.getJwks` on every verification,
+so cache expensive reads in the adapter. See the
+[1.7.25 release notes](https://github.com/better-auth/better-auth/releases/tag/v1.7.25)
+and [1.7.26 release notes](https://github.com/better-auth/better-auth/releases/tag/v1.7.26).
+
+### Better Auth 1.7.22
+
+[Better Auth 1.7.22](https://github.com/better-auth/better-auth/releases/tag/v1.7.22)
 expires session cookies when the current session is revoked and clears expired
 sessions from the request context.
 
