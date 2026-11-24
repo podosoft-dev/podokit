@@ -296,6 +296,19 @@ describe("PodoKit development gateway", () => {
     expect(() => readDevConfig(root)).toThrow(message);
   });
 
+  it("keeps the API's local files in a volume when the app stores files locally", () => {
+    const root = project();
+    expect(renderRuntimeCompose(resolveDevRuntime(root))).not.toContain("volumes:");
+
+    const manifest = readManifest(root)!;
+    manifest.modules = [{ name: "object-storage-local", order: 0, addedWith: "1.8.3" }];
+    writeManifest(root, manifest);
+    const compose = renderRuntimeCompose(resolveDevRuntime(root));
+    const api = compose.slice(compose.indexOf("\n  api:\n"), compose.indexOf("\n  podokit-"));
+    expect(api).toContain("    volumes:\n      - podokit-api-data:/app/apps/api/data\n");
+    expect(compose).toMatch(/\nvolumes:\n {2}podokit-api-data: \{\}\n$/);
+  });
+
   it("activates profiles required by installed modules", async () => {
     const root = project();
     const manifest = readManifest(root)!;

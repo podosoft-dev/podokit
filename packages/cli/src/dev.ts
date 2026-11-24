@@ -57,7 +57,18 @@ export interface DevRuntime {
   projectRoot: string;
   routeId: string;
   runtimeComposePath: string;
+  /** The app keeps files in the API container (the object-storage-local module). */
+  localFiles: boolean;
 }
+
+/**
+ * Where the API container keeps local files: the object-storage-local default
+ * `LOCAL_STORAGE_PATH=./data/files`, relative to `apps/api`, where `bun run
+ * --cwd apps/api dev` starts. A named volume keeps them when Compose recreates
+ * the container, as it does after a dependency or image change.
+ */
+export const DEV_API_DATA_DIR = "/app/apps/api/data";
+const LOCAL_FILES_VOLUME = "podokit-api-data";
 
 interface CommandResult {
   status: number | null;
@@ -285,6 +296,7 @@ export function resolveDevRuntime(projectRoot: string): DevRuntime {
     projectRoot: root,
     routeId: `route-${projectSlug}-${id}`,
     runtimeComposePath: join(root, RUNTIME_COMPOSE),
+    localFiles: readManifest(root)?.modules.some((module) => module.name === "object-storage-local") ?? false,
   };
 }
 
@@ -377,6 +389,7 @@ export function renderRuntimeCompose(runtime: DevRuntime): string {
     `  web:\n${environment}    depends_on: [${alias}]\n` +
     `    networks:\n      ${PROJECT_NETWORK}:\n        aliases: [${alias}-web]\n` +
     `  api:\n${apiEnvironment}` +
+    (runtime.localFiles ? `    volumes:\n      - ${LOCAL_FILES_VOLUME}:${DEV_API_DATA_DIR}\n` : "") +
     `    networks:\n      ${PROJECT_NETWORK}:\n        aliases: [${alias}-api]\n` +
     `  ${alias}:\n` +
     `    image: ${GATEWAY_IMAGE}\n` +
@@ -386,7 +399,8 @@ export function renderRuntimeCompose(runtime: DevRuntime): string {
     `    configs:\n      - source: ${GATEWAY_LINK_CONFIG}\n        target: /etc/traefik/link.yml\n` +
     `    networks: [${PROJECT_NETWORK}, ${GATEWAY_NETWORK}]\n` +
     `configs:\n  ${GATEWAY_LINK_CONFIG}:\n    content: |\n${linkConfig}` +
-    `networks:\n  ${GATEWAY_NETWORK}:\n    external: true\n    name: ${GATEWAY_NETWORK}\n`
+    `networks:\n  ${GATEWAY_NETWORK}:\n    external: true\n    name: ${GATEWAY_NETWORK}\n` +
+    (runtime.localFiles ? `volumes:\n  ${LOCAL_FILES_VOLUME}: {}\n` : "")
   );
 }
 

@@ -163,6 +163,7 @@ describe("create (integration against templates)", () => {
       ["apps/api/src/database/entities.ts", "export const APP_ENTITIES: AppEntities = [];"],
       ["apps/api/src/core/api-contract.extensions.ts", "export const APP_DOCUMENTED_ROUTES: readonly string[] = [];"],
       ["apps/api/scripts/build.extensions.mjs", "export const appBuildTargets = [];"],
+      ["apps/api/image.extensions.sh", "set -eu"],
     ];
     for (const [path, seed] of apiSeams) {
       expect(readFileSync(join(target, path), "utf8")).toContain(seed);
@@ -183,6 +184,13 @@ describe("create (integration against templates)", () => {
         expect(dockerfile).not.toContain("bun install --production");
       }
       expect(dockerfile).toContain(`RUN bun run --cwd apps/${workspace} build`);
+      if (workspace === "api") {
+        // The application's system packages are installed as root, before the image drops to `bun`.
+        const hook = dockerfile.indexOf('RUN TARGETARCH="$TARGETARCH" sh /tmp/podokit/image.extensions.sh');
+        expect(hook).toBeGreaterThan(dockerfile.indexOf("AS runtime"));
+        expect(hook).toBeLessThan(dockerfile.indexOf("USER bun"));
+        expect(dockerfile).toContain("COPY apps/api/image.extensions.sh /tmp/podokit/image.extensions.sh");
+      }
       expect(dockerfile).not.toContain("bun --cwd");
       expect(dockerfile).not.toContain("FROM node:");
       expect(dockerfile).not.toContain("npm ");
@@ -203,6 +211,10 @@ describe("create (integration against templates)", () => {
       "RUN apk add --no-cache git python3 make g++ ca-certificates",
     );
     expect(devDockerfile).not.toContain("apt-get");
+    expect(devDockerfile).toContain('RUN TARGETARCH="$TARGETARCH" sh /tmp/podokit/image.extensions.sh');
+    // Changing the images' definition rebuilds the development containers.
+    expect(developmentCompose).toContain("- { action: rebuild, path: ./Dockerfile.dev }");
+    expect(developmentCompose).toContain("- { action: rebuild, path: ./apps/api/image.extensions.sh }");
     const infrastructure = readFileSync(
       join(target, "infra/docker/docker-compose.yml"),
       "utf8",
@@ -465,6 +477,9 @@ describe("create (integration against templates)", () => {
     expect(existsSync(join(target, ".env.docker.example"))).toBe(true);
     expect(existsSync(join(target, ".env.docker"))).toBe(false);
     expect(readFileSync(join(target, ".env.docker.example"), "utf8")).toMatch(/^BETTER_AUTH_SECRET=$/m);
+    // The audit switch belongs to the audit-log module; without it the admin
+    // console would offer an audit page whose API does not exist.
+    expect(readFileSync(join(target, ".env.docker.example"), "utf8")).not.toContain("AUDIT_LOG_ENABLED");
     expect(existsSync(join(target, ".devcontainer", "devcontainer.json"))).toBe(true);
     expect(existsSync(join(target, "infra", "traefik", "dynamic.yml"))).toBe(true);
 

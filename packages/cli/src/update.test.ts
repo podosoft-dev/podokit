@@ -498,6 +498,34 @@ describe("applyUpdate", () => {
     return templates;
   }
 
+  it("gives an existing app the image extension file its updated Dockerfile runs", () => {
+    const oldTemplates = oldTemplatesCopy();
+    const extension = "apps/api/image.extensions.sh";
+    rmSync(join(oldTemplates, "fullstack", extension));
+    const dockerfile = join(oldTemplates, "fullstack/apps/api/Dockerfile");
+    writeFileSync(
+      dockerfile,
+      readFileSync(dockerfile, "utf8")
+        .split("\n")
+        .filter((line) => !line.includes("image.extensions.sh"))
+        .join("\n"),
+    );
+    const project = join(tmp(), "app");
+    create({ name: "app", template: "fullstack", templatesDir: oldTemplates, targetDir: project });
+    expect(existsSync(join(project, extension))).toBe(false);
+
+    const result = applyUpdate(project, REPO_TEMPLATES);
+    expect(result.written).toEqual(expect.arrayContaining([extension, "apps/api/Dockerfile"]));
+    expect(readFileSync(join(project, "apps/api/Dockerfile"), "utf8")).toContain(
+      "COPY apps/api/image.extensions.sh /tmp/podokit/image.extensions.sh",
+    );
+    expect(readFilesLock(project)?.files[extension]?.tier).toBe("owned");
+
+    // The application's packages survive the next update.
+    writeFileSync(join(project, extension), "#!/bin/sh\nset -eu\napk add --no-cache poppler-utils\n");
+    expect(planUpdate(project, REPO_TEMPLATES).changes.find((change) => change.path === extension)?.action).toBe("skip");
+  });
+
   it("adds newly introduced owned template and module seeds once", () => {
     const oldTemplates = oldTemplatesCopy();
     const extension = "apps/api/src/app.extensions.ts";

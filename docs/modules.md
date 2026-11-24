@@ -534,6 +534,14 @@ worker and must not be scaled to multiple API replicas. The worker creates its
 table and starts polling once the database is reachable, so an API that starts
 while PostgreSQL is down begins processing jobs when it returns.
 
+A running job records a heartbeat every 10 seconds. A job left `active` by a
+process that stopped (a restart, a crash, or a deploy) has no heartbeat for 60
+seconds and is then queued again, as BullMQ does with stalled jobs. That run
+counts as an attempt and one more run is allowed, so a job whose process stops
+again fails with "The process running this job stopped before the job
+finished" instead of looping. Keep handlers idempotent: a job interrupted part
+way runs again from the start.
+
 **Deployment.** The worker is a separate process, so `podo add bullmq` also adds:
 
 - `infra/k3s/worker-deployment.yaml` — runs the API image with `bun dist/main-worker.js` (no Service/Ingress).
@@ -616,6 +624,14 @@ podo provider set object-storage local --apply
 
 Use an absolute path for packaged or production applications and back it up with
 the database. Local files are single-host and require one API replica.
+
+In container development (`podo dev`), the API keeps the default
+`LOCAL_STORAGE_PATH=./data/files` under `apps/api/data`, which `podo dev` mounts
+from the named volume `podokit-api-data`. The files survive when Compose
+recreates the container, for example after a dependency or image change.
+`podo dev down -v` removes the volume. If `.env.docker` points
+`LOCAL_STORAGE_PATH` elsewhere, add a volume for that path in
+`compose.dev.yaml`.
 
 **Security note:** download URLs work like S3 presigned URLs.
 `getDownloadUrl()` returns `/files/content/<key>?expires=…&signature=…`, signed
