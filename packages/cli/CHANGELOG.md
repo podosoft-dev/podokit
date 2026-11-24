@@ -1,5 +1,21 @@
 # @podosoft/podokit
 
+## 1.9.0
+
+### Minor Changes
+
+- [#320](https://github.com/podosoft-dev/podokit/pull/320) [`68bd0be`](https://github.com/podosoft-dev/podokit/commit/68bd0be94add2a10ac83c8a6dbc265d74a531745) Thanks [@korone00](https://github.com/korone00)! - Let an application install system packages and command-line tools in its API images. The new application-owned `apps/api/image.extensions.sh` runs as root in the runtime stage of the managed `apps/api/Dockerfile`, before the image switches to the `bun` user, and in `Dockerfile.dev`, so development and production have the same tools; `TARGETARCH` gives the architecture. `podo update` creates the file once in an existing app. `podo dev watch` now rebuilds the development containers when `Dockerfile.dev` or this script changes.
+
+### Patch Changes
+
+- [#320](https://github.com/podosoft-dev/podokit/pull/320) [`68bd0be`](https://github.com/podosoft-dev/podokit/commit/68bd0be94add2a10ac83c8a6dbc265d74a531745) Thanks [@korone00](https://github.com/korone00)! - Offer the admin audit page only when the audit-log module is installed. The container environment example no longer switches the audit log on for every app, and the audit capability now also requires the module, so an app without it no longer shows an audit page whose API does not exist (and an administrator switching the audit toggle on cannot bring that page back).
+
+- [#320](https://github.com/podosoft-dev/podokit/pull/320) [`68bd0be`](https://github.com/podosoft-dev/podokit/commit/68bd0be94add2a10ac83c8a6dbc265d74a531745) Thanks [@korone00](https://github.com/korone00)! - Answer an unknown API path with the not-found error envelope for signed-in users too. Better Auth was mounted at the root, so it answered every unmatched request with an empty 404 that bypassed the application's error handling; it now receives only its base path and the root OAuth discovery documents. The request log also records the status of a Response a handler returns, instead of 200.
+
+- [#320](https://github.com/podosoft-dev/podokit/pull/320) [`68bd0be`](https://github.com/podosoft-dev/podokit/commit/68bd0be94add2a10ac83c8a6dbc265d74a531745) Thanks [@korone00](https://github.com/korone00)! - Keep local object storage files across development container rebuilds. With `object-storage-local`, `podo dev` now mounts the named volume `podokit-api-data` at the API's `apps/api/data`, where the default `LOCAL_STORAGE_PATH` keeps files, so they survive when Compose recreates the container.
+
+- [#320](https://github.com/podosoft-dev/podokit/pull/320) [`68bd0be`](https://github.com/podosoft-dev/podokit/commit/68bd0be94add2a10ac83c8a6dbc265d74a531745) Thanks [@korone00](https://github.com/korone00)! - Recover local jobs that a stopped process left running. A job the `jobs-local` worker was running when the API restarted, crashed, or was replaced stayed `active` forever. Running jobs now record a heartbeat every 10 seconds; a job without one for 60 seconds is queued again once, as BullMQ does with stalled jobs, and fails if its process stops again.
+
 ## 1.8.3
 
 ### Patch Changes
