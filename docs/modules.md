@@ -625,6 +625,14 @@ podo provider set object-storage local --apply
 Use an absolute path for packaged or production applications and back it up with
 the database. Local files are single-host and require one API replica.
 
+In container development (`podo dev`), the API keeps the default
+`LOCAL_STORAGE_PATH=./data/files` under `apps/api/data`, which `podo dev` mounts
+from the named volume `podokit-api-data`. The files survive when Compose
+recreates the container, for example after a dependency or image change.
+`podo dev down -v` removes the volume. If `.env.docker` points
+`LOCAL_STORAGE_PATH` elsewhere, add a volume for that path in
+`compose.dev.yaml`.
+
 **Security note:** download URLs work like S3 presigned URLs.
 `getDownloadUrl()` returns `/files/content/<key>?expires=…&signature=…`, signed
 with HMAC-SHA256 and valid for one hour by default (at most seven days).
