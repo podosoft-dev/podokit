@@ -113,6 +113,27 @@ workspaces resolved in the lockfile, such as the optional `vitest`, `svelte`, an
 packages it never loads. The web image ships its build output and needs no
 separate production install.
 
+### System packages in the API image
+
+An API that runs command-line tools, such as a document converter or
+`pdftotext`, installs them in `apps/api/image.extensions.sh`. The application
+owns this file and `podo update` never overwrites it. The managed
+`apps/api/Dockerfile` runs it as root in the runtime stage, before the image
+switches to the unprivileged `bun` user, and `Dockerfile.dev` runs it too, so
+development and production have the same tools. The images are Alpine Linux:
+
+```sh
+#!/bin/sh
+set -eu
+apk add --no-cache poppler-utils
+```
+
+`TARGETARCH` holds the image architecture (`amd64` or `arm64`) when BuildKit
+builds it; fall back to `uname -m` if the image may be built without BuildKit.
+Pin what you install, and check the SHA-256 of anything you download. A glibc
+binary needs `apk add --no-cache gcompat` on Alpine. `podo dev watch` rebuilds
+the development containers when the script or `Dockerfile.dev` changes.
+
 **Build for the architecture the target runs.** Building on an arm64 laptop and
 deploying to an amd64 host produces `exec format error` at rollout — after the
 migration has already run. Pass `--platform linux/amd64` (or use

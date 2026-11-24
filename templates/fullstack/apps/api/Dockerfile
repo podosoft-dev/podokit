@@ -32,8 +32,13 @@ RUN bun run --cwd apps/api build
 RUN mkdir -p /app/packages
 
 FROM oven/bun:1.4.4-alpine AS runtime
+ARG TARGETARCH
 WORKDIR /app
 ENV NODE_ENV=production
+# System packages and tools the application adds (apps/api/image.extensions.sh,
+# application-owned). Runs as root before the image switches to `bun`.
+COPY apps/api/image.extensions.sh /tmp/podokit/image.extensions.sh
+RUN TARGETARCH="$TARGETARCH" sh /tmp/podokit/image.extensions.sh && rm -rf /tmp/podokit
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=manifests /app/apps/api ./apps/api
 COPY --from=build /app/packages ./packages
