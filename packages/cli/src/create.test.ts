@@ -465,6 +465,9 @@ describe("create (integration against templates)", () => {
     expect(existsSync(join(target, ".env.docker.example"))).toBe(true);
     expect(existsSync(join(target, ".env.docker"))).toBe(false);
     expect(readFileSync(join(target, ".env.docker.example"), "utf8")).toMatch(/^BETTER_AUTH_SECRET=$/m);
+    // The audit switch belongs to the audit-log module; without it the admin
+    // console would offer an audit page whose API does not exist.
+    expect(readFileSync(join(target, ".env.docker.example"), "utf8")).not.toContain("AUDIT_LOG_ENABLED");
     expect(existsSync(join(target, ".devcontainer", "devcontainer.json"))).toBe(true);
     expect(existsSync(join(target, "infra", "traefik", "dynamic.yml"))).toBe(true);
 

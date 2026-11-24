@@ -43,6 +43,11 @@
       "file": "apps/api/src/auth/auth-config-store.ts",
       "marker": "// podokit:end:auth-config-defaults",
       "text": "auditLog: true,"
+    },
+    {
+      "file": "apps/api/src/auth/auth-config-store.ts",
+      "marker": "// podokit:end:auth-feature-modules",
+      "text": "\"audit-log\","
     }
   ],
   "instructions": [

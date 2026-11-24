@@ -730,6 +730,19 @@ describe("addModule (auth / better-auth)", () => {
     expect(readFileSync(join(project, "apps/api/src/app.ts"), "utf8")).toContain("auditModule,");
   });
 
+  it("audit-log registers its auth feature so the audit capability needs the module, and remove takes it out", () => {
+    const project = generate("fullstack");
+    addModule({ projectRoot: project, module: "auth", modulesDir: MODULES });
+    const store = join(project, "apps/api/src/auth/auth-config-store.ts");
+    expect(readFileSync(store, "utf8")).toContain("// podokit:begin:auth-feature-modules\n  // podokit:end:auth-feature-modules");
+
+    addModule({ projectRoot: project, module: "audit-log", modulesDir: MODULES });
+    expect(readFileSync(store, "utf8")).toContain('  "audit-log",\n  // podokit:end:auth-feature-modules');
+
+    removeModule({ projectRoot: project, module: "audit-log", modulesDir: MODULES });
+    expect(readFileSync(store, "utf8")).not.toContain('"audit-log",');
+  });
+
   it("audit-log turns auditing on in the example Kubernetes ConfigMap, and remove takes it out", () => {
     const project = generate("fullstack");
     const configMap = join(project, "infra", "k3s", "configmap.yaml");
