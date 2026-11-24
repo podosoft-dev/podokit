@@ -534,6 +534,14 @@ worker and must not be scaled to multiple API replicas. The worker creates its
 table and starts polling once the database is reachable, so an API that starts
 while PostgreSQL is down begins processing jobs when it returns.
 
+A running job records a heartbeat every 10 seconds. A job left `active` by a
+process that stopped (a restart, a crash, or a deploy) has no heartbeat for 60
+seconds and is then queued again, as BullMQ does with stalled jobs. That run
+counts as an attempt and one more run is allowed, so a job whose process stops
+again fails with "The process running this job stopped before the job
+finished" instead of looping. Keep handlers idempotent: a job interrupted part
+way runs again from the start.
+
 **Deployment.** The worker is a separate process, so `podo add bullmq` also adds:
 
 - `infra/k3s/worker-deployment.yaml` — runs the API image with `bun dist/main-worker.js` (no Service/Ingress).
