@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-11-24
+
+### Added
+
+- Generated apps have an application-owned `apps/api/image.extensions.sh`. The
+  managed `apps/api/Dockerfile` runs it as root in its runtime stage, before the
+  image switches to the `bun` user, and `Dockerfile.dev` runs it too, so an API
+  that calls command-line tools installs them without editing the managed
+  Dockerfile. `podo update` creates the file once in an existing app, and
+  `podo dev watch` rebuilds the containers when it or `Dockerfile.dev` changes.
+
+### Fixed
+
+- `jobs-local` recovers jobs a stopped process left running: running jobs record
+  a heartbeat every 10 seconds, and a job without one for 60 seconds runs once
+  more and then fails if its process stops again.
+- With `object-storage-local`, `podo dev` keeps the API's `apps/api/data` in the
+  named volume `podokit-api-data`, so stored files survive container rebuilds.
+- The admin audit page appears only when the `audit-log` module is installed.
+- Signed-in requests to unknown API paths get the not-found error envelope
+  instead of an empty 404 from Better Auth, and the request log records the
+  status the response actually had.
+
 ## [1.8.3] - 2026-11-23
 
 ### Fixed
