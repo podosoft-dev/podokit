@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.9.2] - 2026-11-25
+
+### Fixed
+
+- Docker Compose deployments keep the API's own files across releases. With the
+  local object store or a SQLite database the files lived in the API container,
+  which every `podo deploy apply` replaces. The Compose profile now has
+  `workloads.api.dataVolume`, an external named volume mounted at
+  `/app/apps/api/data` on the API, the worker, and the migration; `podo deploy
+  init` sets it for those providers, apply creates it, and `podo deploy doctor`
+  fails when such an app's profile has none. Add
+  `"dataVolume": "<project>-api-data"` under `workloads.api` in an existing
+  profile. The managed `apps/api/Dockerfile` creates that directory owned by
+  `bun`.
+
 ## [1.9.1] - 2026-11-25
 
 ### Fixed
