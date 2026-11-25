@@ -524,6 +524,8 @@
     "sendResetEmail": "비밀번호 재설정 메일 보내기",
     "resetEmailSent": "재설정 메일을 보냈습니다",
     "sendVerificationOnCreate": "인증 메일 보내기",
+    "socialOnly": "{providers} 로그인으로만 사용(비밀번호 없음)",
+    "socialOnlyHint": "비밀번호 없이 만들고 이메일을 인증됨으로 표시합니다. 이 주소로 {providers} 로그인을 하면 이 계정에 연결됩니다. 주소가 그 사람의 것인지 확인하고 만드세요.",
     "pendingApproval": "승인 대기",
     "approve": "회원가입 승인",
     "approved": "회원가입을 승인했습니다"
