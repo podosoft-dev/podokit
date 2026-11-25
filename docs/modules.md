@@ -307,6 +307,15 @@ migration Job before a rolling deployment.
   `PUBLIC_SIGNUP_DISABLED` code. Email, Google, Apple, magic-link, and future providers all use
   the same new-user database gate. Existing users can still sign in with any enabled method, and
   administrators can still create users deliberately from `/admin/users`.
+- **Adding someone who signs in with Google (or another provider) while sign-up is closed.** In
+  `/admin/users` → *Add user*, check *Sign in with Google only (no password)*; the option appears
+  when a social provider is configured. The account is created without a password and with its
+  email marked verified, so that person's first Google sign-in with the same address links to it
+  instead of being refused. Better Auth links a provider sign-in to an existing account only when
+  the account's email is verified (`account.accountLinking.requireLocalEmailVerified`, on by
+  default), and an account created with a password starts unverified: its Google sign-in fails with
+  `account_not_linked`. For such an account, use *Mark verified* in the manage dialog (shown even
+  when email verification is off), and only for an address you know belongs to that person.
 - **Use a stable HTTPS origin for development OAuth.** Keep portless `*.localhost` for normal
   multi-app work, then expose the web container through a Cloudflare Named Tunnel, reserved ngrok
   domain, or preview deployment for provider callbacks. Register the exact HTTPS origin and

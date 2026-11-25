@@ -156,3 +156,46 @@ test("manage modal closes from its footer", async ({ page, disposableUsers }) =>
   await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).last().click();
   await expect(page.getByRole("dialog")).toBeHidden();
 });
+
+test.describe("social-only users", () => {
+  // In afterEach, not finally: a test that times out cannot run its own cleanup, and a Google
+  // client left enabled would change every later login page in the run.
+  test.afterEach(async ({ page }) => {
+    await page.request.put("/api/account/auth-config", { headers: { origin: base }, data: { social: { google: { enabled: false } } } });
+  });
+
+  test("admin creates a Google-only user without a password, with the email marked verified", { tag: "@exclusive" }, async ({ page, disposableUsers }) => {
+    // A social provider must be configured for the option to appear; enable a dummy Google client.
+    const enable = await page.request.put("/api/account/auth-config", {
+      headers: { origin: base },
+      data: { social: { google: { enabled: true, clientId: "dummy-google-client-id", clientSecret: "dummy-google-client-secret" } } },
+    });
+    expect(enable.ok()).toBeTruthy();
+    await expect
+      .poll(async () => ((await (await page.request.get("/api/account/capabilities")).json()) as { providers: string[] }).providers)
+      .toContain("google");
+    await ready(page, "/admin/users");
+    const email = `ui-social-${Date.now()}@example.com`;
+    await page.getByRole("button", { name: "Add user" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("Name").fill("Social Only");
+    await dialog.getByLabel("Email").fill(email);
+    await dialog.getByTestId("create-social-only").click();
+    await expect(dialog.getByLabel("Password", { exact: true })).toHaveCount(0);
+    await expect(dialog.getByText("Sign in with Google only (no password)")).toBeVisible();
+    const created = page.waitForResponse(
+      (response) => response.url().endsWith("/api/auth/admin/create-user") && response.request().method() === "POST",
+    );
+    await dialog.getByRole("button", { name: "Create" }).click();
+    const response = await created;
+    await disposableUsers.trackResponse(response);
+    const body = response.request().postDataJSON() as { password?: string; data?: { emailVerified?: boolean } };
+    expect(body.password).toBeUndefined();
+    expect(body.data?.emailVerified).toBe(true);
+    await expect(page.getByRole("dialog")).toBeHidden();
+
+    // The manage panel shows the verification state even with email verification off.
+    await openManage(page, email);
+    await expect(page.getByRole("dialog").getByTestId("manage-email-verification")).toContainText("Verified");
+  });
+});
