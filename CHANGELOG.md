@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-11-25
+
+### Fixed
+
+- While the web server treats the API as unreachable, it now checks the API's
+  `GET /health` every two seconds in the background until it answers. Before, it
+  checked again only when a new request arrived, so after the API came back (a
+  restart or a deploy) the first page load or `/api` request still got
+  `503 BACKEND_UNAVAILABLE` however long the API had been up.
+
 ## [1.9.0] - 2026-11-24
 
 ### Added
