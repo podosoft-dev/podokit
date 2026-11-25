@@ -44,6 +44,9 @@ COPY --from=manifests /app/apps/api ./apps/api
 COPY --from=build /app/packages ./packages
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/api/scripts ./apps/api/scripts
+# The API's own files (local object store, SQLite) go under data/. A volume
+# mounted there starts with this directory's owner, so `bun` can write to it.
+RUN mkdir -p /app/apps/api/data && chown bun:bun /app/apps/api/data
 WORKDIR /app/apps/api
 USER bun
 EXPOSE 3000

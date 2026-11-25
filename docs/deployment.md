@@ -188,7 +188,15 @@ select PostgreSQL, Redis, or Silo, BullMQ adds a worker, and the
 new deployment records from its first request until an administrator changes the
 setting. Local providers
 disable their managed external dependency, omit the separate worker, and constrain
-the API to one replica. Dependencies support
+the API to one replica. With the Docker Compose driver, the local object store or a
+SQLite database also sets `workloads.api.dataVolume` (`<project>-api-data`): an
+external named volume mounted at `/app/apps/api/data` on the API, the worker, and
+the migration, where the local object store's default `./data/files` and the SQLite
+database live (the same directory `podo dev` keeps in a volume). A release replaces
+the API container, so without it every apply loses those files; `podo deploy doctor`
+fails when such an app's profile has no data volume, or when `runtimeConfig` sets
+`LOCAL_STORAGE_PATH` outside that directory. Apply creates the volume, and back it up
+with the database. Dependencies support
 `external` and `disabled` as well as PodoKit-managed. External endpoints and
 credentials belong in the referenced secret, not in the profile. `runtimeConfig`
 rejects keys that look like passwords, tokens, private keys, or credentials, and

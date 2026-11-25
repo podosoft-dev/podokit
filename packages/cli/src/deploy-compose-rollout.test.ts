@@ -219,6 +219,19 @@ function firstIndex(host: FakeHost, needle: string): number {
 }
 
 describe("compose rollout", () => {
+  it("creates the API data volume before the migration that mounts it", async () => {
+    const root = initialized((profile) => {
+      (profile.workloads as { api: Record<string, unknown> }).api.dataVolume = "example-app-api-data";
+    });
+    const host = previousRelease();
+
+    await apply(root, host);
+
+    const created = firstIndex(host, "volume create example-app-api-data");
+    expect(created).toBeGreaterThanOrEqual(0);
+    expect(created).toBeLessThan(firstIndex(host, "run --rm --no-deps migrate"));
+  });
+
   it("keeps an API and a web server running at every step behind the gateway", async () => {
     const root = initialized(withGateway);
     const host = previousRelease();
