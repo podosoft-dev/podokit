@@ -325,9 +325,11 @@ does not fail other requests, while an API that stops answering partway through
 a long wait still ends it. Then requests
 still waiting for the API fail at once, new server-side calls throw
 `BackendUnavailableError` from `#lib/server/api.js` without contacting the API,
-and the proxy answers `503` at once. A background check runs at most every two
-seconds while requests arrive, and the first HTTP answer, whatever its status,
-ends the outage. The state belongs to one web process.
+and the proxy answers `503` at once. A background check runs every two seconds
+until the API answers, whether or not requests arrive, so the first request after
+the API comes back (for example after a restart) goes through instead of being
+refused once more. The first HTTP answer, whatever its status, ends the outage.
+The state belongs to one web process.
 
 Both values are whole milliseconds from 1 to 2147483647, set in the web
 server's environment; any other value fails when the web server loads the
