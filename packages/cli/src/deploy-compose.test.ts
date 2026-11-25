@@ -61,6 +61,34 @@ function initialized(modules?: string[]): string {
   return root;
 }
 
+/** A project on the local providers (SQLite, local files), initialized like `podo deploy init`. */
+function localProvidersProject(): string {
+  const root = project([]);
+  const manifestPath = join(root, ".podokit", "manifest.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { providers: Record<string, string> };
+  manifest.providers = {
+    database: "sqlite",
+    cache: "memory",
+    "object-storage": "local",
+    events: "memory",
+    jobs: "local",
+  };
+  writeFileSync(manifestPath, JSON.stringify(manifest));
+  initializeComposeProfile(root, "production", {
+    context: "production",
+    endpointFingerprint: inspectComposeEndpointFingerprint("production", scriptedRunner()),
+    host: "app.example.com",
+  });
+  return root;
+}
+
+function editProfile(root: string, edit: (value: Record<string, any>) => void): void {
+  const file = profilePath(root, "production");
+  const value = JSON.parse(readFileSync(file, "utf8")) as Record<string, any>;
+  edit(value);
+  writeFileSync(file, JSON.stringify(value));
+}
+
 afterEach(() => {
   for (const directory of created.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
@@ -211,6 +239,25 @@ describe("docker-compose profile", () => {
     expect(profile.dependencies.postgres.mode).toBe("disabled");
     expect(profile.dependencies.redis.mode).toBe("disabled");
     expect(profile.dependencies.objectStorage.mode).toBe("disabled");
+    // SQLite and the local object store write under the API's data directory.
+    expect(profile.workloads.api.dataVolume).toBe("example-app-api-data");
+  });
+
+  it("adds no API data volume when every file lives in a managed dependency", () => {
+    expect(composeProfileOf(initialized()).workloads.api.dataVolume).toBeUndefined();
+  });
+
+  it("refuses an API data volume that is not a volume name, and the key on other workloads", () => {
+    const root = initialized();
+    editProfile(root, (value) => {
+      value.workloads.api.dataVolume = "not a volume";
+    });
+    expect(() => loadAnyDeploymentProfile(root, "production")).toThrow("workloads.api.dataVolume");
+    editProfile(root, (value) => {
+      delete value.workloads.api.dataVolume;
+      value.workloads.web.dataVolume = "example-app-web-data";
+    });
+    expect(() => loadAnyDeploymentProfile(root, "production")).toThrow("unknown key(s): dataVolume");
   });
 
   it.each<[string, string]>([
@@ -422,6 +469,27 @@ describe("compose rendering", () => {
     expect(document).toContain("example-app-postgres:\n    external: true");
   });
 
+  it("keeps the API's own files in a volume on the API, the worker, and the migration", () => {
+    const root = localProvidersProject();
+    editProfile(root, (value) => {
+      value.workloads.worker = { replicas: 1, resources: { cpuLimit: "0.5", memoryLimit: "512m" } };
+    });
+    const profile = composeProfileOf(root);
+    const images = defaultComposeImages(profile, "v1.2.3");
+    const document = renderComposeDocument(profile, "v1.2.3", images, "sha256:0", NO_APP_PROXY_TIMEOUTS);
+    const mount = '"example-app-api-data:/app/apps/api/data"';
+    const section = (service: string) => document.split(`  ${service}:\n`)[1]?.split(/\n  [a-z]/)[0] ?? "";
+    expect(section("example-app-api")).toContain(mount);
+    expect(section("example-app-worker")).toContain(mount);
+    expect(section("example-app-web")).not.toContain("volumes:");
+    // External, like the database volume: a compose down -v must not delete the files.
+    expect(document).toContain("example-app-api-data:\n    external: true");
+
+    const migration = renderMigrationDocument(profile, "v1.2.3", images, NO_APP_PROXY_TIMEOUTS);
+    expect(migration).toContain(mount);
+    expect(migration).toContain("volumes:\n  example-app-api-data:\n    external: true");
+  });
+
   it("references env files by path and never inlines a value", () => {
     const profile = composeProfileOf(initialized());
     const document = renderComposeDocument(
@@ -535,6 +603,40 @@ describe("compose doctor", () => {
     const api = findings.find((finding) => finding.code === "env-file-api");
     expect(api?.ok).toBe(false);
     expect(api?.message).toContain("POSTGRES_PASSWORD");
+  });
+
+  it("fails when the API keeps files in its container and the profile has no data volume", () => {
+    const root = localProvidersProject();
+    editProfile(root, (value) => {
+      delete value.workloads.api.dataVolume;
+    });
+    const finding = doctorComposeDeployment(root, "production", scriptedRunner()).find(
+      (entry) => entry.code === "api-data-volume",
+    );
+    expect(finding?.ok).toBe(false);
+    expect(finding?.message).toContain("the local object store and the SQLite database");
+    expect(finding?.message).toContain('workloads.api.dataVolume (for example "example-app-api-data")');
+  });
+
+  it("fails when the local object store is configured outside the data volume", () => {
+    const root = localProvidersProject();
+    const dataVolume = (path: string) => {
+      editProfile(root, (value) => {
+        value.runtimeConfig.LOCAL_STORAGE_PATH = path;
+      });
+      return doctorComposeDeployment(root, "production", scriptedRunner()).find(
+        (entry) => entry.code === "api-data-volume",
+      );
+    };
+    expect(dataVolume("/srv/files")?.ok).toBe(false);
+    expect(dataVolume("../files")?.ok).toBe(false);
+    expect(dataVolume("./data/files")?.ok).toBe(true);
+    expect(dataVolume("/app/apps/api/data/files")?.ok).toBe(true);
+  });
+
+  it("does not ask for a data volume when every file lives in a managed dependency", () => {
+    const findings = doctorComposeDeployment(initialized(), "production", scriptedRunner());
+    expect(findings.some((entry) => entry.code === "api-data-volume")).toBe(false);
   });
 
   it("passes when every required key is present", () => {

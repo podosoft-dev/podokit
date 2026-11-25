@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import { directApiRoutes } from "./api-paths";
 import { readAppProxyTimeouts } from "./app-proxy-timeouts";
 import {
@@ -31,7 +31,10 @@ import {
 } from "./deploy-compose-exec";
 import { readComposeSyncDrift, type ComposeSyncDrift } from "./deploy-compose-sync";
 import {
+  COMPOSE_API_DATA_DIRECTORY,
+  composeApiDataVolume,
   composeProfileDigest,
+  providersNeedApiDataVolume,
   type DockerComposeProfileV1,
 } from "./deploy-compose-profile";
 import {
@@ -399,6 +402,53 @@ function runObjectStorageInit(
   }
 }
 
+/**
+ * Whether the files the API keeps in its own container survive a release. The
+ * local object store and a SQLite database write under the API's data directory,
+ * and a release replaces the container, so without a volume every apply loses them.
+ */
+export function composeApiDataVolumeFinding(
+  projectRoot: string,
+  profile: DockerComposeProfileV1,
+): ComposeDoctorFinding | null {
+  const providers = readManifest(projectRoot)?.providers;
+  if (!providers || !providersNeedApiDataVolume(providers)) return null;
+  const code = "api-data-volume";
+  const kept = [
+    ...(providers["object-storage"] === "local" ? ["the local object store"] : []),
+    ...(providers.database === "sqlite" ? ["the SQLite database"] : []),
+  ].join(" and ");
+  const volume = composeApiDataVolume(profile);
+  if (!volume) {
+    return {
+      code,
+      ok: false,
+      message:
+        `${kept} keeps files in the API container, and every release replaces it. Set ` +
+        `workloads.api.dataVolume (for example "${profile.target.project}-api-data") so they are kept ` +
+        `in a volume at ${COMPOSE_API_DATA_DIRECTORY}.`,
+    };
+  }
+  const storagePath = profile.runtimeConfig.LOCAL_STORAGE_PATH;
+  if (providers["object-storage"] === "local" && storagePath !== undefined) {
+    const resolved = posix.resolve(posix.dirname(COMPOSE_API_DATA_DIRECTORY), storagePath);
+    if (resolved !== COMPOSE_API_DATA_DIRECTORY && !resolved.startsWith(`${COMPOSE_API_DATA_DIRECTORY}/`)) {
+      return {
+        code,
+        ok: false,
+        message:
+          `runtimeConfig.LOCAL_STORAGE_PATH (${storagePath}) is outside ${COMPOSE_API_DATA_DIRECTORY}, ` +
+          `the directory volume ${volume} keeps, so stored files would still be lost on release.`,
+      };
+    }
+  }
+  return {
+    code,
+    ok: true,
+    message: `Volume ${volume} keeps ${kept} at ${COMPOSE_API_DATA_DIRECTORY} across releases.`,
+  };
+}
+
 export function doctorComposeDeployment(
   projectRoot: string,
   profileName: string,
@@ -407,6 +457,8 @@ export function doctorComposeDeployment(
 ): ComposeDoctorFinding[] {
   const profile = loadComposeProfile(projectRoot, profileName);
   const findings: ComposeDoctorFinding[] = profileFindings(projectRoot, profile);
+  const dataVolume = composeApiDataVolumeFinding(projectRoot, profile);
+  if (dataVolume) findings.push(dataVolume);
   const record = (code: string, ok: boolean, message: string): void => {
     findings.push({ code, ok, message });
   };
@@ -1032,6 +1084,9 @@ export async function applyComposeDeployment(
         checked(runner, "docker", dockerArgs(profile, ["volume", "create", dependency.volume]));
       }
     }
+    // Before the migration, which mounts it when the database is SQLite.
+    const dataVolume = composeApiDataVolume(profile);
+    if (dataVolume) checked(runner, "docker", dockerArgs(profile, ["volume", "create", dataVolume]));
 
     const dependencies = managedDependencyServices(profile);
     if (dependencies.length) {

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { isIP } from "node:net";
+import type { ProviderSelections } from "@podosoft/podokit-runtime";
 import { readManifest } from "./lockfile";
 import {
   DNS_LABEL,
@@ -53,6 +54,22 @@ export interface ComposeResourceProfile {
 export interface ComposeWorkloadProfile {
   replicas: number;
   resources: ComposeResourceProfile;
+}
+
+/**
+ * Where the API image keeps files of its own: the local object store's default
+ * `./data/files` and a SQLite database. The same directory `podo dev` keeps in a
+ * named volume, so development and production store files in one place.
+ */
+export const COMPOSE_API_DATA_DIRECTORY = "/app/apps/api/data";
+
+export interface ComposeApiWorkloadProfile extends ComposeWorkloadProfile {
+  /**
+   * External named volume mounted at COMPOSE_API_DATA_DIRECTORY on the API, the
+   * worker, and the migration. Without it those files live in the container and
+   * are lost when a release replaces the container.
+   */
+  dataVolume?: string;
 }
 
 /**
@@ -118,7 +135,7 @@ export interface DockerComposeProfileV1 {
     gatewayImage: string;
   };
   workloads: {
-    api: ComposeWorkloadProfile;
+    api: ComposeApiWorkloadProfile;
     web: ComposeWorkloadProfile;
     worker: ComposeWorkloadProfile | null;
   };
@@ -225,6 +242,31 @@ function parseComposeWorkload(
     replicas: requiredNumber(value, "replicas"),
     resources: parseComposeResources(requiredRecord(value, "resources"), `${field}.resources`),
   };
+}
+
+function parseComposeApiWorkload(value: Record<string, unknown>, field: string): ComposeApiWorkloadProfile {
+  const { dataVolume, ...workload } = value;
+  const parsed: ComposeApiWorkloadProfile = parseComposeWorkload(workload, field);
+  if (dataVolume === undefined) return parsed;
+  if (typeof dataVolume !== "string" || !VOLUME_NAME.test(dataVolume)) {
+    throw new Error(`Deployment profile field "${field}.dataVolume" must be a Docker volume name.`);
+  }
+  return { ...parsed, dataVolume };
+}
+
+/** The API data volume, or null when the profile keeps no files outside the database. */
+export function composeApiDataVolume(profile: DockerComposeProfileV1): string | null {
+  return profile.workloads.api.dataVolume ?? null;
+}
+
+/**
+ * Whether the installed providers keep files in the API container: the local
+ * object store or a SQLite database. Such an app needs workloads.api.dataVolume.
+ */
+export function providersNeedApiDataVolume(
+  providers: Pick<ProviderSelections, "object-storage" | "database">,
+): boolean {
+  return providers["object-storage"] === "local" || providers.database === "sqlite";
 }
 
 function parseComposeMode(value: unknown, field: string): ComposeDependencyMode {
@@ -436,7 +478,7 @@ export function parseComposeProfile(value: unknown): DockerComposeProfileV1 {
       gatewayImage,
     },
     workloads: {
-      api: parseComposeWorkload(requiredRecord(workloads, "api"), "workloads.api"),
+      api: parseComposeApiWorkload(requiredRecord(workloads, "api"), "workloads.api"),
       web,
       worker:
         workloads.worker === null
@@ -602,6 +644,9 @@ export function initializeComposeProfile(
     || providers.events === "memory"
     || providers.jobs === "local";
   draft.workloads.api.replicas = usesEmbeddedProviders ? 1 : 2;
+  if (providersNeedApiDataVolume(providers)) {
+    draft.workloads.api.dataVolume = `${draft.target.project}-api-data`;
+  }
   draft.exposure.apiPaths = installedApiPaths(manifest.modules);
   draft.dependencies.postgres.mode = providers.database === "postgres" ? "managed" : "disabled";
   draft.dependencies.redis.mode = usesRedis ? "managed" : "disabled";
