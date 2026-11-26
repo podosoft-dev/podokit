@@ -1,5 +1,13 @@
 # @podosoft/podokit
 
+## 1.9.4
+
+### Patch Changes
+
+- [#328](https://github.com/podosoft-dev/podokit/pull/328) [`d8b0b94`](https://github.com/podosoft-dev/podokit/commit/d8b0b940e06f8dbada0abbebb1d009cfeab108eb) Thanks [@korone00](https://github.com/korone00)! - Make the development migration retry test check the delays it asks for instead of timing real timers. On a loaded CI runner the first 10 ms wait sometimes ran longer than the second and failed the comparison. `applyDevelopmentMigrations` takes an optional `wait` for this; the default is the same timer as before.
+
+- [#330](https://github.com/podosoft-dev/podokit/pull/330) [`a9185c2`](https://github.com/podosoft-dev/podokit/commit/a9185c23ec4c54f5b1ff742392666c3b10eb9e5f) Thanks [@korone00](https://github.com/korone00)! - Bundle the web server's runtime dependencies into its production build. With the stable SvelteKit adapter, every `dependency` in `apps/web/package.json` stayed out of the server bundle, and the web image copies only the build, so Bun fetched those packages from npm (unpinned) each time the server started, and a web container without network access could not start (`Cannot find package 'clsx'`). The managed `vite.config.ts` now lists them in `ssr.noExternal`. Applications created with 1.7.6 or later should update and rebuild their web image.
+
 ## 1.9.3
 
 ### Patch Changes
