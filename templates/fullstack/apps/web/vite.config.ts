@@ -85,6 +85,17 @@ function readDevConfig(): string | null {
   }
 }
 
+// The web server's runtime dependencies, bundled into its build. The adapter leaves
+// every package.json `dependency` out of the server bundle unless `ssr.noExternal`
+// names it, and the production image copies only the build: left out, Bun fetched
+// those packages from npm each time the server started (unpinned), and a server
+// without network access could not start at all.
+const webDependencies = Object.keys(
+  (JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")) as {
+    dependencies?: Record<string, string>;
+  }).dependencies ?? {},
+);
+
 export default defineConfig((env) =>
   mergeConfig(
     {
@@ -102,6 +113,7 @@ export default defineConfig((env) =>
           ...(publicOrigin ? { paths: { ...appSvelteKitConfig.paths, origin: publicOrigin } } : {}),
         }),
       ],
+      ssr: { noExternal: webDependencies },
       define: {
         __PODOKIT_CSRF_TRUSTED_ORIGINS__: JSON.stringify(appSvelteKitConfig.csrf?.trustedOrigins ?? []),
       },
